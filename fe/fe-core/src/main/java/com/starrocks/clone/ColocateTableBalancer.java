@@ -197,8 +197,9 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
         // get all groups
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
-        Map<GroupId, Long> group2InScheduleTabletNum =
-                globalStateMgr.getTabletScheduler().getTabletsNumInScheduleForEachCG();
+        TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
+        TabletSchedulerStat stat = tabletScheduler.getStat();
+        Map<GroupId, Long> group2InScheduleTabletNum = tabletScheduler.getTabletsNumInScheduleForEachCG();
         for (GroupId groupId : groupIds) {
             Database db = globalStateMgr.getDbIncludeRecycleBin(groupId.dbId);
             if (db == null) {
@@ -223,6 +224,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 continue;
             }
 
+            stat.counterColocateBalanceRound.incrementAndGet();
             Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
             List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();

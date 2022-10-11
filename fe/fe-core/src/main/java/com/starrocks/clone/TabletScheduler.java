@@ -715,8 +715,8 @@ public class TabletScheduler extends LeaderDaemon {
      * If all the replicas for tablets that belongs to some bucket are healthy(e.g. previously
      * considered not alive backend comes alive or backend decommission is canceled), in this case,
      * we don't really need to continue to execute the previously made relocation decision, we just
-     * cancel the scheduling by setting the status to HEALTHY.<p>
-     *
+     * cancel the scheduling by setting the status to HEALTHY.
+     * <p>
      * If some tablets belongs to the same bucket are already scheduled based on the new backend sequence,
      * we won't try to skip the current scheduling and reset the backend sequence because this will cause the tablets
      * which have finished scheduling to be scheduled again.
@@ -1108,6 +1108,7 @@ public class TabletScheduler extends LeaderDaemon {
      */
     private boolean handleColocateRedundant(TabletSchedCtx tabletCtx) throws SchedException {
         Preconditions.checkNotNull(tabletCtx.getColocateBackendsSet());
+        stat.counterReplicaColocateRedundant.incrementAndGet();
         for (Replica replica : tabletCtx.getReplicas()) {
             if (tabletCtx.getColocateBackendsSet().contains(replica.getBackendId())) {
                 continue;

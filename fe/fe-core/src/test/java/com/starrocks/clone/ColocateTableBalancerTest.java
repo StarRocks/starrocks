@@ -49,13 +49,16 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
+import org.junit.FixMethodOrder;
 import org.junit.Test;
+import org.junit.runners.MethodSorters;
 
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class ColocateTableBalancerTest {
     private ColocateTableBalancer balancer = ColocateTableBalancer.getInstance();
 
@@ -71,11 +74,13 @@ public class ColocateTableBalancerTest {
 
     private Map<Long, Double> mixLoadScores;
 
+    private static StarRocksAssert starRocksAssert;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
-        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert = new StarRocksAssert(ctx);
         starRocksAssert.withDatabase("db1").useDatabase("db1")
                 .withTable("CREATE TABLE db1.tbl(id INT NOT NULL) " +
                         "distributed by hash(`id`) buckets 3 " +
@@ -730,10 +735,9 @@ public class ColocateTableBalancerTest {
         Assert.assertEquals(expected, balancedBackendsPerBucketSeq);
     }
 
-    @Test
-    public void testMatchGroup() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("db1");
-        OlapTable table = (OlapTable) database.getTable("tbl");
+    private void addTabletsToScheduler(String dbName, String tableName, boolean setGroupId) {
+        Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
+        OlapTable table = (OlapTable) database.getTable(tableName);
         // add its tablet to TabletScheduler
         TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
         for (Partition partition : table.getPartitions()) {
@@ -747,9 +751,20 @@ public class ColocateTableBalancerTest {
                         tablet.getId(),
                         System.currentTimeMillis());
                 ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
+                if (setGroupId) {
+                    ctx.setColocateGroupId(
+                            GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
+                }
                 tabletScheduler.addTablet(ctx, false);
             }
         }
+    }
+
+    @Test
+    public void test1MatchGroup() {
+        Database database = GlobalStateMgr.getCurrentState().getDb("db1");
+        OlapTable table = (OlapTable) database.getTable("tbl");
+        addTabletsToScheduler("db1", "tbl", false);
 
         // test if group is unstable when all its tablets are in TabletScheduler
         long tableId = table.getId();
@@ -757,5 +772,27 @@ public class ColocateTableBalancerTest {
         colocateTableBalancer.runAfterCatalogReady();
         GroupId groupId = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(tableId);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId));
+    }
+
+    @Test
+    public void test2TabletsInScheduleBlockColocateBalanceRound() throws Exception {
+        starRocksAssert.withDatabase("db2").useDatabase("db2")
+                .withTable("CREATE TABLE db2.tbl2(id INT NOT NULL) " +
+                        "distributed by hash(`id`) buckets 3 " +
+                        "properties('replication_num' = '1', 'colocate_with' = 'group2');");
+        addTabletsToScheduler("db2", "tbl2", true);
+        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
+        TabletSchedulerStat stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
+
+        colocateTableBalancer.runAfterCatalogReady();
+        long before = stat.counterColocateBalanceRound.get();
+        colocateTableBalancer.runAfterCatalogReady();
+        long after = stat.counterColocateBalanceRound.get();
+        Assert.assertEquals(before + 1, after);
+    }
+
+    @Test
+    public void testRepairPrecedeBalance() {
+        // TODO(yiming): construct case for repair precedence
     }
 }
