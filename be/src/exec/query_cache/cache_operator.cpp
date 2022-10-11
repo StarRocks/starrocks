@@ -185,6 +185,90 @@ void CacheOperator::close(RuntimeState* state) {
 
     Operator::close(state);
 }
+
+void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
+                                              int64_t version) {
+    // In BE unittest, stale value is considered as partial-hit
+#ifdef BE_TEST
+    buffer->state = PLBS_HIT_PARTIAL;
+    buffer->num_rows = 0;
+    buffer->num_bytes = 0;
+    for (const auto& chunk : buffer->chunks) {
+        buffer->num_rows += chunk->num_rows();
+        buffer->num_bytes += chunk->bytes_usage();
+    }
+    buffer->chunks.back()->owner_info().set_last_chunk(false);
+#endif
+
+    // Try to reuse partial cache result when cached version is less than required version, delta versions
+    // should be captured at first.
+    auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(
+            tablet_id, cache_value.version + 1, version);
+
+    // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
+    if (!status.ok()) {
+        buffer->state = PLBS_MISS;
+        buffer->cached_version = 0;
+        return;
+    }
+
+    // Delta versions are captured, several situations should be taken into consideration.
+    auto& [tablet, rowsets] = status.value();
+    auto all_rs_empty = true;
+    auto min_version = std::numeric_limits<int64_t>::max();
+    auto max_version = std::numeric_limits<int64_t>::min();
+    for (const auto& rs : rowsets) {
+        all_rs_empty &= !rs->has_data_files();
+        min_version = std::min(min_version, rs->start_version());
+        max_version = std::max(max_version, rs->end_version());
+    }
+    Version delta_versions(min_version, max_version);
+    buffer->tablet = tablet;
+    auto has_delete_predicates = tablet->has_delete_predicates(delta_versions);
+    // case 1: there exist delete predicates in delta versions, the cache result is not reuse, so cache miss.
+    if (has_delete_predicates) {
+        buffer->state = PLBS_MISS;
+        buffer->cached_version = 0;
+        return;
+    }
+
+    buffer->cached_version = cache_value.version;
+    auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
+    _update_probe_metrics(tablet_id, chunks);
+    buffer->chunks = std::move(chunks);
+    // case 2: all delta versions are empty rowsets, so the cache result is hit totally.
+    if (all_rs_empty) {
+        buffer->state = PLBS_HIT_TOTAL;
+        buffer->chunks.back()->owner_info().set_last_chunk(true);
+        return;
+    }
+
+    // case 3: otherwise, the cache result is partial result of per-tablet computation, so delta versions must
+    //  be scanned and merged with cache result to generate total result.
+    buffer->state = PLBS_HIT_PARTIAL;
+    buffer->rowsets = std::move(rowsets);
+    buffer->num_rows = 0;
+    buffer->num_bytes = 0;
+    for (const auto& chunk : buffer->chunks) {
+        buffer->num_rows += chunk->num_rows();
+        buffer->num_bytes += chunk->bytes_usage();
+    }
+    buffer->chunks.back()->owner_info().set_last_chunk(false);
+}
+
+void CacheOperator::_update_probe_metrics(int64_t tablet_id, const std::vector<vectorized::ChunkPtr>& chunks) {
+    auto num_bytes = 0L;
+    auto num_rows = 0L;
+    for (const auto& chunk : chunks) {
+        num_bytes += chunk->bytes_usage();
+        num_rows += chunk->num_rows();
+    }
+    _cache_probe_bytes_counter->update(num_bytes);
+    _cache_probe_chunks_counter->update(num_rows);
+    _cache_probe_rows_counter->update(num_rows);
+    _probe_tablets.insert(tablet_id);
+}
+
 bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
     _all_tablets.insert(tablet_id);
     // allocate lane and PerLaneBuffer for tablet_id
@@ -210,26 +294,13 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
         return false;
     }
 
-    auto update_metrics = [&](const std::vector<vectorized::ChunkPtr>& chunks) {
-        auto num_bytes = 0L;
-        auto num_rows = 0L;
-        for (const auto& chunk : chunks) {
-            num_bytes += chunk->bytes_usage();
-            num_rows += chunk->num_rows();
-        }
-        _cache_probe_bytes_counter->update(num_bytes);
-        _cache_probe_chunks_counter->update(num_rows);
-        _cache_probe_rows_counter->update(num_rows);
-        _probe_tablets.insert(tablet_id);
-    };
-
     auto& cache_value = probe_status.value();
     if (cache_value.version == version) {
         // Cache HIT_TOTAL when cached version equals to required version
         buffer->state = PLBS_HIT_TOTAL;
         buffer->cached_version = cache_value.version;
         auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
-        update_metrics(chunks);
+        _update_probe_metrics(tablet_id, chunks);
         buffer->chunks = std::move(chunks);
     } else if (cache_value.version > version) {
         // It rarely happens that required version is less that cached version, the required version become
@@ -239,59 +310,12 @@ bool CacheOperator::probe_cache(int64_t tablet_id, int64_t version) {
         buffer->state = PLBS_MISS;
         buffer->cached_version = 0;
     } else {
-        // Try to reuse partial cache result when cached version is less than required version, delta versions
-        // should be captured at first.
-        auto status = StorageEngine::instance()->tablet_manager()->capture_tablet_and_rowsets(
-                tablet_id, cache_value.version + 1, version);
-        if (!status.ok()) {
-            // Cache MISS if delta versions are not captured, because aggressive cumulative compactions.
-            buffer->state = PLBS_MISS;
-            buffer->cached_version = 0;
-        } else {
-            // Delta versions are captured, several situations should be taken into consideration.
-            // case 1: all delta versions are empty rowsets, so the cache result is hit totally.
-            // case 2: there exist delete predicates in delta versions, the cache result is not reuse, so cache miss.
-            // case 3: otherwise, the cache result is partial result of per-tablet computation, so delta versions must
-            //  be scanned and merged with cache result to generate total result.
-            auto& [tablet, rowsets] = status.value();
-            auto all_rs_empty = true;
-            auto min_version = std::numeric_limits<int64_t>::max();
-            auto max_version = std::numeric_limits<int64_t>::min();
-            for (const auto& rs : rowsets) {
-                all_rs_empty &= !rs->has_data_files();
-                min_version = std::min(min_version, rs->start_version());
-                max_version = std::max(max_version, rs->end_version());
-            }
-            Version delta_versions(min_version, max_version);
-            buffer->tablet = tablet;
-            auto has_delete_predicates = tablet->has_delete_predicates(delta_versions);
-            if (has_delete_predicates) {
-                buffer->state = PLBS_MISS;
-                buffer->cached_version = 0;
-                return false;
-            }
-
-            buffer->cached_version = cache_value.version;
-            auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
-            update_metrics(chunks);
-            buffer->chunks = std::move(chunks);
-            if (all_rs_empty) {
-                buffer->state = PLBS_HIT_TOTAL;
-                buffer->chunks.back()->owner_info().set_last_chunk(true);
-                update_metrics(chunks);
-            } else {
-                buffer->state = PLBS_HIT_PARTIAL;
-                buffer->rowsets = std::move(rowsets);
-                buffer->num_rows = 0;
-                buffer->num_bytes = 0;
-                for (const auto& chunk : buffer->chunks) {
-                    buffer->num_rows += chunk->num_rows();
-                    buffer->num_bytes += chunk->bytes_usage();
-                }
-                buffer->chunks.back()->owner_info().set_last_chunk(false);
-            }
-        }
+        // Incremental updating cause the cached value become stale, It is a very critical and complex situation.
+        // here we support a multi-version cache mechanism.
+        _handle_stale_cache_value(tablet_id, cache_value, buffer, version);
     }
+
+    // return true on cache hit, false on cache miss
     if (buffer->state == PLBS_HIT_TOTAL) {
         _lane_arbiter->mark_processed(tablet_id);
         return true;
