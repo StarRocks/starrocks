@@ -124,6 +124,7 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
 fi
 
 export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
+# enable coredump when BE build with ASAN
 export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
 
 # Prevent JVM from handling any internally or externally generated signals.
