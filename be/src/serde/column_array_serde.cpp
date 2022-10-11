@@ -30,7 +30,7 @@
 
 namespace starrocks::serde {
 namespace {
-constexpr int ENCODE_SIZE_LIMIT = 64;
+constexpr int ENCODE_SIZE_LIMIT = 256;
 uint8_t* write_little_endian_32(uint32_t value, uint8_t* buff) {
     encode_fixed32_le(buff, value);
     return buff + sizeof(value);
@@ -77,7 +77,7 @@ uint8_t* encode_integers_streamvbyte(const void* data, size_t size, uint8_t* buf
         break;
     case 2:
         encode_size =
-                p4nenc256v32(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0, buff + sizeof(uint64_t));
+                p4nenc256v32(const_cast<uint32_t*>((uint32_t*)data), (3 + size) * 1.0 / 4.0, buff + sizeof(uint64_t));
         break;
     default:
         encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
@@ -104,7 +104,7 @@ const uint8_t* decode_integers_streamvbyte(const uint8_t* buff, void* target, si
         encode_size1 = streamvbyte_delta_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0, 0);
         break;
     case 2:
-        encode_size1 = p4ndec256v32(buff, (3 + size) * 1.0 / 4.0, (uint32_t*)target);
+        encode_size1 = p4ndec256v32(const_cast<uint8_t*>(buff), (3 + size) * 1.0 / 4.0, (uint32_t*)target);
         break;
     default:
         encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
