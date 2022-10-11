@@ -483,7 +483,9 @@ public class Optimizer {
             if (!mv.isActive()) {
                 continue;
             }
+            Set<String> partitionNamesToRefresh = Sets.newHashSet();
 
+            /*
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
@@ -495,6 +497,8 @@ public class Optimizer {
                 // then it can not be candidate
                 continue;
             }
+
+             */
 
             MaterializationContext materializationContext = mv.getMaterializationContext();
             if (materializationContext != null) {

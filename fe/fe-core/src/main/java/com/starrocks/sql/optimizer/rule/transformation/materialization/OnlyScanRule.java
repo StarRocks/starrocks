@@ -23,6 +23,10 @@ public class OnlyScanRule extends SingleTableRewriteRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
+        boolean ret = super.check(input, context);
+        if (!ret) {
+            return false;
+        }
         Operator currentOp = input.getOp();
         if (!(currentOp instanceof LogicalScanOperator)) {
             return false;
