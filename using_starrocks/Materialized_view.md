@@ -597,6 +597,8 @@ REFRESH MATERIALIZED VIEW order_mv;
 >
 > 您可以对异步刷新和手动刷新方式的物化视图手动调用物化视图，但不能通过该命令手动刷新单表同步刷新方式的物化视图。
 
+您可以通过 [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) 命令手动刷新特定物化视图。
+
 ### 查看多表物化视图的执行状态
 
 您可以通过以下方式查看数据仓库内多表物化视图的执行状态。
