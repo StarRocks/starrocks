@@ -591,7 +591,6 @@ under the License.
             <artifactId>commons-dbcp2</artifactId>
             <scope>test</scope>
         </dependency>
-
     </dependencies>
 
     <build>

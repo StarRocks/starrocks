@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.external.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
@@ -26,12 +27,15 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_TYPE;
+
 public class HiveMetaClient {
     private static final Logger LOG = LogManager.getLogger(HiveMetaClient.class);
     public static final String PARTITION_NULL_VALUE = "__HIVE_DEFAULT_PARTITION__";
     public static final String HUDI_PARTITION_NULL_VALUE = "default";
+
     public static final String DLF_HIVE_METASTORE = "dlf";
-    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+    public static final String GLUE_HIVE_METASTORE = "glue";
     // Maximum number of idle metastore connections in the connection pool at any point.
     private static final int MAX_HMS_CONNECTION_POOL_SIZE = 32;
 
@@ -61,12 +65,15 @@ public class HiveMetaClient {
         private final IMetaStoreClient hiveClient;
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
-            if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
-                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
-                        HiveMetaStoreThriftClient.class.getName());
-            } else {
+            if (DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
                         DLFProxyMetaStoreClient.class.getName());
+            } else if (GLUE_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
+                        AWSCatalogMetastoreClient.class.getName());
+            } else {
+                hiveClient = RetryingMetaStoreClient.getProxy(conf, DUMMY_HOOK_LOADER,
+                        HiveMetaStoreThriftClient.class.getName());
             }
         }
 
