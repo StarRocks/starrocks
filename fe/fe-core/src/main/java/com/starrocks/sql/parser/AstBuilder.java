@@ -3463,15 +3463,44 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitPrivilegeObjectNameList(StarRocksParser.PrivilegeObjectNameListContext context) {
+    public ParseNode visitUserList(StarRocksParser.UserListContext context) {
+        GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
+        List<UserIdentity> l = new ArrayList<>();
+        for (StarRocksParser.UserContext oneContext : context.user()) {
+            l.add(((UserIdentifier) visit(oneContext)).getUserIdentity());
+        }
+        ret.setUserPrivilegeObjectList(l);
+        return ret;
+    }
+
+    private GrantRevokePrivilegeObjects parsePrivilegeObjectNameList(
+            String type, StarRocksParser.PrivilegeObjectNameListContext context) {
+        // GRANT ADMIN ON SYSTEM TO userx, should return null as privilege object list
+        if (context == null) {
+            return null;
+        }
         if (context.ASTERISK_SYMBOL() != null) {
             GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
             ret.setPrivilegeObjectNameTokensList(Arrays.asList(Arrays.asList("*")));
             return ret;
+        } else if (context.userList() != null) {
+            return (GrantRevokePrivilegeObjects) visit(context.userList());
         } else if (context.identifierOrStringList() != null) {
-            return visit(context.identifierOrStringList());
+            if (type.equals("USER")) {
+                // GRANT IMPERSONATE ON USER user1,user2
+                // it's actually a list of user although it matches the `IdentifierOrString`
+                GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
+                List<UserIdentity> l = new ArrayList<>();
+                for (StarRocksParser.IdentifierOrStringContext oneContext :
+                        context.identifierOrStringList().identifierOrString()) {
+                    l.add(new UserIdentity(((Identifier) visit(oneContext)).getValue(), "%", false));
+                }
+                ret.setUserPrivilegeObjectList(l);
+                return ret;
+            }
+            return (GrantRevokePrivilegeObjects) visit(context.identifierOrStringList());
         } else {
-            return visit(context.tablePrivilegeObjectNameList());
+            return (GrantRevokePrivilegeObjects) visit(context.tablePrivilegeObjectNameList());
         }
     }
 
@@ -3517,18 +3546,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantPrivWithType(StarRocksParser.GrantPrivWithTypeContext context) {
-        GrantRevokePrivilegeObjects objects =
-                (GrantRevokePrivilegeObjects) visit(context.privilegeObjectNameList());
         String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        GrantRevokePrivilegeObjects objects = parsePrivilegeObjectNameList(type, context.privilegeObjectNameList());
         return newGrantRevokePrivilegeStmt(
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, true);
     }
 
     @Override
     public ParseNode visitRevokePrivWithType(StarRocksParser.RevokePrivWithTypeContext context) {
-        GrantRevokePrivilegeObjects objects =
-                (GrantRevokePrivilegeObjects) visit(context.privilegeObjectNameList());
         String type = ((Identifier) visit(context.privilegeType())).getValue().toUpperCase();
+        GrantRevokePrivilegeObjects objects = parsePrivilegeObjectNameList(type, context.privilegeObjectNameList());
         return newGrantRevokePrivilegeStmt(
                 type, context.privilegeActionList(), context.grantRevokeClause(), objects, false);
     }
@@ -3555,8 +3582,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             List<StarRocksParser.PrivilegeTypeContext> privilegeTypeContexts,
             StarRocksParser.IdentifierOrStringContext identifierOrStringContext) {
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        List<String> l = privilegeTypeContexts.stream().map(k -> ((Identifier) visit(k)).getValue()).collect(toList());
-        if (identifierOrStringContext.isEmpty()) {
+        List<String> l = privilegeTypeContexts.stream().map(
+                k -> ((Identifier) visit(k)).getValue().toUpperCase()).collect(toList());
+        if (identifierOrStringContext == null) {
             // all xxx in all xxx
             objects.setAll(l, null, null);
         } else {

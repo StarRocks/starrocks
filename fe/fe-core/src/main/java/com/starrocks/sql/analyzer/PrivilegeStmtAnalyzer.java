@@ -112,6 +112,9 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            if (stmt.isWithGrantOption()) {
+                throw new SemanticException("unsupported syntax: WITH GRANT OPTION");
+            }
             // validate user/role
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), session, true);
@@ -137,7 +140,7 @@ public class PrivilegeStmtAnalyzer {
                     throw new SemanticException("only IMPERSONATE can only be granted on user");
                 }
                 if (stmt.getUserPrivilegeObjectList().size() != 1) {
-                    throw new SemanticException("unsupported syntax: can only grant/revoke on one user");
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one USER");
                 }
                 stmt.setPrivBitSet(privs);
                 analyseUser(stmt.getUserPrivilegeObjectList().get(0), session, true);

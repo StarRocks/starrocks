@@ -27,7 +27,7 @@ import java.util.Arrays;
 import java.util.List;
 
 public class PrivilegeManagerTest {
-    private static final List<String> DB_TBL_TOKENS = Arrays.asList("db", "tbl");
+    private static final List<String> DB_TBL_TOKENS = Arrays.asList("db", "tbl1");
     private ConnectContext ctx;
 
     @Before
@@ -37,11 +37,14 @@ public class PrivilegeManagerTest {
         UtFrameUtils.setUpForPersistTest();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
-        String createTblStmtStr = "create table db.tbl(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        // create db.tbl0, db1.tbl1
+        String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withDatabase("db");
-        starRocksAssert.withTable(createTblStmtStr);
+        for (int i = 0; i < 2; ++ i) {
+            starRocksAssert.withTable("create table db.tbl" + i + createTblStmtStr);
+        }
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         starRocksAssert.getCtx().setRemoteIP("localhost");
 
@@ -74,7 +77,7 @@ public class PrivilegeManagerTest {
                 DB_TBL_TOKENS));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        String sql = "grant select on table db.tbl to test_user";
+        String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
         ctx.setCurrentUserIdentity(testUser);
@@ -91,7 +94,7 @@ public class PrivilegeManagerTest {
                 DB_TBL_TOKENS));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        sql = "revoke select on db.tbl from test_user";
+        sql = "revoke select on db.tbl1 from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
         ctx.setCurrentUserIdentity(testUser);
@@ -109,8 +112,9 @@ public class PrivilegeManagerTest {
 
         // grant many priveleges
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        sql = "grant select, insert, delete on table db.tbl to test_user";
+        sql = "grant select, insert, delete on table db.tbl1 to test_user with grant option";
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertTrue(grantStmt.isWithGrantOption());
         manager.grant(grantStmt);
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertTrue(manager.check(
@@ -131,8 +135,9 @@ public class PrivilegeManagerTest {
 
         // revoke only select
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        sql = "revoke select on db.tbl from test_user";
+        sql = "revoke select on db.tbl1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertFalse(revokeStmt.isWithGrantOption());
         manager.revoke(revokeStmt);
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertFalse(manager.check(
@@ -153,7 +158,7 @@ public class PrivilegeManagerTest {
 
         // revoke all
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        sql = "revoke insert, delete, select on table db.tbl from test_user";
+        sql = "revoke ALL on table db.tbl1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
         ctx.setCurrentUserIdentity(testUser);
@@ -185,7 +190,7 @@ public class PrivilegeManagerTest {
         masterManager.save(emptyImage.getDataOutputStream());
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        String sql = "grant select on db.tbl to test_user";
+        String sql = "grant select on db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.grant(grantStmt);
         ctx.setCurrentUserIdentity(testUser);
@@ -197,7 +202,7 @@ public class PrivilegeManagerTest {
         UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
         masterManager.save(grantImage.getDataOutputStream());
 
-        sql = "revoke select on db.tbl from test_user";
+        sql = "revoke select on db.tbl1 from test_user";
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.revoke(revokeStmt);
@@ -343,8 +348,8 @@ public class PrivilegeManagerTest {
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        // 1. add validate entry: select on db.tbl to test_user
-        String sql = "grant select on db.tbl to test_user";
+        // 1. add validate entry: select on db.tbl1 to test_user
+        String sql = "grant select on db.tbl1 to test_user";
         GrantPrivilegeStmt grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantTableStmt);
         Assert.assertEquals(1, grantTableStmt.getObjectList().size());
@@ -353,7 +358,7 @@ public class PrivilegeManagerTest {
         sql = "grant create_table, drop on db to test_user";
         GrantPrivilegeStmt grantDbStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantDbStmt);
-        // 3. add invalidate entry: select on db.tbl to invalidate user
+        // 3. add invalidate entry: select on db.tbl1 to invalidate user
         UserIdentity badUser = UserIdentity.createAnalyzedUserIdentWithIp("xxx", "10.1.1.1");
         List<PEntryObject> objects = Arrays.asList(goodTableObject);
         manager.onCreateUser(badUser);
@@ -386,5 +391,100 @@ public class PrivilegeManagerTest {
         Assert.assertEquals(numDbPentires - 1, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size());
     }
+
+    @Test
+    public void testGrantAll() throws Exception {
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+        ctx.setCurrentUserIdentity(testUser);
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.TABLE.toString(),
+                PrivilegeTypes.TableActions.SELECT.toString(),
+                DB_TBL_TOKENS));
+
+        List<List<String>> sqls = Arrays.asList(
+                Arrays.asList(
+                        "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO test_user",
+                        "REVOKE SELECT ON ALL TABLES IN ALL DATABASES FROM test_user"),
+                Arrays.asList(
+                        "GRANT SELECT ON ALL TABLES IN DATABASE db TO test_user",
+                        "REVOKE SELECT ON ALL TABLES IN DATABASE db FROM test_user")
+        );
+        for (List<String> sqlPair : sqls) {
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+            GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(0), ctx);
+            manager.grant(grantStmt);
+            ctx.setCurrentUserIdentity(testUser);
+            Assert.assertTrue(manager.check(
+                    ctx,
+                    PrivilegeTypes.TABLE.toString(),
+                    PrivilegeTypes.TableActions.SELECT.toString(),
+                    DB_TBL_TOKENS));
+
+            ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+            RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(1), ctx);
+            manager.revoke(revokeStmt);
+            ctx.setCurrentUserIdentity(testUser);
+            Assert.assertFalse(manager.check(
+                    ctx,
+                    PrivilegeTypes.TABLE.toString(),
+                    PrivilegeTypes.TableActions.SELECT.toString(),
+                    DB_TBL_TOKENS));
+        }
+
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.DATABASE.toString(),
+                PrivilegeTypes.DbActions.CREATE_TABLE.toString(),
+                Arrays.asList("db")));
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT CREATE_TABLE ON ALL DATABASES TO test_user", ctx);
+        manager.grant(grantStmt);
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertTrue(manager.check(
+                ctx,
+                PrivilegeTypes.DATABASE.toString(),
+                PrivilegeTypes.DbActions.CREATE_TABLE.toString(),
+                Arrays.asList("db")));
+
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE CREATE_TABLE ON ALL DATABASES FROM test_user", ctx);
+        manager.revoke(revokeStmt);
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertFalse(manager.check(
+                ctx,
+                PrivilegeTypes.DATABASE.toString(),
+                PrivilegeTypes.DbActions.CREATE_TABLE.toString(),
+                Arrays.asList("db")));
+    }
+
+    @Test
+    public void testImpersonate() throws Exception {
+        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertFalse(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+
+        GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON USER root, test_user TO test_user", ctx);
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        manager.grant(grantStmt);
+
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+
+        RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE IMPERSONATE ON root FROM test_user", ctx);
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        manager.revoke(revokeStmt);
+
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertFalse(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+    }
+
 
 }

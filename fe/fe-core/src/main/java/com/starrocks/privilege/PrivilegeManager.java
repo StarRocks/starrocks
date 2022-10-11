@@ -79,7 +79,7 @@ public class PrivilegeManager {
             typeStringToId.put(entry.getKey(), typeId);
             PrivilegeTypes types = PrivilegeTypes.valueOf(entry.getKey());
             if (types.getPlural() != null) {
-                pluralToType.put(entry.getKey(), types.getPlural());
+                pluralToType.put(types.getPlural(), entry.getKey());
             }
             Map<String, Action> actionMap = new HashMap<>();
             typeToActionMap.put(typeId, actionMap);
@@ -91,7 +91,6 @@ public class PrivilegeManager {
                 actionId++;
             }
         }
-        LOG.info("typeToAction: {}", typeToActionMap);
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
         userToPrivilegeCollection = new HashMap<>();
@@ -106,7 +105,7 @@ public class PrivilegeManager {
             PrivilegeCollection collection, String type, List<String> actionList, List<String> tokens, boolean isGrant) {
         try {
             short typeId = 0;
-            typeId = analyzeType(type, false);
+            typeId = analyzeType(type);
             ActionSet actionSet = analyzeActionSet(type, typeId, actionList);
             List<PEntryObject> object = null;
             if (tokens != null) {
@@ -217,19 +216,8 @@ public class PrivilegeManager {
         }
     }
 
-    public void validateGrant(short type, ActionSet wantSet, List<PEntryObject> objects, ConnectContext context)
-            throws PrivilegeException {
-        // check for GRANT
-        if (check(context, "SYSTEM", "GRANT", null)) {
-            return;
-        }
-        userReadLock();
-        try {
-            // check with grant option
-            provider.validateGrant(type, wantSet, objects, mergePrivilegeCollection(context));
-        } finally {
-            userReadUnlock();
-        }
+    public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
+        provider.validateGrant(type, actions, objects);
     }
 
     public boolean check(ConnectContext context, String typeName, String actionName, List<String> objectToken) {
@@ -240,7 +228,7 @@ public class PrivilegeManager {
                 object = provider.generateObject(
                         typeName, objectToken, globalStateMgr);
             }
-            short typeId = analyzeType(typeName, false);
+            short typeId = analyzeType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.check(typeId, want, object, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
@@ -252,10 +240,26 @@ public class PrivilegeManager {
         }
     }
 
+    public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
+        userReadLock();
+        try {
+            String typeStr = PrivilegeTypes.USER.toString();
+            short typeId = analyzeType(typeStr);
+            PEntryObject object = provider.generateUserObject(typeStr, impersonateUser, globalStateMgr);
+            Action want = typeToActionMap.get(typeId).get(PrivilegeTypes.UserActions.IMPERSONATE.toString());
+            return provider.check(typeId, want, object, mergePrivilegeCollection(context));
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception in canExecuteAs() user[{}]", impersonateUser, e);
+            return false;
+        } finally {
+            userReadUnlock();
+        }
+    }
+
     public boolean checkAnyObject(ConnectContext context, String typeName, String actionName) {
         userReadLock();
         try {
-            short typeId = analyzeType(typeName, false);
+            short typeId = analyzeType(typeName);
             Action want = typeToActionMap.get(typeId).get(actionName);
             return provider.checkAnyObject(typeId, want, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
@@ -269,10 +273,22 @@ public class PrivilegeManager {
     public boolean hasType(ConnectContext context, String typeName) {
         userReadLock();
         try {
-            short typeId = analyzeType(typeName, false);
+            short typeId = analyzeType(typeName);
             return provider.hasType(typeId, mergePrivilegeCollection(context));
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when hasType type[{}]", typeName, e);
+            return false;
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public boolean allowGrant(ConnectContext context, short type, ActionSet wants, List<PEntryObject> objects) {
+        userReadLock();
+        try {
+            return provider.allowGrant(type, wants, objects, mergePrivilegeCollection(context));
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when allowGrant", e);
             return false;
         } finally {
             userReadUnlock();
@@ -353,13 +369,14 @@ public class PrivilegeManager {
         return new ActionSet(actions);
     }
 
-    public short analyzeType(String typeName, boolean isAll) throws PrivilegeException {
-        if (isAll) {
-            if (! pluralToType.containsKey(typeName)) {
-                throw new PrivilegeException("invalid plural privilege type " + typeName);
-            }
-            typeName = pluralToType.get(typeName);
+    public String analyzeTypeInPlural(String plural) throws PrivilegeException {
+        if (! pluralToType.containsKey(plural)) {
+            throw new PrivilegeException("invalid plural privilege type " + plural);
         }
+        return pluralToType.get(plural);
+    }
+
+    public short analyzeType(String typeName) throws PrivilegeException {
         if (!typeStringToId.containsKey(typeName)) {
             throw new PrivilegeException("cannot find type " + typeName + " in " + typeStringToId.keySet());
         }

@@ -13,8 +13,8 @@ import java.util.List;
 public class TablePEntryObject extends PEntryObject {
     @SerializedName(value = "d")
     protected long databaseId;
-    private static final long ALL_DATABASE_ID = -2; // -2 represent all databases
-    private static final long ALL_TABLES_ID = -3; // -3 represent all tables
+    protected static final long ALL_DATABASE_ID = -2; // -2 represent all databases
+    protected static final long ALL_TABLES_ID = -3; // -3 represent all tables
 
     public static TablePEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 2) {
@@ -46,7 +46,7 @@ public class TablePEntryObject extends PEntryObject {
             }
             return new TablePEntryObject(database.getId(), ALL_TABLES_ID);
         } else if (allTypes.size() == 2) {
-            if (allTypes.get(1).equals(PrivilegeTypes.DATABASE.getPlural())) {
+            if (!allTypes.get(1).equals(PrivilegeTypes.DATABASE.getPlural())) {
                 throw new PrivilegeException(
                         "ALL TABLES must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
             }
@@ -70,8 +70,13 @@ public class TablePEntryObject extends PEntryObject {
         if (databaseId == ALL_DATABASE_ID) {
             return id == ALL_TABLES_ID || other.id == id;
         }
-        return other.databaseId == databaseId && other.id == id;
+        return other.databaseId == databaseId && (id == ALL_TABLES_ID || other.id == id);
     }
+
+    public boolean isFuzzyMatching() {
+        return databaseId == ALL_DATABASE_ID || id == ALL_TABLES_ID;
+    }
+
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
@@ -80,5 +85,27 @@ public class TablePEntryObject extends PEntryObject {
             return false;
         }
         return globalStateMgr.getTableIncludeRecycleBin(db, this.id) != null;
+    }
+
+    @Override
+    public int compareTo(PEntryObject obj) {
+        if (!(obj instanceof TablePEntryObject)) {
+            throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
+        }
+        TablePEntryObject o = (TablePEntryObject) obj;
+
+        if (this.databaseId > o.databaseId) {
+            return 1;
+        } else if (this.databaseId < o.databaseId) {
+            return -1;
+        } else {
+            if (this.id > o.id) {
+                return 1;
+            } else if (this.id < o.id) {
+                return -1;
+            } else {
+                return 0;
+            }
+        }
     }
 }

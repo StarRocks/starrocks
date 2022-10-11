@@ -142,30 +142,40 @@ public class PrivilegeStmtAnalyzerV2 {
                 // TODO
                 throw new SemanticException("not supported");
             }
+
             try {
                 PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
-                List<PEntryObject> objectList = new ArrayList<>();
-                if (stmt.getUserPrivilegeObjectList() != null) {
-                    // objects are user
-                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType(), false));
-                    for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
-                        objectList.add(privilegeManager.analyzeUserObject(stmt.getPrivType(), userIdentity));
+                if (stmt.hasPrivilegeObject()) {
+                    List<PEntryObject> objectList = new ArrayList<>();
+                    if (stmt.getUserPrivilegeObjectList() != null) {
+                        // objects are user
+                        stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                        for (UserIdentity userIdentity : stmt.getUserPrivilegeObjectList()) {
+                            analyseUser(userIdentity, true);
+                            objectList.add(privilegeManager.analyzeUserObject(stmt.getPrivType(), userIdentity));
+                        }
+                    } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
+                        // normal objects
+                        stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                        for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
+                            objectList.add(privilegeManager.analyzeObject(stmt.getPrivType(), tokens));
+                        }
+                    } else {
+                        // all statement
+                        // TABLES -> TABLE
+                        stmt.setPrivType(privilegeManager.analyzeTypeInPlural(stmt.getPrivType()));
+                        // TABLE -> 0/1
+                        stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                        objectList.add(privilegeManager.analyzeObject(
+                                stmt.getPrivType(), stmt.getAllTypeList(), stmt.getRestrictType(),
+                                stmt.getRestrictName()));
                     }
-                } else if (stmt.getPrivilegeObjectNameTokensList() != null) {
-                    // normal objects
-                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType(), false));
-                    for (List<String> tokens : stmt.getPrivilegeObjectNameTokensList()) {
-                        objectList.add(privilegeManager.analyzeObject(stmt.getPrivType(), tokens));
-                    }
+                    stmt.setObjectList(objectList);
                 } else {
-                    // all statement
-                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType(), true));
-                    objectList.add(privilegeManager.analyzeObject(
-                            stmt.getPrivType(), stmt.getAllTypeList(), stmt.getRestrictType(), stmt.getRestrictName()));
+                    stmt.setTypeId(privilegeManager.analyzeType(stmt.getPrivType()));
+                    stmt.setObjectList(null);
                 }
                 stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getPrivType(), stmt.getTypeId(), stmt.getPrivList()));
-                stmt.setObjectList(objectList);
-                privilegeManager.validateGrant(stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList(), session);
             } catch (PrivilegeException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);

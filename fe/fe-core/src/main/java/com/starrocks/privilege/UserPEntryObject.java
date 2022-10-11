@@ -29,9 +29,24 @@ public class UserPEntryObject extends PEntryObject {
         UserPEntryObject other = (UserPEntryObject) obj;
         return userIdentity.equals(other.userIdentity);
     }
+    public boolean isFuzzyMatching() {
+        return true; // no fuzzy matching for user
+    }
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         return globalStateMgr.getAuthenticationManager().doesUserExist(userIdentity);
+    }
+
+    @Override
+    public int compareTo(PEntryObject obj) {
+        if (!(obj instanceof UserPEntryObject)) {
+            throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
+        }
+        UserPEntryObject o = (UserPEntryObject) obj;
+        if (userIdentity.equals(o.userIdentity)) {
+            return 0; // this function is only meaningful when checking if identical
+        }
+        return userIdentity.toString().compareTo(o.userIdentity.toString());
     }
 }

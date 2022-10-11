@@ -8,7 +8,7 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 
 public class DbPEntryObject extends PEntryObject {
-    private static final long ALL_DATABASE_ID = -2; // -2 represent all
+    protected static final long ALL_DATABASE_ID = -2; // -2 represent all
 
     public static DbPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
@@ -45,9 +45,27 @@ public class DbPEntryObject extends PEntryObject {
         DbPEntryObject other = (DbPEntryObject) obj;
         return other.id == id;
     }
+    public boolean isFuzzyMatching() {
+        return ALL_DATABASE_ID == id;
+    }
 
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
         return globalStateMgr.getDbIncludeRecycleBin(this.id) != null;
+    }
+
+    @Override
+    public int compareTo(PEntryObject obj) {
+        if (!(obj instanceof DbPEntryObject)) {
+            throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
+        }
+        DbPEntryObject o = (DbPEntryObject) obj;
+        if (this.id > o.id) {
+            return 1;
+        } else if (this.id < o.id) {
+            return -1;
+        } else {
+            return 0;
+        }
     }
 }

@@ -9,6 +9,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -20,7 +21,7 @@ public class PrivilegeCollection {
     @SerializedName("m")
     protected Map<Short, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
 
-    static class PrivilegeEntry {
+    static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
         @SerializedName(value = "a")
         private ActionSet actionSet;
         @SerializedName(value = "o")
@@ -33,6 +34,11 @@ public class PrivilegeCollection {
             this.object = object;
             this.isGrant = isGrant;
         }
+
+        @Override
+        public int compareTo(PrivilegeEntry o) {
+            return this.object.compareTo(o.object);
+        }
     }
 
     private boolean objectMatch(PEntryObject entryObject, PEntryObject other) {
@@ -44,12 +50,22 @@ public class PrivilegeCollection {
     }
 
     /**
-     * find matching entry: object + isGrant
+     * find exact matching entry: object + isGrant
      */
     private PrivilegeEntry findEntry(List<PrivilegeEntry> privilegeEntryList, PEntryObject object, boolean isGrant) {
-        for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object) && isGrant == privilegeEntry.isGrant) {
-                return privilegeEntry;
+        if (object == null) {
+            for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
+                if (privilegeEntry.object == null && isGrant == privilegeEntry.isGrant) {
+                    return privilegeEntry;
+                }
+            }
+        } else {
+            for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
+                if (privilegeEntry.object != null
+                        && 0 == privilegeEntry.object.compareTo(object)
+                        && isGrant == privilegeEntry.isGrant) {
+                    return privilegeEntry;
+                }
             }
         }
         return null;
@@ -66,6 +82,7 @@ public class PrivilegeCollection {
             boolean isGrant) {
         if (entry == null) {
             privilegeEntryList.add(new PrivilegeEntry(actionSet, object, isGrant));
+            Collections.sort(privilegeEntryList);
         } else {
             entry.actionSet.add(actionSet);
         }
@@ -152,8 +169,11 @@ public class PrivilegeCollection {
         }
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object) && privilegeEntry.actionSet.contains(want)) {
-                return true;
+            if (objectMatch(privilegeEntry.object, object)) {
+                if (privilegeEntry.actionSet.contains(want)) {
+                    return true;
+                }
+                // still looking for the next entry, maybe object match but with/without grant option
             }
         }
         return false;
@@ -187,13 +207,15 @@ public class PrivilegeCollection {
             while (iterator.hasNext()) {
                 PEntryObject object = iterator.next();
                 if (privilegeEntry.isGrant && objectMatch(privilegeEntry.object, object)) {
-                    if (!privilegeEntry.actionSet.contains(wantSet)) {
-                        return false;
-                    } else {
+                    if (privilegeEntry.actionSet.contains(wantSet)) {
                         iterator.remove();
                         if (unCheckedObjects.isEmpty()) {
                             // all objects are verified
                             return true;
+                        }
+                    } else {
+                        if (!privilegeEntry.object.isFuzzyMatching()) {
+                            return false;
                         }
                     }
                 }
@@ -210,7 +232,7 @@ public class PrivilegeCollection {
             Iterator<PrivilegeEntry> entryIterator = list.iterator();
             while (entryIterator.hasNext()) {
                 PrivilegeEntry entry = entryIterator.next();
-                if (entry.object != null && ! entry.object.validate(globalStateMgr)) {
+                if (entry.object != null && !entry.object.isFuzzyMatching() && !entry.object.validate(globalStateMgr)) {
                     String entryStr = GsonUtils.GSON.toJson(entry);
                     LOG.info("find invalidate object, will remove the entry now: {}", entryStr);
                     entryIterator.remove();
@@ -220,5 +242,12 @@ public class PrivilegeCollection {
                 listIter.remove();
             }
         }
+    }
+
+    @Override
+    public String toString() {
+        return "PrivilegeCollection{" +
+                "typeToPrivilegeEntryList=" + GsonUtils.GSON.toJson(typeToPrivilegeEntryList) +
+                '}';
     }
 }

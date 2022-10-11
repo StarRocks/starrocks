@@ -97,6 +97,7 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
+            System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
     }
@@ -133,5 +134,30 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on database db1 to test",
                 "revoke drop on database db1 from test",
                 "Access denied for user 'test' to database 'db1'");
+    }
+
+    @Test
+    public void testGrantRevoke() throws Exception {
+        verifyGrantRevoke(
+                "grant select on db1.tbl1 to test",
+                "grant select on db1.tbl1 to test with grant option",
+                "revoke select on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+        verifyGrantRevoke(
+                "revoke select on db1.tbl1 from test",
+                "grant select on db1.tbl1 to test with grant option",
+                "revoke select on db1.tbl1 from test with grant option",
+                "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+    }
+
+    @Test
+    public void testGrantSystem() throws Exception {
+        try {
+            UtFrameUtils.parseStmtWithNewParser("grant grant on system to test", starRocksAssert.getCtx());
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("GRANT permission denied: cannot grant/revoke system privilege"));
+        }
+
     }
 }

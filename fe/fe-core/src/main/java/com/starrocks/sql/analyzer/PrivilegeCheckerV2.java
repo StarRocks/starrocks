@@ -7,6 +7,8 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.privilege.PrivilegeException;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeTypes;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -15,6 +17,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
@@ -166,7 +169,16 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            // will be checked in analyzer after object is analyzed
+            String action = stmt instanceof GrantPrivilegeStmt ? "GRANT" : "REVOKE";
+            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+            try {
+                privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
+            } catch (PrivilegeException e) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, action, e.getMessage());
+            }
+            if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
             return null;
         }
     }

@@ -47,10 +47,9 @@ public interface AuthorizationProvider {
      * e.g. To forbid `NODE` privilege being granted, we should put some code here.
      */
     void validateGrant(
-            short type,
-            ActionSet wantSet,
-            List<PEntryObject> objects,
-            PrivilegeCollection collection) throws PrivilegeException;
+            String type,
+            List<String> actions,
+            List<PEntryObject> objects) throws PrivilegeException;
 
     /**
      * check if certain action of certain type is allowed on certain object.
@@ -69,6 +68,12 @@ public interface AuthorizationProvider {
 
     boolean hasType(
             short type,
+            PrivilegeCollection currentPrivilegeCollection);
+
+    boolean allowGrant(
+            short type,
+            ActionSet wants,
+            List<PEntryObject> objects,
             PrivilegeCollection currentPrivilegeCollection);
 
     /**

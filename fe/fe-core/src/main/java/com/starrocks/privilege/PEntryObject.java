@@ -4,12 +4,13 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.commons.lang.NotImplementedException;
 
 /**
  * interface is hard to serialized/deserialized using GSON
  * to simplify the implementation, the base class PEntryObject contains one data field called `id`.
  */
-public class PEntryObject {
+public class PEntryObject implements Comparable<PEntryObject> {
     @SerializedName(value = "i")
     protected long id;
 
@@ -30,6 +31,14 @@ public class PEntryObject {
     }
 
     /**
+     * return true if current object can be used for fuzzy matching
+     * e.g. GRANT SELECT ON ALL TABLES IN DATABASE db1
+     */
+    public boolean isFuzzyMatching() {
+        throw new NotImplementedException();
+    }
+
+    /**
      * validate this object to see if still exists
      * the default behavior is to do nothing
      */
@@ -37,4 +46,12 @@ public class PEntryObject {
         return true;
     }
 
+    /**
+     * used in Collections.sort() to accelerate lookup
+     * make sure fuzzy matching is smaller than precise matching
+     */
+    @Override
+    public int compareTo(PEntryObject o) {
+        throw new NotImplementedException();
+    }
 }

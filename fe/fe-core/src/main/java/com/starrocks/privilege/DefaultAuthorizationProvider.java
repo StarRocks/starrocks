@@ -79,11 +79,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public void validateGrant(short type, ActionSet wantSet, List<PEntryObject> objects, PrivilegeCollection collection)
-            throws PrivilegeException {
-        // ADMIN/GRANT is not allowed on system type. TBD
-        if (!collection.allowGrant(type, wantSet, objects)) {
-            throw new PrivilegeException("Access denied");
+    public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
+        if (type.equals(PrivilegeTypes.SYSTEM.toString())) {
+            throw new PrivilegeException("cannot grant/revoke system privilege");
         }
     }
 
@@ -95,6 +93,12 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     @Override
     public boolean checkAnyObject(short type, Action want, PrivilegeCollection currentPrivilegeCollection) {
         return currentPrivilegeCollection.checkAnyObject(type, want);
+    }
+
+    @Override
+    public boolean allowGrant(
+            short type, ActionSet wants, List<PEntryObject> objects, PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.allowGrant(type, wants, objects);
     }
 
     @Override
