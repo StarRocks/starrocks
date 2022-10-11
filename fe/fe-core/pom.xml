@@ -773,7 +773,19 @@ under the License.
                                     <arg value="-jar"/>
                                     <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
-                                    <arg value="${starrocks.home}/gensrc/proto/lake_delete.proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/types.proto"/>
+                                </exec>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/tablet_schema.proto"/>
+                                </exec>
+                                <exec executable="${java.home}/bin/java">
+                                    <arg value="-jar"/>
+                                    <arg value="${settings.localRepository}/com/baidu/jprotobuf/${jprotobuf.version}/jprotobuf-${jprotobuf.version}-jar-with-dependencies.jar"/>
+                                    <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
+                                    <arg value="${starrocks.home}/gensrc/proto/lake_types.proto"/>
                                 </exec>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>

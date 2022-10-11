@@ -3,9 +3,9 @@
 syntax="proto2";
 
 package starrocks.lake;
-option java_package = "com.starrocks.lake.proto";
+option java_package = "com.starrocks.proto";
 
-import "lake_delete.proto";
+import "types.proto";
 
 option cc_generic_services = true;
 
