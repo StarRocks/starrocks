@@ -6,8 +6,6 @@
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
-#include <zstd/zstd.h>
-#include <zstd/zstd_errors.h>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -28,7 +26,7 @@
 
 namespace starrocks::serde {
 namespace {
-constexpr int ENCODE_SIZE_LIMIT = 64;
+constexpr int ENCODE_SIZE_LIMIT = 256;
 uint8_t* write_little_endian_32(uint32_t value, uint8_t* buff) {
     encode_fixed32_le(buff, value);
     return buff + sizeof(value);
@@ -120,40 +118,6 @@ const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size)
     return buff + encode_size;
 }
 
-uint8_t* encode_string_zstd(const void* data, size_t size, uint8_t* buff, int encode_level) {
-    if (encode_level == 0) {
-        throw std::runtime_error("zstd encode level does not work.");
-    }
-    uint64_t encode_size = ZSTD_compress((void*)(buff + sizeof(uint64_t)), ZSTD_compressBound(size), data, size,
-                                         std::max(1, std::abs(encode_level / 10000) % 100));
-
-    if (ZSTD_isError(encode_size)) {
-        throw std::runtime_error("zstd compress error.");
-    }
-    buff = write_little_endian_64(encode_size, buff);
-    if (encode_level < -1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, zstd compression ratio = {}\n", size,
-                                    encode_size, encode_size * 1.0 / size);
-    }
-    return buff + encode_size;
-}
-
-const uint8_t* decode_string_zstd(const uint8_t* buff, void* target, size_t size) {
-    uint64_t encode_size = 0;
-    buff = read_little_endian_64(buff, &encode_size);
-    uint64_t encode_size1 = ZSTD_decompress(target, size, (void*)buff, encode_size);
-    if (ZSTD_isError(encode_size)) {
-        throw std::runtime_error("zstd decompress error.");
-    }
-    if (size != encode_size1) {
-        throw std::runtime_error(
-                fmt::format("zstd encode size does not equal when decoding, encode size = {}, but decode get size = "
-                            "{}, raw size = {}.",
-                            encode_size, encode_size1, size));
-    }
-    return buff + encode_size;
-}
-
 template <typename T>
 class FixedLengthColumnSerde {
 public:
@@ -208,8 +172,6 @@ public:
         }
         if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) + LZ4_compressBound(bytes.size());
-        } else if ((encode_level & 4) && bytes.size() >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint64_t) + ZSTD_compressBound(bytes.size());
         } else {
             res += bytes.size();
         }
@@ -230,8 +192,6 @@ public:
         }
         if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
-        } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
-            buff = encode_string_zstd(bytes.data(), bytes_size, buff, encode_level);
         } else {
             buff = write_raw(bytes.data(), bytes_size, buff);
         }
@@ -263,8 +223,6 @@ public:
         column->get_bytes().resize(bytes_size);
         if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
-        } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
-            buff = decode_string_zstd(buff, column->get_bytes().data(), bytes_size);
         } else {
             buff = read_raw(buff, column->get_bytes().data(), bytes_size);
         }
