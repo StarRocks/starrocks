@@ -610,6 +610,8 @@ REFRESH MATERIALIZED VIEW order_mv;
 >
 > You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
 
+You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) statement.
+
 ### Check the execution status of a multi-table materialized view
 
 You can check the execution status of a multi-table materialized view via the following ways.
