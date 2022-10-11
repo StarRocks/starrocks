@@ -226,6 +226,7 @@ public:
     Status check_has_error();
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
+    // Argument op is the SinkOperator that hold this Aggregator, partial-hit chunks will be refill back to op
     Status reset_state(RuntimeState* state, const std::vector<vectorized::ChunkPtr>& chunks, pipeline::Operator* op);
 
 #ifdef NDEBUG

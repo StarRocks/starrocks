@@ -65,11 +65,7 @@ public:
     Reducer(double init_value, ReduceFunc reduce_func, size_t output_num_rows);
     ~Reducer() = default;
     void close(starrocks::RuntimeState* state) override{};
-    Status reset_state() {
-        _sink_is_finished = false;
-        _source_is_finished = false;
-        return Status::OK();
-    }
+    Status reset_state(RuntimeState* state, const Chunks& chunks, pipeline::Operator* op);
 
     void set_result(double result) { _result = result; }
     double result() const { return _result; }

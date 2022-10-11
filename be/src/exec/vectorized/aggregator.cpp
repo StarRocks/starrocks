@@ -305,6 +305,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<vectorized::ChunkPtr>& chunks,
                                pipeline::Operator* op) {
     RETURN_IF_ERROR(_reset_state(state));
+    // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
+    // merge method of agg functions to process these chunks.
     begin_pending_reset_state();
     for (const auto& chunk : chunks) {
         if (chunk == nullptr || chunk->is_empty()) {
@@ -315,6 +317,7 @@ Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector
     end_pending_reset_state();
     return Status::OK();
 }
+
 Status Aggregator::_reset_state(RuntimeState* state) {
     _is_ht_eos = false;
     _num_input_rows = 0;

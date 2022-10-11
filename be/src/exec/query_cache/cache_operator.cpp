@@ -190,14 +190,21 @@ void CacheOperator::_handle_stale_cache_value(int64_t tablet_id, CacheValue& cac
                                               int64_t version) {
     // In BE unittest, stale value is considered as partial-hit
 #ifdef BE_TEST
-    buffer->state = PLBS_HIT_PARTIAL;
-    buffer->num_rows = 0;
-    buffer->num_bytes = 0;
-    for (const auto& chunk : buffer->chunks) {
-        buffer->num_rows += chunk->num_rows();
-        buffer->num_bytes += chunk->bytes_usage();
+    {
+        buffer->state = PLBS_HIT_PARTIAL;
+        buffer->required_version = version;
+        buffer->cached_version = cache_value.version;
+        buffer->num_rows = 0;
+        buffer->num_bytes = 0;
+        auto chunks = remap_chunks(cache_value.result, _cache_param.reverse_slot_remapping);
+        buffer->chunks = std::move(chunks);
+        for (const auto& chunk : buffer->chunks) {
+            buffer->num_rows += chunk->num_rows();
+            buffer->num_bytes += chunk->bytes_usage();
+        }
+        buffer->chunks.back()->owner_info().set_last_chunk(false);
+        return;
     }
-    buffer->chunks.back()->owner_info().set_last_chunk(false);
 #endif
 
     // Try to reuse partial cache result when cached version is less than required version, delta versions

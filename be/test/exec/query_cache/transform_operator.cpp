@@ -117,7 +117,16 @@ Status ReduceSinkOperator::set_finishing(starrocks::RuntimeState* state) {
 
 Status ReduceSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
     _result = _reducer->init_value();
-    return _reducer->reset_state();
+    return _reducer->reset_state(state, chunks, this);
+}
+
+Status Reducer::reset_state(RuntimeState* state, const Chunks& chunks, pipeline::Operator* op) {
+    _sink_is_finished = false;
+    _source_is_finished = false;
+    for (const auto& chunk : chunks) {
+        RETURN_IF_ERROR(op->push_chunk(state, chunk));
+    }
+    return Status::OK();
 }
 
 ReduceSinkOperatorFactory::ReduceSinkOperatorFactory(int32_t id, ReducerFactoryRawPtr reducer_factory)

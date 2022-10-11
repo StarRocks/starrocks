@@ -306,6 +306,7 @@ bool exec_test_pipeline(Task& task, RuntimeState* state, vectorized::ChunkPtr in
 
 struct Action {
     query_cache::LaneOwnerType owner_id;
+    int64_t version = 1;
     long from;
     long to;
     int max_step;
@@ -347,14 +348,17 @@ struct Action {
         return Action{.owner_id = owner_id, .expect_acquire_result = query_cache::AR_SKIP};
     }
 
-    static Action cache_hit(query_cache::LaneOwnerType owner_id) {
-        return Action{
-                .owner_id = owner_id, .expect_acquire_result = query_cache::AR_PROBE, .expect_probe_result = true};
+    static Action cache_hit(query_cache::LaneOwnerType owner_id, int64_t version = 1) {
+        return Action{.owner_id = owner_id,
+                      .version = version,
+                      .expect_acquire_result = query_cache::AR_PROBE,
+                      .expect_probe_result = true};
     }
 
     static Action cache_miss_and_emit_first_chunk(query_cache::LaneOwnerType owner_id, long from, long to, int max_step,
-                                                  bool send_eof, bool expect_finished) {
+                                                  bool send_eof, bool expect_finished, int64_t version = 1) {
         return Action{.owner_id = owner_id,
+                      .version = version,
                       .from = from,
                       .to = to,
                       .max_step = max_step,
@@ -363,6 +367,21 @@ struct Action {
                       .expect_probe_result = false,
                       .expect_finished = expect_finished};
     }
+
+    static Action cache_partial_hit_and_emit_first_chunk(query_cache::LaneOwnerType owner_id, long from, long to,
+                                                         int max_step, bool send_eof, bool expect_finished,
+                                                         int64_t version) {
+        return Action{.owner_id = owner_id,
+                      .version = version,
+                      .from = from,
+                      .to = to,
+                      .max_step = max_step,
+                      .send_eof = send_eof,
+                      .expect_acquire_result = query_cache::AR_PROBE,
+                      .expect_probe_result = true,
+                      .expect_finished = expect_finished};
+    }
+
     static Action emit_remain_chunk(query_cache::LaneOwnerType owner_id, long from, long to, int max_step,
                                     bool send_eof, bool expect_finished) {
         return Action{.owner_id = owner_id,
@@ -393,10 +412,16 @@ void take_action(Task& task, const Action& action, RuntimeState* state) {
     auto ac_result = task.lane_arbiter->try_acquire_lane(action.owner_id);
     ASSERT_EQ(ac_result, action.expect_acquire_result);
     if (ac_result == query_cache::AcquireResult::AR_PROBE) {
-        auto probe_result = task.cache_operator->probe_cache(action.owner_id, 1);
+        auto probe_result = task.cache_operator->probe_cache(action.owner_id, action.version);
         ASSERT_EQ(probe_result, action.expect_probe_result);
+        task.cache_operator->reset_lane(state, action.owner_id);
         if (!probe_result) {
-            task.cache_operator->reset_lane(action.owner_id);
+            exec_action(task, action, state);
+            return;
+        }
+        auto real_version = task.cache_operator->cached_version(action.owner_id);
+        ASSERT_TRUE(real_version <= action.version);
+        if (real_version < action.version) {
             exec_action(task, action, state);
         }
     } else if (ac_result == query_cache::AcquireResult::AR_IO) {
@@ -1014,6 +1039,106 @@ TEST_F(CacheTest, testMultiLanePassthroughWithoutEmptyTablet) {
     };
     test_framework_force_populate_and_passthrough(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func,
                                                   probe_actions, {}, eq_validator_gen(4000000));
+}
+
+TEST_F(CacheTest, testOneTabletPartialHit) {
+    Actions actions = {
+            Action::cache_miss_and_emit_first_chunk(1, 0, 10, 1, false, false),
+            Action::emit_remain_chunk(1, 10, 1000, 1, true, false),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, actions, {},
+                   eq_validator_gen(1000'000.0));
+
+    Actions probe_partial_hit_actions = {
+            Action::cache_partial_hit_and_emit_first_chunk(1, 1000, 1333, 1, false, false, 2),
+            Action::emit_remain_chunk(1, 1333, 2000, 1, true, false),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_partial_hit_actions, {},
+                   eq_validator_gen(4000'000.0));
+
+    Actions probe_total_hit_actions = {
+            Action::cache_hit(1, 2),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
+                   eq_validator_gen(4000'000.0));
+
+    Actions probe_partial_hit_actions2 = {
+            Action::cache_partial_hit_and_emit_first_chunk(1, 2000, 2001, 1, false, false, 4),
+            Action::emit_remain_chunk(1, 2001, 2999, 1, true, false),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_partial_hit_actions2, {},
+                   eq_validator_gen(8994'001.0));
+
+    Actions probe_total_hit_actions2 = {
+            Action::cache_hit(1, 4),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions2, {},
+                   eq_validator_gen(8994'001.0));
+
+    Actions probe_miss_actions2 = {
+            Action::cache_miss_and_emit_first_chunk(1, 0, 99, 1, true, false, 3),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_miss_actions2, {},
+                   eq_validator_gen(9801.0));
+}
+
+TEST_F(CacheTest, testPartialHit) {
+    Actions actions = {
+            Action::cache_miss_and_emit_first_chunk(4, 34, 35, 1, false, false),
+            Action::cache_miss_and_emit_first_chunk(1, 0, 3, 1, false, false),
+            Action::cache_miss_and_emit_first_chunk(2, 3, 11, 1, false, false),
+            Action::cache_miss_and_emit_first_chunk(3, 11, 34, 1, false, false),
+            Action::emit_remain_chunk(1, 35, 500, 1, true, false),
+            Action::emit_eof(2),
+            Action::emit_eof(3),
+            Action::emit_eof(4),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, actions, {},
+                   eq_validator_gen(250000.0));
+
+    Actions probe_partial_hit_actions = {
+            Action::cache_partial_hit_and_emit_first_chunk(1, 500, 510, 1, false, false, 2),
+            Action::cache_miss_and_emit_first_chunk(5, 3, 35, 1, false, false, 2),
+            Action::cache_miss_and_emit_first_chunk(6, 510, 600, 1, false, false, 2),
+            Action::emit_remain_chunk(1, 600, 601, 1, false, false),
+            Action::emit_remain_chunk(1, 601, 605, 1, false, false),
+            Action::emit_remain_chunk(5, 605, 799, 1, true, false),
+            Action::emit_eof(1),
+            Action::emit_eof(6),
+            Action::cache_miss_and_emit_first_chunk(7, 799, 800, 1, false, false, 2),
+            Action::acquire_lane_busy(8),
+            Action::just_run(INT_MAX, false),
+            Action::cache_miss_and_emit_first_chunk(8, 800, 801, 1, true, false, 2),
+            Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_partial_hit_actions, {},
+                   eq_validator_gen(801.0 * 801.0));
+
+    Actions probe_total_hit_actions = {
+            Action::cache_hit(1, 2),         Action::cache_hit(5, 2),
+            Action::cache_hit(6, 2),         Action::cache_hit(7, 2),
+            Action::acquire_lane_busy(8),    Action::just_run(INT_MAX, false),
+            Action::cache_hit(8, 2),         Action::finish(),
+            Action::just_run(INT_MAX, true),
+    };
+    test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
+                   eq_validator_gen(801.0 * 801.0));
 }
 
 } // namespace starrocks::vectorized
