@@ -21,7 +21,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
-#include "testutil//assert.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -342,6 +342,8 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
     std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ptype, op, slot)))};
+    ASSERT_OK(Expr::prepare(conjunct_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
     auto tablet_schema = TabletSchema::create(create_tablet_schema(ptype));
 
     OlapScanConjunctsManager cm;
