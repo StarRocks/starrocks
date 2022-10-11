@@ -191,7 +191,7 @@ public class UDFHelper {
         int[] offsets = new int[numRows];
         byte[][] byteRes = new byte[numRows][];
         int offset = 0;
-        for (int i = 0; i < column.length; i++) {
+        for (int i = 0; i < numRows; i++) {
             if (column[i] == null) {
                 byteRes[i] = emptyBytes;
                 nulls[i] = 1;
