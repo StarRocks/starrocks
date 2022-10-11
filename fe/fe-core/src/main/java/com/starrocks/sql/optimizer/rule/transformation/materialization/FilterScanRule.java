@@ -16,7 +16,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Keep single table rewrite in rule-base phase to reduce the search space
  *
  */
-public class FilterScanRule extends BaseMaterializedViewRewriteRule {
+public class FilterScanRule extends SingleTableRewriteRule {
     public FilterScanRule() {
         super(RuleType.TF_MV_FILTER_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_FILTER)
                 .addChildren(Pattern.create(OperatorType.PATTERN_SCAN)));

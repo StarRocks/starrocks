@@ -11,7 +11,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Here is the rule for pattern Projection - Filter - Scan
  *
  */
-public class ProjectionFilterScanRule extends BaseMaterializedViewRewriteRule {
+public class ProjectionFilterScanRule extends SingleTableRewriteRule {
     public ProjectionFilterScanRule() {
         super(RuleType.TF_MV_PROJECT_FILTER_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_PROJECT)
                 .addChildren(Pattern.create(OperatorType.LOGICAL_FILTER, OperatorType.PATTERN_SCAN)));

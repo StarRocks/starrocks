@@ -29,7 +29,7 @@ import java.util.List;
  * Put multi table query rewrite in memo phase
  *
  */
-public class BaseMaterializedViewRewriteRule extends TransformationRule {
+public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
     public BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }

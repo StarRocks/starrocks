@@ -16,7 +16,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Here is the rule for pattern Scan with predicates
  *
  */
-public class OnlyScanRule extends BaseMaterializedViewRewriteRule {
+public class OnlyScanRule extends SingleTableRewriteRule {
     public OnlyScanRule() {
         super(RuleType.TF_MV_ONLY_SCAN_RULE, Pattern.create(OperatorType.PATTERN_SCAN));
     }
