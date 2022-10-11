@@ -116,7 +116,7 @@ public:
     // partial-hit cache value via the `chunks` parameter, e.g.
     //  MultilaneOperator<ConjugateOperator<AggregateBlockingSinkOperator, AggregateBlockingSourceOperator>>
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
-    virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) { return Status::OK(); }
+    virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
     int32_t get_id() const { return _id; }
 

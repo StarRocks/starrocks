@@ -29,7 +29,7 @@ public:
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
-    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING

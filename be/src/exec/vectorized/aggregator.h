@@ -226,8 +226,14 @@ public:
     Status check_has_error();
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
-    // Argument op is the SinkOperator that hold this Aggregator, partial-hit chunks will be refill back to op
-    Status reset_state(RuntimeState* state, const std::vector<vectorized::ChunkPtr>& chunks, pipeline::Operator* op);
+    // reset_state is used to clear the internal state of the Aggregator, then it can process new tablet, in
+    // multi-version cache, we should refill the chunks (i.e.partial-hit result) from the stale cache back to
+    // the pre-cache agg, after that, the incremental rowsets are read out and merged with these partial state
+    // to produce the final result that will be populated into the cache.
+    // refill_chunk: partial-hit result of stale version.
+    // refill_op: pre-cache agg operator, Aggregator's holder.
+    Status reset_state(RuntimeState* state, const std::vector<vectorized::ChunkPtr>& refill_chunks,
+                       pipeline::Operator* refill_op);
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache

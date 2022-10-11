@@ -169,8 +169,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
     return Status::OK();
 }
 
-Status AggregateStreamingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
+Status AggregateStreamingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
-    return _aggregator->reset_state(state, chunks, this);
+    return _aggregator->reset_state(state, refill_chunks, this);
 }
 } // namespace starrocks::pipeline

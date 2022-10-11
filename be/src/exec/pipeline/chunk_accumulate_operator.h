@@ -28,7 +28,7 @@ public:
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
 
-    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75;          // 0.75 * chunk_size

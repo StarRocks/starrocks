@@ -48,9 +48,9 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) {
+Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
-    return _aggregator->reset_state(state, chunks, this);
+    return _aggregator->reset_state(state, refill_chunks, this);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
