@@ -17,15 +17,10 @@ public class GrantPrivilegeStmt extends BaseGrantRevokePrivilegeStmt {
     }
 
     /**
-     * The following 2 constructor is used to generate sql when excuting `show grants` in old privilege framework
+     * The following 2 functions is used to generate sql when excuting `show grants` in old privilege framework
      */
     public GrantPrivilegeStmt(List<String> privList, String privType, UserIdentity userIdentity) {
         super(privList, privType, new GrantRevokeClause(userIdentity, null, false),
-                new GrantRevokePrivilegeObjects());
-    }
-
-    public GrantPrivilegeStmt(List<String> privList, String privType, String role) {
-        super(privList, privType, new GrantRevokeClause(null, role, false),
                 new GrantRevokePrivilegeObjects());
     }
 

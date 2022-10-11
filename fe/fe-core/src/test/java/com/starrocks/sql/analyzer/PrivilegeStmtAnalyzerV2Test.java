@@ -245,24 +245,41 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("invalid plural privilege type DATABASE"));
         }
 
-        sql = "revoke select on ALL tables to test_user";
+        sql = "grant create_table on ALL tables to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with database"));
         }
 
-        sql = "grant create_table on ALL database in database db1 to test_user";
+        sql = "revoke select on ALL tables IN ALL tables IN all databases from test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for tables"));
         }
+
+        sql = "revoke select on ALL tables IN ALL tables from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with ALL DATABASES instead of ALL TABLES"));
+        }
+
+        sql = "grant create_table on ALL databases in database db1 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for databases! only support ON ALL DATABASES"));
+        }
+
     }
 
     @Test
@@ -287,14 +304,20 @@ public class PrivilegeStmtAnalyzerV2Test {
 
         try {
             UtFrameUtils.parseStmtWithNewParser("grant impersonate on xxx to test_user", ctx);
+            Assert.fail();
         } catch (Exception e) {
-            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("user 'xxx'@'%' not exist!"));
         }
     }
 
     @Test
     public void testGrantSystem() throws Exception {
-        String sql = "grant grant on system to test_user";
-        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        try {
+            UtFrameUtils.parseStmtWithNewParser("grant grant on system to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
+        }
+
     }
 }

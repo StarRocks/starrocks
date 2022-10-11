@@ -6,6 +6,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang.NotImplementedException;
 
+import java.util.Objects;
+
 /**
  * interface is hard to serialized/deserialized using GSON
  * to simplify the implementation, the base class PEntryObject contains one data field called `id`.
@@ -53,5 +55,22 @@ public class PEntryObject implements Comparable<PEntryObject> {
     @Override
     public int compareTo(PEntryObject o) {
         throw new NotImplementedException();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        PEntryObject object = (PEntryObject) o;
+        return id == object.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }

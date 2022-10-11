@@ -6,6 +6,8 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Objects;
+
 public class UserPEntryObject extends PEntryObject {
     @SerializedName(value = "u")
     private UserIdentity userIdentity;
@@ -29,6 +31,8 @@ public class UserPEntryObject extends PEntryObject {
         UserPEntryObject other = (UserPEntryObject) obj;
         return userIdentity.equals(other.userIdentity);
     }
+
+    @Override
     public boolean isFuzzyMatching() {
         return true; // no fuzzy matching for user
     }
@@ -44,9 +48,26 @@ public class UserPEntryObject extends PEntryObject {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
         UserPEntryObject o = (UserPEntryObject) obj;
-        if (userIdentity.equals(o.userIdentity)) {
-            return 0; // this function is only meaningful when checking if identical
-        }
         return userIdentity.toString().compareTo(o.userIdentity.toString());
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        UserPEntryObject that = (UserPEntryObject) o;
+        return userIdentity.equals(that.userIdentity);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), userIdentity);
     }
 }

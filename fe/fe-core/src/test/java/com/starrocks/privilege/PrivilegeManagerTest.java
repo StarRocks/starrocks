@@ -372,6 +372,9 @@ public class PrivilegeManagerTest {
         // 6. add invalidate entry: create_table, drop on invalidatedb
         objects = Arrays.asList(new DbPEntryObject(-1));
         manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
+        // 7. add valid entry:
+        objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASE_ID));
+        manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
 
         // check before clean up:
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));

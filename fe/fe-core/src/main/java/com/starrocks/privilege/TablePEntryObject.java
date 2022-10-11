@@ -9,6 +9,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
+import java.util.Objects;
 
 public class TablePEntryObject extends PEntryObject {
     @SerializedName(value = "d")
@@ -73,6 +74,7 @@ public class TablePEntryObject extends PEntryObject {
         return other.databaseId == databaseId && (id == ALL_TABLES_ID || other.id == id);
     }
 
+    @Override
     public boolean isFuzzyMatching() {
         return databaseId == ALL_DATABASE_ID || id == ALL_TABLES_ID;
     }
@@ -107,5 +109,25 @@ public class TablePEntryObject extends PEntryObject {
                 return 0;
             }
         }
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        TablePEntryObject that = (TablePEntryObject) o;
+        return databaseId == that.databaseId;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), databaseId);
     }
 }

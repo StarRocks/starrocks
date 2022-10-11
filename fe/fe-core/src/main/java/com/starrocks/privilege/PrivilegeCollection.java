@@ -62,7 +62,7 @@ public class PrivilegeCollection {
         } else {
             for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
                 if (privilegeEntry.object != null
-                        && 0 == privilegeEntry.object.compareTo(object)
+                        && object.equals(privilegeEntry.object)
                         && isGrant == privilegeEntry.isGrant) {
                     return privilegeEntry;
                 }
@@ -169,12 +169,10 @@ public class PrivilegeCollection {
         }
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object)) {
-                if (privilegeEntry.actionSet.contains(want)) {
-                    return true;
-                }
-                // still looking for the next entry, maybe object match but with/without grant option
+            if (objectMatch(privilegeEntry.object, object) && privilegeEntry.actionSet.contains(want)) {
+                return true;
             }
+            // still looking for the next entry, maybe object match but with/without grant option
         }
         return false;
     }

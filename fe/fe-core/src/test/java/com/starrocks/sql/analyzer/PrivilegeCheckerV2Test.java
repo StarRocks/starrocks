@@ -149,15 +149,4 @@ public class PrivilegeCheckerV2Test {
                 "revoke select on db1.tbl1 from test with grant option",
                 "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
     }
-
-    @Test
-    public void testGrantSystem() throws Exception {
-        try {
-            UtFrameUtils.parseStmtWithNewParser("grant grant on system to test", starRocksAssert.getCtx());
-        } catch (Exception e) {
-            e.printStackTrace();
-            Assert.assertTrue(e.getMessage().contains("GRANT permission denied: cannot grant/revoke system privilege"));
-        }
-
-    }
 }

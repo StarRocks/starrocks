@@ -74,8 +74,13 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.check(table, delete, table1));
         Assert.assertFalse(collection.checkAnyObject(table, delete));
 
+        // revoke system
+        collection.revoke(system, new ActionSet(Arrays.asList(admin)), null, false);
+        Assert.assertFalse(collection.check(system, admin, null));
+
         // nothing left
         Assert.assertFalse(collection.hasType(table));
+        Assert.assertFalse(collection.hasType(system));
         collection.revoke(table, new ActionSet(Arrays.asList(insert, delete)), Arrays.asList(table1), false);
     }
 

@@ -45,6 +45,8 @@ public class DbPEntryObject extends PEntryObject {
         DbPEntryObject other = (DbPEntryObject) obj;
         return other.id == id;
     }
+
+    @Override
     public boolean isFuzzyMatching() {
         return ALL_DATABASE_ID == id;
     }

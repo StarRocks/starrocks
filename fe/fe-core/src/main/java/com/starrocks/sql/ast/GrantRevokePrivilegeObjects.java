@@ -20,8 +20,6 @@ public class GrantRevokePrivilegeObjects implements ParseNode {
     private String restrictType = null;
     private String restrictName = null;
 
-    public GrantRevokePrivilegeObjects() {}
-
     public void setPrivilegeObjectNameTokensList(List<List<String>> privilegeObjectNameTokensList) {
         this.privilegeObjectNameTokensList = privilegeObjectNameTokensList;
     }
