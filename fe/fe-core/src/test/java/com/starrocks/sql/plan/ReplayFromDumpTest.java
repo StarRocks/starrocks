@@ -593,17 +593,17 @@ public class ReplayFromDumpTest {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
                         TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 21:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 22:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: if(20: c_0_0 != 1: c_0_0, 4: c_0_3, 21: c_0_3) = '1969-12-28', " +
                 "CASE WHEN (22: countRows IS NULL) OR (22: countRows = 0) THEN FALSE " +
                 "WHEN 1: c_0_0 IS NULL THEN NULL WHEN 16: c_0_0 IS NOT NULL THEN TRUE " +
                 "WHEN 23: countNotNulls < 22: countRows THEN NULL ELSE FALSE END IS NULL"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("14:HASH JOIN\n" +
-                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("15:HASH JOIN\n" +
+                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: c_0_0 = 16: c_0_0\n" +
+                "  |  equal join conjunct: 16: c_0_0 = 1: c_0_0\n" +
                 "  |  other join predicates: if(16: c_0_0 != 1: c_0_0, 4: c_0_3, 18: c_0_3) = '1969-12-28'"));
     }
 
@@ -611,7 +611,7 @@ public class ReplayFromDumpTest {
     public void testHiveTPCH02UsingResource() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  22:ANALYTIC\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:ANALYTIC\n" +
                 "  |  functions: [, min[([20: ps_supplycost, DECIMAL64(15,2), true]); args: DECIMAL64; " +
                 "result: DECIMAL64(15,2); args nullable: true; result nullable: true], ]\n" +
                 "  |  partition by: [1: p_partkey, INT, true]"));
@@ -636,6 +636,16 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_table_join"), null, TExplainLevel.COSTS);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("0:HdfsScanNode\n" +
                 "     TABLE: parttbl\n" +
+                "     PARTITION PREDICATES: 3: date = '2022-08-15'\n" +
+                "     partitions=1/3\n" +
+                "     avgRowSize=9.0\n" +
+                "     numNodes=0\n" +
+                "     cardinality: 1\n" +
+                "     column statistics: \n" +
+                "     * c0-->[1.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE\n" +
+                "     * date-->[-Infinity, Infinity, 0.0, 5.0, 1.0] ESTIMATE"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("2:HdfsScanNode\n" +
+                "     TABLE: parttbl\n" +
                 "     PARTITION PREDICATES: 6: date <= '2022-08-16'\n" +
                 "     partitions=2/3\n" +
                 "     avgRowSize=8.0\n" +
@@ -644,16 +654,6 @@ public class ReplayFromDumpTest {
                 "     column statistics: \n" +
                 "     * c1-->[-Infinity, Infinity, 0.0, 3.0, 1.0] ESTIMATE\n" +
                 "     * date-->[-Infinity, Infinity, 0.0, 5.0, 1.0] ESTIMATE"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("2:HdfsScanNode\n" +
-                "     TABLE: parttbl\n" +
-                "     PARTITION PREDICATES: 3: date = '2022-08-15'\n" +
-                "     partitions=1/3\n" +
-                "     avgRowSize=9.0\n" +
-                "     numNodes=0\n" +
-                "     cardinality: 0\n" +
-                "     column statistics: \n" +
-                "     * c0-->[1.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE\n" +
-                "     * date-->[-Infinity, Infinity, 0.0, 5.0, 1.0] ESTIMAT"));
     }
 
     @Test

@@ -32,6 +32,9 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
  */
 public class ExportRelativeStmtTest {
 
+    @Mocked
+    private GlobalStateMgr globalStateMgr;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
@@ -243,8 +246,8 @@ public class ExportRelativeStmtTest {
     }
 
     @Test
-    public void testCancelExportHandler(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked ExportMgr exportMgr, @Mocked EditLog editLog) {
+    public void testCancelExportHandler( @Mocked ExportMgr exportMgr, @Mocked EditLog editLog) {
+
         new MockUp<ConnectContext>() {
             @Mock
             GlobalStateMgr getGlobalStateMgr() {
@@ -255,7 +258,6 @@ public class ExportRelativeStmtTest {
         new Expectations() {
             {
                 globalStateMgr.getExportMgr();
-                minTimes = 0;
                 result = exportMgr;
             }
         };
