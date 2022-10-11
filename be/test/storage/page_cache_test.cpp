@@ -130,7 +130,7 @@ TEST_F(StoragePageCacheTest, metrics) {
     ASSERT_EQ(cache.get_lookup_count(), 2);
     ASSERT_EQ(cache.get_hit_count(), 2);
     // Test the cache miss
-    for (int i=0; i<1024; i++) {
+    for (int i = 0; i < 1024; i++) {
         PageCacheHandle handle;
         StoragePageCache::CacheKey key(std::to_string(i), 0);
         cache.lookup(key, &handle);
