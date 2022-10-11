@@ -444,7 +444,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().createRole(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getPrivilegeManager().createRole(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().createRole(stmt);
+                }
             });
             return null;
         }
@@ -452,7 +456,11 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitDropRoleStatement(DropRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getAuth().dropRole(stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    context.getGlobalStateMgr().getPrivilegeManager().dropRole(stmt);
+                } else {
+                    context.getGlobalStateMgr().getAuth().dropRole(stmt);
+                }
             });
             return null;
         }

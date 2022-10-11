@@ -7,7 +7,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -18,6 +20,7 @@ import org.junit.Test;
 
 public class PrivilegeStmtAnalyzerV2Test {
     static ConnectContext ctx;
+
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.setUpForPersistTest();
@@ -177,6 +180,43 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("cannot drop root!"));
+        }
+    }
+
+    @Test
+    public void testRole() throws Exception {
+        String sql = "create role test_role";
+        CreateRoleStmt createStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_role", createStmt.getQualifiedRole());
+        ctx.getGlobalStateMgr().getPrivilegeManager().createRole(createStmt);
+
+        // bad name
+        sql = "create role ___";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid role format"));
+        }
+
+        sql = "drop role test_role";
+        DropRoleStmt dropStmt = (DropRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_role", dropStmt.getQualifiedRole());
+
+        sql = "drop role ___";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid role format"));
+        }
+
+        sql = "drop role bad_role";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Can not drop role bad_role: cannot find role"));
         }
     }
 }

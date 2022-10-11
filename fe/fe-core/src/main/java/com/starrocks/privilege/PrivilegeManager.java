@@ -12,6 +12,8 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import org.apache.logging.log4j.LogManager;
@@ -49,8 +51,13 @@ public class PrivilegeManager {
         typeStringToId = new HashMap<>();
         typeToActionMap = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
+        roleIdToPrivilegeCollection = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
+        roleLock = new ReentrantReadWriteLock();
     }
+
+    private Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
+    private final ReentrantReadWriteLock roleLock;
 
     public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
@@ -78,7 +85,10 @@ public class PrivilegeManager {
         }
         userToPrivilegeCollection = new HashMap<>();
         userToPrivilegeCollection.put(UserIdentity.ROOT, new UserPrivilegeCollection());
+        roleIdToPrivilegeCollection = new HashMap<>();
+        // TODO init default roles
         userLock = new ReentrantReadWriteLock();
+        roleLock = new ReentrantReadWriteLock();
     }
 
     private void userReadLock() {
@@ -95,6 +105,22 @@ public class PrivilegeManager {
 
     private void userWriteUnlock() {
         userLock.writeLock().unlock();
+    }
+
+    private void roleReadLock() {
+        roleLock.readLock().lock();
+    }
+
+    private void roleReadUnlock() {
+        roleLock.readLock().unlock();
+    }
+
+    private void roleWriteLock() {
+        roleLock.writeLock().lock();
+    }
+
+    private void roleWriteUnlock() {
+        roleLock.writeLock().unlock();
     }
 
     public void grant(GrantPrivilegeStmt stmt) throws DdlException {
@@ -306,6 +332,93 @@ public class PrivilegeManager {
         return typeStringToId.get(typeName);
     }
 
+    public void createRole(CreateRoleStmt stmt) throws DdlException {
+        roleWriteLock();
+        try {
+            String roleName = stmt.getQualifiedRole();
+            Long roleId = getRoleIdByNameNoLock(roleName);
+            if (roleId != null) {
+                throw new DdlException(String.format("Role %s already exists! id = %d", roleName, roleId));
+            }
+            RolePrivilegeCollection collection = new RolePrivilegeCollection(roleName);
+            long nextRoleId = globalStateMgr.getNextId();
+            roleIdToPrivilegeCollection.put(nextRoleId, collection);
+            globalStateMgr.getEditLog().logUpdateRolePrivilege(
+                    nextRoleId, collection, provider.getPluginId(), provider.getPluginVersion());
+            LOG.info("created role {}[{}]", roleName, roleId);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void replayUpdateRolePrivilegeCollection(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) throws PrivilegeException {
+        roleWriteLock();
+        try {
+            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
+            LOG.info("replayed update role {}{}", roleId, privilegeCollection);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void dropRole(DropRoleStmt stmt) throws DdlException {
+        roleWriteLock();
+        try {
+            String roleName = stmt.getQualifiedRole();
+            Long roleId = getRoleIdByNameNoLock(roleName);
+            if (roleId == null) {
+                throw new DdlException(String.format("Role %s doesn't exist! id = %d", roleName, roleId));
+            }
+            RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
+            roleIdToPrivilegeCollection.remove(roleId);
+            globalStateMgr.getEditLog().logDropRole(roleId, collection, provider.getPluginId(), provider.getPluginVersion());
+            LOG.info("dropped role {}[{}]", roleName, roleId);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public void replayDropRole(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) throws PrivilegeException {
+        roleWriteLock();
+        try {
+            // Actually privilege collection is useless here, but we still record it for further usage
+            provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
+            roleIdToPrivilegeCollection.remove(roleId);
+            LOG.info("replayed dropped role {}", roleId);
+        } finally {
+            roleWriteUnlock();
+        }
+    }
+
+    public boolean checkRoleExists(String name) {
+        roleReadLock();
+        try {
+            return getRoleIdByNameNoLock(name) != null;
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    protected Long getRoleIdByNameNoLock(String name) {
+        Iterator<Map.Entry<Long, RolePrivilegeCollection>> iterator = roleIdToPrivilegeCollection.entrySet().iterator();
+        while (iterator.hasNext()) {
+            Map.Entry<Long, RolePrivilegeCollection> entry = iterator.next();
+            if (entry.getValue().getName().equals(name)) {
+                return entry.getKey();
+            }
+        }
+        return null;
+    }
+
     public PEntryObject analyzeObject(String typeName, List<String> objectTokenList) throws PrivilegeException {
         return this.provider.generateObject(typeName, objectTokenList, globalStateMgr);
     }
@@ -317,7 +430,7 @@ public class PrivilegeManager {
             Map.Entry<UserIdentity, UserPrivilegeCollection> entry = mapIter.next();
             UserIdentity user = entry.getKey();
             UserPrivilegeCollection collection = entry.getValue();
-            if (! globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
+            if (!globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
                 String collectionStr = GsonUtils.GSON.toJson(collection);
                 LOG.info("find invalid user {}, will remove privilegeCollection now {}",
                         entry, collectionStr);
@@ -367,7 +480,9 @@ public class PrivilegeManager {
     public void save(DataOutputStream dos) throws IOException {
         try {
             // 1 json for myself,1 json for number of users, 2 json for each user(kv)
-            final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2;
+            // 1 json for number of roles, 2 json for each role(kv)
+            final int cnt = 1 + 1 + userToPrivilegeCollection.size() * 2
+                    + 1 + roleIdToPrivilegeCollection.size() * 2;
             SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, PrivilegeManager.class.getName(), cnt);
             // 1 json for myself
             writer.writeJson(this);
@@ -377,6 +492,15 @@ public class PrivilegeManager {
                     userToPrivilegeCollection.entrySet().iterator();
             while (iterator.hasNext()) {
                 Map.Entry<UserIdentity, UserPrivilegeCollection> entry = iterator.next();
+                writer.writeJson(entry.getKey());
+                writer.writeJson(entry.getValue());
+            }
+            // 1 json for num roles
+            writer.writeJson(roleIdToPrivilegeCollection.size());
+            Iterator<Map.Entry<Long, RolePrivilegeCollection>> roleIter =
+                    roleIdToPrivilegeCollection.entrySet().iterator();
+            while (roleIter.hasNext()) {
+                Map.Entry<Long, RolePrivilegeCollection> entry = roleIter.next();
                 writer.writeJson(entry.getKey());
                 writer.writeJson(entry.getValue());
             }
@@ -412,6 +536,16 @@ public class PrivilegeManager {
                             (UserPrivilegeCollection) reader.readJson(UserPrivilegeCollection.class);
                     ret.userToPrivilegeCollection.put(userIdentity, collection);
                 }
+                // 1 json for num roles
+                int numRole = (int) reader.readJson(int.class);
+                LOG.info("loading {} roles", numRole);
+                for (int i = 0; i != numRole; ++i) {
+                    // 2 json for each role(kv)
+                    Long roleId = (Long) reader.readJson(Long.class);
+                    RolePrivilegeCollection collection =
+                            (RolePrivilegeCollection) reader.readJson(RolePrivilegeCollection.class);
+                    ret.roleIdToPrivilegeCollection.put(roleId, collection);
+                }
             } catch (SRMetaBlockEOFException eofException) {
                 LOG.warn("got EOF exception, ignore, ", eofException);
             } finally {
@@ -419,7 +553,8 @@ public class PrivilegeManager {
             }
 
             assert ret != null; // can't be NULL
-            LOG.info("loaded {} users", ret.userToPrivilegeCollection.size());
+            LOG.info("loaded {} users, {} roles",
+                    ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
             return ret;
         } catch (SRMetaBlockException e) {
             throw new DdlException("failed to load PrivilegeManager!", e);

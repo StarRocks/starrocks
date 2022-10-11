@@ -30,7 +30,10 @@ CREATE EXTERNAL CATALOG catalog_name
 PROPERTIES ("key"="value", ...);
 ```
 
-> Note: Before querying Iceberg data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
+> Note
+>
+> - The CREATE EXTERNAL CATALOG statement does not require any privileges for execution.
+> - Before querying Iceberg data, you must add the mapping between the domain name and IP address of Hive metastore node to the **/etc/hosts** path. Otherwise, StarRocks may fail to access Hive metastore when you start a query.
 
 ### Parameters
 

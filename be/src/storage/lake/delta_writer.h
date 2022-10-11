@@ -41,18 +41,24 @@ public:
 
     DISALLOW_COPY_AND_MOVE(DeltaWriter);
 
+    // NOTE: It's ok to invoke this method in a bthread, there is no I/O operation in this method.
     [[nodiscard]] Status open();
 
+    // NOTE: Do NOT invoke this method in a bthread.
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size);
 
+    // NOTE: Do NOT invoke this method in a bthread.
     [[nodiscard]] Status finish();
 
     // Manual flush, mainly used in UT
+    // NOTE: Do NOT invoke this method in a bthread.
     [[nodiscard]] Status flush();
 
     // Manual flush, mainly used in UT
+    // NOTE: Do NOT invoke this method in a bthread.
     [[nodiscard]] Status flush_async();
 
+    // NOTE: Do NOT invoke this method in a bthread unless you are sure that `write()` has never been called.
     void close();
 
     [[nodiscard]] int64_t partition_id() const;

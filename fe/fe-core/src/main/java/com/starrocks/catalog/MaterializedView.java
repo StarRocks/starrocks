@@ -493,7 +493,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 active = false;
                 continue;
             }
-
+            if (table instanceof MaterializedView && !((MaterializedView) table).active) {
+                LOG.warn("tableName :{} is invalid. set materialized view:{} to invalid",
+                        baseTableInfo.tableName, id);
+                active = false;
+                continue;
+            }
             table.addRelatedMaterializedView(id);
         }
         if (partitionInfo instanceof SinglePartitionInfo) {
