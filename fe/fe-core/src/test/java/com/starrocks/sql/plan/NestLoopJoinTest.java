@@ -118,7 +118,19 @@ public class NestLoopJoinTest extends PlanTestBase {
         sql = "select * from t0 a join t0 b where a.v1 < b.v1";
         assertVerbosePlanContains(sql, "  |  build runtime filters:");
 
+        sql = "select * from t0 a join t0 b where a.v1 < 100";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 in (1,2,3)";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 != b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
         sql = "select * from t0 a join t0 b where a.v1 < a.v1 + b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 + b.v1 < 5";
         assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
 
         sql = "select * from t0 a join t0 b where 1 < a.v1 + b.v1";

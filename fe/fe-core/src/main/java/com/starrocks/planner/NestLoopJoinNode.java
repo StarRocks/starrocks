@@ -3,6 +3,7 @@
 package com.starrocks.planner;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.SlotRef;
@@ -37,29 +38,20 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
     @Override
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator) {
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        JoinNode.DistributionMode distributionMode = JoinNode.DistributionMode.BROADCAST;
         PlanNode buildStageNode = this.getChild(1);
         List<Expr> conjuncts = new ArrayList<>(otherJoinConjuncts);
         conjuncts.addAll(getConjuncts());
         for (int i = 0; i < conjuncts.size(); i++) {
             Expr expr = conjuncts.get(i);
-            // we only support BinaryPredicate to build RuntimeFilter
-            if (expr.getChildren().size() == 2) {
+            if (canBuildFilter(expr)) {
                 Expr left = expr.getChild(0);
                 Expr right = expr.getChild(1);
-
-                if (!(left instanceof SlotRef)) {
-                    continue;
-                }
-                if (!right.isBoundByTupleIds(getChild(1).getTupleIds())) {
-                    continue;
-                }
 
                 RuntimeFilterDescription rf = new RuntimeFilterDescription(sessionVariable);
                 rf.setFilterId(generator.getNextId().asInt());
                 rf.setBuildPlanNodeId(getId().asInt());
                 rf.setExprOrder(i);
-                rf.setJoinMode(distributionMode);
+                rf.setJoinMode(DistributionMode.BROADCAST);
                 rf.setBuildCardinality(buildStageNode.getCardinality());
                 rf.setOnlyLocal(true);
                 rf.setBuildExpr(right);
@@ -69,6 +61,29 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
                 }
             }
         }
+    }
+
+    // Only binary op could build a filter
+    // And some special cases are not suitable for build a filter, such as NOT_EQ
+    private boolean canBuildFilter(Expr joinExpr) {
+        if (joinExpr.getChildren().size() != 2) {
+            return false;
+        }
+        Expr leftExpr = joinExpr.getChild(0);
+        Expr rightExpr = joinExpr.getChild(1);
+        PlanNode leftChild = getChild(0);
+        PlanNode rightChild = getChild(1);
+
+        if (!(leftExpr instanceof SlotRef)) {
+            return false;
+        }
+        if (joinExpr instanceof BinaryPredicate && ((BinaryPredicate) joinExpr).getOp().isUnequivalence()) {
+            return false;
+        }
+        if (!leftExpr.isBoundByTupleIds(leftChild.getTupleIds())) {
+            return false;
+        }
+        return rightExpr.isBoundByTupleIds(rightChild.getTupleIds());
     }
 
     @Override
