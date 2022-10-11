@@ -3,10 +3,22 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.sql.analyzer.SemanticException;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 public class NestLoopJoinTest extends PlanTestBase {
+
+    @Before
+    public void before() {
+        PlanTestBase.connectContext.getSessionVariable().enableJoinReorder(false);
+    }
+
+    @After
+    public void after() {
+        PlanTestBase.connectContext.getSessionVariable().enableJoinReorder(true);
+    }
 
     @Test
     public void testJoinColumnsPrune() throws Exception {
@@ -38,11 +50,11 @@ public class NestLoopJoinTest extends PlanTestBase {
         PlanTestBase.connectContext.getSessionVariable().setJoinImplementationMode("auto");
         sql = "SELECT * from t0 left join test_all_type t1 on t1.t1c = 2";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("RIGHT OUTER JOIN"));
+        Assert.assertTrue(planFragment, planFragment.contains("LEFT OUTER JOIN"));
 
         sql = "SELECT * from t0 left join test_all_type t1 on 2 = t0.v1";
         planFragment = getFragmentPlan(sql);
-        Assert.assertTrue(planFragment, planFragment.contains("RIGHT OUTER JOIN"));
+        Assert.assertTrue(planFragment, planFragment.contains("LEFT OUTER JOIN"));
     }
 
     private void assertNestloopJoin(String sql, String joinType, String onPredicate) throws Exception {

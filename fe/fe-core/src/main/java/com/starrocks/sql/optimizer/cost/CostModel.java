@@ -258,16 +258,12 @@ public class CostModel {
                             rightStatistics.getUsedColumns(),
                             Utils.extractConjuncts(join.getOnPredicate()));
 
-            if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
-                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
-                        rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatsConstants.CROSS_JOIN_COST_PENALTY, 0);
-            } else {
-                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
-                        rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
-            }
+            Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
+                    "should be handled by nestloopjoin");
+
+            return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                            + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                    rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
         }
 
         @Override
@@ -301,14 +297,24 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator join, ExpressionContext context) {
-            final double nestLoopPunishment = 1000000.0;
             Statistics leftStatistics = context.getChildStatistics(0);
             Statistics rightStatistics = context.getChildStatistics(1);
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            return CostEstimate.of(leftSize * rightSize + nestLoopPunishment,
-                    rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2, 0);
+            double cpuCost = leftSize * rightSize + StatsConstants.CROSS_JOIN_COST_PENALTY;
+            double memCost = rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2;
+
+            // Right cross join could not be parallelized, so apply more punishment
+            if (join.getJoinType().isRightJoin()) {
+                cpuCost += StatsConstants.CROSS_JOIN_RIGHT_COST_PENALTY;
+                memCost += rightSize;
+            }
+            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+                cpuCost += leftSize;
+            }
+
+            return CostEstimate.of(cpuCost, memCost, 0);
         }
 
         @Override
