@@ -2,6 +2,11 @@
 
 #include "storage/lake/delta_writer.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
+DIAGNOSTIC_POP
+
 #include "column/chunk.h"
 #include "column/column.h"
 #include "gutil/strings/util.h"
@@ -243,14 +248,17 @@ Status DeltaWriter::open() {
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::write() in a bthread";
     return _impl->write(chunk, indexes, indexes_size);
 }
 
 Status DeltaWriter::finish() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
     return _impl->finish();
 }
 
 void DeltaWriter::close() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::close() in a bthread";
     _impl->close();
 }
 
@@ -275,10 +283,12 @@ TabletWriter* DeltaWriter::tablet_writer() {
 }
 
 Status DeltaWriter::flush() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush() in a bthread";
     return _impl->flush();
 }
 
 Status DeltaWriter::flush_async() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush_async() in a bthread";
     return _impl->flush_async();
 }
 
