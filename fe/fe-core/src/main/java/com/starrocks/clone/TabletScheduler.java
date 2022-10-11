@@ -746,6 +746,9 @@ public class TabletScheduler extends LeaderDaemon {
                 if (st != TabletStatus.COLOCATE_MISMATCH) {
                     colocateTableIndex.setBackendsSetByIdxForGroup(ctx.getColocateGroupId(),
                             ctx.getTabletOrderIdx(), lastBackendsSet);
+                    LOG.info("all current backends are available for tablet {}, reset backend set to: {}" +
+                            " for colocate group {}, before backend set: {}", ctx.getTabletId(), lastBackendsSet,
+                            ctx.getColocateGroupId(), currentBackendsSet);
                 }
             }
         }
