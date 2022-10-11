@@ -115,13 +115,12 @@ Status ExportSinkIOBuffer::_open_file_writer(int timeout_ms) {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
             ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
-            break;
         } else {
             const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
             BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties, timeout_ms);
             ASSIGN_OR_RETURN(output_file, fs_broker.new_writable_file(options, file_path));
-            break;
         }
+        break;
     }
     case TFileType::FILE_STREAM:
         return Status::NotSupported(strings::Substitute("Unsupported file type $0", file_type));
