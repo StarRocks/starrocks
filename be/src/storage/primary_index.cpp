@@ -924,9 +924,9 @@ PrimaryIndex::PrimaryIndex(const vectorized::Schema& pk_schema) {
 
 void PrimaryIndex::_set_schema(const vectorized::Schema& pk_schema) {
     _pk_schema = pk_schema;
-    std::vector<ColumnId> sort_key_idxes;
+    std::vector<ColumnId> sort_key_idxes(pk_schema.num_fields());
     for (ColumnId i = 0; i < pk_schema.num_fields(); ++i) {
-        sort_key_idxes.push_back(i);
+        sort_key_idxes[i] = i;
     }
     _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);

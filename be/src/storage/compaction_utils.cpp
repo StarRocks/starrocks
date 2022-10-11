@@ -102,14 +102,14 @@ void CompactionUtils::split_column_into_groups_sort_key(size_t num_columns, cons
     for (ColumnId i = 0; i < num_columns; ++i) {
         all_columns.push_back(i);
     }
-    std::vector<ColumnId> value_columns;
+    std::vector<ColumnId> non_sort_columns;
     std::set_difference(all_columns.begin(), all_columns.end(), sort_key_idxes.begin(), sort_key_idxes.end(),
-                        std::back_inserter(value_columns));
-    for (auto i = 0; i < value_columns.size(); ++i) {
+                        std::back_inserter(non_sort_columns));
+    for (auto i = 0; i < non_sort_columns.size(); ++i) {
         if (i % max_columns_per_group == 0) {
             column_groups->emplace_back();
         }
-        column_groups->back().emplace_back(value_columns[i]);
+        column_groups->back().emplace_back(non_sort_columns[i]);
     }
 }
 

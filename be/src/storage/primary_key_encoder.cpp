@@ -279,9 +279,9 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
 
 Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
                                         std::unique_ptr<vectorized::Column>* pcolumn) {
-    std::vector<ColumnId> sort_key_idxes;
+    std::vector<ColumnId> sort_key_idxes(schema.num_key_fields());
     for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
-        sort_key_idxes.push_back(i);
+        sort_key_idxes[i] = i;
     }
     return PrimaryKeyEncoder::create_column(schema, pcolumn, sort_key_idxes);
 }
