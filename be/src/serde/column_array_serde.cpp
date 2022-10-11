@@ -63,21 +63,13 @@ const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
 
 uint8_t* encode_integers_streamvbyte(const void* data, size_t size, uint8_t* buff, int encode_level) {
     if (encode_level == 0) {
-        throw std::runtime_error("integer encode level does not work.");
+        throw std::runtime_error("streamvbyte integer encode level does not work.");
     }
     uint64_t encode_size = 0;
-    switch (encode_level / 10000) {
-    case 0:
-        encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
-                                         buff + sizeof(uint64_t));
-        break;
+    switch ((encode_level / 1000) % 10) {
     case 1:
         encode_size = streamvbyte_delta_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
                                                buff + sizeof(uint64_t), 0);
-        break;
-    case 2:
-        encode_size =
-                p4nenc256v32(const_cast<uint32_t*>((uint32_t*)data), (3 + size) * 1.0 / 4.0, buff + sizeof(uint64_t));
         break;
     default:
         encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
@@ -86,8 +78,8 @@ uint8_t* encode_integers_streamvbyte(const void* data, size_t size, uint8_t* buf
 
     buff = write_little_endian_64(encode_size, buff);
     if (encode_level < -1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
-                                    encode_size, encode_size * 1.0 / size);
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, streamvbyte integers compression ratio = {}\n",
+                                    size, encode_size, encode_size * 1.0 / size);
     }
     return buff + encode_size;
 }
@@ -96,23 +88,116 @@ const uint8_t* decode_integers_streamvbyte(const uint8_t* buff, void* target, si
     uint64_t encode_size = 0;
     buff = read_little_endian_64(buff, &encode_size);
     uint64_t encode_size1 = 0;
-    switch (encode_level / 10000) {
-    case 0:
-        encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
-        break;
+    switch ((encode_level / 1000) % 10) {
     case 1:
         encode_size1 = streamvbyte_delta_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0, 0);
-        break;
-    case 2:
-        encode_size1 = p4ndec256v32(const_cast<uint8_t*>(buff), (3 + size) * 1.0 / 4.0, (uint32_t*)target);
         break;
     default:
         encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
     }
     if (encode_size != encode_size1) {
-        throw std::runtime_error(fmt::format(
-                "encode size does not equal when decoding, encode size = {}, but decode get size = {}, raw size = {}.",
-                encode_size, encode_size1, size));
+        throw std::runtime_error(
+                fmt::format("streamvbyte  encode size does not equal when decoding, encode size = {}, but decode get "
+                            "size = {}, raw size = {}.",
+                            encode_size, encode_size1, size));
+    }
+    return buff + encode_size1;
+}
+
+template <uint32_t bytes>
+uint8_t* encode_integers_TurboPFor(const void* data, size_t size, uint8_t* buff, int encode_level) {
+    if (encode_level == 0) {
+        throw std::runtime_error("TurboPFor integer encode level does not work.");
+    }
+    uint64_t encode_size = 0;
+    switch (bytes) {
+    case 1:
+        encode_size = p4nenc8(const_cast<uint8_t*>((uint8_t*)data), size, buff + sizeof(uint64_t));
+        break;
+    case 2:
+        switch ((encode_level / 1000) % 10) {
+        case 0:
+        case 1:
+            encode_size = p4nenc128v16(const_cast<uint16_t*>((uint16_t*)data), (1 + size) * 1.0 / 2.0,
+                                       buff + sizeof(uint64_t));
+            break;
+        default:
+            encode_size =
+                    p4nenc16(const_cast<uint16_t*>((uint16_t*)data), (1 + size) * 1.0 / 2.0, buff + sizeof(uint64_t));
+        }
+        break;
+    case 4:
+        switch ((encode_level / 1000) % 10) {
+        case 0:
+            encode_size = p4nenc256v32(const_cast<uint32_t*>((uint32_t*)data), (3 + size) * 1.0 / 4.0,
+                                       buff + sizeof(uint64_t));
+            break;
+        case 1:
+            encode_size = p4nenc128v32(const_cast<uint32_t*>((uint32_t*)data), (3 + size) * 1.0 / 4.0,
+                                       buff + sizeof(uint64_t));
+            break;
+        default:
+            encode_size =
+                    p4nenc32(const_cast<uint32_t*>((uint32_t*)data), (3 + size) * 1.0 / 4.0, buff + sizeof(uint64_t));
+        }
+        break;
+    case 8:
+        encode_size = p4nenc64(const_cast<uint64_t*>((uint64_t*)data), (7 + size) * 1.0 / 8.0, buff + sizeof(uint64_t));
+        break;
+    default:
+        throw std::runtime_error(fmt::format("bytes {} is invalid for encode_integers_TurboPFor().", bytes));
+    }
+
+    buff = write_little_endian_64(encode_size, buff);
+    if (encode_level < -1) {
+        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, TurboPFor integers compression ratio = {}\n",
+                                    size, encode_size, encode_size * 1.0 / size);
+    }
+    return buff + encode_size;
+}
+
+template <uint8_t bytes>
+const uint8_t* decode_integers_TurboPFor(const uint8_t* buff, void* target, size_t size, int encode_level) {
+    uint64_t encode_size = 0;
+    buff = read_little_endian_64(buff, &encode_size);
+    uint64_t encode_size1 = 0;
+    switch (bytes) {
+    case 1:
+        encode_size1 = p4ndec8(const_cast<uint8_t*>(buff), size, (uint8_t*)target);
+        break;
+    case 2:
+        switch ((encode_level / 1000) % 10) {
+        case 0:
+        case 1:
+            encode_size1 = p4ndec128v16(const_cast<uint8_t*>(buff), (1 + size) * 1.0 / 2.0, (uint16_t*)target);
+            break;
+        default:
+            encode_size1 = p4ndec16(const_cast<uint8_t*>(buff), (1 + size) * 1.0 / 2.0, (uint16_t*)target);
+        }
+        break;
+    case 4:
+        switch ((encode_level / 1000) % 10) {
+        case 0:
+            encode_size1 = p4ndec256v32(const_cast<uint8_t*>(buff), (3 + size) * 1.0 / 4.0, (uint32_t*)target);
+            break;
+        case 1:
+            encode_size1 = p4ndec128v32(const_cast<uint8_t*>(buff), (3 + size) * 1.0 / 4.0, (uint32_t*)target);
+            break;
+        default:
+            encode_size1 = p4ndec32(const_cast<uint8_t*>(buff), (3 + size) * 1.0 / 4.0, (uint32_t*)target);
+        }
+        break;
+    case 8:
+        encode_size1 = p4ndec64(const_cast<uint8_t*>(buff), (7 + size) * 1.0 / 8.0, (uint64_t*)target);
+        break;
+    default:
+        throw std::runtime_error(fmt::format("bytes {} is invalid for decode_integers_TurboPFor().", bytes));
+    }
+    if (encode_size != encode_size1) {
+        throw std::runtime_error(
+                fmt::format("TurboPFor encode size does not equal when decoding, encode size = {}, but decode get size "
+                            "= {}, raw size = {}.",
+                            encode_size, encode_size1, size));
     }
     return buff + encode_size1;
 }
@@ -193,6 +278,8 @@ public:
         uint32_t size = sizeof(T) * column.size();
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint64_t) + streamvbyte_max_compressedbytes((size + 3) / 4.0);
+        } else if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
+            return sizeof(uint64_t) + size + 16;
         } else {
             return sizeof(uint64_t) + size;
         }
@@ -204,6 +291,8 @@ public:
         buff = write_little_endian_32(size, buff);
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
             buff = encode_integers_streamvbyte(column.raw_data(), size, buff, encode_level);
+        } else if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
+            buff = encode_integers_TurboPFor<sizeof(T)>(column.raw_data(), size, buff, encode_level);
         } else {
             buff = write_raw(column.raw_data(), size, buff);
         }
@@ -218,6 +307,8 @@ public:
         raw::make_room(&data, size / sizeof(T));
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
             buff = decode_integers_streamvbyte(buff, data.data(), size, encode_level);
+        } else if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
+            buff = decode_integers_TurboPFor<sizeof(T)>(buff, data.data(), size, encode_level);
         } else {
             buff = read_raw(buff, data.data(), size);
         }
@@ -235,10 +326,12 @@ public:
         int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) + streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0);
+        } else if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
+            res += sizeof(uint64_t) + offsets_size + 16;
         } else {
             res += offsets_size;
         }
-        if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 8) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) + LZ4_compressBound(bytes.size());
         } else if ((encode_level & 4) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) + ZSTD_compressBound(bytes.size());
@@ -260,7 +353,7 @@ public:
         } else {
             buff = write_little_endian_64(bytes_size, buff);
         }
-        if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 8) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
         } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_string_zstd(bytes.data(), bytes_size, buff, encode_level);
@@ -277,6 +370,8 @@ public:
         }
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_integers_streamvbyte(offsets.data(), offsets_size, buff, encode_level);
+        } else if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
+            buff = encode_integers_TurboPFor<sizeof(T)>(offsets.data(), offsets_size, buff, encode_level);
         } else {
             buff = write_raw(offsets.data(), offsets_size, buff);
         }
@@ -293,7 +388,7 @@ public:
             buff = read_little_endian_64(buff, &bytes_size);
         }
         column->get_bytes().resize(bytes_size);
-        if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 8) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
         } else if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_string_zstd(buff, column->get_bytes().data(), bytes_size);
@@ -310,6 +405,8 @@ public:
         raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_integers_streamvbyte(buff, column->get_offset().data(), offsets_size, encode_level);
+        } else if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
+            buff = decode_integers_TurboPFor<sizeof(T)>(buff, column->get_offset().data(), offsets_size, encode_level);
         } else {
             buff = read_raw(buff, column->get_offset().data(), offsets_size);
         }
