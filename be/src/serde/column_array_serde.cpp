@@ -3,6 +3,8 @@
 #include "serde/column_array_serde.h"
 
 #include <encode/streamvbyte.h>
+#include <encode/streamvbytedelta.h>
+#include <encode/vp4.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
@@ -59,12 +61,29 @@ const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     return buff + size;
 }
 
-uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encode_level) {
+uint8_t* encode_integers_streamvbyte(const void* data, size_t size, uint8_t* buff, int encode_level) {
     if (encode_level == 0) {
         throw std::runtime_error("integer encode level does not work.");
     }
-    uint64_t encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
-                                              buff + sizeof(uint64_t));
+    uint64_t encode_size = 0;
+    switch (encode_level / 10000) {
+    case 0:
+        encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
+                                         buff + sizeof(uint64_t));
+        break;
+    case 1:
+        encode_size = streamvbyte_delta_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
+                                               buff + sizeof(uint64_t), 0);
+        break;
+    case 2:
+        encode_size =
+                p4nenc256v32(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0, buff + sizeof(uint64_t));
+        break;
+    default:
+        encode_size = streamvbyte_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
+                                         buff + sizeof(uint64_t));
+    }
+
     buff = write_little_endian_64(encode_size, buff);
     if (encode_level < -1) {
         LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
@@ -73,10 +92,23 @@ uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encod
     return buff + encode_size;
 }
 
-const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
+const uint8_t* decode_integers_streamvbyte(const uint8_t* buff, void* target, size_t size, int encode_level) {
     uint64_t encode_size = 0;
     buff = read_little_endian_64(buff, &encode_size);
-    uint64_t encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
+    uint64_t encode_size1 = 0;
+    switch (encode_level / 10000) {
+    case 0:
+        encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
+        break;
+    case 1:
+        encode_size1 = streamvbyte_delta_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0, 0);
+        break;
+    case 2:
+        encode_size1 = p4ndec256v32(buff, (3 + size) * 1.0 / 4.0, (uint32_t*)target);
+        break;
+    default:
+        encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
+    }
     if (encode_size != encode_size1) {
         throw std::runtime_error(fmt::format(
                 "encode size does not equal when decoding, encode size = {}, but decode get size = {}, raw size = {}.",
@@ -171,7 +203,7 @@ public:
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
-            buff = encode_integers(column.raw_data(), size, buff, encode_level);
+            buff = encode_integers_streamvbyte(column.raw_data(), size, buff, encode_level);
         } else {
             buff = write_raw(column.raw_data(), size, buff);
         }
@@ -185,7 +217,7 @@ public:
         std::vector<T>& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
-            buff = decode_integers(buff, data.data(), size);
+            buff = decode_integers_streamvbyte(buff, data.data(), size, encode_level);
         } else {
             buff = read_raw(buff, data.data(), size);
         }
@@ -244,7 +276,7 @@ public:
             buff = write_little_endian_64(offsets_size, buff);
         }
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
-            buff = encode_integers(offsets.data(), offsets_size, buff, encode_level);
+            buff = encode_integers_streamvbyte(offsets.data(), offsets_size, buff, encode_level);
         } else {
             buff = write_raw(offsets.data(), offsets_size, buff);
         }
@@ -277,7 +309,7 @@ public:
         }
         raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
-            buff = decode_integers(buff, column->get_offset().data(), offsets_size);
+            buff = decode_integers_streamvbyte(buff, column->get_offset().data(), offsets_size, encode_level);
         } else {
             buff = read_raw(buff, column->get_offset().data(), offsets_size);
         }
