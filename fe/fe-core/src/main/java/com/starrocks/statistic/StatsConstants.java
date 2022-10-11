@@ -17,6 +17,7 @@ public class StatsConstants {
     public static final String INFORMATION_SCHEMA = "information_schema";
 
     public static final int CROSS_JOIN_COST_PENALTY = 100000000;
+    public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 
     //Statistics collection threshold

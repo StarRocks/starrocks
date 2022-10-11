@@ -1085,6 +1085,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableSQLDigest;
     }
 
+    public void enableJoinReorder(boolean value) {
+        this.disableJoinReorder = !value;
+    }
+
     public String getJoinImplementationMode() {
         return joinImplementationMode;
     }
