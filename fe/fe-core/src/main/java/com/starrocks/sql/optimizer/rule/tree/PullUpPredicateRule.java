@@ -6,13 +6,13 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -89,64 +89,19 @@ public class PullUpPredicateRule implements TreeRewriteRule {
         }
 
         @Override
-        public Void visitLogicalJoin(OptExpression optExpression, RewriteContext context) {
-            LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
+        public Void visitLogicalProject(OptExpression optExpression, RewriteContext context) {
+            OptExpression child = optExpression.inputAt(0);
+            child.getOp().accept(this, child, context);
 
-            RewriteContext rleft = new RewriteContext();
-            optExpression.inputAt(0).getOp().accept(this, optExpression.inputAt(0), rleft);
-            RewriteContext rright = new RewriteContext();
-            optExpression.inputAt(1).getOp().accept(this, optExpression.inputAt(1), rright);
-
-            List<ScalarOperator> predicates = new ArrayList<>();
-            predicates.add(joinOperator.getOnPredicate());
-
-            if (!joinOperator.getJoinType().isLeftOuterJoin() && !joinOperator.getJoinType().isLeftAntiJoin()) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rright.columnRefToConstant.entrySet()) {
-                    predicates.add(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue()));
+            LogicalProjectOperator projectOperator = (LogicalProjectOperator) optExpression.getOp();
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
+                if (entry.getValue() instanceof ConstantOperator) {
+                    context.columnRefToConstant.put(entry.getKey(), entry.getValue());
                 }
             }
 
-            if (!joinOperator.getJoinType().isRightOuterJoin() && !joinOperator.getJoinType().isRightAntiJoin()) {
-                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rleft.columnRefToConstant.entrySet()) {
-                    predicates.add(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue()));
-                }
-            }
-
-            ScalarOperator scalarOperator = Utils.compoundAnd(predicates);
-            joinOperator.setOnPredicate(scalarOperator);
-
-            if (joinOperator.getJoinType().isLeftOuterJoin()) {
-                Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iter = rright.columnRefToConstant.entrySet().iterator();
-                while (iter.hasNext()) {
-                    Map.Entry<ColumnRefOperator, ScalarOperator> entry = iter.next();
-                    if (optExpression.inputAt(1).getOutputColumns().contains(entry.getKey())) {
-                        rright.columnRefToConstant.remove(entry.getKey());
-
-                        OptExpression o = OptExpression.create(new LogicalFilterOperator(
-                                        new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                                                entry.getKey(), entry.getValue())),
-                                optExpression.inputAt(1));
-                        optExpression.setChild(1, o);
-                    }
-                }
-            } else if (joinOperator.getJoinType().isRightOuterJoin()) {
-                Iterator<Map.Entry<ColumnRefOperator, ScalarOperator>> iter = rleft.columnRefToConstant.entrySet().iterator();
-                while (iter.hasNext()) {
-                    Map.Entry<ColumnRefOperator, ScalarOperator> entry = iter.next();
-                    if (optExpression.inputAt(0).getOutputColumns().contains(entry.getKey())) {
-                        rleft.columnRefToConstant.remove(entry.getKey());
-                    }
-
-                    OptExpression o = OptExpression.create(new LogicalFilterOperator(
-                                    new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ,
-                                            entry.getKey(), entry.getValue())),
-                            optExpression.inputAt(0));
-                    optExpression.setChild(0, o);
-                }
-            }
-
-            context.columnRefToConstant.putAll(rleft.columnRefToConstant);
-            context.columnRefToConstant.putAll(rright.columnRefToConstant);
+            child = handleLegacyPredicate(optExpression.getOutputColumns(), child, context);
+            optExpression.setChild(0, child);
 
             return null;
         }
@@ -166,7 +121,26 @@ public class PullUpPredicateRule implements TreeRewriteRule {
             return null;
         }
 
+        @Override
         public Void visitLogicalTableFunction(OptExpression optExpression, RewriteContext context) {
+            convertPredicateToLogicalFilter(optExpression, context);
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalCTEAnchor(OptExpression optExpression, RewriteContext context) {
+            convertPredicateToLogicalFilter(optExpression, context);
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalCTEProduce(OptExpression optExpression, RewriteContext context) {
+            convertPredicateToLogicalFilter(optExpression, context);
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalCTEConsume(OptExpression optExpression, RewriteContext context) {
             convertPredicateToLogicalFilter(optExpression, context);
             return null;
         }

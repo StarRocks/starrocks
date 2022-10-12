@@ -102,13 +102,7 @@ public class ConstantRewriteTest extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=0/1\n" +
-                "     rollup: t0\n" +
-                "     tabletRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     cardinality=1\n" +
-                "     avgRowSize=2.0\n" +
-                "     numNodes=0");
+                "     PREDICATES: 1: v1 = 4");
 
         //Assert v4 = 4 can push down to Join left child t0 where op is right outer
         sql = "select v1, v2 from (select v1, v2 from t0) a right outer join " +
@@ -126,39 +120,16 @@ public class ConstantRewriteTest extends PlanTestBase {
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a right outer join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "2:OlapScanNode\n" +
+        assertContains(plan, "1:OlapScanNode\n" +
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     partitions=0/1\n" +
-                "     rollup: t1\n" +
-                "     tabletRatio=0/0\n" +
-                "     tabletList=\n" +
-                "     cardinality=1\n" +
-                "     avgRowSize=1.0\n" +
-                "     numNodes=0");
+                "     PREDICATES: 4: v4 = 1");
 
         //Assert v1 = 1 push down to right when op is left semi
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a left semi join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 4: v4 = 1");
-
-        sql = "select v1, v2 from (select v1, v2 from t0) a left semi join " +
-                "(select v4, v5 from t1 where v4 = 4) b on a.v1 = b.v4";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 1: v1 = 4");
-
-        //Assert v4 = 4 push down to Join left child t0
-        sql = "select v4, v5 from (select v1, v2 from t0) a right semi join " +
-                "(select v4, v5 from t1 where v4 = 4) b on a.v1 = b.v4";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 1: v1 = 4");
-
-        sql = "select v4, v5 from (select v1, v2 from t0 where v1 = 1) a right semi join " +
-                "(select v4, v5 from t1) b on a.v1 = b.v4";
-        plan = getFragmentPlan(sql);
-        assertContains(plan, "PREDICATES: 4: v4 = 1");
-
+        assertContains(plan, "PREDICATES: 4: v4 IS NOT NULL, 4: v4 = 1");
 
         //Assert v1 = 1 push down to right when op is left anti
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a left anti join " +
@@ -216,6 +187,29 @@ public class ConstantRewriteTest extends PlanTestBase {
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
                 "     avgRowSize=2.0\n" +
+                "     numNodes=0");
+    }
+
+    @Test
+    public void testProjectConstantFullUp() throws Exception {
+        String sql = "select x+1,v1 from (select 1 as x, v1, v2 from t0) t group by x,v1";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 1> : 1: v1\n" +
+                "  |  <slot 5> : CAST(1 AS SMALLINT) + 1\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
                 "     numNodes=0");
     }
 }

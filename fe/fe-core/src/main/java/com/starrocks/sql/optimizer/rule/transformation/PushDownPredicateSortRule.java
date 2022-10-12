@@ -68,10 +68,11 @@ public class PushDownPredicateSortRule extends TransformationRule {
             return Collections.emptyList();
         }
 
-        OptExpression aggOpt = OptExpression.create(new LogicalTopNOperator.Builder()
+        input.setChild(0, input.inputAt(0).inputAt(0));
+        OptExpression topN = OptExpression.create(new LogicalTopNOperator.Builder()
                 .withOperator(logicalTopNOperator)
                 .setOrderByElements(orderingList)
-                .build(), input.getInputs());
-        return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(projection), Lists.newArrayList(aggOpt)));
+                .build(), input);
+        return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(projection), Lists.newArrayList(topN)));
     }
 }
