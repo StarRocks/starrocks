@@ -474,7 +474,7 @@ public class Optimizer {
                 continue;
             }
             // Set<String> partitionNamesToRefresh = Sets.newHashSet();
-            
+
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {

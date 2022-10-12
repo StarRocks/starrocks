@@ -37,7 +37,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
 
-        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_1" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
@@ -67,9 +66,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " select LO_ORDERDATE, LO_ORDERKEY, LO_REVENUE from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 50000 and lo_orderpriority='5-LOW';");
 
-         */
-
-        /*
         starRocksAssert.withNewMaterializedView("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -78,7 +74,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 = 1");
 
-         */
         starRocksAssert.withNewMaterializedView("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -90,7 +85,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
     @Test
     public void testFilterScan() throws Exception {
-        /*
         String query1 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv where lo_orderpriority='5-LOW';";
         String plan1 = getFragmentPlan(query1);
         assertContains(plan1, "1:Project\n" +
@@ -130,8 +124,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_2");
 
-         */
-
         String query4 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 50000 and lo_orderpriority='5-LOW';";
         String plan4 = getFragmentPlan(query4);
@@ -147,7 +139,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_3");
-        /*
+
         String query5 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 100000 and lo_orderpriority='5-LOW';";
         String plan5 = getFragmentPlan(query5);
@@ -195,12 +187,10 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_4");
 
-         */
     }
 
     @Test
     public void testJoin() throws Exception {
-        /*
         new MockUp<StmtExecutor>() {
             @Mock
             public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
@@ -233,8 +223,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
         TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
-
-         */
 
         String query1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1";
