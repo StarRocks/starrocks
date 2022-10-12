@@ -22,7 +22,7 @@ namespace starrocks::serde {
 PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
     auto c1 = vectorized::JsonColumn::create();
 
-    ASSERT_EQ(8, ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(8, ColumnArraySerde::max_serialized_size(*c1, 0));
 
     for (int i = 0; i < 10; i++) {
         JsonValue json;
@@ -31,14 +31,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, json_column) {
         c1->append(&json);
     }
 
-    ASSERT_EQ(148, ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(148, ColumnArraySerde::max_serialized_size(*c1, 0));
 
     auto c2 = vectorized::JsonColumn::create();
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    auto p1 = ColumnArraySerde::serialize(*c1, buffer.data());
-    auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get());
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    auto p1 = ColumnArraySerde::serialize(*c1, buffer.data(), false, 0);
+    auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0);
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
 
@@ -61,14 +61,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, decimal_column) {
     c1->append(DecimalV2Value(2));
     c1->append(DecimalV2Value(3));
 
-    ASSERT_EQ(sizeof(uint32_t) + c1->size() * sizeof(DecimalV2Value), ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(sizeof(uint32_t) + c1->size() * sizeof(DecimalV2Value), ColumnArraySerde::max_serialized_size(*c1, 0));
 
     auto c2 = vectorized::DecimalColumn::create();
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    auto p1 = ColumnArraySerde::serialize(*c1, buffer.data());
-    auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get());
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    auto p1 = ColumnArraySerde::serialize(*c1, buffer.data(), false, 0);
+    auto p2 = ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0);
     ASSERT_EQ(buffer.data() + buffer.size(), p1);
     ASSERT_EQ(buffer.data() + buffer.size(), p2);
     for (size_t i = 0; i < c1->size(); i++) {
@@ -77,8 +77,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, decimal_column) {
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -92,20 +92,20 @@ PARALLEL_TEST(ColumnArraySerdeTest, int_column) {
     auto c2 = vectorized::Int32Column::create();
     c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
 
-    ASSERT_EQ(sizeof(uint32_t) + c1->size() * sizeof(int32_t), ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(sizeof(uint32_t) + c1->size() * sizeof(int32_t), ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     for (size_t i = 0; i < numbers.size(); i++) {
         ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
     }
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < numbers.size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -119,20 +119,20 @@ PARALLEL_TEST(ColumnArraySerdeTest, double_column) {
     auto c2 = vectorized::DoubleColumn::create();
     c1->append_numbers(numbers.data(), numbers.size() * sizeof(double));
 
-    ASSERT_EQ(sizeof(uint32_t) + c1->size() * sizeof(double), ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(sizeof(uint32_t) + c1->size() * sizeof(double), ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     for (size_t i = 0; i < numbers.size(); i++) {
         ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
     }
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < numbers.size(); i++) {
             ASSERT_EQ(c1->get_data()[i], c2->get_data()[i]);
         }
@@ -147,14 +147,14 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
     c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
     c1->append_nulls(2);
 
-    ASSERT_EQ(ColumnArraySerde::max_serialized_size(*c1->null_column()) +
-                      ColumnArraySerde::max_serialized_size(*c1->data_column()),
-              ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(ColumnArraySerde::max_serialized_size(*c1->null_column(), 0) +
+                      ColumnArraySerde::max_serialized_size(*c1->data_column(), 0),
+              ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->is_null(i), c2->is_null(i));
         if (!c1->is_null(i)) {
@@ -164,8 +164,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, nullable_int32_column) {
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->is_null(i), c2->is_null(i));
             if (!c1->is_null(i)) {
@@ -182,20 +182,20 @@ PARALLEL_TEST(ColumnArraySerdeTest, binary_column) {
     auto c2 = vectorized::BinaryColumn::create();
     c1->append_strings(strings);
 
-    ASSERT_EQ(c1->byte_size() + sizeof(uint32_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(c1->byte_size() + sizeof(uint32_t) * 2, ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
     }
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
@@ -209,20 +209,20 @@ PARALLEL_TEST(ColumnArraySerdeTest, large_binary_column) {
     auto c2 = vectorized::LargeBinaryColumn::create();
     c1->append_strings(strings);
 
-    ASSERT_EQ(c1->byte_size() + sizeof(uint64_t) * 2, ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(c1->byte_size() + sizeof(uint64_t) * 2, ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
     }
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get_slice(i), c2->get_slice(i));
         }
@@ -240,13 +240,13 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
     auto c1 = create_const_column(100, 10);
     auto c2 = c1->clone_empty();
 
-    ASSERT_EQ(sizeof(uint64_t) + ColumnArraySerde::max_serialized_size(*c1->data_column()),
-              ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(sizeof(uint64_t) + ColumnArraySerde::max_serialized_size(*c1->data_column(), 0),
+              ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     ASSERT_EQ(c1->size(), c2->size());
     for (size_t i = 0; i < c1->size(); i++) {
         ASSERT_EQ(c1->get(i).get_int32(), c2->get(i).get_int32());
@@ -254,8 +254,8 @@ PARALLEL_TEST(ColumnArraySerdeTest, const_column) {
 
     for (auto level = 0; level < 8; ++level) {
         buffer.resize(ColumnArraySerde::max_serialized_size(*c1, level));
-        ColumnArraySerde::serialize(*c1, buffer.data(), level);
-        ColumnArraySerde::deserialize(buffer.data(), c2.get(), level);
+        ColumnArraySerde::serialize(*c1, buffer.data(), false, level);
+        ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, level);
         for (size_t i = 0; i < c1->size(); i++) {
             ASSERT_EQ(c1->get(i).get_int32(), c2->get(i).get_int32());
         }
@@ -280,20 +280,20 @@ PARALLEL_TEST(ColumnArraySerdeTest, array_column) {
     elem1->append_datum(6);
     off1->append(6);
 
-    ASSERT_EQ(ColumnArraySerde::max_serialized_size(c1->offsets()) +
-                      ColumnArraySerde::max_serialized_size(c1->elements()),
-              ColumnArraySerde::max_serialized_size(*c1));
+    ASSERT_EQ(ColumnArraySerde::max_serialized_size(c1->offsets(), 0) +
+                      ColumnArraySerde::max_serialized_size(c1->elements(), 0),
+              ColumnArraySerde::max_serialized_size(*c1, 0));
 
     std::vector<uint8_t> buffer;
-    buffer.resize(ColumnArraySerde::max_serialized_size(*c1));
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data()));
+    buffer.resize(ColumnArraySerde::max_serialized_size(*c1, 0));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::serialize(*c1, buffer.data(), false, 0));
 
     auto off2 = vectorized::UInt32Column::create();
     auto elem2 =
             vectorized::NullableColumn::create(vectorized::Int32Column::create(), vectorized::NullColumn ::create());
     auto c2 = vectorized::ArrayColumn::create(elem1, off2);
 
-    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get()));
+    ASSERT_EQ(buffer.data() + buffer.size(), ColumnArraySerde::deserialize(buffer.data(), c2.get(), false, 0));
     ASSERT_EQ("[1, 2, 3]", c2->debug_item(0));
     ASSERT_EQ("[4, 5, 6]", c2->debug_item(1));
 }
