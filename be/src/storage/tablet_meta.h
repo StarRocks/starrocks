@@ -116,7 +116,7 @@ public:
     int64_t tablet_id() const;
     void set_tablet_id(int64_t tablet_id) { _tablet_id = tablet_id; }
     int32_t schema_hash() const;
-    int16_t shard_id() const;
+    int32_t shard_id() const;
     void set_shard_id(int32_t shard_id);
     int64_t creation_time() const;
     void set_creation_time(int64_t creation_time);
@@ -246,7 +246,7 @@ inline int32_t TabletMeta::schema_hash() const {
     return _schema_hash;
 }
 
-inline int16_t TabletMeta::shard_id() const {
+inline int32_t TabletMeta::shard_id() const {
     return _shard_id;
 }
 

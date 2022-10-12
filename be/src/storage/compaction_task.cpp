@@ -28,7 +28,7 @@ void CompactionTask::run() {
     _task_info.start_time = UnixMillis();
     scoped_refptr<Trace> trace(new Trace);
     SCOPED_CLEANUP({
-        uint64_t time_s = _watch.elapsed_time() / 1e9;
+        uint64_t time_s = _watch.elapsed_time() / 1000000000;
         if (time_s > config::compaction_trace_threshold) {
             LOG(INFO) << "Trace:" << std::endl << trace->DumpToString(Trace::INCLUDE_ALL);
         }

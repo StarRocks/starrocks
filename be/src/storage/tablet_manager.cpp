@@ -67,7 +67,7 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(int32_t tablet_map_lock_shard_size)
+TabletManager::TabletManager(int64_t tablet_map_lock_shard_size)
         : _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
           _last_update_stat_ms(0) {
@@ -145,8 +145,8 @@ Status TabletManager::create_tablet(const TCreateTabletReq& request, std::vector
     // the shard where the target tablet is located need to be locked.
     // In order to prevent deadlock, the order of locking needs to be fixed.
     if (request.__isset.base_tablet_id && request.base_tablet_id > 0) {
-        int shard_idx = _get_tablets_shard_idx(tablet_id);
-        int base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
+        int64_t shard_idx = _get_tablets_shard_idx(tablet_id);
+        int64_t base_shard_idx = _get_tablets_shard_idx(request.base_tablet_id);
 
         if (shard_idx == base_shard_idx) {
             wlock.lock();
