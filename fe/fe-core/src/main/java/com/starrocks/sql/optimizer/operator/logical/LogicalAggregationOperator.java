@@ -159,6 +159,10 @@ public class LogicalAggregationOperator extends LogicalOperator {
         return Objects.hash(super.hashCode(), type, aggregations, groupingKeys);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder
             extends LogicalOperator.Builder<LogicalAggregationOperator, LogicalAggregationOperator.Builder> {
         private AggType type;

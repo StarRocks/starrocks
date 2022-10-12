@@ -627,8 +627,8 @@ public class UtFrameUtils {
                     while (true) {
                         try {
                             JournalTask journalTask = masterJournalQueue.take();
-                            journalTask.markSucceed();
                             followerJournalQueue.put(journalTask);
+                            journalTask.markSucceed();
                         } catch (InterruptedException e) {
                             System.err.println("fakeJournalWriter got an InterruptedException and exit!");
                             break;

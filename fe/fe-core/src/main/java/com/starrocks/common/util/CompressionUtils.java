@@ -41,13 +41,14 @@ public class CompressionUtils {
     public static TCompressionType getCompressTypeByName(String name) {
         TCompressionType compressionType = T_COMPRESSION_BY_NAME.get(name);
 
-        // Only lz4, zlib, zstd is available.
+        // Only lz4, zlib, zstd, snappy is available.
         if (compressionType == null) {
             return null;
         } else if (compressionType == TCompressionType.LZ4
                    || compressionType == TCompressionType.LZ4_FRAME
                    || compressionType == TCompressionType.ZLIB
-                   || compressionType == TCompressionType.ZSTD) {
+                   || compressionType == TCompressionType.ZSTD
+                   || compressionType == TCompressionType.SNAPPY) {
             return compressionType;
         } else {
             return null;

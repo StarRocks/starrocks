@@ -58,7 +58,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -136,7 +135,7 @@ TEST_F(DeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = DeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
 }

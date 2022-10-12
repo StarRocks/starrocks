@@ -847,8 +847,8 @@ size_t MutableIndex::estimate_nbucket(size_t key_size, size_t size, size_t nshar
     return std::min(kBucketPerPage, npad(size, pad));
 }
 
-struct StringHash {
-    size_t operator()(const std::string& s) const { return key_index_hash(s.data(), s.length() - kIndexValueSize); }
+struct StringHasher2 {
+    uint64_t operator()(const std::string& s) const { return key_index_hash(s.data(), s.length() - kIndexValueSize); }
 };
 
 class EqualOnStringWithHash {
@@ -880,7 +880,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             auto iter = _set.find(composite_key, hash);
             if (iter == _set.end()) {
                 values[idx] = NullIndexValue;
@@ -907,7 +907,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_idxes.emplace_back((uint32_t)idx);
                 not_found->hashes.emplace_back(hash);
@@ -935,7 +935,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 not_found->key_idxes.emplace_back((uint32_t)idx);
                 not_found->hashes.emplace_back(hash);
@@ -962,7 +962,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [_, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
             } else {
@@ -985,7 +985,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value);
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 old_values[idx] = NullIndexValue;
                 not_found->key_idxes.emplace_back((uint32_t)idx);
@@ -1013,7 +1013,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
                 _overlap_kv_pairs_usage += composite_key.size();
@@ -1059,7 +1059,7 @@ public:
             composite_key.reserve(skey.size + kIndexValueSize);
             composite_key.append(skey.data, skey.size);
             put_fixed64_le(&composite_key, value.get_value());
-            uint64_t hash = StringHash()(composite_key);
+            uint64_t hash = StringHasher2()(composite_key);
             if (auto [it, inserted] = _set.emplace_with_hash(hash, composite_key); inserted) {
                 _total_kv_pairs_usage += composite_key.size();
             } else {
@@ -1188,7 +1188,7 @@ public:
         }
         for (const auto& composite_key : _set) {
             const auto value = UNALIGNED_LOAD64(composite_key.data() + composite_key.size() - kIndexValueSize);
-            IndexHash h(StringHash()(composite_key));
+            IndexHash h(StringHasher2()(composite_key));
             if (without_null && value == NullIndexValue) {
                 continue;
             }
@@ -1236,7 +1236,7 @@ public:
 private:
     friend ShardByLengthMutableIndex;
     friend PersistentIndex;
-    phmap::flat_hash_set<KeyType, StringHash, EqualOnStringWithHash> _set;
+    phmap::flat_hash_set<KeyType, StringHasher2, EqualOnStringWithHash> _set;
     size_t _total_kv_pairs_usage = 0;
     // _overlap_num and _overlap_kv_pairs_usage will lost after be restart,
     // but it is not very important because it will be fixed in later _merge_compaction.
@@ -1797,7 +1797,7 @@ Status ShardByLengthMutableIndex::commit(MutableIndexMetaPB* meta, const EditVer
         WritableFileOptions wblock_opts;
         wblock_opts.mode = FileSystem::MUST_EXIST;
         ASSIGN_OR_RETURN(_index_file, fs->new_writable_file(wblock_opts, file_name));
-        size_t snapshot_size = _index_file->size();
+        size_t snapshot_size = dump_bound();
         meta->clear_wals();
         IndexSnapshotMetaPB* snapshot = meta->mutable_snapshot();
         version.to_pb(snapshot->mutable_version());

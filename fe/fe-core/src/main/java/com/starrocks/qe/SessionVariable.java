@@ -227,6 +227,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SQL_DIGEST = "enable_sql_digest";
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
@@ -663,6 +664,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PRUNE_SHUFFLE_COLUMN_RATE, flag = VariableMgr.INVISIBLE)
     private double cboPruneShuffleColumnRate = 0.1;
+
+    // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
+    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
+    private int cboPushDownAggregateMode = 0;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
@@ -1209,8 +1214,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.cboCTERuseRatio = cboCTERuseRatio;
     }
 
+    public int getCboPushDownAggregateMode() {
+        return cboPushDownAggregateMode;
+    }
+
+    public void setCboPushDownAggregateMode(int cboPushDownAggregateMode) {
+        this.cboPushDownAggregateMode = cboPushDownAggregateMode;
+    }
+
     public boolean isEnableSQLDigest() {
         return enableSQLDigest;
+    }
+
+    public void enableJoinReorder(boolean value) {
+        this.disableJoinReorder = !value;
     }
 
     public String getJoinImplementationMode() {

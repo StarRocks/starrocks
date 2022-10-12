@@ -91,6 +91,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -724,6 +725,12 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
                 data = UserPrivilegeCollectionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_ROLE_V2:
+            case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
+                data = RolePrivilegeCollectionInfo.read(in);
                 isRead = true;
                 break;
             }

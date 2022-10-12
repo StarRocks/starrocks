@@ -30,8 +30,8 @@ Status PushBrokerReader::init(const TBrokerScanRange& t_scan_range, const TPushR
                                            query_options, query_globals, ExecEnv::GetInstance());
 
     DescriptorTbl* desc_tbl = nullptr;
-    RETURN_IF_ERROR(
-            DescriptorTbl::create(_runtime_state->obj_pool(), request.desc_tbl, &desc_tbl, config::vector_chunk_size));
+    RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state.get(), _runtime_state->obj_pool(), request.desc_tbl, &desc_tbl,
+                                          config::vector_chunk_size));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     _runtime_profile = _runtime_state->runtime_profile();

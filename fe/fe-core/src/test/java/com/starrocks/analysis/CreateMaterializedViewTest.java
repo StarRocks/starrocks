@@ -1299,13 +1299,13 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Create materialized view do not support the table type : MYSQL"));
+            Assert.assertTrue(e.getMessage().contains("Create materialized view do not support the table type: MYSQL"));
         }
     }
 
     @Test
-    public void testAsTableOnMV() {
-        String sql1 = "create materialized view mv1 " +
+    public void testCreateMvFromMv() {
+        String sql1 = "create materialized view base_mv " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
@@ -1319,20 +1319,55 @@ public class CreateMaterializedViewTest {
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }
-        String sql2 = "create materialized view mv2 " +
+        String sql2 = "create materialized view mv_from_base_mv " +
                 "partition by k1 " +
                 "distributed by hash(k2) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ") " +
-                "as select k1, k2 from mv1;";
+                "as select k1, k2 from base_mv;";
         try {
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
             currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
         } catch (Exception e) {
-            Assert.assertEquals("Creating a materialized view from materialized view is not supported now." +
-                    " The type of table: mv1 is: Materialized View", e.getMessage());
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateMvFromInactiveMv() {
+        String sql1 = "create materialized view base_inactive_mv " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from tbl1;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql1, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+
+        MaterializedView baseInactiveMv = ((MaterializedView) testDb.getTable("base_inactive_mv"));
+        baseInactiveMv.setActive(false);
+
+        String sql2 = "create materialized view mv_from_base_inactive_mv " +
+                "partition by k1 " +
+                "distributed by hash(k2) buckets 10 " +
+                "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\"\n" +
+                ") " +
+                "as select k1, k2 from base_inactive_mv;";
+        try {
+            StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql2, connectContext);
+            currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
+        } catch (Exception e) {
+            Assert.assertEquals("Create materialized view from inactive materialized view: base_inactive_mv", e.getMessage());
         }
     }
 
@@ -1873,7 +1908,7 @@ public class CreateMaterializedViewTest {
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         } catch (Exception e) {
-            Assert.assertEquals("Create materialized view do not support the table type : VIEW", e.getMessage());
+            Assert.assertEquals("Create materialized view do not support the table type: VIEW", e.getMessage());
         }
     }
 

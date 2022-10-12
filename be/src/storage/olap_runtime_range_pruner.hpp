@@ -59,6 +59,11 @@ struct RuntimeColumnPredicateBuilder {
             std::vector<TCondition> filters;
             range.to_olap_filter(filters);
 
+            // if runtime filter generate an empty range we could return directly
+            if (range.is_empty_value_range()) {
+                return Status::EndOfFile("EOF, Filter by always false runtime filter");
+            }
+
             for (auto& f : filters) {
                 std::unique_ptr<ColumnPredicate> p(parser->parse_thrift_cond(f));
                 p->set_index_filter_only(f.is_index_filter_only);
