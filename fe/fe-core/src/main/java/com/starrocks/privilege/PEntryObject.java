@@ -4,11 +4,25 @@ package com.starrocks.privilege;
 
 import com.starrocks.server.GlobalStateMgr;
 
+/**
+ * Each `GRANT`/`REVOKE` statement will create some privilege entry object
+ * For example, `GRANT SELECT ON TABLE db1.tbl1 TO user1` will create an object like (db1, tbl1)
+ * Thus when user1 executes `SELECT * FROM db1.tbl1`, `PrivilegeChecker` will try to find a matching one in all the table
+ * object and check if SELECT action is granted on it.
+ * If the GRANT statement contains `ALL`, for example, `GRANT SELECT ON ALL TABLES IN DATABASE db1 TO user1`, a slightly
+ * different object like (db1, ALL) will be created to represent fuzzy matching.
+ * Another scenario that will take usage of this fuzzy matching is when user1 execute statement like `USE DATABASE db1`.
+ * We shall create a (db1, ALL) to check if there's any table in the database db1 that user1 have any privilege on.
+ *
+ * The matching rule on the above description can be simplified as this:
+ * (db1, tbl1) matches (db1, tbl1)
+ * (db1, ALL) matches (db1, tbl1)
+ * (db1, tbl1) matches (db1, ALL)
+ **/
 public interface PEntryObject extends Comparable<PEntryObject> {
 
     /**
-     * if the specific object match current object, including fuzzy matching.
-     * the default behavior is simply check if id is identical.
+     * if the specific object matches current object, including fuzzy matching.
      */
     boolean match(Object obj);
 
