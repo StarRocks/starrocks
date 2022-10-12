@@ -143,6 +143,7 @@ protected:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 2;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -745,4 +746,130 @@ TEST_F(RowsetTest, VerticalWriteTest) {
     }
     EXPECT_EQ(count, num_rows);
 }
+<<<<<<< HEAD
+=======
+
+TEST_F(RowsetTest, SegmentWriteTest) {
+    auto tablet_schema = TabletSchemaHelper::create_tablet_schema();
+
+    RowsetWriterContext writer_context;
+    create_rowset_writer_context(12345, tablet_schema.get(), &writer_context);
+    writer_context.writer_type = kHorizontal;
+
+    std::unique_ptr<RowsetWriter> rowset_writer;
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer).ok());
+
+    int32_t chunk_size = 3000;
+    size_t num_rows = 10000;
+
+    std::vector<std::unique_ptr<SegmentPB>> seg_infos;
+    {
+        // k1 k2 v
+        std::vector<uint32_t> column_indexes{0, 1, 2};
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema, column_indexes);
+        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        for (auto i = 0; i < num_rows / chunk_size + 1; ++i) {
+            chunk->reset();
+            auto& cols = chunk->columns();
+            for (auto j = 0; j < chunk_size && i * chunk_size + j < num_rows; ++j) {
+                cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j)));
+                cols[1]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 1)));
+                cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(i * chunk_size + j + 2)));
+            }
+            seg_infos.emplace_back(std::make_unique<SegmentPB>());
+            ASSERT_OK(rowset_writer->flush_chunk(*chunk, seg_infos.back().get()));
+        }
+    }
+
+    // check rowset
+    RowsetSharedPtr rowset = rowset_writer->build().value();
+    ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
+    ASSERT_EQ(4, rowset->rowset_meta()->num_segments());
+
+    RowsetReadOptions rs_opts;
+    rs_opts.is_primary_keys = false;
+    rs_opts.sorted = true;
+    rs_opts.version = 0;
+    rs_opts.stats = &_stats;
+    auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+    auto res = rowset->new_iterator(schema, rs_opts);
+    ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+
+    auto iterator = res.value();
+    int count = 0;
+    auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+    while (true) {
+        chunk->reset();
+        auto st = iterator->get_next(chunk.get());
+        if (st.is_end_of_file()) {
+            break;
+        }
+        ASSERT_FALSE(!st.ok());
+        for (auto i = 0; i < chunk->num_rows(); ++i) {
+            EXPECT_EQ(count, chunk->get(i)[0].get_int32());
+            EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
+            EXPECT_EQ(count + 2, chunk->get(i)[2].get_int32());
+            ++count;
+        }
+    }
+    EXPECT_EQ(count, num_rows);
+
+    std::unique_ptr<RowsetWriter> segment_rowset_writer;
+    writer_context.rowset_path_prefix = config::storage_root_path + "/data/rowset_test_seg";
+    ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &segment_rowset_writer).ok());
+
+    std::shared_ptr<FileSystem> fs = FileSystem::CreateSharedFromString(rowset->rowset_path()).value();
+
+    for (int i = 0; i < seg_infos.size(); ++i) {
+        auto& seg_info = seg_infos[i];
+        auto seg_path = rowset->segment_file_path(rowset->rowset_path(), rowset->rowset_id(), i);
+        auto rfile = std::move(fs->new_random_access_file(seg_path).value());
+
+        butil::IOBuf data;
+        auto buf = new uint8[seg_info->data_size()];
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
+
+        ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
+        auto st = segment_rowset_writer->flush_segment(*seg_info, data);
+        LOG(INFO) << st;
+        ASSERT_TRUE(st.ok());
+    }
+
+    // check rowset
+    {
+        RowsetSharedPtr rowset = segment_rowset_writer->build().value();
+        ASSERT_EQ(num_rows, rowset->rowset_meta()->num_rows());
+        ASSERT_EQ(4, rowset->rowset_meta()->num_segments());
+
+        RowsetReadOptions rs_opts;
+        rs_opts.is_primary_keys = false;
+        rs_opts.sorted = true;
+        rs_opts.version = 0;
+        rs_opts.stats = &_stats;
+        auto schema = ChunkHelper::convert_schema_to_format_v2(*tablet_schema);
+        auto res = rowset->new_iterator(schema, rs_opts);
+        ASSERT_FALSE(res.status().is_end_of_file() || !res.ok() || res.value() == nullptr);
+
+        auto iterator = res.value();
+        int count = 0;
+        auto chunk = ChunkHelper::new_chunk(schema, chunk_size);
+        while (true) {
+            chunk->reset();
+            auto st = iterator->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            ASSERT_FALSE(!st.ok());
+            for (auto i = 0; i < chunk->num_rows(); ++i) {
+                EXPECT_EQ(count, chunk->get(i)[0].get_int32());
+                EXPECT_EQ(count + 1, chunk->get(i)[1].get_int32());
+                EXPECT_EQ(count + 2, chunk->get(i)[2].get_int32());
+                ++count;
+            }
+        }
+        EXPECT_EQ(count, num_rows);
+    }
+}
+
+>>>>>>> aed2d1324 ([Bugfix] Revert removing version_hash in thrift rpc (#12069))
 } // namespace starrocks
