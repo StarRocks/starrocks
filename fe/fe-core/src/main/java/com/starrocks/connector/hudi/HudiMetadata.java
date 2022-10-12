@@ -145,7 +145,7 @@ public class HudiMetadata implements ConnectorMetadata {
         }
     }
 
-    public void clearQueryLevelCache() {
+    public void clear() {
         hmsOps.invalidateAll();
         fileOps.invalidateAll();
     }

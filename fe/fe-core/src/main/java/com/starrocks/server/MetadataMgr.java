@@ -60,7 +60,7 @@ public class MetadataMgr {
         if (queryId != null) {
             QueryMetadatas queryMetadatas = metadataByQueryId.get(queryId);
             if (queryMetadatas != null) {
-                queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clearQueryLevelCache);
+                queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
                 metadataByQueryId.remove(queryId);
             }
         }

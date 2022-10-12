@@ -102,7 +102,7 @@ public interface ConnectorMetadata {
     /**
      * Clean the query level cache after the query.
      */
-    default void clearQueryLevelCache() {
+    default void clear() {
     }
 
     default void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
