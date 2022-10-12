@@ -182,42 +182,32 @@ public class MaterializedViewRewriter {
                 ScalarOperator left = RewriteUtils.canonizeNode(compensationPredicates.first);
                 ScalarOperator right = RewriteUtils.canonizeNode(compensationPredicates.second);
                 if (!isAlwaysTrue(left) || !isAlwaysTrue(right)) {
-                    Map<ColumnRefOperator, ScalarOperator> viewExprMap;
-                    if (mvTopProjection != null) {
-                        viewExprMap = mvTopProjection.getColumnRefMap();
-                    } else {
-                        if (mvExpression.getOp().getProjection() != null) {
-                            viewExprMap = mvExpression.getOp().getProjection().getColumnRefMap();
-                        } else {
-                            ExpressionContext expressionContext = new ExpressionContext(mvExpression);
-                            ColumnRefSet refSet = ((LogicalOperator) mvExpression.getOp()).getOutputColumns(expressionContext);
-                            viewExprMap = Maps.newHashMap();
-                            for (int columnId : refSet.getColumnIds()) {
-                                ColumnRefOperator columnRef =
-                                        materializationContext.getMvColumnRefFactory().getColumnRef(columnId);
-                                viewExprMap.put(columnRef, columnRef);
-                            }
-                        }
-                    }
+                    Map<ColumnRefOperator, ScalarOperator> viewExprMap =
+                            getProjectionMap(mvTopProjection, mvExpression, materializationContext.getMvColumnRefFactory());
 
                     if (!isAlwaysTrue(left)) {
-                        left = rewriteScalarOperator(left, viewExprMap, rewrittenExpression,
+                        List<ScalarOperator> conjuncts = Utils.extractConjuncts(left);
+                        List<ScalarOperator> rewritten = rewriteScalarOperators(conjuncts, viewExprMap, rewrittenExpression,
                                 relationIdMapping.inverse(), mvRelationIdToColumns,
                                 materializationContext.getMvColumnRefFactory(), queryRelationIdToColumns,
                                 optimizerContext.getColumnRefFactory(), queryBaseViewEc);
-                        if (left == null) {
+                        if (rewritten == null) {
                             continue;
                         }
+                        // TODO: consider normalizing it
+                        left = Utils.compoundAnd(rewritten);
                     }
 
                     if (!isAlwaysTrue(right)) {
-                        right = rewriteScalarOperator(right, viewExprMap, rewrittenExpression,
+                        List<ScalarOperator> conjuncts = Utils.extractConjuncts(right);
+                        List<ScalarOperator> rewritten = rewriteScalarOperators(conjuncts, viewExprMap, rewrittenExpression,
                                 relationIdMapping.inverse(), mvRelationIdToColumns,
                                 materializationContext.getMvColumnRefFactory(), queryRelationIdToColumns,
                                 optimizerContext.getColumnRefFactory(), queryEc);
-                        if (right == null) {
+                        if (rewritten == null) {
                             continue;
                         }
+                        right = Utils.compoundAnd(rewritten);
                     }
                 }
                 ScalarOperator compensationPredicate = RewriteUtils.canonizeNode(Utils.compoundAnd(left, right));
