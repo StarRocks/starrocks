@@ -312,6 +312,7 @@ bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
 }
 
 void RuntimeState::append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary) {
+    std::lock_guard<std::mutex> l(_error_log_lock);
     if (_query_options.query_type != TQueryType::LOAD) {
         return;
     }

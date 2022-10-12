@@ -249,6 +249,8 @@ struct TPlanFragmentExecParams {
   53: optional map<Types.TPlanNodeId, map<i32, list<TScanRangeParams>>> node_to_per_driver_seq_scan_ranges
 
   54: optional bool enable_exchange_perf
+
+  70: optional i32 pipeline_sink_dop
 }
 
 // Global query parameters assigned by the coordinator.

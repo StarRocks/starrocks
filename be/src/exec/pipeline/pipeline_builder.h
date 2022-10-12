@@ -75,6 +75,8 @@ public:
     // disable to ignore local data after aggregations with profile exchange speed.
     bool has_aggregation = false;
 
+    static int localExchangeBufferChunks() { return kLocalExchangeBufferChunks; }
+
 private:
     static constexpr int kLocalExchangeBufferChunks = 8;
 
