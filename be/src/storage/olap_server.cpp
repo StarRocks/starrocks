@@ -170,7 +170,7 @@ Status StorageEngine::start_bg_threads() {
     }
 
     int32_t update_compaction_num_threads_per_disk =
-            std::max<int32_t>(0, config::update_compaction_num_threads_per_disk);
+            config::update_compaction_num_threads_per_disk >= 0 ? config::update_compaction_num_threads_per_disk : 1;
     int32_t update_compaction_num_threads = update_compaction_num_threads_per_disk * data_dir_num;
     _update_compaction_threads.reserve(update_compaction_num_threads);
     for (uint32_t i = 0; i < update_compaction_num_threads; ++i) {
