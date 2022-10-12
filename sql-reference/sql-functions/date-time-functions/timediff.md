@@ -2,9 +2,23 @@
 
 ## description
 
-### Syntax
+返回两个 DATETIME 类型值之间的差值。
 
-`TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
+## 语法
+
+```Haskell
+TIME TIMEDIFF(DATETIME expr1, DATETIME expr2)`
+```
+
+## 参数说明
+
+`expr1`: 结束时间，支持的数据类型为 DATETIME。
+
+`expr2`: 开始时间，支持的数据类型为 DATETIME。
+
+## 返回值说明
+
+返回值的数据类型为 TIME 类型。如果日期不存在，则返回 NULL。如果日期为 DATE 类型，则按照该日期的零点进行计算。
 
 TIMEDIFF返回两个DATETIME之间的差值
 
