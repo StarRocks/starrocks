@@ -103,7 +103,6 @@ protected:
         tablet_schema_pb.set_keys_type(PRIMARY_KEYS);
         tablet_schema_pb.set_num_short_key_columns(2);
         tablet_schema_pb.set_num_rows_per_row_block(1024);
-        tablet_schema_pb.set_compress_kind(COMPRESS_NONE);
         tablet_schema_pb.set_next_column_unique_id(4);
 
         ColumnPB* column_1 = tablet_schema_pb.add_column();
@@ -143,6 +142,7 @@ protected:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 2;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -820,7 +820,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
 
         butil::IOBuf data;
         auto buf = new uint8[seg_info->data_size()];
-        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
 
         ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
         auto st = segment_rowset_writer->flush_segment(*seg_info, data);

@@ -387,8 +387,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 + "'FRANCE') ) and l_shipdate between date '1995-01-01' and date '1996-12-31' ) as shipping "
                 + "group by supp_nation, cust_nation, l_year order by supp_nation, cust_nation, l_year;";
         String plan = getCostExplain(sql);
-        assertContains(plan, "     probe runtime filters:\n" +
-                "     - filter_id = 2, probe_expr = (11: L_SUPPKEY)");
+        assertContains(plan, "build_expr = (1: S_SUPPKEY)");
     }
 
     @Test

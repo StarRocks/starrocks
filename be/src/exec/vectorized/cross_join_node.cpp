@@ -81,6 +81,7 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
 
 Status CrossJoinNode::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ExecNode::prepare(state));
+    RETURN_IF_ERROR(Expr::prepare(_join_conjuncts, state));
 
     _build_timer = ADD_TIMER(runtime_profile(), "BuildTime");
     _probe_timer = ADD_TIMER(runtime_profile(), "ProbeTime");
@@ -94,6 +95,7 @@ Status CrossJoinNode::prepare(RuntimeState* state) {
 Status CrossJoinNode::open(RuntimeState* state) {
     SCOPED_TIMER(_runtime_profile->total_time_counter());
     RETURN_IF_ERROR(ExecNode::open(state));
+    RETURN_IF_ERROR(Expr::open(_join_conjuncts, state));
 
     RETURN_IF_ERROR(_build(state));
 
@@ -495,6 +497,7 @@ Status CrossJoinNode::close(RuntimeState* state) {
         _probe_chunk->reset();
     }
 
+    Expr::close(_join_conjuncts, state);
     return ExecNode::close(state);
 }
 
