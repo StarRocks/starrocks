@@ -31,6 +31,7 @@ static void compare_decimal_string(const std::string& expect, const std::string&
     if (actual.size() == expect.size()) {
         ASSERT_EQ(actual, expect);
     } else {
+        std::cout << "expect=" << expect << ", actual=" << actual << std::endl;
         ASSERT_EQ(actual.size() - scale - 1, expect.size());
         ASSERT_EQ(actual.substr(0, actual.size() - scale - 1), expect);
         ASSERT_EQ(actual[expect.size()], '.');

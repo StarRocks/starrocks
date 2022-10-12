@@ -76,6 +76,7 @@ public:
     static void set_default_create_tablet_request(TCreateTabletReq* request) {
         request->tablet_id = 12345;
         request->__set_version(1);
+        request->__set_version_hash(0);
         request->tablet_schema.schema_hash = 1111;
         request->tablet_schema.short_key_column_count = 2;
         request->tablet_schema.keys_type = TKeysType::DUP_KEYS;
@@ -156,7 +157,7 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -211,6 +212,7 @@ private:
     PrimitiveType _primitive_type[3] = {PrimitiveType::TYPE_INT, PrimitiveType::TYPE_VARCHAR, PrimitiveType::TYPE_INT};
 
     std::string _names[3] = {"k1", "k2", "v1"};
+    RuntimeState _runtime_state;
     ObjectPool _pool;
 };
 

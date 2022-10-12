@@ -20,6 +20,12 @@ struct BitAndOp {};
 struct BitOrOp {};
 struct BitXorOp {};
 struct BitNotOp {};
+
+struct MulOp64x64_128 {};
+struct MulOp32x64_128 {};
+struct MulOp32x32_64 {};
+struct MulOp32x32_128 {};
+
 TYPE_GUARD(AddOpGuard, is_add_op, AddOp)
 TYPE_GUARD(SubOpGuard, is_sub_op, SubOp)
 TYPE_GUARD(ReverseSubOpGuard, is_reverse_sub_op, ReverseSubOp)
@@ -141,6 +147,7 @@ struct ArithmeticBinaryOperator<ModOp, Type, guard::Guard, FloatPTGuard<Type>> {
 };
 
 TYPE_GUARD(DecimalOpGuard, is_decimal_op, AddOp, SubOp, ReverseSubOp, MulOp, DivOp, ModOp, ReverseModOp)
+TYPE_GUARD(DecimalFastMulOpGuard, is_decimal_fast_mul_op, MulOp32x32_64, MulOp32x32_128, MulOp32x64_128, MulOp64x64_128)
 
 // compute precision, scale and adjust for result of binary operation
 // scale(a add/sub b) = max(scale(a), scale(b))
@@ -155,7 +162,7 @@ static inline std::tuple<int, int, int> compute_decimal_result_type(int lhs_scal
     if constexpr (is_add_op<Op> || is_sub_op<Op> || is_mod_op<Op>) {
         scale = std::max(lhs_scale, rhs_scale);
         adjust_scale = scale - std::min(lhs_scale, rhs_scale);
-    } else if constexpr (is_mul_op<Op>) {
+    } else if constexpr (is_mul_op<Op> || is_decimal_fast_mul_op<Op>) {
         int max_precision = decimal_precision_limit<T>;
         scale = lhs_scale + rhs_scale;
         adjust_scale = 0;
@@ -325,6 +332,20 @@ struct ArithmeticBinaryOperator<Op, Type, DecimalOpGuard<Op>, DecimalPTGuard<Typ
         } else {
             return apply<check_overflow, LType, RType, ResultType>(l, r, result);
         }
+    }
+};
+
+template <typename Op, PrimitiveType Type>
+struct ArithmeticBinaryOperator<Op, Type, DecimalFastMulOpGuard<Op>, DecimalPTGuard<Type>> {
+    template <bool check_overflow, bool adjust_left, typename LType, typename RType, typename ResultType>
+    static inline bool apply(const LType& l, const RType& r, ResultType* result,
+                             [[maybe_unused]] const RType& scale_factor) {
+        if constexpr (pt_is_decimal128<Type>) {
+            *result = i64_x_i64_produce_i128(l, r);
+        } else {
+            *result = i32_x_i32_produce_i64(l, r);
+        }
+        return false;
     }
 };
 
