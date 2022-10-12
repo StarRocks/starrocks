@@ -255,7 +255,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
     private Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws UserException {
-        if (table.isOlapTable()) {
+        if (table.isLocalTable()) {
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable()) {
             return HiveMetaStoreTableUtils.getPartitionRange((HiveMetaStoreTable) table, partitionColumn);
@@ -414,7 +414,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         Map<String, Set<String>> tableNamePartitionNames = Maps.newHashMap();
         for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table table = tablePair.second;
-            if (!table.isOlapTable()) {
+            if (!table.isLocalTable()) {
                 // TODO(ywb) support external table refresh according to partition later
                 return tableNamePartitionNames;
             }

@@ -135,6 +135,7 @@ public:
 
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
     bool version_for_delete_predicate(const Version& version);
+    bool has_delete_predicates(const Version& version);
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -169,7 +170,6 @@ public:
     static bool check_migrate(const TabletSharedPtr& tablet);
 
     // operation for compaction
-    bool can_do_compaction();
     const uint32_t calc_cumulative_compaction_score() const;
     const uint32_t calc_base_compaction_score() const;
 
@@ -182,6 +182,9 @@ public:
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
+
+    TStatusCode::type last_cumu_compaction_failure_status() { return _last_cumu_compaction_failure_status; }
+    void set_last_cumu_compaction_failure_status(TStatusCode::type st) { _last_cumu_compaction_failure_status = st; }
 
     int64_t last_base_compaction_failure_time() { return _last_base_compaction_failure_millis; }
     void set_last_base_compaction_failure_time(int64_t millis) { _last_base_compaction_failure_millis = millis; }
@@ -247,6 +250,8 @@ public:
     void set_enable_persistent_index(bool enable_persistent_index) {
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
+
+    Status contains_version(const Version& version);
 
 protected:
     void on_shutdown() override;
@@ -329,6 +334,8 @@ private:
     std::atomic<int64_t> _last_cumu_compaction_success_millis{0};
     // timestamp of last base compaction success
     std::atomic<int64_t> _last_base_compaction_success_millis{0};
+
+    TStatusCode::type _last_cumu_compaction_failure_status = TStatusCode::OK;
 
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};

@@ -16,9 +16,9 @@ GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(std::move(tabl
 
 GeneralTabletWriter::~GeneralTabletWriter() {}
 
+// To developers: Do NOT perform any I/O in this method, because this method may be invoked
+// in a bthread.
 Status GeneralTabletWriter::open() {
-    DCHECK(_schema == nullptr);
-    ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
     return Status::OK();
 }
 
@@ -60,6 +60,9 @@ void GeneralTabletWriter::close() {
 }
 
 Status GeneralTabletWriter::reset_segment_writer() {
+    if (_schema == nullptr) {
+        ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
+    }
     auto name = fmt::format("{}.dat", generate_uuid_string());
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;

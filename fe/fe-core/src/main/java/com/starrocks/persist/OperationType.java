@@ -264,6 +264,10 @@ public class OperationType {
     // new privilege, all endswith V2
     public static final short OP_CREATE_USER_V2 = 10261;
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
+    public static final short OP_ALTER_USER_V2 = 10263;
+    public static final short OP_DROP_USER_V2 = 10264;
+    public static final short OP_UPDATE_ROLE_PRIVILEGE_V2 = 10265;
+    public static final short OP_DROP_ROLE_V2 = 10266;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;

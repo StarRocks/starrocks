@@ -11,7 +11,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchor;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.tree.PreAggregateTurnOnRule;
 import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
+import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
@@ -128,7 +129,8 @@ public class Optimizer {
     }
 
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
-        tree = OptExpression.create(new LogicalTreeAnchor(), tree);
+        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
         deriveLogicalProperty(tree);
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
@@ -142,14 +144,11 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.AGGREGATE_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_SUBQUERY);
-        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_COMMON);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_TO_WINDOW);
+        ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SUBQUERY_REWRITE_TO_JOIN);
         ruleRewriteOnlyOnce(tree, rootTaskContext, new ApplyExceptionRule());
         CTEUtils.collectCteOperators(tree, context);
-
-        // Add full cte required columns, and save orig required columns
-        // If cte was inline, the columns don't effect normal prune
-        ColumnRefSet requiredColumns = rootTaskContext.getRequiredColumns().clone();
-        rootTaskContext.getRequiredColumns().union(cteContext.getAllRequiredColumns());
 
         // Note: PUSH_DOWN_PREDICATE tasks should be executed before MERGE_LIMIT tasks
         // because of the Filter node needs to be merged first to avoid the Limit node
@@ -161,7 +160,6 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownPredicateRankingWindowRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-
         deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
@@ -185,14 +183,8 @@ public class Optimizer {
         if (cteContext.needOptimizeCTE()) {
             cteContext.reset();
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.COLLECT_CTE);
-
-            // Prune CTE produce plan columns
-            requiredColumns.union(cteContext.getAllRequiredColumns());
-            rootTaskContext.setRequiredColumns(requiredColumns);
+            rootTaskContext.setRequiredColumns(requiredColumns.clone());
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
-            // After prune columns, the output column in the logical property may outdated, because of the following rule
-            // will use the output column, we need to derive the logical property here.
-
             if (cteContext.needPushLimit() || cteContext.needPushPredicate()) {
                 ruleRewriteOnlyOnce(tree, rootTaskContext, new PushLimitAndFilterToCTEProduceRule());
             }
@@ -216,6 +208,8 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, LimitPruneTabletsRule.getInstance());
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_PROJECT);
 
+        tree = pushDownAggregation(tree, rootTaskContext, requiredColumns);
+
         CTEUtils.collectCteOperators(tree, context);
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -230,6 +224,20 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
         return tree.getInputs().get(0);
+    }
+
+    private OptExpression pushDownAggregation(OptExpression tree, TaskContext rootTaskContext,
+                                              ColumnRefSet requiredColumns) {
+        if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
+            return tree;
+        }
+        
+        tree = new PushDownAggregateRule().rewrite(tree, rootTaskContext);
+        deriveLogicalProperty(tree);
+
+        rootTaskContext.setRequiredColumns(requiredColumns.clone());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+        return tree;
     }
 
     private void deriveLogicalProperty(OptExpression root) {

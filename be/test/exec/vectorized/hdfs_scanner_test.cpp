@@ -132,7 +132,7 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     return tuple_desc;
@@ -372,6 +372,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
 
@@ -438,6 +441,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
@@ -466,6 +472,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
@@ -493,6 +502,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
+
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
@@ -1315,6 +1327,53 @@ TEST_F(HdfsScannerTest, TestCSVSmall) {
 
         scanner->close(_runtime_state);
     }
+}
+
+// =============================================================================
+
+/*
+row group 1:           RC:100 TS:28244 OFFSET:4
+--------------------------------------------------------------------------------
+:                       BINARY SNAPPY DO:4 FPO:447 SZ:577/738/1.28 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+vin:                    BINARY SNAPPY DO:640 FPO:1070 SZ:570/1044/1.83 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+log_domain:             BINARY SNAPPY DO:1279 FPO:1810 SZ:685/1758/2.57 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+file_name:              BINARY SNAPPY DO:2054 FPO:2584 SZ:682/1656/2.43 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+is_collection:          BINARY SNAPPY DO:2823 FPO:3360 SZ:697/2064/2.96 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+is_center:              BINARY SNAPPY DO:3619 FPO:4149 SZ:682/1656/2.43 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+is_cloud:               BINARY SNAPPY DO:4388 FPO:4927 SZ:689/1554/2.26 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+collection_time:        INT96 SNAPPY DO:5161 FPO:5189 SZ:61/57/0.93 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+center_time:            INT96 SNAPPY DO:5284 FPO:5312 SZ:61/57/0.93 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+cloud_time:             INT96 SNAPPY DO:5403 FPO:5431 SZ:61/57/0.93 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+error_collection_tips:  BINARY SNAPPY DO:5521 FPO:6063 SZ:718/2880/4.01 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+error_center_tips:      BINARY SNAPPY DO:6362 FPO:6900 SZ:706/2472/3.50 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+error_cloud_tips:       BINARY SNAPPY DO:7179 FPO:7716 SZ:703/2370/3.37 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+error_collection_time:  BINARY SNAPPY DO:7990 FPO:8532 SZ:718/2880/4.01 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+error_center_time:      BINARY SNAPPY DO:8833 FPO:9371 SZ:706/2472/3.50 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+error_cloud_time:       BINARY SNAPPY DO:9653 FPO:10190 SZ:703/2370/3.37 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+original_time:          BINARY SNAPPY DO:10467 FPO:11001 SZ:694/2064/2.97 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+is_original:            INT64 SNAPPY DO:11263 FPO:11287 SZ:99/95/0.96 VC:100 ENC:RLE,PLAIN_DICTIONARY,PLAIN
+*/
+
+TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
+    SlotDesc parquet_descs[] = {
+            {"vin", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+            {"collection_time", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+            {""}};
+
+    const std::string parquet_file = "./be/test/exec/test_data/parquet_scanner/type_mismatch_int96_string.parquet";
+
+    auto scanner = std::make_shared<HdfsParquetScanner>();
+    auto* range = _create_scan_range(parquet_file, 0, 0);
+    auto* tuple_desc = _create_tuple_desc(parquet_descs);
+    auto* param = _create_param(parquet_file, range, tuple_desc);
+
+    Status status = scanner->init(_runtime_state, *param);
+    EXPECT_TRUE(status.ok());
+
+    status = scanner->open(_runtime_state);
+    // parquet column reader: not supported convert from parquet `INT96` to `VARCHAR`
+    EXPECT_TRUE(!status.ok()) << status.get_error_msg();
+    scanner->close(_runtime_state);
 }
 
 } // namespace starrocks::vectorized

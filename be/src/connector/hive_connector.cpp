@@ -56,6 +56,11 @@ Status HiveDataSource::open(RuntimeState* state) {
         return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
     }
 
+    _use_block_cache = config::block_cache_enable;
+    if (state->query_options().__isset.use_scan_block_cache) {
+        _use_block_cache &= state->query_options().use_scan_block_cache;
+    }
+
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
     _init_counter(state);
@@ -167,6 +172,9 @@ Status HiveDataSource::_decompose_conjunct_ctxs(RuntimeState* state) {
         const Expr* root_expr = ctx->root();
         std::vector<SlotId> slot_ids;
         root_expr->get_slot_ids(&slot_ids);
+        for (SlotId slot_id : slot_ids) {
+            _conjunct_slots.insert(slot_id);
+        }
 
         // For some conjunct like (a < 1) or (a > 7)
         // slot_ids = (a, a), but actually there is only one slot.
@@ -212,7 +220,7 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_read_timer = ADD_TIMER(_runtime_profile, "ColumnReadTime");
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
-    if (config::block_cache_enable) {
+    if (_use_block_cache) {
         _profile.block_cache_read_counter = ADD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT);
         _profile.block_cache_read_bytes = ADD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES);
         _profile.block_cache_read_timer = ADD_TIMER(_runtime_profile, "BlockCacheReadTimer");
@@ -271,12 +279,14 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.partition_values = _partition_values;
     scanner_params.conjunct_ctxs = _scanner_conjunct_ctxs;
     scanner_params.conjunct_ctxs_by_slot = _conjunct_ctxs_by_slot;
+    scanner_params.conjunct_slots = _conjunct_slots;
     scanner_params.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     scanner_params.min_max_tuple_desc = _min_max_tuple_desc;
     scanner_params.hive_column_names = &_hive_column_names;
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    scanner_params.use_block_cache = _use_block_cache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;

@@ -670,25 +670,97 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     Slice format_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_format);
     auto period_unit = format_slice.to_string();
 
+    ColumnPtr column_time_base = context->get_constant_column(3);
+    Slice time_base_slice = ColumnHelper::get_const_value<TYPE_VARCHAR>(column_time_base);
+    auto time_base = time_base_slice.to_string();
+
     ScalarFunction function;
-    if (period_unit == "second") {
-        function = &TimeFunctions::time_slice_second;
-    } else if (period_unit == "minute") {
-        function = &TimeFunctions::time_slice_minute;
-    } else if (period_unit == "hour") {
-        function = &TimeFunctions::time_slice_hour;
-    } else if (period_unit == "day") {
-        function = &TimeFunctions::time_slice_day;
-    } else if (period_unit == "month") {
-        function = &TimeFunctions::time_slice_month;
-    } else if (period_unit == "year") {
-        function = &TimeFunctions::time_slice_year;
-    } else if (period_unit == "week") {
-        function = &TimeFunctions::time_slice_week;
-    } else if (period_unit == "quarter") {
-        function = &TimeFunctions::time_slice_quarter;
+    const FunctionContext::TypeDesc* boundary = context->get_arg_type(0);
+    if (boundary->type == PrimitiveType::TYPE_DATETIME) {
+        // floor specify START as the result time.
+        if (time_base == "floor") {
+            if (period_unit == "second") {
+                function = &TimeFunctions::time_slice_datetime_start_second;
+            } else if (period_unit == "minute") {
+                function = &TimeFunctions::time_slice_datetime_start_minute;
+            } else if (period_unit == "hour") {
+                function = &TimeFunctions::time_slice_datetime_start_hour;
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_datetime_start_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_datetime_start_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_datetime_start_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_datetime_start_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_datetime_start_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        } else {
+            // ceil specify END as the result time.
+            DCHECK_EQ(time_base, "ceil");
+            if (period_unit == "second") {
+                function = &TimeFunctions::time_slice_datetime_end_second;
+            } else if (period_unit == "minute") {
+                function = &TimeFunctions::time_slice_datetime_end_minute;
+            } else if (period_unit == "hour") {
+                function = &TimeFunctions::time_slice_datetime_end_hour;
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_datetime_end_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_datetime_end_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_datetime_end_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_datetime_end_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_datetime_end_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        }
     } else {
-        return Status::InternalError("period unit must in {second, minute, hour, day, month, year, week, quarter}");
+        DCHECK_EQ(boundary->type, PrimitiveType::TYPE_DATE);
+        if (time_base == "floor") {
+            if (period_unit == "second" || period_unit == "minute" || period_unit == "hour") {
+                return Status::InvalidArgument("can't use time_slice for date with time(hour/minute/second)");
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_date_start_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_date_start_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_date_start_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_date_start_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_date_start_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        } else {
+            DCHECK_EQ(time_base, "ceil");
+            if (period_unit == "second" || period_unit == "minute" || period_unit == "hour") {
+                return Status::InvalidArgument("can't use time_slice for date with time(hour/minute/second)");
+            } else if (period_unit == "day") {
+                function = &TimeFunctions::time_slice_date_end_day;
+            } else if (period_unit == "month") {
+                function = &TimeFunctions::time_slice_date_end_month;
+            } else if (period_unit == "year") {
+                function = &TimeFunctions::time_slice_date_end_year;
+            } else if (period_unit == "week") {
+                function = &TimeFunctions::time_slice_date_end_week;
+            } else if (period_unit == "quarter") {
+                function = &TimeFunctions::time_slice_date_end_quarter;
+            } else {
+                return Status::InternalError(
+                        "period unit must in {second, minute, hour, day, month, year, week, quarter}");
+            }
+        }
     }
 
     auto fc = new DateTruncCtx();
@@ -697,14 +769,35 @@ Status TimeFunctions::time_slice_prepare(starrocks_udf::FunctionContext* context
     return Status::OK();
 }
 
-#define DEFINE_TIME_SLICE_FN(UNIT)                                         \
-    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_##UNIT##Impl, v, period) { \
-        TimestampValue result = v;                                         \
-        result.floor_to_##UNIT##_period(period);                           \
-        return result;                                                     \
-    }                                                                      \
-                                                                           \
-    DEFINE_TIME_CALC_FN(time_slice_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);
+#define DEFINE_TIME_SLICE_FN(UNIT)                                                                 \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_start_##UNIT##Impl, v, period) {          \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<false>(period);                                   \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_datetime_start_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME); \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_datetime_end_##UNIT##Impl, v, period) {            \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<true>(period);                                    \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_datetime_end_##UNIT, TYPE_DATETIME, TYPE_INT, TYPE_DATETIME);   \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_start_##UNIT##Impl, v, period) {              \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<false>(period);                                   \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_date_start_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);             \
+    DEFINE_BINARY_FUNCTION_WITH_IMPL(time_slice_date_end_##UNIT##Impl, v, period) {                \
+        TimestampValue result = v;                                                                 \
+        result.template floor_to_##UNIT##_period<true>(period);                                    \
+        return result;                                                                             \
+    }                                                                                              \
+                                                                                                   \
+    DEFINE_TIME_CALC_FN(time_slice_date_end_##UNIT, TYPE_DATE, TYPE_INT, TYPE_DATE);
 
 // time_slice_to_second
 DEFINE_TIME_SLICE_FN(second);

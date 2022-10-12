@@ -63,6 +63,7 @@ public class PartitionPruneRule extends TransformationRule {
             selectedPartitionIds =
                     table.getPartitions().stream().filter(Partition::hasData).map(Partition::getId).collect(
                             Collectors.toList());
+            // some test cases need to perceive partitions pruned, so we can not filter empty partitions.
         } else {
             selectedPartitionIds = selectedPartitionIds.stream()
                     .filter(id -> table.getPartition(id).hasData()).collect(Collectors.toList());

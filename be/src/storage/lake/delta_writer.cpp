@@ -2,6 +2,11 @@
 
 #include "storage/lake/delta_writer.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/bthread.h>
+DIAGNOSTIC_POP
+
 #include "column/chunk.h"
 #include "column/column.h"
 #include "gutil/strings/util.h"
@@ -94,7 +99,7 @@ public:
     [[nodiscard]] Status flush_async();
 
 private:
-    void reset_memtable();
+    Status reset_memtable();
 
     const int64_t _tablet_id;
     const int64_t _txn_id;
@@ -116,9 +121,13 @@ private:
     bool _schema_initialized;
 };
 
-inline void DeltaWriterImpl::reset_memtable() {
+inline Status DeltaWriterImpl::reset_memtable() {
+    if (_tablet_schema == nullptr) {
+        ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
+        ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
+    }
     if (!_schema_initialized) {
-        _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema.get(), _slots));
+        _vectorized_schema = MemTable::convert_schema(_tablet_schema.get(), _slots);
         _schema_initialized = true;
     }
     if (_slots != nullptr) {
@@ -127,6 +136,7 @@ inline void DeltaWriterImpl::reset_memtable() {
         _mem_table.reset(
                 new MemTable(_tablet_id, &_vectorized_schema, _mem_table_sink.get(), _max_buffer_size, _mem_tracker));
     }
+    return Status::OK();
 }
 
 inline Status DeltaWriterImpl::flush_async() {
@@ -144,13 +154,14 @@ inline Status DeltaWriterImpl::flush() {
     return _flush_token->wait();
 }
 
+// To developers: Do NOT perform any I/O in this method, because this method may be invoked
+// in a bthread.
 Status DeltaWriterImpl::open() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     DCHECK(_tablet_writer == nullptr);
     // TODO: remove the dependency |ExecEnv::GetInstance()|
     ASSIGN_OR_RETURN(auto tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(_tablet_id));
-    ASSIGN_OR_RETURN(_tablet_schema, tablet.get_schema());
     ASSIGN_OR_RETURN(_tablet_writer, tablet.new_writer());
     RETURN_IF_ERROR(_tablet_writer->open());
     _mem_table_sink = std::make_unique<TabletWriterSink>(_tablet_writer.get());
@@ -165,7 +176,7 @@ Status DeltaWriterImpl::write(const Chunk& chunk, const uint32_t* indexes, uint3
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
 
     if (_mem_table == nullptr) {
-        reset_memtable();
+        RETURN_IF_ERROR(reset_memtable());
     }
     Status st;
     bool full = _mem_table->insert(chunk, indexes, 0, indexes_size);
@@ -186,7 +197,6 @@ Status DeltaWriterImpl::finish() {
 
     // TODO: move file type checking to a common place
     auto is_seg_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".dat"); };
-    auto is_del_file = [](const std::string& name) -> bool { return HasSuffixString(name, ".del"); };
 
     RETURN_IF_ERROR(flush());
     RETURN_IF_ERROR(_tablet_writer->finish());
@@ -198,8 +208,6 @@ Status DeltaWriterImpl::finish() {
     for (auto& f : _tablet_writer->files()) {
         if (is_seg_file(f)) {
             op_write->mutable_rowset()->add_segments(std::move(f));
-        } else if (is_del_file(f)) {
-            op_write->add_deletes(std::move(f));
         } else {
             return Status::InternalError(fmt::format("unknown file {}", f));
         }
@@ -240,14 +248,17 @@ Status DeltaWriter::open() {
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t indexes_size) {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::write() in a bthread";
     return _impl->write(chunk, indexes, indexes_size);
 }
 
 Status DeltaWriter::finish() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::finish() in a bthread";
     return _impl->finish();
 }
 
 void DeltaWriter::close() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::close() in a bthread";
     _impl->close();
 }
 
@@ -272,10 +283,12 @@ TabletWriter* DeltaWriter::tablet_writer() {
 }
 
 Status DeltaWriter::flush() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush() in a bthread";
     return _impl->flush();
 }
 
 Status DeltaWriter::flush_async() {
+    DCHECK_EQ(0, bthread_self()) << "Should not invoke DeltaWriter::flush_async() in a bthread";
     return _impl->flush_async();
 }
 

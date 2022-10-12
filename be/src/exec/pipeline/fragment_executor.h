@@ -30,6 +30,8 @@ class QueryContext;
 //    - params.per_node_scan_ranges
 //    - fragment.output_sink (only for MultiCastDataStreamSink and ExportSink)
 // For the exec_plan_fragments request, common_request and unique_request are identical.
+
+using PerDriverScanRangesMap = std::map<int32_t, std::vector<TScanRangeParams>>;
 class UnifiedExecPlanFragmentParams {
 public:
     UnifiedExecPlanFragmentParams(const TExecPlanFragmentParams& common_request,
@@ -53,8 +55,7 @@ public:
     int32_t sender_id() const { return _unique_request.params.sender_id; }
 
     const std::vector<TScanRangeParams>& scan_ranges_of_node(TPlanNodeId node_id) const;
-    const std::map<int32_t, std::vector<TScanRangeParams>>& per_driver_seq_scan_ranges_of_node(
-            TPlanNodeId node_id) const;
+    const PerDriverScanRangesMap& per_driver_seq_scan_ranges_of_node(TPlanNodeId node_id) const;
 
     bool isset_output_sink() const {
         return _common_request.fragment.__isset.output_sink || _unique_request.fragment.__isset.output_sink;
@@ -63,8 +64,7 @@ public:
 
 private:
     static const std::vector<TScanRangeParams> _no_scan_ranges;
-    static const std::map<int32_t, std::vector<TScanRangeParams>> _no_scan_ranges_per_driver_seq;
-
+    static const PerDriverScanRangesMap _no_scan_ranges_per_driver_seq;
     const TExecPlanFragmentParams& _common_request;
     const TExecPlanFragmentParams& _unique_request;
 };

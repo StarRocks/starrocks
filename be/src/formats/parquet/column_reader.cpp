@@ -118,8 +118,7 @@ public:
     Status prepare_batch(size_t* num_records, ColumnContentType content_type, vectorized::Column* dst) override {
         vectorized::NullableColumn* nullable_column = nullptr;
         vectorized::ArrayColumn* array_column = nullptr;
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             DCHECK(nullable_column->mutable_data_column()->is_array());
             array_column = down_cast<vectorized::ArrayColumn*>(nullable_column->mutable_data_column());
@@ -146,8 +145,7 @@ public:
         offsets.resize(num_offsets + 1);
         is_nulls.resize(num_offsets);
 
-        if (_field->is_nullable) {
-            DCHECK(dst->is_nullable());
+        if (dst->is_nullable()) {
             DCHECK(nullable_column != nullptr);
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(has_null);

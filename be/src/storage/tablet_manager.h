@@ -46,6 +46,7 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
+using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -74,12 +75,16 @@ public:
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
-    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir);
+    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
+                                                   std::pair<int32_t, int32_t> tablet_shards_range);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
+
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
+                                                          int64_t to_version);
 
     TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
                                std::string* err = nullptr);

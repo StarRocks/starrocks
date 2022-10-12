@@ -847,7 +847,7 @@ public class Auth implements Writable {
     // grant
     public void grant(GrantPrivilegeStmt stmt) throws DdlException {
         PrivBitSet privs = stmt.getPrivBitSet();
-        if (stmt.getPrivType().equals("TABLE")) {
+        if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
             grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getTblPattern(), privs, true, false);
         } else if (stmt.getPrivType().equals("RESOURCE")) {
             grantInternal(stmt.getUserIdentity(), stmt.getRole(), stmt.getResourcePattern(), privs, true, false);

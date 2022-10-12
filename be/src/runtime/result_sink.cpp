@@ -50,7 +50,7 @@ ResultSink::ResultSink(const RowDescriptor& row_desc, const std::vector<TExpr>& 
 
     if (_sink_type == TResultSinkType::FILE) {
         CHECK(sink.__isset.file_options);
-        _file_opts = std::make_unique<ResultFileOptions>(sink.file_options);
+        _file_opts = std::make_shared<ResultFileOptions>(sink.file_options);
     }
 }
 

@@ -296,6 +296,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -411,6 +413,8 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
         std::vector<ExprContext*> sort_exprs;
         sort_exprs.push_back(new ExprContext(column));
         sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+        ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
         constexpr int kTotalRows = 16;
         for (int limit = 1; limit < kTotalRows; limit++) {
@@ -445,6 +449,8 @@ TEST_F(ChunksSorterTest, rank_topn) {
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_ranking_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     std::vector<int32_t> expected_perm = {1, 2, 3, 4, 5, 6, 6, 6, 7, 7, 7, 11, 12, 13, 14, 15, 16, 16, 16, 17, 17, 17};
     std::vector<int32_t> res_num_rows_by_limit = {-1, 1,  2,  3,  4,  5,  8,  8,  8,  11, 11, 11,
@@ -495,6 +501,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -528,6 +536,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -564,6 +574,8 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -603,6 +615,8 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -640,6 +654,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2, 7, TTopNType::ROW_NUMBER,
                             2);
@@ -677,6 +693,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     int offset = 7;
     for (int limit = 8; limit + offset <= 16; limit++) {
@@ -725,6 +743,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     // partial sort
     ChunksSorterTopn full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1, 6,
@@ -801,13 +821,15 @@ void pack_nullable(ChunkPtr chunk) {
 }
 
 TEST_F(ChunksSorterTest, get_filter_test) {
-    ObjectPool pool;
     auto c0 = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
     auto c1 = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 1);
+    ObjectPool pool;
 
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(pool.add(new ExprContext(c0.get())));
     sort_exprs.push_back(pool.add(new ExprContext(c1.get())));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunkPtr merged_chunk = std::make_shared<Chunk>();
     {

@@ -22,17 +22,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ExportProcNode;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -44,7 +40,6 @@ import java.util.UUID;
 //
 // syntax:
 //      SHOW EXPORT [FROM db] [WHERE queryid = "921d8f80-7c9d-11eb-9342-acde48001122"]
-// TODO(lingbin): remove like predicate because export do not have label string
 public class ShowExportStmt extends ShowStmt {
     private static final Logger LOG = LogManager.getLogger(ShowExportStmt.class);
 
@@ -68,8 +63,35 @@ public class ShowExportStmt extends ShowStmt {
         this.limitElement = limitElement;
     }
 
+    public void setStateValue(String stateValue) {
+        this.stateValue = stateValue;
+    }
+    public void setQueryId(UUID queryId) {
+        this.queryId = queryId;
+    }
+    public void setJobId(long jobId) {
+        this.jobId = jobId;
+    }
+    public void setJobState(JobState jobState) {
+        this.jobState = jobState;
+    }
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
+    }
+    public void setOrderByPairs(ArrayList<OrderByPair> orderByPairs) {
+        this.orderByPairs = orderByPairs;
+    }
+
     public String getDbName() {
         return dbName;
+    }
+
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
+    public List<OrderByElement> getOrderByElements() {
+        return orderByElements;
     }
 
     public ArrayList<OrderByPair> getOrderByPairs() {
@@ -96,110 +118,6 @@ public class ShowExportStmt extends ShowStmt {
 
     public UUID getQueryId() {
         return queryId;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-
-        // analyze where clause if not null
-        if (whereClause != null) {
-            analyzePredicate(whereClause);
-        }
-
-        // order by
-        if (orderByElements != null && !orderByElements.isEmpty()) {
-            orderByPairs = new ArrayList<OrderByPair>();
-            for (OrderByElement orderByElement : orderByElements) {
-                if (!(orderByElement.getExpr() instanceof SlotRef)) {
-                    throw new AnalysisException("Should order by column");
-                }
-                SlotRef slotRef = (SlotRef) orderByElement.getExpr();
-                int index = ExportProcNode.analyzeColumn(slotRef.getColumnName());
-                OrderByPair orderByPair = new OrderByPair(index, !orderByElement.getIsAsc());
-                orderByPairs.add(orderByPair);
-            }
-        }
-    }
-
-    private void analyzePredicate(Expr whereExpr) throws AnalysisException {
-        if (whereExpr == null) {
-            return;
-        }
-
-        boolean hasJobId = false;
-        boolean hasState = false;
-        boolean hasQueryId = false;
-        AnalysisException exception = new AnalysisException(
-                "Where clause should look like : queryid = \"your_query_id\" " +
-                        "or STATE = \"PENDING|EXPORTING|FINISHED|CANCELLED\"");
-        // check predicate type
-        if (whereExpr instanceof BinaryPredicate) {
-            BinaryPredicate binaryPredicate = (BinaryPredicate) whereExpr;
-            if (binaryPredicate.getOp() != Operator.EQ) {
-                throw exception;
-            }
-        } else {
-            throw exception;
-        }
-
-        // left child
-        if (!(whereExpr.getChild(0) instanceof SlotRef)) {
-            throw exception;
-        }
-        String leftKey = ((SlotRef) whereExpr.getChild(0)).getColumnName();
-        if (leftKey.equalsIgnoreCase("id")) {
-            hasJobId = true;
-        } else if (leftKey.equalsIgnoreCase("state")) {
-            hasState = true;
-        } else if (leftKey.equalsIgnoreCase("queryid")) {
-            hasQueryId = true;
-        } else {
-            throw exception;
-        }
-
-        // right child
-        if (hasState) {
-            if (!(whereExpr.getChild(1) instanceof StringLiteral)) {
-                throw exception;
-            }
-
-            String value = ((StringLiteral) whereExpr.getChild(1)).getStringValue();
-            if (Strings.isNullOrEmpty(value)) {
-                throw exception;
-            }
-
-            stateValue = value.toUpperCase();
-
-            try {
-                jobState = JobState.valueOf(stateValue);
-            } catch (IllegalArgumentException e) {
-                LOG.warn("illegal state argument in export stmt. stateValue={}, error={}", stateValue, e);
-                throw exception;
-            }
-        } else if (hasJobId) {
-            if (!(whereExpr.getChild(1) instanceof IntLiteral)) {
-                throw exception;
-            }
-            jobId = ((IntLiteral) whereExpr.getChild(1)).getLongValue();
-        } else if (hasQueryId) {
-            if (!(whereExpr.getChild(1) instanceof StringLiteral)) {
-                throw exception;
-            }
-
-            String value = ((StringLiteral) whereExpr.getChild(1)).getStringValue();
-            try {
-                queryId = UUID.fromString(value);
-            } catch (IllegalArgumentException e) {
-                throw new AnalysisException("Invalid UUID string: " + value);
-            }
-        }
     }
 
     @Override
@@ -235,7 +153,10 @@ public class ShowExportStmt extends ShowStmt {
     public String toString() {
         return toSql();
     }
-
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
     @Override
     public ShowResultSetMetaData getMetaData() {
         ShowResultSetMetaData.Builder builder = ShowResultSetMetaData.builder();
@@ -243,6 +164,10 @@ public class ShowExportStmt extends ShowStmt {
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();
+    }
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowExportStatement(this, context);
     }
 
     @Override

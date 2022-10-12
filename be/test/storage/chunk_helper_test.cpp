@@ -12,7 +12,9 @@
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -51,7 +53,7 @@ private:
         std::vector<TTupleId> row_tuples{0};
         std::vector<bool> nullable_tuples{true};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -59,6 +61,7 @@ private:
         return tuple_desc;
     }
 
+    RuntimeState _runtime_state;
     ObjectPool _pool;
 };
 
@@ -85,7 +88,7 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];

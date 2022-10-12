@@ -290,7 +290,7 @@ template <typename T>
 std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
-    size_t size = this->size();
+    int size = this->size();
     for (int i = 0; i < size - 1; ++i) {
         ss << debug_item(i) << ", ";
     }

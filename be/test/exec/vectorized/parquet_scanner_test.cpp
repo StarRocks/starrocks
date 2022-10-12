@@ -4,11 +4,14 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil//assert.h"
@@ -89,7 +92,8 @@ class ParquetScannerTest : public ::testing::Test {
             generate_desc_tuple(dst_slot_infos, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
-        DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        DescriptorTbl::create(_runtime_state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                              config::vector_chunk_size);
         return desc_tbl;
     }
 
@@ -344,10 +348,12 @@ class ParquetScannerTest : public ::testing::Test {
                                        773729, /*"/test_data/parquet_data/data_8191.parquet",*/
                                        772472, /*"/test_data/parquet_data/data_8192.parquet",*/
                                        775318 /*"/test_data/parquet_data/data_8193.parquet"*/};
+        _runtime_state = _obj_pool.add(new RuntimeState(TQueryGlobals()));
     }
 
 private:
     std::string test_exec_dir;
+    RuntimeState* _runtime_state;
     ObjectPool _obj_pool;
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;

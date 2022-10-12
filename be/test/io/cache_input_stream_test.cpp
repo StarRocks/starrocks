@@ -1,18 +1,18 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include "io/cache_input_stream.h"
+
 #include <gtest/gtest.h>
 
-#include "fs/fs_util.h"
-#include "io/cache_input_stream.h"
 #include "block_cache/block_cache.h"
+#include "fs/fs_util.h"
 #include "testutil/assert.h"
 
 namespace starrocks::io {
 
 class MockSeekableInputStream : public io::SeekableInputStream {
 public:
-    explicit MockSeekableInputStream(char* contents, int64_t size)
-            : _contents(contents), _size(size), _offset(0) {}
+    explicit MockSeekableInputStream(char* contents, int64_t size) : _contents(contents), _size(size), _offset(0) {}
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
         count = std::min(count, _size - _offset);
@@ -43,14 +43,12 @@ public:
         auto cache = BlockCache::instance();
         CacheOptions options;
         options.mem_space_size = 20 * 1024 * 1024;
-        options.disk_spaces.push_back({ .path = "./ut_dir/block_disk_cache", .size = 50 * 1024 * 1024 });
+        options.disk_spaces.push_back({.path = "./ut_dir/block_disk_cache", .size = 50 * 1024 * 1024});
         options.block_size = block_size;
         ASSERT_OK(cache->init(options));
     }
 
-    static void TearDownTestCase() {
-        ASSERT_TRUE(fs::remove_all("./ut_dir").ok());
-    }
+    static void TearDownTestCase() { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
 
     void SetUp() override {}
     void TearDown() override {}
@@ -81,12 +79,12 @@ public:
     static const int64_t block_size;
 };
 
-const int64_t CacheInputStreamTest::block_size = 1024 * 1024; 
+const int64_t CacheInputStreamTest::block_size = 1024 * 1024;
 
 TEST_F(CacheInputStreamTest, test_aligned_read) {
     const int64_t block_count = 4;
 
-    int64_t data_size = block_size * block_count; 
+    int64_t data_size = block_size * block_count;
     char data[data_size + 1];
     gen_test_data(data, data_size, block_size);
 
@@ -94,7 +92,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
     io::CacheInputStream cache_stream("test_file1", stream);
     auto& stats = cache_stream.stats();
 
-    // first read from backend 
+    // first read from backend
     for (int i = 0; i < block_count; ++i) {
         char buffer[block_size];
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
@@ -103,7 +101,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
     ASSERT_EQ(stats.read_cache_count, 0);
     ASSERT_EQ(stats.write_cache_count, block_count);
 
-    // first read from cache 
+    // first read from cache
     for (int i = 0; i < block_count; ++i) {
         char buffer[block_size];
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);
@@ -115,7 +113,7 @@ TEST_F(CacheInputStreamTest, test_aligned_read) {
 TEST_F(CacheInputStreamTest, test_random_read) {
     const int64_t block_count = 4;
 
-    const int64_t data_size = block_size * block_count; 
+    const int64_t data_size = block_size * block_count;
     char data[data_size + 1];
     gen_test_data(data, data_size, block_size);
 
@@ -123,7 +121,7 @@ TEST_F(CacheInputStreamTest, test_random_read) {
     io::CacheInputStream cache_stream("test_file2", stream);
     auto& stats = cache_stream.stats();
 
-    // first read from backend 
+    // first read from backend
     for (int i = 0; i < block_count; ++i) {
         char buffer[block_size];
         read_stream_data(&cache_stream, i * block_size, block_size, buffer);

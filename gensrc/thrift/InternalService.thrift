@@ -191,6 +191,8 @@ struct TQueryOptions {
   64: optional TLoadJobType load_job_type
 
   65: optional bool enable_replicated_storage;
+
+  66: optional bool use_scan_block_cache;
 }
 
 

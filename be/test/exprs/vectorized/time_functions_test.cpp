@@ -13,6 +13,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
+#include "exprs/anyval_util.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "runtime/datetime_value.h"
 #include "runtime/primitive_type.h"
@@ -2372,6 +2373,12 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
     tc->append(TimestampValue::create(2022, 9, 9, 8, 8, 16));
     tc->append(TimestampValue::create(2022, 11, 3, 23, 41, 37));
 
+    std::vector<FunctionContext::TypeDesc> arg_types = {
+            AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME))};
+    auto return_type = AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_primtive_type(TYPE_DATETIME));
+    std::unique_ptr<FunctionContext> time_slice_context(
+            FunctionContext::create_test_context(std::move(arg_types), return_type));
+
     //second
     {
         auto period_value = Int32Column::create();
@@ -2382,21 +2389,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("second");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2421,21 +2434,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("minute");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2460,21 +2479,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("hour");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2499,21 +2524,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("day");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2538,21 +2569,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("month");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2577,21 +2614,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("year");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2616,21 +2659,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("week");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
@@ -2655,21 +2704,27 @@ TEST_F(TimeFunctionsTest, datetimeFloorTest) {
         unit_text->append("quarter");
         auto unit_column = ConstColumn::create(unit_text, 1);
 
+        auto boundary_text = BinaryColumn::create();
+        boundary_text->append("floor");
+        auto boundary_column = ConstColumn::create(boundary_text, 1);
+
         Columns columns;
         columns.emplace_back(tc);
         columns.emplace_back(period_column);
         columns.emplace_back(unit_column);
+        columns.emplace_back(boundary_column);
 
-        _utils->get_fn_ctx()->impl()->set_constant_columns(columns);
+        time_slice_context->impl()->set_constant_columns(columns);
 
-        ASSERT_TRUE(TimeFunctions::time_slice_prepare(_utils->get_fn_ctx(),
+        ASSERT_TRUE(TimeFunctions::time_slice_prepare(time_slice_context.get(),
                                                       FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
 
-        ColumnPtr result = TimeFunctions::time_slice(_utils->get_fn_ctx(), columns);
-        ASSERT_TRUE(TimeFunctions::time_slice_close(
-                            _utils->get_fn_ctx(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
-                            .ok());
+        ColumnPtr result = TimeFunctions::time_slice(time_slice_context.get(), columns);
+        ASSERT_TRUE(
+                TimeFunctions::time_slice_close(time_slice_context.get(),
+                                                FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
 
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATETIME>(ColumnHelper::as_column<NullableColumn>(result)->data_column());

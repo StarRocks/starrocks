@@ -70,6 +70,7 @@ public class PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -1311,7 +1312,7 @@ public class PlanTestBase {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
             }
-            if (nthPlan == 1) {
+            if (nthPlan <= 1) {
                 writer.append("[sql]\n");
                 writer.append(sql.trim());
             }

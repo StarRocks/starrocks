@@ -17,6 +17,7 @@
 #include "formats/parquet/page_reader.h"
 #include "fs/fs.h"
 #include "runtime/descriptor_helper.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks::parquet {
 
@@ -26,7 +27,7 @@ using starrocks::vectorized::HdfsScannerContext;
 // TODO: min/max conjunct
 class FileReaderTest : public testing::Test {
 public:
-    void SetUp() override {}
+    void SetUp() override { _runtime_state = _pool.add(new RuntimeState(TQueryGlobals())); }
     void TearDown() override {}
 
 private:
@@ -53,6 +54,7 @@ private:
     HdfsScannerContext* _create_context_for_struct_solumn();
 
     HdfsScannerContext* _create_file5_base_context();
+    HdfsScannerContext* _create_file6_base_context();
 
     void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                    std::vector<ExprContext*>* conjunct_ctxs);
@@ -61,6 +63,7 @@ private:
 
     static vectorized::ChunkPtr _create_chunk();
     static vectorized::ChunkPtr _create_struct_chunk();
+    static vectorized::ChunkPtr _create_required_array_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
     static vectorized::ChunkPtr _create_chunk_for_not_exist();
     static void _append_column_for_chunk(PrimitiveType column_type, vectorized::ChunkPtr* chunk);
@@ -137,7 +140,11 @@ private:
     // 5    | [[1,2,3],[4,5]]
     std::string _file5_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet5";
 
+    // Description: A parquet file contains required array columns
+    std::string _file6_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet6";
+
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
+    RuntimeState* _runtime_state = nullptr;
     ObjectPool _pool;
 };
 
@@ -146,7 +153,7 @@ struct SlotDesc {
     TypeDescriptor type;
 };
 
-TupleDescriptor* create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs) {
+TupleDescriptor* create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs) {
     TDescriptorTableBuilder table_desc_builder;
 
     TTupleDescriptorBuilder tuple_desc_builder;
@@ -165,7 +172,7 @@ TupleDescriptor* create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     return row_desc->tuple_descriptors()[0];
@@ -206,7 +213,7 @@ HdfsScannerContext* FileReaderTest::_create_file1_base_context() {
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
 
@@ -224,7 +231,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_partition() {
             {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
     auto column = vectorized::ColumnHelper::create_const_column<PrimitiveType::TYPE_INT>(1, 1);
@@ -244,7 +251,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_not_exist() {
             {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file1_path, 1024));
 
@@ -262,7 +269,7 @@ HdfsScannerContext* FileReaderTest::_create_file2_base_context() {
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file2_path, 850));
 
@@ -276,7 +283,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_min_max() {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    ctx->min_max_tuple_desc = create_tuple_descriptor(&_pool, min_max_slots);
+    ctx->min_max_tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
     // create min max conjuncts
     // c1 >= 1
@@ -295,7 +302,7 @@ HdfsScannerContext* FileReaderTest::_create_context_for_filter_file() {
             {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
 
     // create conjuncts
@@ -339,7 +346,7 @@ HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file3_path));
 
@@ -372,7 +379,7 @@ HdfsScannerContext* FileReaderTest::_create_file4_base_context() {
             {"B1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file4_path));
 
@@ -393,7 +400,7 @@ HdfsScannerContext* FileReaderTest::_create_file5_base_context() {
             {"c2", type_outer},
             {""},
     };
-    ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
     ctx->scan_ranges.emplace_back(_create_scan_range(_file5_path));
 
@@ -405,6 +412,26 @@ HdfsScannerContext* FileReaderTest::_create_context_for_struct_solumn() {
     // create conjuncts
     // c3 = "c", c2 is not in slots, so the slot_id=1
     _create_string_conjunct_ctxs(TExprOpcode::EQ, 1, "c", &ctx->conjunct_ctxs_by_slot[1]);
+    return ctx;
+}
+
+HdfsScannerContext* FileReaderTest::_create_file6_base_context() {
+    auto ctx = _create_scan_context();
+
+    TypeDescriptor array_column(PrimitiveType::TYPE_ARRAY);
+    array_column.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    // tuple desc and conjuncts
+    // struct columns are not supported now, so we skip reading them
+    SlotDesc slot_descs[] = {
+            {"col_int", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"col_array", array_column},
+            {""},
+    };
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file6_path));
+
     return ctx;
 }
 
@@ -453,6 +480,8 @@ void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId 
     t_conjuncts.emplace_back(t_expr);
 
     Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::prepare(*conjunct_ctxs, _runtime_state);
+    Expr::open(*conjunct_ctxs, _runtime_state);
 }
 
 void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, const std::string& value,
@@ -500,6 +529,8 @@ void FileReaderTest::_create_string_conjunct_ctxs(TExprOpcode::type opcode, Slot
     t_conjuncts.emplace_back(t_expr);
 
     Expr::create_expr_trees(&_pool, t_conjuncts, conjunct_ctxs);
+    Expr::prepare(*conjunct_ctxs, _runtime_state);
+    Expr::open(*conjunct_ctxs, _runtime_state);
 }
 
 THdfsScanRange* FileReaderTest::_create_scan_range(const std::string& file_path, size_t scan_length) {
@@ -532,6 +563,17 @@ vectorized::ChunkPtr FileReaderTest::_create_struct_chunk() {
     _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
+    return chunk;
+}
+
+vectorized::ChunkPtr FileReaderTest::_create_required_array_chunk() {
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+
+    TypeDescriptor array_column(PrimitiveType::TYPE_ARRAY);
+    array_column.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    auto c = vectorized::ColumnHelper::create_column(array_column, true);
+    chunk->append_column(c, chunk->num_columns());
     return chunk;
 }
 
@@ -855,6 +897,26 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     EXPECT_EQ(chunk->debug_row(2), "[3, [[1, 2, 3], [4]]]");
     EXPECT_EQ(chunk->debug_row(3), "[4, [[1, 2, 3], [4], [5]]]");
     EXPECT_EQ(chunk->debug_row(4), "[5, [[1, 2, 3], [4, 5]]]");
+}
+
+TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
+    auto file = _create_file(_file6_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file6_path));
+
+    // init
+    auto* ctx = _create_file6_base_context();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    // get next
+    auto chunk = _create_required_array_chunk();
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    ASSERT_EQ(1, chunk->num_rows());
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
 }
 
 } // namespace starrocks::parquet

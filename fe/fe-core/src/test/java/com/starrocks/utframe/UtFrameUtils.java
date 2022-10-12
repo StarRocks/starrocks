@@ -61,7 +61,7 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.common.SqlDigestBuilder;
-import com.starrocks.sql.optimizer.OperatorStrings;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -335,8 +335,7 @@ public class UtFrameUtils {
                 }
             }
 
-            OperatorStrings operatorPrinter = new OperatorStrings();
-            return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+            return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
         } finally {
             // before returning we have to restore session variable.
             connectContext.setSessionVariable(oldSessionVariable);
@@ -484,14 +483,12 @@ public class UtFrameUtils {
                         logicalPlan.getOutputColumn(), columnRefFactory, new ArrayList<>(),
                         TResultSinkType.MYSQL_PROTOCAL, true);
 
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(optimizedPlan), execPlan);
+        return new Pair<>(LogicalPlanPrinter.print(optimizedPlan), execPlan);
     }
 
     private static Pair<String, ExecPlan> getInsertExecPlan(InsertStmt statement, ConnectContext connectContext) {
         ExecPlan execPlan = new InsertPlanner().plan(statement, connectContext);
-        OperatorStrings operatorPrinter = new OperatorStrings();
-        return new Pair<>(operatorPrinter.printOperator(execPlan.getPhysicalPlan()), execPlan);
+        return new Pair<>(LogicalPlanPrinter.print(execPlan.getPhysicalPlan()), execPlan);
     }
 
     public static Pair<String, ExecPlan> getNewPlanAndFragmentFromDump(ConnectContext connectContext,
@@ -630,8 +627,8 @@ public class UtFrameUtils {
                     while (true) {
                         try {
                             JournalTask journalTask = masterJournalQueue.take();
-                            journalTask.markSucceed();
                             followerJournalQueue.put(journalTask);
+                            journalTask.markSucceed();
                         } catch (InterruptedException e) {
                             System.err.println("fakeJournalWriter got an InterruptedException and exit!");
                             break;
@@ -650,15 +647,27 @@ public class UtFrameUtils {
             followerJournalQueue.clear();
         }
 
-        public static synchronized Writable replayNextJournal() throws InterruptedException, IOException {
+        public static synchronized Writable replayNextJournal(short expectCode) throws Exception {
             assert (followerJournalQueue != null);
-            DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
-            DataInputStream dis = new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
-            JournalEntity je = new JournalEntity();
-            je.readFields(dis);
-            Writable ret = je.getData();
-            dis.close();
-            return ret;
+            while (true) {
+                if (followerJournalQueue.isEmpty()) {
+                    throw new Exception("cannot replay next journal because queue is empty!");
+                }
+                DataOutputBuffer buffer = followerJournalQueue.take().getBuffer();
+                DataInputStream dis =
+                        new DataInputStream(new ByteArrayInputStream(buffer.getData(), 0, buffer.getLength()));
+                try {
+                    JournalEntity je = new JournalEntity();
+                    je.readFields(dis);
+                    if (je.getOpCode() == expectCode) {
+                        return je.getData();
+                    } else {
+                        System.err.println("ignore irrelevant journal id " + je.getOpCode());
+                    }
+                } finally {
+                    dis.close();
+                }
+            }
         }
 
         protected static synchronized void tearDown() {

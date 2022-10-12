@@ -74,7 +74,7 @@ static int print_unique_id(char* buffer, const TUniqueId& uid) {
     return 36;
 }
 
-static void failure_writer(const char* data, int size) {
+static void dump_trace_info() {
     static bool start_dump = false;
     if (!start_dump) {
         auto query_id = CurrentThread::current().query_id();
@@ -84,12 +84,21 @@ static void failure_writer(const char* data, int size) {
         res = print_unique_id(buffer + res, query_id) + res;
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
-        res = print_unique_id(buffer + res, query_id) + res;
+        res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
     }
-    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
     start_dump = true;
+}
+
+static void failure_writer(const char* data, int size) {
+    dump_trace_info();
+    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+}
+
+static void failure_function() {
+    dump_trace_info();
+    std::abort();
 }
 
 bool init_glog(const char* basename, bool install_signal_handler) {
@@ -101,9 +110,9 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (install_signal_handler) {
         google::InstallFailureSignalHandler();
+        google::InstallFailureWriter(failure_writer);
+        google::InstallFailureFunction(failure_function);
     }
-
-    google::InstallFailureWriter(failure_writer);
 
     // Don't log to stderr.
     FLAGS_stderrthreshold = 5;

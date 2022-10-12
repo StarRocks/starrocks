@@ -34,6 +34,8 @@ public:
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove_cache(const CacheKey& cache_key, off_t offset, size_t size);
 
+    size_t block_size() const { return _block_size; }
+
 private:
     BlockCache();
 

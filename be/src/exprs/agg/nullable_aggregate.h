@@ -247,6 +247,17 @@ public:
             const Column* data_column = &column->data_column_ref();
             const uint8_t* f_data = column->null_column()->raw_data();
             int offset = 0;
+
+            // all not null
+            if (!columns[0]->has_null()) {
+                for (size_t i = 0; i < chunk_size; i++) {
+                    this->data(states[i] + state_offset).is_null = false;
+                    this->nested_function->update(ctx, &data_column,
+                                                  this->data(states[i] + state_offset).mutable_nest_state(), i);
+                }
+                return;
+            }
+
 #ifdef __AVX2__
             // !important: filter must be an uint8_t container
             constexpr int batch_nums = 256 / (8 * sizeof(uint8_t));
@@ -338,9 +349,11 @@ public:
                     // all null
                     if constexpr (!IgnoreNull) {
                         for (size_t i = offset; i < offset + batch_nums; i++) {
-                            this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->process_null(
-                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            if (!selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
                         }
                     }
                 } else {

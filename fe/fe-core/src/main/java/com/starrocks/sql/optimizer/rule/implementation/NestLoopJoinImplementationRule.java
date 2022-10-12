@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.implementation;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -21,6 +22,8 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
 
     private static final NestLoopJoinImplementationRule INSTANCE = new NestLoopJoinImplementationRule();
 
+    private static final String UNSUPPORTED_JOIN_CLAUSE = "Unsupported '%s' clause with this ['%s'] correlated condition.";
+
     public static NestLoopJoinImplementationRule getInstance() {
         return INSTANCE;
     }
@@ -28,11 +31,20 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
     // Only choose NestLoopJoin for such scenarios, which HashJoin could not handle
     // 1. No equal-conjuncts in join clause
     // 2. JoinType is INNER/CROSS/OUTER
+    // TODO need support SEMI/ANTI JOIN
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         List<BinaryPredicateOperator> eqPredicates = extractEqPredicate(input, context);
-        JoinOperator joinType = getJoinType(input);
-        return supportJoinType(joinType) && CollectionUtils.isEmpty(eqPredicates);
+        if (CollectionUtils.isNotEmpty(eqPredicates)) {
+            return false;
+        } else {
+            JoinOperator joinType = getJoinType(input);
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+            if (!supportJoinType(joinType)) {
+                throw new SemanticException(UNSUPPORTED_JOIN_CLAUSE, joinType, joinOperator.getOnPredicate());
+            }
+            return true;
+        }
     }
 
     private boolean supportJoinType(JoinOperator joinType) {
