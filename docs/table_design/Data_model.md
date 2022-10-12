@@ -426,7 +426,8 @@ PROPERTIES("replication_num" = "3",
   > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
   > - It is recommended to set this property to true if the disk is a solid state drive SSD.
   > - As of version 2.3.0, StarRocks supports to set this property.
-  > - Since version 2.3.0, the indicator column now supports BITMAP, HLL data types.
+
+- Since version 2.3.0, the indicator column now supports BITMAP, HLL data types.
 
 - When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
 
