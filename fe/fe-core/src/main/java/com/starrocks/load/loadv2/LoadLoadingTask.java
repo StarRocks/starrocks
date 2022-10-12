@@ -102,7 +102,7 @@ public class LoadLoadingTask extends LoadTask {
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
         planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                strictMode, timezone, timeoutS, createTimestamp, partialUpdate);
+                strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables);
         planner.plan(loadId, fileStatusList, fileNum);
     }
 

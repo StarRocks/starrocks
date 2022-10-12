@@ -84,6 +84,12 @@ enum CompressionTypePB {
     LZ4_HADOOP = 13;
 }
 
+enum WriteQuorumTypePB {
+    ONE = 0;
+    MAJORITY = 1;
+    ALL = 2;
+}
+
 // Used to store additional information about a txn when it is finished/visible
 // It will be serialized with TransactionState
 message TxnFinishStatePB {

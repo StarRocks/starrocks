@@ -149,6 +149,7 @@ message PTabletWriterOpenRequest {
     optional string txn_trace_parent = 22;
     optional bool is_replicated_storage = 23;
     optional int64 timeout_ms = 24;
+    optional WriteQuorumTypePB write_quorum = 25;
 };
 
 message PTabletWriterOpenResult {

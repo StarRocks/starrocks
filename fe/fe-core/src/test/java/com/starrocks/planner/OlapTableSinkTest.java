@@ -54,6 +54,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -123,7 +124,7 @@ public class OlapTableSinkTest {
             result = partition;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
@@ -160,7 +161,7 @@ public class OlapTableSinkTest {
             result = p1;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
@@ -183,7 +184,7 @@ public class OlapTableSinkTest {
             result = null;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
@@ -256,7 +257,7 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId));
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY);
         TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
         System.out.println(param);
 
