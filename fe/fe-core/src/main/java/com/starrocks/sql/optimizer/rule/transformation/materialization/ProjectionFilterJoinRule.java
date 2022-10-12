@@ -16,7 +16,7 @@ public class ProjectionFilterJoinRule extends BaseMaterializedViewRewriteRule {
 
     public ProjectionFilterJoinRule() {
         super(RuleType.TF_MV_PROJECT_FILTER_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_PROJECT)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_FILTER, OperatorType.LOGICAL_JOIN)));
+                .addChildren(Pattern.create(OperatorType.LOGICAL_FILTER, OperatorType.PATTERN_MULTIJOIN)));
     }
 
     public static ProjectionFilterJoinRule getInstance() {

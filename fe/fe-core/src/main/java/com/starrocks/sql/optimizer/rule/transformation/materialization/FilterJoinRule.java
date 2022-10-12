@@ -15,7 +15,7 @@ public class FilterJoinRule extends BaseMaterializedViewRewriteRule {
     private static FilterJoinRule INSTANCE = new FilterJoinRule();
     public FilterJoinRule() {
         super(RuleType.TF_MV_FILTER_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_FILTER)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)));
+                .addChildren(Pattern.create(OperatorType.PATTERN_MULTIJOIN)));
     }
 
     public static FilterJoinRule getInstance() {
