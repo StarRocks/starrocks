@@ -90,6 +90,8 @@ public class ColocateTableBalancer extends LeaderDaemon {
         /**
          * Count the number of tablets which have been successfully scheduled by TabletScheduler after a relocation
          * decision has been made.
+         * <p>
+         * bucket index -> number of finished scheduling tablets
          */
         private Map<Integer, Integer> scheduledTabletNumPerBucket;
 
@@ -109,7 +111,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             return lastBackendsPerBucketSeq;
         }
 
-        public Map<Integer, Integer> getScheduledTabletNumPerBucket() {
+        public synchronized Map<Integer, Integer> getScheduledTabletNumPerBucket() {
             return scheduledTabletNumPerBucket;
         }
 
@@ -221,6 +223,11 @@ public class ColocateTableBalancer extends LeaderDaemon {
             if (inScheduleTabletNum != null && inScheduleTabletNum >= 1L) {
                 LOG.info("colocate group {} still has {} tablets in schedule, won't make new relocation decision",
                         groupId, inScheduleTabletNum);
+                ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
+                if (info != null) {
+                    LOG.info("number of finished scheduling tablets per bucket: {} for colocate group {}",
+                            info.getScheduledTabletNumPerBucket(), groupId);
+                }
                 continue;
             }
 
