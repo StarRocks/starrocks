@@ -164,6 +164,10 @@ public:
 
     virtual size_t memory_usage() = 0;
 
+    virtual void update_overlap_info(size_t overlap_size, size_t overlap_usage) = 0;
+
+    virtual size_t overlap_size() = 0;
+
     static StatusOr<std::unique_ptr<MutableIndex>> create(size_t key_size);
 
     static std::tuple<size_t, size_t> estimate_nshard_and_npage(const size_t total_kv_pairs_usage);
@@ -273,6 +277,9 @@ public:
 
     size_t memory_usage();
 
+    Status update_overlap_info(size_t key_size, size_t num_overlap, const Slice* keys, const IndexValue* values,
+                               const KeysInfo& keys_info, bool erase);
+
     static StatusOr<std::unique_ptr<ShardByLengthMutableIndex>> create(size_t key_size, const std::string& path);
 
 private:
@@ -376,6 +383,7 @@ private:
         uint32_t key_size;
         uint32_t value_size;
         uint32_t nbucket;
+        uint64_t data_size;
     };
 
     std::vector<ShardInfo> _shards;

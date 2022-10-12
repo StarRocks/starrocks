@@ -168,6 +168,7 @@ public:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 1;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -218,6 +219,7 @@ public:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 6;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -256,6 +258,7 @@ public:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 6;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;

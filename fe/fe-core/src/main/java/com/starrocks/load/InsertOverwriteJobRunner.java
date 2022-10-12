@@ -109,7 +109,7 @@ public class InsertOverwriteJobRunner {
                 doLoad();
                 break;
             case OVERWRITE_FAILED:
-                gc();
+                gc(false);
                 LOG.warn("insert overwrite job:{} failed. createPartitionElapse:{} ms, insertElapse:{} ms",
                         job.getJobId(), createPartitionElapse, insertElapse);
                 break;
@@ -127,7 +127,7 @@ public class InsertOverwriteJobRunner {
         createTempPartitions();
         prepareInsert();
         executeInsert();
-        doCommit();
+        doCommit(false);
         transferTo(InsertOverwriteJobState.OVERWRITE_SUCCESS);
     }
 
@@ -147,11 +147,11 @@ public class InsertOverwriteJobRunner {
             case OVERWRITE_FAILED:
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_FAILED);
                 LOG.info("replay insert overwrite job:{} to FAILED", job.getJobId());
-                gc();
+                gc(true);
                 break;
             case OVERWRITE_SUCCESS:
                 job.setJobState(InsertOverwriteJobState.OVERWRITE_SUCCESS);
-                doCommit();
+                doCommit(true);
                 LOG.info("replay insert overwrite job:{} to SUCCESS", job.getJobId());
                 break;
             default:
@@ -163,15 +163,6 @@ public class InsertOverwriteJobRunner {
     private void transferTo(InsertOverwriteJobState state) throws Exception {
         if (state == InsertOverwriteJobState.OVERWRITE_SUCCESS) {
             Preconditions.checkState(job.getJobState() == InsertOverwriteJobState.OVERWRITE_RUNNING);
-        }
-        Database db = getAndWriteLockDatabase(dbId);
-        try {
-            InsertOverwriteStateChangeInfo info =
-                    new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(), state,
-                            job.getSourcePartitionIds(), job.getTmpPartitionIds());
-            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
-        } finally {
-            db.writeUnlock();
         }
         job.setJobState(state);
         handle();
@@ -185,6 +176,15 @@ public class InsertOverwriteJobRunner {
             tmpPartitionIds.add(GlobalStateMgr.getCurrentState().getNextId());
         }
         job.setTmpPartitionIds(tmpPartitionIds);
+        Database db = getAndWriteLockDatabase(dbId);
+        try {
+            InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                    InsertOverwriteJobState.OVERWRITE_RUNNING, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+            GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+        } finally {
+            db.writeUnlock();
+        }
+
         transferTo(InsertOverwriteJobState.OVERWRITE_RUNNING);
     }
 
@@ -214,7 +214,7 @@ public class InsertOverwriteJobRunner {
         createPartitionElapse = System.currentTimeMillis() - createPartitionStartTimestamp;
     }
 
-    private void gc() {
+    private void gc(boolean isReplay) {
         LOG.info("start to garbage collect");
         Database db = getAndWriteLockDatabase(dbId);
         try {
@@ -236,6 +236,11 @@ public class InsertOverwriteJobRunner {
                     }
                 }
             }
+            if (!isReplay) {
+                InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                        InsertOverwriteJobState.OVERWRITE_FAILED, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+                GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+            }
         } catch (Exception e) {
             LOG.warn("exception when gc insert overwrite job.", e);
         } finally {
@@ -243,7 +248,7 @@ public class InsertOverwriteJobRunner {
         }
     }
 
-    private void doCommit() {
+    private void doCommit(boolean isReplay) {
         Database db = getAndWriteLockDatabase(dbId);
         try {
             OlapTable targetTable = checkAndGetTable(db, tableId);
@@ -258,9 +263,14 @@ public class InsertOverwriteJobRunner {
             } else {
                 targetTable.replacePartition(sourcePartitionNames.get(0), tmpPartitionNames.get(0));
             }
+            if (!isReplay) {
+                InsertOverwriteStateChangeInfo info = new InsertOverwriteStateChangeInfo(job.getJobId(), job.getJobState(),
+                        InsertOverwriteJobState.OVERWRITE_SUCCESS, job.getSourcePartitionIds(), job.getTmpPartitionIds());
+                GlobalStateMgr.getCurrentState().getEditLog().logInsertOverwriteStateChange(info);
+            }
         } catch (Exception e) {
-            LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}," +
-                    " sourcePartitionNames:{}, newPartitionNames:{}", job.getTargetDbId(), job.getTargetTableId(), e);
+            LOG.warn("replace partitions failed when insert overwrite into dbId:{}, tableId:{}",
+                    job.getTargetDbId(), job.getTargetTableId(), e);
             throw new DmlException("replace partitions failed", e);
         } finally {
             db.writeUnlock();
@@ -299,7 +309,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         if (!db.writeLockAndCheckExist()) {
-            throw new DmlException("insert overwrite commit failed because db:%s lock failed", dbId);
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         return db;
     }
@@ -311,7 +321,7 @@ public class InsertOverwriteJobRunner {
             throw new DmlException("database id:%s does not exist", dbId);
         }
         if (!db.readLockAndCheckExist()) {
-            throw new DmlException("insert overwrite commit failed because db:%s lock failed", dbId);
+            throw new DmlException("insert overwrite commit failed because locking db:%s failed", dbId);
         }
         return db;
     }

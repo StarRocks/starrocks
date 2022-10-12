@@ -4,7 +4,17 @@
 
 #include <type_traits>
 
+#include "column/column_helper.h"
+#include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/statusor.h"
+#include "exprs/expr.h"
+#include "exprs/expr_context.h"
+#include "exprs/vectorized/cast_expr.h"
 #include "jni_md.h"
+#include "runtime/primitive_type.h"
+#include "runtime/types.h"
+#include "udf/java/java_udf.h"
 #include "util/defer_op.h"
 
 namespace starrocks::vectorized {
@@ -38,6 +48,8 @@ Status JDBCScanner::reset_jni_env() {
 }
 
 Status JDBCScanner::open(RuntimeState* state) {
+    RETURN_IF_ERROR(detect_java_runtime());
+
     RETURN_IF_ERROR(reset_jni_env());
 
     _init_profile();

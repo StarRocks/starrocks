@@ -423,7 +423,7 @@ When a query is executed with a materialized view, the original query statement 
 >
 > StarRocks prior to 2.4 does not support the functions demonstrated below.
 
-StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse.
+StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md).
 
 As for the current version, multi-table materialized views support two refresh strategies:
 
@@ -609,6 +609,8 @@ REFRESH MATERIALIZED VIEW order_mv;
 > **CAUTION**
 >
 > You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
+
+You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) statement.
 
 ### Check the execution status of a multi-table materialized view
 
