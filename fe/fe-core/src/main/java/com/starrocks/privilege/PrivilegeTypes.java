@@ -13,6 +13,7 @@ public enum PrivilegeTypes {
     USER(UserActions.values(), null);
 
     private final List<String> validActions;
+
     // used in ALL statement, e.g. grant select on all tables in all databases
     private final String plural;
     PrivilegeTypes(Object[] validObject, String plural) {
@@ -32,17 +33,20 @@ public enum PrivilegeTypes {
      * Below defines all validate actions of a certain type
      */
     public enum TableActions {
-        SELECT,
         INSERT,
-        DELETE
+        DELETE,
+        SELECT,
+        SHOW
     }
 
     public enum DbActions {
         CREATE_TABLE,
-        DROP
+        DROP,
+        SHOW
     }
 
     public enum SystemActions {
+        ADMIN,
         GRANT  // AND MORE...
     }
 

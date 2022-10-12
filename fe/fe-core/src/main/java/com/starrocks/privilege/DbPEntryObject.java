@@ -2,13 +2,17 @@
 
 package com.starrocks.privilege;
 
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.List;
+import java.util.Objects;
 
-public class DbPEntryObject extends PEntryObject {
+public class DbPEntryObject implements PEntryObject {
     protected static final long ALL_DATABASE_ID = -2; // -2 represent all
+    @SerializedName(value = "i")
+    private long id;
 
     public static DbPEntryObject generate(GlobalStateMgr mgr, List<String> tokens) throws PrivilegeException {
         if (tokens.size() != 1) {
@@ -31,7 +35,7 @@ public class DbPEntryObject extends PEntryObject {
     }
 
     protected DbPEntryObject(long dbId) {
-        super(dbId);
+        id = dbId;
     }
 
     @Override
@@ -62,12 +66,23 @@ public class DbPEntryObject extends PEntryObject {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
         DbPEntryObject o = (DbPEntryObject) obj;
-        if (this.id > o.id) {
-            return 1;
-        } else if (this.id < o.id) {
-            return -1;
-        } else {
-            return 0;
+        return Long.compare(this.id, o.id);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
         }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        DbPEntryObject that = (DbPEntryObject) o;
+        return id == that.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
     }
 }

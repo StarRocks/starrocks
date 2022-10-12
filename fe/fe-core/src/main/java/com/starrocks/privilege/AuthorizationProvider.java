@@ -61,13 +61,9 @@ public interface AuthorizationProvider {
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
-    boolean checkAnyObject(
+    boolean checkAnyAction(
             short type,
-            Action want,
-            PrivilegeCollection currentPrivilegeCollection);
-
-    boolean hasType(
-            short type,
+            PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
     boolean allowGrant(

@@ -29,13 +29,11 @@ public class PrivilegeCollectionTest {
         Assert.assertTrue(collection.check(system, admin, null));
 
         // grant select on object1
-        Assert.assertFalse(collection.checkAnyObject(table, select));
-        Assert.assertFalse(collection.hasType(table));
+        Assert.assertFalse(collection.checkAnyAction(table, table1));
         Assert.assertFalse(collection.check(table, select, table1));
         collection.grant(table, new ActionSet(Arrays.asList(select)), Arrays.asList(table1), false);
         Assert.assertTrue(collection.check(table, select, table1));
-        Assert.assertTrue(collection.checkAnyObject(table, select));
-        Assert.assertTrue(collection.hasType(table));
+        Assert.assertTrue(collection.checkAnyAction(table, table1));
 
         // grant select, insert on object1
         Assert.assertFalse(collection.check(table, insert, table1));
@@ -66,21 +64,19 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.allowGrant(table, new ActionSet(Arrays.asList(insert)), Arrays.asList(table1)));
 
         // revoke insert,delete
-        Assert.assertTrue(collection.checkAnyObject(table, delete));
-        Assert.assertTrue(collection.hasType(table));
+        Assert.assertTrue(collection.checkAnyAction(table, table1));
         collection.revoke(table, new ActionSet(Arrays.asList(insert, delete)), Arrays.asList(table1), false);
         Assert.assertFalse(collection.check(table, insert, table1));
         Assert.assertFalse(collection.allowGrant(table, new ActionSet(Arrays.asList(delete, insert)), Arrays.asList(table1)));
         Assert.assertFalse(collection.check(table, delete, table1));
-        Assert.assertFalse(collection.checkAnyObject(table, delete));
+        Assert.assertFalse(collection.checkAnyAction(table, table1));
 
         // revoke system
         collection.revoke(system, new ActionSet(Arrays.asList(admin)), null, false);
         Assert.assertFalse(collection.check(system, admin, null));
 
         // nothing left
-        Assert.assertFalse(collection.hasType(table));
-        Assert.assertFalse(collection.hasType(system));
+        Assert.assertEquals(0, collection.typeToPrivilegeEntryList.size());
         collection.revoke(table, new ActionSet(Arrays.asList(insert, delete)), Arrays.asList(table1), false);
     }
 
@@ -137,7 +133,7 @@ public class PrivilegeCollectionTest {
         Assert.assertFalse(collection.check(table, delete, table1));
 
         // nothing left
-        Assert.assertFalse(collection.hasType(table));
+        Assert.assertEquals(0, collection.typeToPrivilegeEntryList.size());
     }
 
     @Test

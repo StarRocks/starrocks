@@ -177,21 +177,17 @@ public class PrivilegeCollection {
         return false;
     }
 
-    public boolean checkAnyObject(short type, Action want) {
+    public boolean checkAnyAction(short type, PEntryObject object) {
         if (!typeToPrivilegeEntryList.containsKey(type)) {
             return false;
         }
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (privilegeEntry.actionSet.contains(want)) {
+            if (objectMatch(privilegeEntry.object, object)) {
                 return true;
             }
         }
         return false;
-    }
-
-    public boolean hasType(short type) {
-        return typeToPrivilegeEntryList.containsKey(type);
     }
 
     public boolean allowGrant(short type, ActionSet wantSet, List<PEntryObject> objects) {

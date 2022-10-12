@@ -25,8 +25,6 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 
-import java.util.Arrays;
-
 public class PrivilegeCheckerV2 {
 
     private PrivilegeCheckerV2() {}
@@ -42,11 +40,7 @@ public class PrivilegeCheckerV2 {
             throw new SemanticException("external catalog is not supported for now!");
         }
         String actionStr = action.toString();
-        if (!context.getGlobalStateMgr().getPrivilegeManager().check(
-                context,
-                PrivilegeTypes.TABLE.toString(),
-                actionStr,
-                Arrays.asList(tableName.getDb(), tableName.getTbl()))) {
+        if (!PrivilegeManager.checkTableAction(context, tableName.getDb(), tableName.getTbl(), action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
                     actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
@@ -57,11 +51,7 @@ public class PrivilegeCheckerV2 {
             throw new SemanticException("external catalog is not supported for now!");
         }
         String db = tableName.getDb();
-        if (!context.getGlobalStateMgr().getPrivilegeManager().check(
-                context,
-                PrivilegeTypes.DATABASE.toString(),
-                action.toString(),
-                Arrays.asList(db))) {
+        if (!PrivilegeManager.checkDbAction(context, db, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), db);
         }

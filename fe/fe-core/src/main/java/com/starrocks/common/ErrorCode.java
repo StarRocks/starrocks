@@ -266,9 +266,7 @@ public enum ErrorCode {
     ERR_UNSUPPORTED_SQL_PATTERN(5081, new byte[] {'4', '2', '0', '0', '0'},
             "Only support like 'function_pattern' syntax."),
     ERR_WRONG_LABEL_NAME(5082, new byte[] {'4', '2', '0', '0', '0'},
-            "Incorrect label name '%s'"),
-    ERR_GRANT_REVOKE(5083, new byte[] {'4', '2', '0', '0'},
-            "%s permission denied: %s");
+            "Incorrect label name '%s'");
 
     ErrorCode(int code, byte[] sqlState, String errorMsg) {
         this.code = code;

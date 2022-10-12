@@ -8,11 +8,10 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.Objects;
 
-public class UserPEntryObject extends PEntryObject {
+public class UserPEntryObject implements PEntryObject {
     @SerializedName(value = "u")
     private UserIdentity userIdentity;
     protected UserPEntryObject(UserIdentity userIdentity) {
-        super(0);
         this.userIdentity = userIdentity;
     }
 
@@ -34,7 +33,7 @@ public class UserPEntryObject extends PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return true; // no fuzzy matching for user
+        return false; // no fuzzy matching for user
     }
 
     @Override
@@ -57,9 +56,6 @@ public class UserPEntryObject extends PEntryObject {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
             return false;
         }
         UserPEntryObject that = (UserPEntryObject) o;

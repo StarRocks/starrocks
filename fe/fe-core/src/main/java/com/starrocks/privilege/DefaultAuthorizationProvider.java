@@ -80,8 +80,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
     @Override
     public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
-        if (type.equals(PrivilegeTypes.SYSTEM.toString())) {
-            throw new PrivilegeException("cannot grant/revoke system privilege");
+        if (type.equals("SYSTEM")) {
+            throw new PrivilegeException("cannot grant/revoke system privilege: " + actions);
         }
     }
 
@@ -91,19 +91,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean checkAnyObject(short type, Action want, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.checkAnyObject(type, want);
+    public boolean checkAnyAction(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.checkAnyAction(type, object);
     }
 
     @Override
     public boolean allowGrant(
             short type, ActionSet wants, List<PEntryObject> objects, PrivilegeCollection currentPrivilegeCollection) {
         return currentPrivilegeCollection.allowGrant(type, wants, objects);
-    }
-
-    @Override
-    public boolean hasType(short type, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.hasType(type);
     }
 
     @Override

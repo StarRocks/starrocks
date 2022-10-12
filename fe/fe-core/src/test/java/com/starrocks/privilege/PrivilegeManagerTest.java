@@ -27,8 +27,9 @@ import java.util.Arrays;
 import java.util.List;
 
 public class PrivilegeManagerTest {
-    private static final List<String> DB_TBL_TOKENS = Arrays.asList("db", "tbl1");
     private ConnectContext ctx;
+    private static final String DB_NAME = "db";
+    private static final String TABLE_NAME_1 = "tbl1";
 
     @Before
     public void setUp() throws Exception {
@@ -41,7 +42,7 @@ public class PrivilegeManagerTest {
         // create db.tbl0, db1.tbl1
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        starRocksAssert.withDatabase("db");
+        starRocksAssert.withDatabase(DB_NAME);
         for (int i = 0; i < 2; ++ i) {
             starRocksAssert.withTable("create table db.tbl" + i + createTblStmtStr);
         }
@@ -65,50 +66,40 @@ public class PrivilegeManagerTest {
         ctx.setQualifiedUser(testUser.getQualifiedUser());
 
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        Assert.assertFalse(manager.hasType(ctx, PrivilegeTypes.TABLE.toString()));
-        Assert.assertFalse(manager.checkAnyObject(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString()));
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
-
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
+
         String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
-        ctx.setCurrentUserIdentity(testUser);
+        System.err.println(sql);
+        System.err.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection.get(testUser)));
 
-        Assert.assertTrue(manager.hasType(ctx, PrivilegeTypes.TABLE.toString()));
-        Assert.assertTrue(manager.checkAnyObject(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString()));
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         sql = "revoke select on db.tbl1 from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
-        ctx.setCurrentUserIdentity(testUser);
+        System.err.println(sql);
+        System.err.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection.get(testUser)));
 
-        Assert.assertFalse(manager.hasType(ctx, PrivilegeTypes.TABLE.toString()));
-        Assert.assertFalse(manager.checkAnyObject(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString()));
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // grant many priveleges
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -116,22 +107,16 @@ public class PrivilegeManagerTest {
         grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertTrue(grantStmt.isWithGrantOption());
         manager.grant(grantStmt);
+
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.INSERT.toString(),
-                DB_TBL_TOKENS));
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.DELETE.toString(),
-                DB_TBL_TOKENS));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.INSERT));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DELETE));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // revoke only select
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -139,44 +124,32 @@ public class PrivilegeManagerTest {
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertFalse(revokeStmt.isWithGrantOption());
         manager.revoke(revokeStmt);
+
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.INSERT.toString(),
-                DB_TBL_TOKENS));
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.DELETE.toString(),
-                DB_TBL_TOKENS));
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.INSERT));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DELETE));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
 
         // revoke all
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         sql = "revoke ALL on table db.tbl1 from test_user";
         revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
+
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.INSERT.toString(),
-                DB_TBL_TOKENS));
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.DELETE.toString(),
-                DB_TBL_TOKENS));
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.INSERT));
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DELETE));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
+        Assert.assertFalse(PrivilegeManager.checkAnyActionInTable(ctx, DB_NAME, TABLE_NAME_1));
     }
 
     @Test
@@ -193,12 +166,11 @@ public class PrivilegeManagerTest {
         String sql = "grant select on db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.grant(grantStmt);
+
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(masterManager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+
         UtFrameUtils.PseudoImage grantImage = new UtFrameUtils.PseudoImage();
         masterManager.save(grantImage.getDataOutputStream());
 
@@ -207,11 +179,8 @@ public class PrivilegeManagerTest {
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         masterManager.revoke(revokeStmt);
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(masterManager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
         UtFrameUtils.PseudoImage revokeImage = new UtFrameUtils.PseudoImage();
         masterManager.save(revokeImage.getDataOutputStream());
 
@@ -223,39 +192,30 @@ public class PrivilegeManagerTest {
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        Assert.assertTrue(followerManager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        PrivilegeCollection collection = followerManager.mergePrivilegeCollection(ctx);
+        Assert.assertTrue(followerManager.checkTableAction(
+                collection, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
 
         info = (UserPrivilegeCollectionInfo)
                 UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_UPDATE_USER_PRIVILEGE_V2);
         followerManager.replayUpdateUserPrivilegeCollection(
                 info.getUserIdentity(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
-        Assert.assertFalse(followerManager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        collection = followerManager.mergePrivilegeCollection(ctx);
+        Assert.assertFalse(followerManager.checkTableAction(
+                collection, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
 
         // check image
-        ctx.setCurrentUserIdentity(testUser);
         PrivilegeManager imageManager = PrivilegeManager.load(
                 grantImage.getDataInputStream(), masterGlobalStateMgr, null);
-        Assert.assertTrue(imageManager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        collection = imageManager.mergePrivilegeCollection(ctx);
+        Assert.assertTrue(imageManager.checkTableAction(
+                collection, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
+
         imageManager = PrivilegeManager.load(
                 revokeImage.getDataInputStream(), masterGlobalStateMgr, null);
-        Assert.assertFalse(imageManager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
-
+        collection = imageManager.mergePrivilegeCollection(ctx);
+        Assert.assertFalse(imageManager.checkTableAction(
+                collection, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
     }
 
     @Test
@@ -364,7 +324,7 @@ public class PrivilegeManagerTest {
         manager.onCreateUser(badUser);
         manager.grantToUser(grantTableStmt.getTypeId(), grantTableStmt.getActionList(), objects, false, badUser);
         // 4. add invalidate entry: select on invalidatedb.table
-        objects = Arrays.asList(new TablePEntryObject(-1, goodTableObject.id));
+        objects = Arrays.asList(new TablePEntryObject(-1, goodTableObject.tableId));
         manager.grantToUser(grantTableStmt.getTypeId(), grantTableStmt.getActionList(), objects, false, testUser);
         // 5. add invalidate entry: select on db.invalidatetable
         objects = Arrays.asList(new TablePEntryObject(goodTableObject.databaseId, -1));
@@ -400,11 +360,8 @@ public class PrivilegeManagerTest {
         UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         ctx.setCurrentUserIdentity(testUser);
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.TABLE.toString(),
-                PrivilegeTypes.TableActions.SELECT.toString(),
-                DB_TBL_TOKENS));
+        Assert.assertFalse(PrivilegeManager.checkTableAction(
+                ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
 
         List<List<String>> sqls = Arrays.asList(
                 Arrays.asList(
@@ -419,49 +376,37 @@ public class PrivilegeManagerTest {
             GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(0), ctx);
             manager.grant(grantStmt);
             ctx.setCurrentUserIdentity(testUser);
-            Assert.assertTrue(manager.check(
-                    ctx,
-                    PrivilegeTypes.TABLE.toString(),
-                    PrivilegeTypes.TableActions.SELECT.toString(),
-                    DB_TBL_TOKENS));
+            Assert.assertTrue(PrivilegeManager.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
 
             ctx.setCurrentUserIdentity(UserIdentity.ROOT);
             RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sqlPair.get(1), ctx);
             manager.revoke(revokeStmt);
             ctx.setCurrentUserIdentity(testUser);
-            Assert.assertFalse(manager.check(
-                    ctx,
-                    PrivilegeTypes.TABLE.toString(),
-                    PrivilegeTypes.TableActions.SELECT.toString(),
-                    DB_TBL_TOKENS));
+            Assert.assertFalse(PrivilegeManager.checkTableAction(
+                    ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
         }
 
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.DATABASE.toString(),
-                PrivilegeTypes.DbActions.CREATE_TABLE.toString(),
-                Arrays.asList("db")));
+        Assert.assertFalse(PrivilegeManager.checkDbAction(
+                ctx, DB_NAME, PrivilegeTypes.DbActions.CREATE_TABLE));
+
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "GRANT CREATE_TABLE ON ALL DATABASES TO test_user", ctx);
         manager.grant(grantStmt);
+
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertTrue(manager.check(
-                ctx,
-                PrivilegeTypes.DATABASE.toString(),
-                PrivilegeTypes.DbActions.CREATE_TABLE.toString(),
-                Arrays.asList("db")));
+        Assert.assertTrue(PrivilegeManager.checkDbAction(
+                ctx, DB_NAME, PrivilegeTypes.DbActions.CREATE_TABLE));
 
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE CREATE_TABLE ON ALL DATABASES FROM test_user", ctx);
         manager.revoke(revokeStmt);
+
         ctx.setCurrentUserIdentity(testUser);
-        Assert.assertFalse(manager.check(
-                ctx,
-                PrivilegeTypes.DATABASE.toString(),
-                PrivilegeTypes.DbActions.CREATE_TABLE.toString(),
-                Arrays.asList("db")));
+        Assert.assertFalse(PrivilegeManager.checkDbAction(
+                ctx, DB_NAME, PrivilegeTypes.DbActions.CREATE_TABLE));
     }
 
     @Test

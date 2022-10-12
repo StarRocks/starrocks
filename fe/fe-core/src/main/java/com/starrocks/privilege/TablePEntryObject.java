@@ -11,9 +11,12 @@ import org.apache.commons.lang3.StringUtils;
 import java.util.List;
 import java.util.Objects;
 
-public class TablePEntryObject extends PEntryObject {
+public class TablePEntryObject implements PEntryObject {
     @SerializedName(value = "d")
     protected long databaseId;
+    @SerializedName(value = "t")
+    protected long tableId;
+
     protected static final long ALL_DATABASE_ID = -2; // -2 represent all databases
     protected static final long ALL_TABLES_ID = -3; // -3 represent all tables
 
@@ -31,6 +34,7 @@ public class TablePEntryObject extends PEntryObject {
         }
         return new TablePEntryObject(database.getId(), table.getId());
     }
+
     public static TablePEntryObject generate(
             GlobalStateMgr mgr, List<String> allTypes, String restrictType, String restrictName)
             throws PrivilegeException {
@@ -58,7 +62,7 @@ public class TablePEntryObject extends PEntryObject {
     }
 
     protected TablePEntryObject(long databaseId, long tableId) {
-        super(tableId);
+        this.tableId = tableId;
         this.databaseId = databaseId;
     }
 
@@ -68,15 +72,18 @@ public class TablePEntryObject extends PEntryObject {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) obj;
-        if (databaseId == ALL_DATABASE_ID) {
-            return id == ALL_TABLES_ID || other.id == id;
+        if (databaseId == ALL_DATABASE_ID || other.databaseId == ALL_DATABASE_ID) {
+            return true;
         }
-        return other.databaseId == databaseId && (id == ALL_TABLES_ID || other.id == id);
+        if (tableId == ALL_TABLES_ID || other.tableId == ALL_TABLES_ID) {
+            return databaseId == other.databaseId;
+        }
+        return other.databaseId == databaseId && other.tableId == tableId;
     }
 
     @Override
     public boolean isFuzzyMatching() {
-        return databaseId == ALL_DATABASE_ID || id == ALL_TABLES_ID;
+        return databaseId == ALL_DATABASE_ID || tableId == ALL_TABLES_ID;
     }
 
 
@@ -86,7 +93,7 @@ public class TablePEntryObject extends PEntryObject {
         if (db == null) {
             return false;
         }
-        return globalStateMgr.getTableIncludeRecycleBin(db, this.id) != null;
+        return globalStateMgr.getTableIncludeRecycleBin(db, this.tableId) != null;
     }
 
     @Override
@@ -101,13 +108,7 @@ public class TablePEntryObject extends PEntryObject {
         } else if (this.databaseId < o.databaseId) {
             return -1;
         } else {
-            if (this.id > o.id) {
-                return 1;
-            } else if (this.id < o.id) {
-                return -1;
-            } else {
-                return 0;
-            }
+            return Long.compare(this.tableId, o.tableId);
         }
     }
 
@@ -119,15 +120,12 @@ public class TablePEntryObject extends PEntryObject {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
-            return false;
-        }
         TablePEntryObject that = (TablePEntryObject) o;
-        return databaseId == that.databaseId;
+        return databaseId == that.databaseId && tableId == that.tableId;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), databaseId);
+        return Objects.hash(databaseId, tableId);
     }
 }
