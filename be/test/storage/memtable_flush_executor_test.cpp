@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 
-#include "storage/memtable.h"
+#include "storage/memtable_flush_executor.h"
 
 #include <gtest/gtest.h>
 
@@ -13,6 +13,7 @@
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
+#include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -181,7 +182,7 @@ static shared_ptr<Chunk> gen_chunk(const std::vector<SlotDescriptor*>& slots, si
     return ret;
 }
 
-class MemTableTest : public ::testing::Test {
+class MemTableFlushExecutorTest : public ::testing::Test {
 public:
     void MySetUp(const string& schema_desc, const string& slot_desc, int nkey, KeysType ktype, const string& root) {
         _root_path = root;
@@ -189,13 +190,8 @@ public:
         fs::create_directories(_root_path);
         _mem_tracker.reset(new MemTracker(-1, "root"));
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
-<<<<<<< HEAD
-        _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
-=======
         _slots = create_tuple_desc_slots(&_runtime_state, slot_desc, _obj_pool);
         RowsetWriterContext writer_context;
->>>>>>> 9a95ca75d ([Enhancement] add some debug check for expression (#12022))
         RowsetId rowset_id;
         rowset_id.init(rand() % 1000000000);
         writer_context.rowset_id = rowset_id;
@@ -209,8 +205,7 @@ public:
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
-        _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
-        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get()));
+        _vectorized_schema = MemTable::convert_schema(_schema.get(), _slots);
     }
 
     void TearDown() override {
@@ -218,21 +213,59 @@ public:
         fs::remove_all(_root_path);
     }
 
+    void checkResult(size_t n) {
+        RowsetSharedPtr rowset = *_writer->build();
+        unique_ptr<Schema> read_schema = create_schema("pk int", 1);
+        OlapReaderStatistics stats;
+        RowsetReadOptions rs_opts;
+        rs_opts.sorted = false;
+        rs_opts.use_page_cache = false;
+        rs_opts.stats = &stats;
+        auto itr = rowset->new_iterator(*read_schema, rs_opts);
+        ASSERT_TRUE(itr.ok()) << itr.status().to_string();
+        std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
+        size_t pkey_read = 0;
+        while (true) {
+            Status st = (*itr)->get_next(chunk.get());
+            if (st.is_end_of_file()) {
+                break;
+            }
+            auto column = chunk->get_column_by_name("pk");
+            int last_value = 0;
+            for (size_t i = 0; i < column->size(); i++) {
+                int new_value = column->get(i).get_int32();
+                ASSERT_LE(last_value, new_value);
+                last_value = new_value;
+            }
+            pkey_read += chunk->num_rows();
+            chunk->reset();
+        }
+        ASSERT_EQ(n, pkey_read);
+    }
+
     std::string _root_path;
+
     RuntimeState _runtime_state;
     ObjectPool _obj_pool;
     unique_ptr<MemTracker> _mem_tracker;
     shared_ptr<TabletSchema> _schema;
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     unique_ptr<RowsetWriter> _writer;
-    unique_ptr<MemTable> _mem_table;
     Schema _vectorized_schema;
     unique_ptr<MemTableRowsetWriterSink> _mem_table_sink;
 };
 
-TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
-    const string path = "./ut_dir/MemTableTest_testDupKeysInsertFlushRead";
+TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
+    const string path = "./ut_dir/MemTableFlushExecutorTest_testDupKeysInsertFlushRead";
     MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+    auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
     const size_t n = 3000;
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;
@@ -241,177 +274,88 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
         indexes.emplace_back(i);
     }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
-    ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_OK(_mem_table->flush());
-    RowsetSharedPtr rowset = *_writer->build();
-    unique_ptr<Schema> read_schema = create_schema("pk int", 1);
-    OlapReaderStatistics stats;
-    RowsetReadOptions rs_opts;
-    rs_opts.sorted = false;
-    rs_opts.use_page_cache = false;
-    rs_opts.stats = &stats;
-    auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    ASSERT_TRUE(itr.ok()) << itr.status().to_string();
-    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
-    size_t pkey_read = 0;
-    while (true) {
-        Status st = (*itr)->get_next(chunk.get());
-        if (st.is_end_of_file()) {
-            break;
-        }
-        auto column = chunk->get_column_by_name("pk");
-        int last_value = 0;
-        for (size_t i = 0; i < column->size(); i++) {
-            int new_value = column->get(i).get_int32();
-            ASSERT_LE(last_value, new_value);
-            last_value = new_value;
-        }
-        pkey_read += chunk->num_rows();
-        chunk->reset();
-    }
-    ASSERT_EQ(n, pkey_read);
+    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(mem_table->finalize().ok());
+
+    ASSERT_TRUE(flush_token->submit(std::move(mem_table)).ok());
+
+    ASSERT_TRUE(flush_token->wait().ok());
+
+    checkResult(n);
 }
 
-TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
-    const string path = "./ut_dir/MemTableTest_testUniqKeysInsertFlushRead";
-    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::UNIQUE_KEYS, path);
-    const size_t n = 1000;
+TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
+    const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
+    auto mem_table = make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+    const size_t n = 2000;
     auto pchunk = gen_chunk(*_slots, n);
     vector<uint32_t> indexes;
-    indexes.reserve(2 * n);
-    // double input data, then test uniq key's deduplicate effect
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
-    std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
-    ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_OK(_mem_table->flush());
-    RowsetSharedPtr rowset = *_writer->build();
-    unique_ptr<Schema> read_schema = create_schema("pk int", 1);
-    OlapReaderStatistics stats;
-    RowsetReadOptions rs_opts;
-    rs_opts.sorted = false;
-    rs_opts.use_page_cache = false;
-    rs_opts.stats = &stats;
-    auto itr = rowset->new_iterator(*read_schema, rs_opts);
-    std::shared_ptr<vectorized::Chunk> chunk = ChunkHelper::new_chunk(*read_schema, 4096);
-    size_t pkey_read = 0;
-    while (true) {
-        Status st = (*itr)->get_next(chunk.get());
-        if (st.is_end_of_file()) {
-            break;
-        }
-        auto column = chunk->get_column_by_name("pk");
-        int last_value = 0;
-        for (size_t i = 0; i < column->size(); i++) {
-            int new_value = column->get(i).get_int32();
-            ASSERT_LE(last_value, new_value);
-            last_value = new_value;
-        }
-        pkey_read += chunk->num_rows();
-        chunk->reset();
-    }
-    ASSERT_EQ(n, pkey_read);
-}
-
-TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysWithDeletes";
-    MySetUp("pk bigint,v1 int", "pk bigint,v1 int,__op tinyint", 1, KeysType::PRIMARY_KEYS, path);
-    const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
-    for (int i = 0; i < n; i++) {
-        Datum v;
-        v.set_int64(i);
-        chunk->get_column_by_index(0)->append_datum(v);
-        v.set_int32(i * 3);
-        chunk->get_column_by_index(1)->append_datum(v);
-        v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(2)->append_datum(v);
-    }
-    vector<uint32_t> indexes;
     indexes.reserve(n);
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
     std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
-    ASSERT_TRUE(_mem_table->finalize().ok());
-    ASSERT_OK(_mem_table->flush());
-    RowsetSharedPtr rowset = *_writer->build();
-    EXPECT_EQ(1, rowset->rowset_meta()->get_num_delete_files());
+    mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
+    ASSERT_TRUE(mem_table->finalize().ok());
+
+    size_t ret_num_rows = 0;
+    bool ret_eos = true;
+    ASSERT_TRUE(flush_token
+                        ->submit(std::move(mem_table), false,
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                     ret_num_rows = seg->num_rows();
+                                     ret_eos = eos;
+                                 })
+                        .ok());
+
+    ASSERT_TRUE(flush_token->wait().ok());
+
+    ASSERT_EQ(false, ret_eos);
+    ASSERT_EQ(n, ret_num_rows);
+
+    checkResult(n);
 }
 
-TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitSinglePK";
-    MySetUp("pk varchar,v1 int", "pk varchar,v1 int,__op tinyint", 1, KeysType::PRIMARY_KEYS, path);
-    const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
-    string tmpstr(128, 's');
-    tmpstr[tmpstr.size() - 1] = '\0';
-    for (int i = 0; i < n; i++) {
-        Datum v;
-        v.set_slice(tmpstr);
-        chunk->get_column_by_index(0)->append_datum(v);
-        v.set_int32(i * 3);
-        chunk->get_column_by_index(1)->append_datum(v);
-        v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(2)->append_datum(v);
-    }
-    vector<uint32_t> indexes;
-    indexes.reserve(n);
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
-    std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
-    ASSERT_TRUE(_mem_table->finalize().ok());
-}
+TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
+    const string path = "./ut_dir/MemTableFlushExecutorTest_testMemtableFlushWithSeg";
+    MySetUp("pk int,name varchar,pv int", "pk int,name varchar,pv int", 1, KeysType::DUP_KEYS, path);
 
-TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
-    const string path = "./ut_dir/MemTableTest_testPrimaryKeysSizeLimitCompositePK";
-    MySetUp("pk int, pk varchar, pk smallint, pk boolean,v1 int",
-            "pk int, pk varchar, pk smallint, pk boolean ,v1 int,__op tinyint", 4, KeysType::PRIMARY_KEYS, path);
-    const size_t n = 1000;
-    shared_ptr<Chunk> chunk = ChunkHelper::new_chunk(*_slots, n);
-    string tmpstr(121, 's');
-    tmpstr[tmpstr.size() - 1] = '\0';
-    for (int i = 0; i < n; i++) {
-        Datum v;
-        v.set_int32(42);
-        chunk->get_column_by_index(0)->append_datum(v);
-        v.set_slice(tmpstr);
-        chunk->get_column_by_index(1)->append_datum(v);
-        v.set_int16(42);
-        chunk->get_column_by_index(2)->append_datum(v);
-        v.set_uint8(1);
-        chunk->get_column_by_index(3)->append_datum(v);
-        v.set_int32(i * 3);
-        chunk->get_column_by_index(4)->append_datum(v);
-        v.set_int8(i % 5 == 0 ? TOpType::DELETE : TOpType::UPSERT);
-        chunk->get_column_by_index(5)->append_datum(v);
-    }
-    vector<uint32_t> indexes;
-    indexes.reserve(n);
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
-    for (int i = 0; i < n; i++) {
-        indexes.emplace_back(i);
-    }
-    std::random_shuffle(indexes.begin(), indexes.end());
-    _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
-    ASSERT_FALSE(_mem_table->finalize().ok());
+    auto mem_table_flush_executor = make_unique<MemTableFlushExecutor>();
+    std::vector<DataDir*> data_dirs = {nullptr, nullptr};
+    ASSERT_TRUE(mem_table_flush_executor->init(data_dirs).ok());
+    auto mem_table = nullptr;
+
+    auto flush_token = mem_table_flush_executor->create_flush_token();
+    ASSERT_NE(nullptr, flush_token);
+
+    ASSERT_FALSE(flush_token->submit(std::move(mem_table), false, nullptr).ok());
+
+    bool ret_eos = false;
+    std::unique_ptr<SegmentPB> ret_seg = make_unique<SegmentPB>();
+    ASSERT_TRUE(flush_token
+                        ->submit(std::move(mem_table), true,
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                     ret_seg = std::move(seg);
+                                     ret_eos = eos;
+                                 })
+                        .ok());
+
+    ASSERT_TRUE(flush_token->wait().ok());
+
+    ASSERT_EQ(true, ret_eos);
+    ASSERT_EQ(nullptr, ret_seg);
+
+    ASSERT_TRUE(flush_token->submit(nullptr, true, nullptr).ok());
+
+    ASSERT_TRUE(flush_token->wait().ok());
 }
 
 } // namespace starrocks::vectorized

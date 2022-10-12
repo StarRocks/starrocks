@@ -10,6 +10,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -110,6 +111,9 @@ public:
         _is_null_first.push_back(true);
 
         _runtime_state = _create_runtime_state();
+
+        ASSERT_OK(Expr::prepare(_sort_exprs, _runtime_state.get()));
+        ASSERT_OK(Expr::open(_sort_exprs, _runtime_state.get()));
     }
 
     void TearDown() {

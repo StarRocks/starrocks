@@ -14,6 +14,7 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "runtime/chunk_cursor.h"
+#include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
@@ -38,10 +39,21 @@ static void clear_exprs(std::vector<ExprContext*>& exprs) {
     exprs.clear();
 }
 
+static std::shared_ptr<RuntimeState> create_runtime_state() {
+    TUniqueId fragment_id;
+    TQueryOptions query_options;
+    query_options.batch_size = config::vector_chunk_size;
+    TQueryGlobals query_globals;
+    auto runtime_state = std::make_shared<RuntimeState>(fragment_id, query_options, query_globals, nullptr);
+    runtime_state->init_instance_mem_tracker();
+    return runtime_state;
+}
+
 using MergeParamType = std::tuple<std::vector<int>, std::vector<std::vector<int32_t>>>;
 class MergeTestFixture : public testing::TestWithParam<MergeParamType> {};
 
 TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
+    auto runtime_state = create_runtime_state();
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
     std::vector<int> sort_slots = std::get<0>(GetParam());
     std::vector<std::vector<int32_t>> sorting_data = std::get<1>(GetParam());
@@ -86,6 +98,9 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
         exprs.push_back(std::move(expr));
         sort_exprs.push_back(new ExprContext(exprs.back().get()));
     }
+
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
 
     size_t expected_size = left_rows + right_rows;
     ChunkPtr output;
@@ -230,6 +245,7 @@ TEST(SortingTest, sorted_runs) {
 }
 
 TEST(SortingTest, merge_sorted_chunks) {
+    auto runtime_state = create_runtime_state();
     std::vector<ChunkPtr> input_chunks;
     Chunk::SlotHashMap slot_map{{0, 0}};
 
@@ -250,6 +266,9 @@ TEST(SortingTest, merge_sorted_chunks) {
     std::vector<ExprContext*> sort_exprs;
     exprs.push_back(std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0));
     sort_exprs.push_back(new ExprContext(exprs.back().get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
+
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     SortDescs sort_desc(std::vector<int>{1}, std::vector<int>{-1});
@@ -259,6 +278,7 @@ TEST(SortingTest, merge_sorted_chunks) {
 }
 
 TEST(SortingTest, merge_sorted_stream) {
+    auto runtime_state = create_runtime_state();
     constexpr int num_columns = 3;
     constexpr int num_runs = 4;
     constexpr int num_chunks_per_run = 4;
@@ -278,6 +298,8 @@ TEST(SortingTest, merge_sorted_stream) {
         null_first.push_back(true);
         map[i] = i;
     }
+    ASSERT_OK(Expr::prepare(sort_exprs, runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, runtime_state.get()));
     DeferOp defer([&]() { clear_exprs(sort_exprs); });
 
     std::vector<ChunkProvider> chunk_providers;
