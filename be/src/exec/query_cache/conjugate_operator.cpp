@@ -87,9 +87,9 @@ Status ConjugateOperator::push_chunk(RuntimeState* state, const vectorized::Chun
     return _sink_op->push_chunk(state, chunk);
 }
 
-Status ConjugateOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
-    RETURN_IF_ERROR(_sink_op->reset_state(std::move(chunks)));
-    RETURN_IF_ERROR(_source_op->reset_state({}));
+Status ConjugateOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    RETURN_IF_ERROR(_sink_op->reset_state(state, refill_chunks));
+    RETURN_IF_ERROR(_source_op->reset_state(state, {}));
     return Status::OK();
 }
 
