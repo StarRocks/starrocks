@@ -4,7 +4,8 @@ StarRocks 提供基于 MySQL 协议的 Broker Load 导入方式，帮助您从 H
 
 Broker Load 是一种异步的导入方式。您提交导入作业以后，StarRocks 会异步地执行导入作业。您需要通过 [SHOW LOAD](/sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) 语句或者 curl 命令来查看导入作业的结果。
 
-Broker Load 支持一次导入多个数据文件。另外，Broker Load 支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
+Broker Load 支持一次导入多个数据文件，并且能够保证单次导入事务的原子性，即单次导入的多个数据文件都成功或者都失败，而不会出现部分导入成功、部分导入失败的情况。
+Broker Load 还支持在导入过程中做数据的转换，具体请参见[导入过程中实现数据转换](/loading/Etl_in_loading.md)。
 
 ## 背景信息
 
