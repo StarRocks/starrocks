@@ -324,7 +324,7 @@ public class Tablet {
     }
 
     public TTabletInfo getTabletInfo() {
-        TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), getRowCount(), getDataSize());
+        TTabletInfo info = new TTabletInfo(id, schemaHash, maxContinuousVersion(), 0, getRowCount(), getDataSize());
         info.setMin_readable_version(minVersion());
         return info;
     }
