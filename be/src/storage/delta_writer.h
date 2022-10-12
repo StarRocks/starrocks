@@ -41,6 +41,7 @@ struct DeltaWriterOptions {
     bool is_replicated_storage = false;
     std::vector<PNetworkAddress> replicas;
     int64_t timeout_ms;
+    WriteQuorumTypePB write_quorum;
 };
 
 enum ReplicaState {

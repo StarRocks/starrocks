@@ -448,3 +448,9 @@ enum TCompressionType {
     BZIP2 = 10;
     LZO = 11; // Deprecated
 }
+
+enum TWriteQuorumType {
+    ONE = 0;
+    MAJORITY = 1;
+    ALL = 2;
+}

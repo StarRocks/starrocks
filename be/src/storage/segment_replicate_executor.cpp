@@ -193,8 +193,13 @@ ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_t
         _replicate_channels.emplace_back(std::move(std::make_unique<ReplicateChannel>(
                 opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id())));
     }
-    // default quorom policy
-    _max_fail_replica_num = opt->replicas.size() - (opt->replicas.size() / 2 + 1);
+    if (opt->write_quorum == WriteQuorumTypePB::ONE) {
+        _max_fail_replica_num = opt->replicas.size();
+    } else if (opt->write_quorum == WriteQuorumTypePB::ALL) {
+        _max_fail_replica_num = 0;
+    } else {
+        _max_fail_replica_num = opt->replicas.size() - (opt->replicas.size() / 2 + 1);
+    }
 }
 
 Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
