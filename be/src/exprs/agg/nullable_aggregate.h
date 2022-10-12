@@ -320,9 +320,11 @@ public:
                     // all null
                     if constexpr (!IgnoreNull) {
                         for (size_t i = offset; i < offset + batch_nums; i++) {
-                            this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->process_null(
-                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            if (!selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
                         }
                     }
                 } else {
