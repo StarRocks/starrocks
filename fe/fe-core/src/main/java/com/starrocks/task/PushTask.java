@@ -122,7 +122,7 @@ public class PushTask extends AgentTask {
     }
 
     public TPushReq toThrift() {
-        TPushReq request = new TPushReq(tabletId, schemaHash, version, timeoutSecond, pushType);
+        TPushReq request = new TPushReq(tabletId, schemaHash, version, 0, timeoutSecond, pushType);
         if (taskType == TTaskType.REALTIME_PUSH) {
             request.setPartition_id(partitionId);
             request.setTransaction_id(transactionId);

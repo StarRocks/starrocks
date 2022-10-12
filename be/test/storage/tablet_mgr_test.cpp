@@ -109,6 +109,7 @@ public:
         create_tablet_req.__set_tablet_schema(tablet_schema);
         create_tablet_req.__set_tablet_id(tablet_id);
         create_tablet_req.__set_version(2);
+        create_tablet_req.__set_version_hash(0);
         return create_tablet_req;
     }
 
