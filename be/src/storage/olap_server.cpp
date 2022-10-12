@@ -255,7 +255,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         if (UNLIKELY(!(memory_urgent_level > memory_high_level && memory_high_level >= 1 &&
                        memory_urgent_level <= 100))) {
             LOG(ERROR) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
-                         << " memory_high_level=" << memory_high_level;
+                       << " memory_high_level=" << memory_high_level;
             continue;
         }
 
