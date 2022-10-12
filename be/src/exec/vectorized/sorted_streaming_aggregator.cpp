@@ -135,6 +135,7 @@ public:
         RETURN_IF_ERROR(column->data_column()->accept_mutable(&data_appender));
         AppendWithMask null_appender(col->null_column().get(), _sel_mask, _selected_size);
         RETURN_IF_ERROR(column->null_column()->accept_mutable(&null_appender));
+        column->update_has_null();
         return Status::OK();
     }
 
