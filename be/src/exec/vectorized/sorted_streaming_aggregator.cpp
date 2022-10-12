@@ -282,8 +282,6 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     {
         SCOPED_TIMER(_allocate_state_timer);
         auto batch_allocated_states = _streaming_state_allocator->allocated(_last_state);
-
-        DCHECK(!_last_columns.empty());
         vectorized::AggDataPtr last_state = _last_state;
         size_t cnt = 0;
         //
