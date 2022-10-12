@@ -1,14 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.ResourceDesc;
-import com.starrocks.catalog.CatalogUtils;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -19,6 +15,8 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.ResourceDesc;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
@@ -26,7 +24,8 @@ import java.util.Map;
 
 public class LoadStmtAnalyzer {
 
-    private LoadStmtAnalyzer(){}
+    private LoadStmtAnalyzer() {
+    }
 
     public static void analyze(LoadStmt statement, ConnectContext context) {
         new LoadStmtAnalyzerVisitor().analyze(statement, context);
@@ -57,7 +56,6 @@ public class LoadStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_NO_DB_ERROR);
                 }
             }
-            dbName = ClusterNamespace.getFullName(dbName);
             label.setDbName(dbName);
             try {
                 FeNameFormat.checkLabel(label.getLabelName());
@@ -107,8 +105,8 @@ public class LoadStmtAnalyzer {
                             PrivPredicate.USAGE)) {
                         ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                                 "USAGE denied to user '" + ConnectContext.get().getQualifiedUser()
-                                + "'@'" + ConnectContext.get().getRemoteIP()
-                                + "' for resource '" + resourceDesc.getName() + "'");
+                                        + "'@'" + ConnectContext.get().getRemoteIP()
+                                        + "' for resource '" + resourceDesc.getName() + "'");
                     }
                 } else if (brokerDesc != null) {
                     etlJobType = EtlJobType.BROKER;
@@ -118,11 +116,6 @@ public class LoadStmtAnalyzer {
                     etlJobType = EtlJobType.HADOOP;
                 }
 
-                if (etlJobType == EtlJobType.SPARK) {
-                    for (DataDescription dataDescription : dataDescriptions) {
-                        CatalogUtils.checkIsLakeTable(label.getDbName(), dataDescription.getTableName());
-                    }
-                }
                 statement.setEtlJobType(etlJobType);
             } catch (AnalysisException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());

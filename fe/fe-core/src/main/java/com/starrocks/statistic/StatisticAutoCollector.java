@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
@@ -20,7 +20,7 @@ import java.util.List;
 public class StatisticAutoCollector extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(StatisticAutoCollector.class);
 
-    private static final StatisticExecutor statisticExecutor = new StatisticExecutor();
+    private static final StatisticExecutor STATISTIC_EXECUTOR = new StatisticExecutor();
 
     public StatisticAutoCollector() {
         super("AutoStatistic", Config.statistic_collect_interval_sec * 1000);
@@ -52,13 +52,19 @@ public class StatisticAutoCollector extends LeaderDaemon {
                             ScheduleStatus.PENDING,
                             LocalDateTime.MIN));
             for (StatisticsCollectJob statsJob : allJobs) {
-                statisticExecutor.collectStatistics(statsJob);
+                AnalyzeStatus analyzeStatus = new AnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
+                        statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumns(),
+                        statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
+                analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
+                GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+
+                STATISTIC_EXECUTOR.collectStatistics(statsJob, analyzeStatus, true);
             }
         } else {
             List<AnalyzeJob> allAnalyzeJobs = GlobalStateMgr.getCurrentAnalyzeMgr().getAllAnalyzeJobList();
             allAnalyzeJobs.sort((o1, o2) -> Long.compare(o2.getId(), o1.getId()));
             for (AnalyzeJob analyzeJob : allAnalyzeJobs) {
-                analyzeJob.run(statisticExecutor);
+                analyzeJob.run(STATISTIC_EXECUTOR);
             }
         }
     }

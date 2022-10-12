@@ -1,19 +1,19 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

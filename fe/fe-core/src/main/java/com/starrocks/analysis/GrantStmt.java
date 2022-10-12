@@ -24,7 +24,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -42,6 +41,7 @@ import java.util.List;
 // GRANT STMT
 // GRANT privilege [, privilege] ON db.tbl TO user [ROLE 'role'];
 // GRANT privilege [, privilege] ON RESOURCE 'resource' TO user [ROLE 'role'];
+@Deprecated         // will remove after old analyzer died
 public class GrantStmt extends DdlStmt {
     private UserIdentity userIdent;
     private String role;
@@ -127,7 +127,6 @@ public class GrantStmt extends DdlStmt {
             userIdent.analyze();
         } else {
             FeNameFormat.checkRoleName(role, false /* can not be admin */, "Can not grant to role");
-            role = ClusterNamespace.getFullName(role);
         }
 
         if (tblPattern != null) {

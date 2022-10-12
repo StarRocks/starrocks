@@ -29,6 +29,7 @@
 #include <vector>
 
 #include "common/status.h"
+#include "gen_cpp/FrontendService.h"
 #include "gen_cpp/StarrocksExternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -82,6 +83,13 @@ public:
     void debug(std::stringstream& ss) override;
 
     Status trigger_profile_report(const PTriggerProfileReportRequest* request);
+
+    void report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids);
+
+    void report_fragments_with_same_host(const std::vector<std::shared_ptr<FragmentExecState>>& need_report_exec_states,
+                                         std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
+                                         std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
+                                         std::vector<int32_t>& cur_batch_report_indexes);
 
     // input: TScanOpenParams fragment_instance_id
     // output: selected_columns

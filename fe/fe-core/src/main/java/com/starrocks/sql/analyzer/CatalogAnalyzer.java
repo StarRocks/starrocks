@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
@@ -15,6 +15,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 
 import java.util.Map;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
 public class CatalogAnalyzer {
@@ -48,7 +49,7 @@ public class CatalogAnalyzer {
                 throw new SemanticException("'type' can not be null or empty");
             }
             statement.setCatalogType(catalogType);
-            if (!CreateCatalogStmt.supportedCatalog.contains(catalogType)) {
+            if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(catalogType)) {
                 throw new SemanticException("[type : %s] is not supported", catalogType);
             }
             return null;
@@ -64,6 +65,11 @@ public class CatalogAnalyzer {
             if (name.equals(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
                 throw new SemanticException("Can't drop the default internal catalog");
             }
+
+            if (isResourceMappingCatalog(name)) {
+                throw new SemanticException("Can't drop the resource mapping catalog");
+            }
+
             return null;
         }
     }

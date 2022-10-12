@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -14,9 +14,11 @@ public class ObjectStorageUtilsTest {
         String s3nPath = "s3n://xxx";
         String cosPath = "cos://xxx";
         String cosnPath = "cosn://xxx";
+        String ks3Path = "ks3://xxx";
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(s3Path));
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(s3nPath));
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(cosnPath));
         Assert.assertEquals(s3aPath, ObjectStorageUtils.formatObjectStoragePath(cosPath));
+        Assert.assertEquals(ks3Path, ObjectStorageUtils.formatObjectStoragePath(ks3Path));
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "io/s3_input_stream.h"
 
@@ -9,6 +9,11 @@
 #include <fmt/format.h>
 
 namespace starrocks::io {
+
+inline Status make_error_status(const Aws::S3::S3Error& error) {
+    return Status::IOError(fmt::format("code={}(SdkErrorType:{}), message={}", error.GetResponseCode(),
+                                       error.GetErrorType(), error.GetMessage()));
+}
 
 StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
     if (UNLIKELY(_size == -1)) {
@@ -30,7 +35,7 @@ StatusOr<int64_t> S3InputStream::read(void* out, int64_t count) {
         _offset += body.gcount();
         return body.gcount();
     } else {
-        return Status::IOError(outcome.GetError().GetMessage());
+        return make_error_status(outcome.GetError());
     }
 }
 
@@ -53,10 +58,14 @@ StatusOr<int64_t> S3InputStream::get_size() {
         if (outcome.IsSuccess()) {
             _size = outcome.GetResult().GetContentLength();
         } else {
-            return Status::IOError(outcome.GetError().GetMessage());
+            return make_error_status(outcome.GetError());
         }
     }
     return _size;
+}
+
+void S3InputStream::set_size(int64_t value) {
+    _size = value;
 }
 
 } // namespace starrocks::io

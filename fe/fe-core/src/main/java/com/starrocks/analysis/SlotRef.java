@@ -29,6 +29,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.io.Text;
+import com.starrocks.planner.FragmentNormalizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TExprNode;
@@ -130,6 +131,10 @@ public class SlotRef extends Expr {
         this.desc = desc;
     }
 
+    public SlotDescriptor getSlotDescriptorWithoutCheck() {
+        return desc;
+    }
+
     @Override
     public void analyzeImpl(Analyzer analyzer) throws AnalysisException {
     }
@@ -208,11 +213,6 @@ public class SlotRef extends Expr {
     }
 
     @Override
-    public String toColumnLabel() {
-        return label;
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.SLOT_REF;
         if (desc != null) {
@@ -227,6 +227,20 @@ public class SlotRef extends Expr {
             msg.slot_ref = new TSlotRef(0,0);
         }
 
+        msg.setOutput_column(outputColumn);
+    }
+
+    @Override
+    public void toNormalForm(TExprNode msg, FragmentNormalizer normalizer) {
+        msg.node_type = TExprNodeType.SLOT_REF;
+        if (desc != null) {
+            SlotId newSlotId = normalizer.remapSlotId(desc.getId());
+            // tuple id is meaningless here
+            msg.slot_ref = new TSlotRef(newSlotId.asInt(), 0);
+        } else {
+            // slot id and tuple id are meaningless here
+            msg.slot_ref = new TSlotRef(0, 0);
+        }
         msg.setOutput_column(outputColumn);
     }
 
@@ -291,18 +305,6 @@ public class SlotRef extends Expr {
     public boolean isBound(SlotId slotId) {
         Preconditions.checkState(isAnalyzed);
         return desc.getId().equals(slotId);
-    }
-
-    @Override
-    public void getIds(List<TupleId> tupleIds, List<SlotId> slotIds) {
-        Preconditions.checkState(type.isValid());
-        Preconditions.checkState(desc != null);
-        if (slotIds != null) {
-            slotIds.add(desc.getId());
-        }
-        if (tupleIds != null) {
-            tupleIds.add(desc.getParent().getId());
-        }
     }
 
     public Table getTable() {

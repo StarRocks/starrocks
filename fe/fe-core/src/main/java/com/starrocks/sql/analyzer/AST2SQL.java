@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Joiner;
@@ -14,7 +14,6 @@ import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
-import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -29,33 +28,38 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
 import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
+import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.IntersectRelation;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetQualifier;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
-import com.starrocks.sql.optimizer.base.SetQualifier;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -79,14 +83,54 @@ public class AST2SQL {
                     sb.append(", ");
                 }
                 // `SET DEFAULT` is not supported
-                if (! setVar.getType().equals(SetType.DEFAULT)) {
+                if (!setVar.getType().equals(SetType.DEFAULT)) {
                     sb.append(setVar.getType().toString() + " ");
                 }
-                sb.append(setVar.getVariable() + " = " + setVar.getValue().toSql());
+                sb.append(setVar.getVariable() + " = " + setVar.getExpression().toSql());
                 idx++;
             }
             return sb.toString();
         }
+
+        @Override
+        public String visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, Void context) {
+            StringBuilder sb = new StringBuilder();
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append("GRANT ");
+            } else {
+                sb.append("REVOKE ");
+            }
+            boolean firstLine = true;
+            for (Privilege privilege : stmt.getPrivBitSet().toPrivilegeList()) {
+                if (firstLine) {
+                    firstLine = false;
+                } else {
+                    sb.append(", ");
+                }
+                String priv = privilege.toString().toUpperCase();
+                sb.append(priv.substring(0, priv.length() - 5));
+            }
+            if (stmt.getPrivType().equals("TABLE") || stmt.getPrivType().equals("DATABASE")) {
+                sb.append(" ON " + stmt.getTblPattern());
+            } else if (stmt.getPrivType().equals("RESOURCE")) {
+                sb.append(" ON RESOURCE ").append(stmt.getResourcePattern());
+            } else {
+                sb.append(" ON ").append(stmt.getUserPrivilegeObject());
+            }
+            if (stmt instanceof GrantPrivilegeStmt) {
+                sb.append(" TO ");
+            } else {
+                sb.append(" FROM ");
+            }
+            if (stmt.getUserIdentity() != null) {
+                sb.append(stmt.getUserIdentity());
+            } else {
+                sb.append("ROLE '" + stmt.getRole() + "'");
+            }
+
+            return sb.toString();
+        }
+
         @Override
         public String visitQueryStatement(QueryStatement stmt, Void context) {
             StringBuilder sqlBuilder = new StringBuilder();
@@ -190,7 +234,8 @@ public class AST2SQL {
 
         @Override
         public String visitSubquery(SubqueryRelation subquery, Void context) {
-            return "(" + visit(subquery.getQueryStatement()) + ")" + " " + subquery.getAlias();
+            return "(" + visit(subquery.getQueryStatement()) + ")"
+                    + " " + (subquery.getAlias() == null ? "" : subquery.getAlias());
         }
 
         @Override
@@ -387,8 +432,9 @@ public class AST2SQL {
             return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
         }
 
+        @Override
         public String visitArrowExpr(ArrowExpr node, Void context) {
-            return visitExpression(node, context);
+            return String.format("%s->%s", visit(node.getItem(), context), visit(node.getKey(), context));
         }
 
         @Override
@@ -459,7 +505,7 @@ public class AST2SQL {
 
             }
             strBuilder.append("EXISTS ");
-            strBuilder.append(printWithParentheses(node.getChild(0)));
+            strBuilder.append(visit(node.getChild(0)));
             return strBuilder.toString();
         }
 
@@ -471,7 +517,8 @@ public class AST2SQL {
         public String visitFunctionCall(FunctionCallExpr node, Void context) {
             FunctionParams fnParams = node.getParams();
             StringBuilder sb = new StringBuilder();
-            sb.append(node.getFnName().getFunction());
+            String functionName = node.getFnName().getFunction();
+            sb.append(functionName);
 
             sb.append("(");
             if (fnParams.isStar()) {
@@ -480,13 +527,25 @@ public class AST2SQL {
             if (fnParams.isDistinct()) {
                 sb.append("DISTINCT ");
             }
-            List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
-            sb.append(Joiner.on(", ").join(p)).append(")");
+
+            if (functionName.equalsIgnoreCase("TIME_SLICE")) {
+                sb.append(visit(node.getChild(0))).append(", ");
+                sb.append("INTERVAL ");
+                sb.append(visit(node.getChild(1)));
+                StringLiteral ident = (StringLiteral) node.getChild(2);
+                sb.append(" ").append(ident.getValue());
+                StringLiteral boundary = (StringLiteral) node.getChild(3);
+                sb.append(", ").append(boundary.getValue());
+                sb.append(")");
+            } else {
+                List<String> p = node.getChildren().stream().map(this::visit).collect(Collectors.toList());
+                sb.append(Joiner.on(", ").join(p)).append(")");
+            }
             return sb.toString();
         }
 
         public String visitGroupingFunctionCall(GroupingFunctionCallExpr node, Void context) {
-            return visitExpression(node, context);
+            return visitFunctionCall(node, context);
         }
 
         public String visitInformationFunction(InformationFunction node, Void context) {
@@ -532,11 +591,12 @@ public class AST2SQL {
             return node.getColumnName();
         }
 
+        @Override
         public String visitSubquery(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 
-        public String visitSysVariableDesc(SysVariableDesc node, Void context) {
+        public String visitVariableExpr(VariableExpr node, Void context) {
             return visitExpression(node, context);
         }
 

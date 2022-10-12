@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
@@ -151,7 +151,7 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_close) {
     consumer_thread->join();
 }
 
-class DriverQueueWithWorkGroupTest : public ::testing::Test {
+class WorkGroupDriverQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
         _wg1 = std::make_shared<workgroup::WorkGroup>("wg100", 100, workgroup::WorkGroup::DEFAULT_VERSION, 1, 0.5, 10,
@@ -181,9 +181,9 @@ protected:
     }
 };
 
-TEST_F(DriverQueueWithWorkGroupTest, test_basic) {
+TEST_F(WorkGroupDriverQueueTest, test_basic) {
     QueryContext query_ctx;
-    DriverQueueWithWorkGroup queue;
+    WorkGroupDriverQueue queue;
 
     int worker_id = _get_any_worker_from_owner(_wg3);
     ASSERT_GE(worker_id, 0);
@@ -243,15 +243,15 @@ TEST_F(DriverQueueWithWorkGroupTest, test_basic) {
 
     // Take drivers from queue.
     for (auto* out_driver : out_drivers) {
-        auto maybe_driver = queue.take(worker_id);
+        auto maybe_driver = queue.take();
         ASSERT_TRUE(maybe_driver.ok());
         ASSERT_EQ(out_driver, maybe_driver.value());
     }
 }
 
-TEST_F(DriverQueueWithWorkGroupTest, test_take_block) {
+TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     QueryContext query_ctx;
-    DriverQueueWithWorkGroup queue;
+    WorkGroupDriverQueue queue;
 
     // Prepare drivers.
     auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, -1);
@@ -271,8 +271,8 @@ TEST_F(DriverQueueWithWorkGroupTest, test_take_block) {
     consumer_thread->join();
 }
 
-TEST_F(DriverQueueWithWorkGroupTest, test_take_close) {
-    DriverQueueWithWorkGroup queue;
+TEST_F(WorkGroupDriverQueueTest, test_take_close) {
+    WorkGroupDriverQueue queue;
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
         auto maybe_driver = queue.take(0);

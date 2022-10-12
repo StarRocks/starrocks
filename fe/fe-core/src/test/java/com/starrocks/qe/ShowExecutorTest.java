@@ -22,9 +22,18 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.Analyzer;
+import com.starrocks.analysis.HelpStmt;
+import com.starrocks.analysis.LabelName;
+import com.starrocks.analysis.SetType;
+import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.ListPartitionInfoTest;
 import com.starrocks.catalog.MaterializedIndex;
@@ -35,6 +44,7 @@ import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -46,6 +56,20 @@ import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcedureStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageType;
@@ -64,7 +88,12 @@ import org.junit.rules.ExpectedException;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME;
+import static com.starrocks.thrift.TStorageMedium.SSD;
 
 public class ShowExecutorTest {
 
@@ -165,11 +194,44 @@ public class ShowExecutorTest {
 
                 mv.getViewDefineSql();
                 minTimes = 0;
-                result = "create materialized view testMv select col1, col2 from table1";
+                result = "select col1, col2 from table1";
 
                 mv.getRowCount();
                 minTimes = 0;
                 result = 10L;
+
+                mv.getComment();
+                minTimes = 0;
+                result = "TEST MATERIALIZED VIEW";
+
+                mv.getPartitionInfo();
+                minTimes = 0;
+                result = new ExpressionRangePartitionInfo(
+                        Collections.singletonList(
+                                new SlotRef(
+                                        new TableName("test", "testMv"), column1.getName())),
+                        Collections.singletonList(column1));
+
+                mv.getDefaultDistributionInfo();
+                minTimes = 0;
+                result = new HashDistributionInfo(10, Collections.singletonList(column1));
+
+                mv.getRefreshScheme();
+                minTimes = 0;
+                result = new MaterializedView.MvRefreshScheme();
+
+                mv.getDefaultReplicationNum();
+                minTimes = 0;
+                result = 1;
+
+                mv.getStorageMedium();
+                minTimes = 0;
+                result = SSD.name();
+
+                mv.getTableProperty();
+                minTimes = 0;
+                result = new TableProperty(
+                        Collections.singletonMap(PROPERTIES_STORAGE_COLDOWN_TIME, "100"));
             }
         };
 
@@ -248,7 +310,7 @@ public class ShowExecutorTest {
         ConnectScheduler scheduler = new ConnectScheduler(10);
         new Expectations(scheduler) {
             {
-                scheduler.listConnection("default_cluster:testUser");
+                scheduler.listConnection("testUser");
                 minTimes = 0;
                 result = Lists.newArrayList(ctx.toThreadInfo());
             }
@@ -256,7 +318,7 @@ public class ShowExecutorTest {
 
         ctx.setConnectScheduler(scheduler);
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         new Expectations(ctx) {
             {
@@ -308,6 +370,13 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowPartitions(@Mocked Analyzer analyzer) throws UserException {
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<Long> getAvailableBackendIds() {
+                return Arrays.asList(10001L, 10002L, 10003L);
+            }
+        };
         // Prepare to Test
         ListPartitionInfoTest listPartitionInfoTest = new ListPartitionInfoTest();
         listPartitionInfoTest.setUp();
@@ -379,7 +448,7 @@ public class ShowExecutorTest {
     @Test
     public void testDescribe() throws DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         DescribeStmt stmt = (DescribeStmt) com.starrocks.sql.parser.SqlParser.parse("desc testTbl",
                 ctx.getSessionVariable().getSqlMode()).get(0);
@@ -451,7 +520,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowCreateDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("testDb");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -466,7 +535,7 @@ public class ShowExecutorTest {
     @Test(expected = AnalysisException.class)
     public void testShowCreateNoDb() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowCreateDbStmt stmt = new ShowCreateDbStmt("emptyDb");
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -498,10 +567,10 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumn() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
 
         ShowColumnStmt stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -516,7 +585,7 @@ public class ShowExecutorTest {
 
         // verbose
         stmt = (ShowColumnStmt) com.starrocks.sql.parser.SqlParser.parse("show full columns from testTbl in testDb",
-                ctx.getSessionVariable().getSqlMode()).get(0);
+                ctx.getSessionVariable()).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
 
         executor = new ShowExecutor(ctx, stmt);
@@ -546,7 +615,7 @@ public class ShowExecutorTest {
     @Test
     public void testShowColumnFromUnknownTable() throws AnalysisException, DdlException {
         ctx.setGlobalStateMgr(globalStateMgr);
-        ctx.setQualifiedUser("default_cluster:testUser");
+        ctx.setQualifiedUser("testUser");
         ShowColumnStmt stmt = new ShowColumnStmt(new TableName("emptyDb", "testTable"), null, null, false);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
@@ -603,7 +672,7 @@ public class ShowExecutorTest {
 
         new MockUp<StarOSAgent>() {
             @Mock
-            long getWorkerIdByBackendId(long BackendId) {
+            long getWorkerIdByBackendId(long backendId) {
                 return 5;
             }
         };
@@ -613,15 +682,15 @@ public class ShowExecutorTest {
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
 
-        Assert.assertEquals(26, resultSet.getMetaData().getColumnCount());
+        Assert.assertEquals(25, resultSet.getMetaData().getColumnCount());
         Assert.assertEquals("BackendId", resultSet.getMetaData().getColumn(0).getName());
-        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(24).getName());
-        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(25).getName());
+        Assert.assertEquals("StarletPort", resultSet.getMetaData().getColumn(23).getName());
+        Assert.assertEquals("WorkerId", resultSet.getMetaData().getColumn(24).getName());
 
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1", resultSet.getString(0));
-        Assert.assertEquals("0", resultSet.getString(24));
-        Assert.assertEquals("5", resultSet.getString(25));
+        Assert.assertEquals("0", resultSet.getString(23));
+        Assert.assertEquals("5", resultSet.getString(24));
 
         Config.integrate_starmgr = false;
     }
@@ -736,14 +805,7 @@ public class ShowExecutorTest {
         ShowMaterializedViewStmt stmt = new ShowMaterializedViewStmt("testDb", (String) null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);
         ShowResultSet resultSet = executor.execute();
-
-        Assert.assertTrue(resultSet.next());
-        Assert.assertEquals("1000", resultSet.getString(0));
-        Assert.assertEquals("testMv", resultSet.getString(1));
-        Assert.assertEquals("testDb", resultSet.getString(2));
-        Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
-        Assert.assertEquals("10", resultSet.getString(4));
-        Assert.assertFalse(resultSet.next());
+        verifyShowMaterializedViewResult(resultSet);
     }
 
     @Test
@@ -765,11 +827,27 @@ public class ShowExecutorTest {
         stmt = new ShowMaterializedViewStmt("testDb", "%test%");
         executor = new ShowExecutor(ctx, stmt);
         resultSet = executor.execute();
+        verifyShowMaterializedViewResult(resultSet);
+    }
+
+    private void verifyShowMaterializedViewResult(ShowResultSet resultSet) throws AnalysisException, DdlException {
+        String expectedSqlText = "CREATE MATERIALIZED VIEW `testMv`\n" +
+                "COMMENT \"TEST MATERIALIZED VIEW\"\n" +
+                "PARTITION BY (`col1`)\n" +
+                "DISTRIBUTED BY HASH(`col1`) BUCKETS 10 \n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"storage_medium\" = \"SSD\",\n" +
+                "\"storage_cooldown_time\" = \"1970-01-01 08:00:00\"\n" +
+                ")\n" +
+                "AS select col1, col2 from table1;";
+
         Assert.assertTrue(resultSet.next());
         Assert.assertEquals("1000", resultSet.getString(0));
         Assert.assertEquals("testMv", resultSet.getString(1));
         Assert.assertEquals("testDb", resultSet.getString(2));
-        Assert.assertEquals("create materialized view testMv select col1, col2 from table1", resultSet.getString(3));
+        Assert.assertEquals(expectedSqlText, resultSet.getString(3));
         Assert.assertEquals("10", resultSet.getString(4));
         Assert.assertFalse(resultSet.next());
     }

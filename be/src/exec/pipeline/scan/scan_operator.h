@@ -1,8 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
 #include "exec/pipeline/source_operator.h"
+#include "exec/query_cache/cache_operator.h"
+#include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "util/spinlock.h"
 
@@ -55,6 +57,9 @@ public:
 
     QueryStatisticsItemPB get_scan_stats_item();
 
+    void set_lane_arbiter(const query_cache::LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
+    void set_cache_operator(const query_cache::CacheOperatorPtr& cache_operator) { _cache_operator = cache_operator; }
+
 protected:
     static constexpr size_t kIOTaskBatchSize = 64;
 
@@ -82,6 +87,8 @@ private:
     void _close_chunk_source(RuntimeState* state, int index);
     void _finish_chunk_source_task(RuntimeState* state, int chunk_source_index, int64_t cpu_time_ns, int64_t scan_rows,
                                    int64_t scan_bytes);
+    void _detach_chunk_sources();
+
     void _merge_chunk_source_profiles();
     size_t _buffer_unplug_threshold() const;
     void _set_scan_table_id(RuntimeState* state);
@@ -132,6 +139,9 @@ private:
     std::atomic_int64_t _last_scan_bytes = 0;
     TableId _scan_table_id = -1;
 
+    query_cache::LaneArbiterPtr _lane_arbiter = nullptr;
+    query_cache::CacheOperatorPtr _cache_operator = nullptr;
+
     RuntimeProfile::Counter* _default_buffer_capacity_counter = nullptr;
     RuntimeProfile::Counter* _buffer_capacity_counter = nullptr;
     RuntimeProfile::HighWaterMarkCounter* _peak_buffer_size_counter = nullptr;
@@ -158,7 +168,7 @@ public:
     void close(RuntimeState* state) override;
 
     bool need_local_shuffle() const override { return _need_local_shuffle; }
-    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) override { _need_local_shuffle = need_local_shuffle; }
 
     // interface for different scan node
     virtual Status do_prepare(RuntimeState* state) = 0;

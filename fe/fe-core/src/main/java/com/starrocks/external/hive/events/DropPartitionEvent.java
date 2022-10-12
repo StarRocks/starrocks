@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -7,10 +7,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.external.Utils;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
 import com.starrocks.external.hive.HivePartitionKeysKey;
-import com.starrocks.external.hive.Utils;
+import com.starrocks.external.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.DropPartitionMessage;
 import org.apache.logging.log4j.LogManager;
@@ -47,7 +47,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
             Preconditions.checkState(!partCols.isEmpty());
             this.partCols = partCols;
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(new HivePartitionKey(dbName, tblName, Table.TableType.HIVE,
+            hivePartitionKeys.add(new HivePartitionName(dbName, tblName, Table.TableType.HIVE,
                     Lists.newArrayList(droppedPartition.values())));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(

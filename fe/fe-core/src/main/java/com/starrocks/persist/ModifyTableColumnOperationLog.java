@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.persist;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Column;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
@@ -24,13 +25,14 @@ public class ModifyTableColumnOperationLog implements Writable {
     private List<Column> columns = new ArrayList<>();
 
     public ModifyTableColumnOperationLog(String dbName, String tableName, List<Column> columns) {
-        this.dbName = dbName;
+        // compatible with old version
+        this.dbName = ClusterNamespace.getFullName(dbName);
         this.tableName = tableName;
         this.columns = columns;
     }
 
     public String getDbName() {
-        return dbName;
+        return ClusterNamespace.getNameFromFullName(dbName);
     }
 
     public String getTableName() {

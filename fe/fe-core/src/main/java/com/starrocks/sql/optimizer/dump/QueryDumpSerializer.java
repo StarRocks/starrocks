@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.dump;
 
@@ -8,14 +8,17 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.Version;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.system.BackendCoreStat;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,9 +34,17 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
     @Override
     public JsonElement serialize(QueryDumpInfo dumpInfo, Type type, JsonSerializationContext jsonSerializationContext) {
         JsonObject dumpJson = new JsonObject();
-        // 1. statement
+        // statement
         dumpJson.addProperty("statement", dumpInfo.getOriginStmt());
-        // 2. table meta
+        // resource
+        if (!dumpInfo.getResourceSet().isEmpty()) {
+            JsonObject resourceMetaData = new JsonObject();
+            for (Resource resource : dumpInfo.getResourceSet()) {
+                resourceMetaData.addProperty(resource.getName(), resource.toString());
+            }
+            dumpJson.add("resources", resourceMetaData);
+        }
+        // table meta
         JsonObject tableMetaData = new JsonObject();
         List<Pair<String, Table>> tableMetaPairs = Lists.newArrayList(dumpInfo.getTableMap().values());
         tableMetaPairs.sort(Comparator.comparing(pair -> pair.first + ":" + pair.second.getName()));
@@ -44,7 +55,31 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableMetaData.addProperty(tableName, createTableStmt.get(0));
         }
         dumpJson.add("table_meta", tableMetaData);
-        // 3. table row count
+        // hive meta store table info
+        if (!dumpInfo.getHmsTableMap().isEmpty()) {
+            JsonObject externalTableInfoData = new JsonObject();
+            for (Map.Entry<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> resourceEntry :
+                    dumpInfo.getHmsTableMap().entrySet()) {
+                String resourceName = resourceEntry.getKey();
+                for (Map.Entry<String, Map<String, HiveMetaStoreTableDumpInfo>> dbEntry :
+                        resourceEntry.getValue().entrySet()) {
+                    String dbName = dbEntry.getKey();
+                    for (Map.Entry<String, HiveMetaStoreTableDumpInfo> tableEntry : dbEntry.getValue().entrySet()) {
+                        String tableName = tableEntry.getKey();
+                        String fullName = String.join("%", resourceName, dbName, tableName);
+                        JsonObject tableTypeObject = new JsonObject();
+                        tableTypeObject.addProperty("type", tableEntry.getValue().getType());
+                        JsonArray jsonArray = new JsonArray();
+                        jsonArray.add(tableTypeObject);
+                        jsonArray.add(GsonUtils.GSON.toJson(tableEntry.getValue()));
+                        externalTableInfoData.add(fullName, jsonArray);
+                    }
+                }
+            }
+            dumpJson.add("hms_table", externalTableInfoData);
+        }
+
+        // table row count
         JsonObject tableRowCount = new JsonObject();
         for (Map.Entry<String, Map<String, Long>> entry : dumpInfo.getPartitionRowCountMap().entrySet()) {
             JsonObject partitionRowCount = new JsonObject();
@@ -54,7 +89,7 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableRowCount.add(entry.getKey(), partitionRowCount);
         }
         dumpJson.add("table_row_count", tableRowCount);
-        // 4. view meta
+        // view meta
         if (!dumpInfo.getViewMap().isEmpty()) {
             JsonObject viewMetaData = new JsonObject();
             for (Pair<String, View> entry : dumpInfo.getViewMap().values()) {
@@ -63,13 +98,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             }
             dumpJson.add("view_meta", viewMetaData);
         }
-        // 5. session variables
+        // session variables
         try {
             dumpJson.addProperty("session_variables", dumpInfo.getSessionVariable().getJsonString());
         } catch (IOException e) {
             LOG.warn("serialize session variables failed. " + e);
         }
-        // 6. column statistics
+        // column statistics
         JsonObject tableColumnStatistics = new JsonObject();
         for (Map.Entry<String, Map<String, ColumnStatistic>> entry : dumpInfo.getTableStatisticsMap().entrySet()) {
             JsonObject columnStatistics = new JsonObject();
@@ -79,17 +114,24 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
             tableColumnStatistics.add(entry.getKey(), columnStatistics);
         }
         dumpJson.add("column_statistics", tableColumnStatistics);
-        // 7. BE number
+        // BE number
         ConnectContext ctx = ConnectContext.get();
         long beNum = ctx.getAliveBackendNumber();
         dumpJson.addProperty("be_number", beNum);
-        // 8. exception
+        // backend core stat
+        JsonObject backendCoreStat = new JsonObject();
+        backendCoreStat.addProperty("numOfHardwareCoresPerBe",
+                GsonUtils.GSON.toJson(BackendCoreStat.getNumOfHardwareCoresPerBe()));
+        backendCoreStat.addProperty("cachedAvgNumOfHardwareCores",
+                BackendCoreStat.getCachedAvgNumOfHardwareCores());
+        dumpJson.add("be_core_stat", backendCoreStat);
+        // exception
         JsonArray exceptions = new JsonArray();
         for (String ex : dumpInfo.getExceptionList()) {
             exceptions.add(ex);
         }
         dumpJson.add("exception", exceptions);
-        // 9. version
+        // version
         if (!FeConstants.runningUnitTest) {
             dumpJson.addProperty("version", Version.STARROCKS_VERSION);
             dumpJson.addProperty("commit_version", Version.STARROCKS_COMMIT_HASH);

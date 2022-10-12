@@ -20,7 +20,6 @@ package com.starrocks.analysis;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.AccessPrivilege;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.mysql.privilege.PrivBitSet;
@@ -33,6 +32,7 @@ import java.util.List;
 //
 // REVOKE privilege [, privilege] ON db.tbl FROM user [ROLE 'role'];
 // REVOKE privilege [, privilege] ON resource 'resource' FROM user [ROLE 'role'];
+@Deprecated         // will remove after old analyzer died
 public class RevokeStmt extends DdlStmt {
     private UserIdentity userIdent;
     private String role;
@@ -91,7 +91,6 @@ public class RevokeStmt extends DdlStmt {
             userIdent.analyze();
         } else {
             FeNameFormat.checkRoleName(role, false /* can not be superuser */, "Can not revoke from role");
-            role = ClusterNamespace.getFullName(role);
         }
 
         if (tblPattern != null) {

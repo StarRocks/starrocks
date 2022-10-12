@@ -23,10 +23,9 @@ package com.starrocks.persist;
 
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
-import com.starrocks.alter.DecommissionBackendJob;
-import com.starrocks.alter.RollupJob;
-import com.starrocks.alter.SchemaChangeJob;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.authentication.UserAuthenticationInfo;
+import com.starrocks.authentication.UserProperty;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.Repository;
 import com.starrocks.backup.RestoreJob;
@@ -36,7 +35,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -48,6 +46,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
+import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteHandler;
@@ -63,6 +62,8 @@ import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.plugin.PluginInfo;
+import com.starrocks.privilege.RolePrivilegeCollection;
+import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
@@ -81,6 +82,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
 import com.starrocks.transaction.TransactionState;
+import jersey.repackaged.com.google.common.collect.Lists;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -105,7 +107,8 @@ public class EditLog {
         this.journalQueue = journalQueue;
     }
 
-    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal) {
+    public static void loadJournal(GlobalStateMgr globalStateMgr, JournalEntity journal)
+            throws JournalInconsistentException {
         short opCode = journal.getOpCode();
         if (opCode != OperationType.OP_SAVE_NEXTID && opCode != OperationType.OP_TIMESTAMP) {
             LOG.debug("replay journal op code: {}", opCode);
@@ -196,16 +199,6 @@ public class EditLog {
                     globalStateMgr.replayAddPartition(info);
                     break;
                 }
-                case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
-                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
-                    globalStateMgr.replayAddMvPartitionVersionInfo(info);
-                    break;
-                }
-                case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO: {
-                    MaterializedViewPartitionVersionInfo info = (MaterializedViewPartitionVersionInfo) journal.getData();
-                    globalStateMgr.replayRemoveMvPartitionVersionInfo(info);
-                    break;
-                }
                 case OperationType.OP_ADD_PARTITION: {
                     PartitionPersistInfo info = (PartitionPersistInfo) journal.getData();
                     LOG.info("Begin to unprotect add partition. db = " + info.getDbId()
@@ -217,6 +210,13 @@ public class EditLog {
                 case OperationType.OP_ADD_PARTITIONS: {
                     AddPartitionsInfo infos = (AddPartitionsInfo) journal.getData();
                     for (PartitionPersistInfo info : infos.getAddPartitionInfos()) {
+                        globalStateMgr.replayAddPartition(info);
+                    }
+                    break;
+                }
+                case OperationType.OP_ADD_PARTITIONS_V2: {
+                    AddPartitionsInfoV2 infos = (AddPartitionsInfoV2) journal.getData();
+                    for (PartitionPersistInfoV2 info : infos.getAddPartitionInfos()) {
                         globalStateMgr.replayAddPartition(info);
                     }
                     break;
@@ -305,26 +305,6 @@ public class EditLog {
                     globalStateMgr.getBackupHandler().replayAddJob(job);
                     break;
                 }
-                case OperationType.OP_START_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISHING_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayFinishing(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_CANCEL_ROLLUP: {
-                    RollupJob job = (RollupJob) journal.getData();
-                    globalStateMgr.getRollupHandler().replayCancel(job, globalStateMgr);
-                    break;
-                }
                 case OperationType.OP_DROP_ROLLUP: {
                     DropInfo info = (DropInfo) journal.getData();
                     globalStateMgr.getRollupHandler().replayDropRollup(info, globalStateMgr);
@@ -339,40 +319,13 @@ public class EditLog {
                     }
                     break;
                 }
-                case OperationType.OP_START_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.info("Begin to unprotect create schema change job. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISHING_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.info("Begin to unprotect replay finishing schema change job. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayFinishing(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    globalStateMgr.getSchemaChangeHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_CANCEL_SCHEMA_CHANGE: {
-                    SchemaChangeJob job = (SchemaChangeJob) journal.getData();
-                    LOG.debug("Begin to unprotect cancel schema change. db = " + job.getDbId()
-                            + " table = " + job.getTableId());
-                    globalStateMgr.getSchemaChangeHandler().replayCancel(job, globalStateMgr);
-                    break;
-                }
                 case OperationType.OP_FINISH_CONSISTENCY_CHECK: {
                     ConsistencyCheckInfo info = (ConsistencyCheckInfo) journal.getData();
                     globalStateMgr.getConsistencyChecker().replayFinishConsistencyCheck(info, globalStateMgr);
                     break;
                 }
                 case OperationType.OP_CLEAR_ROLLUP_INFO: {
-                    ReplicaPersistInfo info = (ReplicaPersistInfo) journal.getData();
-                    globalStateMgr.getLoadInstance().replayClearRollupInfo(info, globalStateMgr);
+                    // Nothing to do
                     break;
                 }
                 case OperationType.OP_RENAME_ROLLUP: {
@@ -443,18 +396,6 @@ public class EditLog {
                     GlobalStateMgr.getCurrentSystemInfo().updateBackendState(be);
                     break;
                 }
-                case OperationType.OP_START_DECOMMISSION_BACKEND: {
-                    DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
-                    LOG.debug("{}: {}", opCode, job.getTableId());
-                    globalStateMgr.getClusterHandler().replayInitJob(job, globalStateMgr);
-                    break;
-                }
-                case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
-                    DecommissionBackendJob job = (DecommissionBackendJob) journal.getData();
-                    LOG.debug("{}: {}", opCode, job.getTableId());
-                    globalStateMgr.getClusterHandler().replayFinish(job, globalStateMgr);
-                    break;
-                }
                 case OperationType.OP_ADD_FIRST_FRONTEND:
                 case OperationType.OP_ADD_FRONTEND: {
                     Frontend fe = (Frontend) journal.getData();
@@ -465,9 +406,7 @@ public class EditLog {
                     Frontend fe = (Frontend) journal.getData();
                     globalStateMgr.replayDropFrontend(fe);
                     if (fe.getNodeName().equals(GlobalStateMgr.getCurrentState().getNodeName())) {
-                        System.out.println("current fe " + fe + " is removed. will exit");
-                        LOG.info("current fe " + fe + " is removed. will exit");
-                        System.exit(-1);
+                        throw new JournalInconsistentException("current fe " + fe + " is removed. will exit");
                     }
                     break;
                 }
@@ -511,6 +450,16 @@ public class EditLog {
                     globalStateMgr.getAuth().replayDropRole(privInfo);
                     break;
                 }
+                case OperationType.OP_GRANT_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayGrantRole(privInfo);
+                    break;
+                }
+                case OperationType.OP_REVOKE_ROLE: {
+                    PrivInfo privInfo = (PrivInfo) journal.getData();
+                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
+                    break;
+                }
                 case OperationType.OP_UPDATE_USER_PROPERTY: {
                     UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
                     globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
@@ -531,10 +480,10 @@ public class EditLog {
                     String versionString = ((Text) journal.getData()).toString();
                     int version = Integer.parseInt(versionString);
                     if (version > FeConstants.meta_version) {
-                        LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                                version);
-                        System.exit(-1);
+                        throw new JournalInconsistentException(
+                                "invalid meta data version found, cat not bigger than FeConstants.meta_version."
+                                + "please update FeConstants.meta_version bigger or equal to " + version +
+                                " and restart.");
                     }
                     MetaContext.get().setMetaVersion(version);
                     break;
@@ -542,18 +491,14 @@ public class EditLog {
                 case OperationType.OP_META_VERSION_V2: {
                     MetaVersion metaVersion = (MetaVersion) journal.getData();
                     if (metaVersion.getCommunityVersion() > FeConstants.meta_version) {
-                        LOG.error("invalid meta data version found, cat not bigger than FeConstants.meta_version."
-                                        + "please update FeConstants.meta_version bigger or equal to {} and restart.",
-                                metaVersion.getCommunityVersion());
-                        System.exit(-1);
+                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
+                                + "FeConstants.meta_version. please update FeConstants.meta_version bigger or equal to "
+                                + metaVersion.getCommunityVersion() + "and restart.");
                     }
                     if (metaVersion.getStarRocksVersion() > FeConstants.starrocks_meta_version) {
-                        LOG.error(
-                                "invalid meta data version found, cat not bigger than FeConstants.starrocks_meta_version."
-                                        +
-                                        "please update FeConstants.starrocks_meta_version bigger or equal to {} and restart.",
-                                metaVersion.getStarRocksVersion());
-                        System.exit(-1);
+                        throw new JournalInconsistentException("invalid meta data version found, cat not bigger than "
+                                + "FeConstants.starrocks_meta_version. please update FeConstants.starrocks_meta_version"
+                                + " bigger or equal to " + metaVersion.getStarRocksVersion() + "and restart.");
                     }
                     MetaContext.get().setMetaVersion(metaVersion.getCommunityVersion());
                     MetaContext.get().setStarRocksMetaVersion(metaVersion.getStarRocksVersion());
@@ -830,6 +775,11 @@ public class EditLog {
                     globalStateMgr.getRoutineLoadManager().replayAlterRoutineLoadJob(log);
                     break;
                 }
+                case OperationType.OP_ALTER_LOAD_JOB: {
+                    AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.getData();
+                    globalStateMgr.getLoadManager().replayAlterLoadJob(log);
+                    break;
+                }
                 case OperationType.OP_GLOBAL_VARIABLE_V2: {
                     GlobalVarPersistInfo info = (GlobalVarPersistInfo) journal.getData();
                     globalStateMgr.replayGlobalVariableV2(info);
@@ -863,6 +813,10 @@ public class EditLog {
                 case OperationType.OP_ADD_BASIC_STATS_META: {
                     BasicStatsMeta basicStatsMeta = (BasicStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddBasicStatsMeta(basicStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should refresh cache here.
+                    globalStateMgr.getAnalyzeManager().refreshBasicStatisticsCache(basicStatsMeta.getDbId(),
+                            basicStatsMeta.getTableId(), basicStatsMeta.getColumns(), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_BASIC_STATS_META: {
@@ -873,6 +827,11 @@ public class EditLog {
                 case OperationType.OP_ADD_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.getData();
                     globalStateMgr.getAnalyzeManager().replayAddHistogramStatsMeta(histogramStatsMeta);
+                    // The follower replays the stats meta log, indicating that the master has re-completed
+                    // statistic, and the follower's should expire cache here.
+                    globalStateMgr.getAnalyzeManager().refreshHistogramStatisticsCache(
+                            histogramStatsMeta.getDbId(), histogramStatsMeta.getTableId(),
+                            Lists.newArrayList(histogramStatsMeta.getColumn()), true);
                     break;
                 }
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
@@ -932,6 +891,49 @@ public class EditLog {
                     StarMgrServer.getCurrentState().getStarMgr().replay(j.getJournal());
                     break;
                 }
+                case OperationType.OP_CREATE_USER_V2: {
+                    CreateUserInfo info = (CreateUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayCreateUser(
+                            info.getUserIdentity(),
+                            info.getAuthenticationInfo(),
+                            info.getUserProperty(),
+                            info.getUserPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                    UserPrivilegeCollectionInfo info = (UserPrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateUserPrivilegeCollection(
+                            info.getUserIdentity(),
+                            info.getPrivilegeCollection(),
+                            info.getPluginId(),
+                            info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_ALTER_USER_V2: {
+                    AlterUserInfo info = (AlterUserInfo) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayAlterUser(
+                            info.getUserIdentity(), info.getAuthenticationInfo());
+                    break;
+                }
+                case OperationType.OP_DROP_USER_V2: {
+                    UserIdentity userIdentity = (UserIdentity) journal.getData();
+                    globalStateMgr.getAuthenticationManager().replayDropUser(userIdentity);
+                    break;
+                }
+                case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
+                    RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(
+                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    break;
+                }
+                case OperationType.OP_DROP_ROLE_V2: {
+                    RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
+                    globalStateMgr.getPrivilegeManager().replayDropRole(
+                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -941,8 +943,9 @@ public class EditLog {
                 }
             }
         } catch (Exception e) {
-            LOG.error("Operation Type {}", opCode, e);
-            System.exit(-1);
+            JournalInconsistentException exception = new JournalInconsistentException("failed to load journal type " + opCode);
+            exception.initCause(e);
+            throw exception;
         }
     }
 
@@ -1090,6 +1093,10 @@ public class EditLog {
         logEdit(OperationType.OP_ADD_PARTITIONS, info);
     }
 
+    public void logAddPartitions(AddPartitionsInfoV2 info) {
+        logEdit(OperationType.OP_ADD_PARTITIONS_V2, info);
+    }
+
     public void logDropPartition(DropPartitionInfo info) {
         logEdit(OperationType.OP_DROP_PARTITION, info);
     }
@@ -1122,17 +1129,6 @@ public class EditLog {
         logEdit(OperationType.OP_RECOVER_TABLE, info);
     }
 
-    public void logFinishingRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_FINISHING_ROLLUP, rollupJob);
-    }
-
-    public void logFinishRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_FINISH_ROLLUP, rollupJob);
-    }
-
-    public void logCancelRollup(RollupJob rollupJob) {
-        logEdit(OperationType.OP_CANCEL_ROLLUP, rollupJob);
-    }
 
     public void logDropRollup(DropInfo info) {
         logEdit(OperationType.OP_DROP_ROLLUP, info);
@@ -1140,18 +1136,6 @@ public class EditLog {
 
     public void logBatchDropRollup(BatchDropInfo batchDropInfo) {
         logEdit(OperationType.OP_BATCH_DROP_ROLLUP, batchDropInfo);
-    }
-
-    public void logFinishingSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_FINISHING_SCHEMA_CHANGE, schemaChangeJob);
-    }
-
-    public void logFinishSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_FINISH_SCHEMA_CHANGE, schemaChangeJob);
-    }
-
-    public void logCancelSchemaChange(SchemaChangeJob schemaChangeJob) {
-        logEdit(OperationType.OP_CANCEL_SCHEMA_CHANGE, schemaChangeJob);
     }
 
     public void logFinishConsistencyCheck(ConsistencyCheckInfo info) {
@@ -1258,8 +1242,12 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_ROLE, info);
     }
 
-    public void logFinishDecommissionBackend(DecommissionBackendJob job) {
-        logEdit(OperationType.OP_FINISH_DECOMMISSION_BACKEND, job);
+    public void logGrantRole(PrivInfo info) {
+        logEdit(OperationType.OP_GRANT_ROLE, info);
+    }
+
+    public void logRevokeRole(PrivInfo info) {
+        logEdit(OperationType.OP_REVOKE_ROLE, info);
     }
 
     public void logDatabaseRename(DatabaseInfo databaseInfo) {
@@ -1488,6 +1476,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_ROUTINE_LOAD_JOB, log);
     }
 
+    public void logAlterLoadJob(AlterLoadJobOperationLog log) {
+        logEdit(OperationType.OP_ALTER_LOAD_JOB, log);
+    }
+
     public void logGlobalVariableV2(GlobalVarPersistInfo info) {
         logEdit(OperationType.OP_GLOBAL_VARIABLE_V2, info);
     }
@@ -1564,15 +1556,58 @@ public class EditLog {
         logEdit(OperationType.OP_DELETE_UNUSED_SHARD, new ShardInfo(shardIds));
     }
 
-    public void logAddMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
-        logEdit(OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
-    }
-
-    public void logRemoveMvVersionMapInfo(MaterializedViewPartitionVersionInfo info) {
-        logEdit(OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO, info);
-    }
-
     public void logStarMgrOperation(StarMgrJournal journal) {
         logEdit(OperationType.OP_STARMGR, journal);
+    }
+
+    public void logCreateUser(
+            UserIdentity userIdentity,
+            UserAuthenticationInfo authenticationInfo,
+            UserProperty userProperty,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        CreateUserInfo info = new CreateUserInfo(
+                userIdentity, authenticationInfo, userProperty, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_CREATE_USER_V2, info);
+    }
+
+    public void logAlterUser(UserIdentity userIdentity, UserAuthenticationInfo authenticationInfo) {
+        AlterUserInfo info = new AlterUserInfo(userIdentity, authenticationInfo);
+        logEdit(OperationType.OP_ALTER_USER_V2, info);
+    }
+
+    public void logDropUser(UserIdentity userIdentity) {
+        logEdit(OperationType.OP_DROP_USER_V2, userIdentity);
+    }
+
+    public void logUpdateUserPrivilege(
+            UserIdentity userIdentity,
+            UserPrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        UserPrivilegeCollectionInfo info = new UserPrivilegeCollectionInfo(
+                userIdentity, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_UPDATE_USER_PRIVILEGE_V2, info);
+    }
+
+    public void logUpdateRolePrivilege(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                roleId, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
+    }
+
+    public void logDropRole(
+            long roleId,
+            RolePrivilegeCollection privilegeCollection,
+            short pluginId,
+            short pluginVersion) {
+        RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
+                roleId, privilegeCollection, pluginId, pluginVersion);
+        logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 }

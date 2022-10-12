@@ -1,8 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/encryption_functions.h"
-
-#include <boost/smart_ptr.hpp>
 
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
@@ -11,6 +9,7 @@
 #include "exprs/expr.h"
 #include "util/aes_util.h"
 #include "util/debug_util.h"
+#include "util/integer_util.h"
 #include "util/md5.h"
 #include "util/sha.h"
 
@@ -129,6 +128,10 @@ ColumnPtr EncryptionFunctions::to_base64(FunctionContext* ctx, const Columns& co
         if (src_value.size == 0) {
             result.append_null();
             continue;
+        } else if (src_value.size > config::max_length_for_to_base64) {
+            std::stringstream ss;
+            ss << "to_base64 not supported length > " << config::max_length_for_to_base64;
+            throw std::runtime_error(ss.str());
         }
 
         int cipher_len = (size_t)(4.0 * ceil((double)src_value.size / 3.0)) + 1;
@@ -169,6 +172,34 @@ ColumnPtr EncryptionFunctions::md5sum(FunctionContext* ctx, const Columns& colum
         result.append(Slice(digest.hex().c_str(), digest.hex().size()));
     }
 
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Columns& columns) {
+    std::vector<ColumnViewer<TYPE_VARCHAR>> list;
+    list.reserve(columns.size());
+    for (const ColumnPtr& col : columns) {
+        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+    }
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_VARCHAR> result(size);
+    for (int row = 0; row < size; row++) {
+        Md5Digest digest;
+        for (auto& view : list) {
+            if (view.is_null(row)) {
+                continue;
+            }
+            auto v = view.value(row);
+            digest.update(v.data, v.size);
+        }
+        digest.digest();
+        StringParser::ParseResult parse_res;
+        uint128_t int_val =
+                StringParser::string_to_int<uint128_t>(digest.hex().c_str(), digest.hex().size(), 16, &parse_res);
+        DCHECK_EQ(parse_res, StringParser::PARSE_SUCCESS);
+        std::string decimal_str = starrocks::integer_to_string<uint128_t>(int_val);
+        result.append(Slice(decimal_str.data(), decimal_str.size()));
+    }
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

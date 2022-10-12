@@ -1,8 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.server;
 
-import com.amazonaws.services.dynamodbv2.document.Expected;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
@@ -23,6 +22,7 @@ import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -35,8 +35,6 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-
-import javax.validation.constraints.AssertTrue;
 
 import static org.apache.iceberg.types.Types.NestedField.optional;
 
@@ -77,9 +75,9 @@ public class CatalogLevelTest {
                 result = hiveTable;
             }
         };
-        String sql_1 = "select col1 from hive_catalog.hive_db.hive_table";
+        String sql1 = "select col1 from hive_catalog.hive_db.hive_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
 
     }
 
@@ -89,24 +87,53 @@ public class CatalogLevelTest {
                                      @Mocked HiveRepository hiveRepository,
                                      @Mocked HoodieTableMetaClient metaClient,
                                      @Mocked TableSchemaResolver schemaUtil) throws Exception {
+        String catalogName = "hudi_catalog";
+        String resourceName = "thrift://127.0.0.1:9083";
+        String dbName = "hudi_db";
+        String tableName = "hudi_table";
         String createCatalog = "CREATE EXTERNAL CATALOG hudi_catalog PROPERTIES(\"type\"=\"hudi\", \"hive.metastore.uris\"=\"thrift://127.0.0.1:9083\")";
         StatementBase statementBase = AnalyzeTestUtil.analyzeSuccess(createCatalog);
         Assert.assertTrue(statementBase instanceof CreateCatalogStmt);
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog((CreateCatalogStmt) statementBase);
-        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
-        List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "bigint", ""));
+        List<FieldSchema> unPartKeys = Lists.newArrayList();
+        unPartKeys.add(new FieldSchema("_hoodie_commit_time", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_commit_seqno", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_record_key", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_partition_path", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_file_name", "string", ""));
+        unPartKeys.add(new FieldSchema("col2", "int", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hudi";
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
+        sd.setInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+        SerDeInfo sdInfo = new SerDeInfo();
+        sdInfo.setSerializationLib("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+        sd.setSerdeInfo(sdInfo);
         Table msTable1 = new Table();
-        msTable1.setDbName("hudi_db");
-        msTable1.setTableName("hudi_table");
+        msTable1.setDbName(dbName);
+        msTable1.setTableName(tableName);
         msTable1.setPartitionKeys(partKeys);
         msTable1.setSd(sd);
         msTable1.setTableType("MANAGED_TABLE");
 
         List<org.apache.avro.Schema.Field> hudiFields = new ArrayList<>();
+        hudiFields.add(new org.apache.avro.Schema.Field("_hoodie_commit_time",
+                org.apache.avro.Schema.createUnion(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.NULL),
+                        org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING)), "", null));
+        hudiFields.add(new org.apache.avro.Schema.Field("_hoodie_commit_seqno",
+                org.apache.avro.Schema.createUnion(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.NULL),
+                        org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING)), "", null));
+        hudiFields.add(new org.apache.avro.Schema.Field("_hoodie_record_key",
+                org.apache.avro.Schema.createUnion(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.NULL),
+                        org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING)), "", null));
+        hudiFields.add(new org.apache.avro.Schema.Field("_hoodie_partition_path",
+                org.apache.avro.Schema.createUnion(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.NULL),
+                        org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING)), "", null));
+        hudiFields.add(new org.apache.avro.Schema.Field("_hoodie_file_name",
+                org.apache.avro.Schema.createUnion(org.apache.avro.Schema.create(org.apache.avro.Schema.Type.NULL),
+                        org.apache.avro.Schema.create(org.apache.avro.Schema.Type.STRING)), "", null));
         hudiFields.add(new org.apache.avro.Schema.Field("col1",
                 org.apache.avro.Schema.createUnion(
                         org.apache.avro.Schema.create(org.apache.avro.Schema.Type.NULL), org.apache.avro.Schema.create(
@@ -126,32 +153,29 @@ public class CatalogLevelTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getResourceMgr();
-                result = resourceMgr;
-
-                GlobalStateMgr.getCurrentState().getHiveRepository();
-                result = hiveRepository;
-
                 schemaUtil.getTableAvroSchema();
                 result = hudiSchema;
+
+                hiveRepository.getTable(resourceName, dbName, tableName);
+                result = msTable1;
             }
         };
 
-        com.starrocks.catalog.Table hudiTable = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(msTable1, "thrift://127.0.0.1:9083");
+        com.starrocks.catalog.Table hudiTable = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(msTable1, resourceName);
 
         new Expectations() {
             {
-                metadataMgr.getDb("hudi_catalog", "hudi_db");
-                result = new Database(111, "hudi_db");
+                metadataMgr.getDb(catalogName, dbName);
+                result = new Database(111, dbName);
                 minTimes = 0;
 
-                metadataMgr.getTable("hudi_catalog", "hudi_db", "hudi_table");
+                metadataMgr.getTable(catalogName, dbName, tableName);
                 result = hudiTable;
             }
         };
-        String sql_1 = "select col1 from hudi_catalog.hudi_db.hudi_table";
+        String sql1 = "select col1 from " + catalogName + "." + dbName + "." + tableName;
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
     }
 
     @Test
@@ -185,9 +209,9 @@ public class CatalogLevelTest {
                 result = icebergTable;
             }
         };
-        String sql_1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
+        String sql1 = "select col1 from iceberg_catalog.iceberg_db.iceberg_table";
 
-        AnalyzeTestUtil.analyzeSuccess(sql_1);
+        AnalyzeTestUtil.analyzeSuccess(sql1);
 
     }
 }

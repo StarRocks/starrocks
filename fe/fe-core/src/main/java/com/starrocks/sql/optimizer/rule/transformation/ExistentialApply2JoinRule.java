@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -39,7 +39,7 @@ public class ExistentialApply2JoinRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
         return apply.isUseSemiAnti() && apply.isExistential()
-                && !Utils.containsCorrelationSubquery(input.getGroupExpression());
+                && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 
     @Override

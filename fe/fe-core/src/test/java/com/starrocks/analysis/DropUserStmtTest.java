@@ -18,17 +18,16 @@
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 public class DropUserStmtTest {
-    private Analyzer analyzer;
 
     @Mocked
     private Auth auth;
@@ -37,23 +36,22 @@ public class DropUserStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         MockedAuth.mockedAuth(auth);
         MockedAuth.mockedConnectContext(ctx, "root", "192.168.1.1");
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException {
-        DropUserStmt stmt = new DropUserStmt(new UserIdentity("user", "%"));
-        stmt.analyze(analyzer);
-        Assert.assertEquals("DROP USER 'default_cluster:user'@'%'", stmt.toString());
-        Assert.assertEquals("default_cluster:user", stmt.getUserIdentity().getQualifiedUser());
+    public void testNormal() throws Exception {
+        String dropSql = "DROP USER 'user'";
+        DropUserStmt stmt = (DropUserStmt) UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
+        Assert.assertEquals("DROP USER 'user'@'%'", stmt.toString());
+        Assert.assertEquals("user", stmt.getUserIdentity().getQualifiedUser());
     }
 
     @Test(expected = AnalysisException.class)
-    public void testNoUser() throws UserException, AnalysisException {
-        DropUserStmt stmt = new DropUserStmt(new UserIdentity("", "%"));
-        stmt.analyze(analyzer);
+    public void testNoUser() throws Exception {
+        String dropSql = "DROP USER ''";
+        UtFrameUtils.parseStmtWithNewParser(dropSql, ctx);
         Assert.fail("No Exception throws.");
     }
 }

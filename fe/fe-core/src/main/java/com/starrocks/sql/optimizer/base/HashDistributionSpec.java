@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.base;
 
@@ -125,9 +125,7 @@ public class HashDistributionSpec extends DistributionSpec {
         }
         // Outer join will produce NULL rows in different node, do aggregate may output multi null rows
         // if satisfy required shuffle directly
-        if (otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG &&
-                (thisSourceType == HashDistributionDesc.SourceType.LOCAL ||
-                        thisSourceType == HashDistributionDesc.SourceType.SHUFFLE_JOIN)) {
+        if (otherSourceType == HashDistributionDesc.SourceType.SHUFFLE_AGG) {
             ColumnRefSet otherColumns = new ColumnRefSet();
             other.hashDistributionDesc.getColumns().forEach(otherColumns::union);
             if (propertyInfo.nullableColumns.isIntersect(otherColumns)) {

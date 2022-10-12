@@ -1,9 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
 #ifdef __x86_64__
 #include <immintrin.h>
+#endif
+#if defined(__ARM_NEON__) || defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
 #endif
 
 #include <runtime/types.h>
@@ -36,6 +40,9 @@ public:
     static void merge_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected,
                                   bool* all_zero = nullptr);
 
+    // Like merge_filters but use OR operator to merge them
+    static void or_two_filters(Column::Filter* __restrict filter, const uint8_t* __restrict selected);
+    static void or_two_filters(size_t count, uint8_t* __restrict filter, const uint8_t* __restrict selected);
     static size_t count_nulls(const ColumnPtr& col);
 
     /**
@@ -127,8 +134,7 @@ public:
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(const TypeDescriptor& dst_type_desc, bool dst_nullable,
-                                            const ColumnPtr& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -151,6 +157,14 @@ public:
         }
     }
 
+    // Cast to Nullable
+    static ColumnPtr cast_to_nullable_column(const ColumnPtr& src_column) {
+        if (src_column->is_nullable()) {
+            return src_column;
+        }
+        return NullableColumn::create(src_column, NullColumn::create(src_column->size(), 0));
+    }
+
     // Move the source column according to the specific dest type and nullable.
     static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                  int num_rows) {
@@ -158,13 +172,13 @@ public:
             return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
         }
 
-        return update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        return update_column_nullable(dst_nullable, src_column, num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static ColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
                                   int num_rows) {
-        auto dst_column = update_column_nullable(dst_type_desc, dst_nullable, src_column, num_rows);
+        auto dst_column = update_column_nullable(dst_nullable, src_column, num_rows);
         return dst_column->clone_shared();
     }
 
@@ -226,6 +240,22 @@ public:
     }
 
     template <PrimitiveType Type>
+    static inline const RunTimeCppType<Type>* unpack_cpp_data_one_value(const Column* input_column) {
+        using ColumnType = RunTimeColumnType<Type>;
+        DCHECK(input_column->size() == 1);
+        if (input_column->has_null()) return nullptr;
+        if (input_column->is_constant()) {
+            const auto* const_column = down_cast<const ConstColumn*>(input_column);
+            return down_cast<const ColumnType*>(const_column->data_column().get())->get_data().data();
+        } else if (input_column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
+            return down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data().data();
+        } else {
+            return down_cast<const ColumnType*>(input_column)->get_data().data();
+        }
+    }
+
+    template <PrimitiveType Type>
     static inline RunTimeCppType<Type> get_const_value(const Column* col) {
         const ColumnPtr& c = as_raw_column<ConstColumn>(col)->data_column();
         return cast_to_raw<Type>(c)->get_data()[0];
@@ -282,7 +312,7 @@ public:
 
 #ifdef __AVX2__
         const uint8_t* f_data = filter.data();
-        size_t data_type_size = sizeof(T);
+        constexpr size_t data_type_size = sizeof(T);
 
         constexpr size_t kBatchNums = 256 / (8 * sizeof(uint8_t));
         const __m256i all0 = _mm256_setzero_si256();
@@ -309,6 +339,36 @@ public:
 
             start_offset += kBatchNums;
         }
+#elif defined(__ARM_NEON__) || defined(__aarch64__)
+        const uint8_t* f_data = filter.data() + from;
+        constexpr size_t data_type_size = sizeof(T);
+
+        constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
+        while (start_offset + kBatchNums < to) {
+            uint8x16_t filter = vld1q_u8(f_data);
+            if (vmaxvq_u8(filter) == 0) {
+                // skip
+            } else if (vminvq_u8(filter)) {
+                memmove(data + result_offset, data + start_offset, kBatchNums * data_type_size);
+                result_offset += kBatchNums;
+            } else {
+                for (int i = 0; i < kBatchNums; ++i) {
+                    // the index for vgetq_lane_u8 should be a literal integer
+                    // but in ASAN/DEBUG the loop is unrolled. so we won't call vgetq_lane_u8
+                    // in ASAN/DEBUG
+#ifndef NDEBUG
+                    if (vgetq_lane_u8(filter, i)) {
+#else
+                    if (f_data[i]) {
+#endif
+                        *(data + result_offset++) = *(data + start_offset + i);
+                    }
+                }
+            }
+
+            start_offset += kBatchNums;
+            f_data += kBatchNums;
+        }
 #endif
         for (auto i = start_offset; i < to; ++i) {
             if (filter[i]) {
@@ -332,6 +392,18 @@ public:
     static NullColumnPtr one_size_not_null_column;
 
     static NullColumnPtr one_size_null_column;
+};
+
+// Hold a slice of chunk
+struct ChunkSlice {
+    ChunkUniquePtr chunk;
+    size_t offset = 0;
+
+    bool empty() const;
+    size_t rows() const;
+    size_t skip(size_t skip_rows);
+    vectorized::ChunkPtr cutoff(size_t required_rows);
+    void reset(vectorized::ChunkUniquePtr input);
 };
 
 } // namespace starrocks::vectorized

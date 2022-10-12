@@ -1,8 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
-
-import com.starrocks.system.SystemInfoService;
 
 public class StatsConstants {
     public static final long DEFAULT_ALL_ID = -1;
@@ -11,14 +9,15 @@ public class StatsConstants {
     public static final int STATISTIC_DICT_VERSION = 101;
     public static final int STATISTIC_HISTOGRAM_VERSION = 2;
 
-    public static final String STATISTICS_DB_NAME = SystemInfoService.DEFAULT_CLUSTER + ":" + "_statistics_";
+    public static final String STATISTICS_DB_NAME = "_statistics_";
     public static final String SAMPLE_STATISTICS_TABLE_NAME = "table_statistic_v1";
     public static final String FULL_STATISTICS_TABLE_NAME = "column_statistics";
     public static final String HISTOGRAM_STATISTICS_TABLE_NAME = "histogram_statistics";
 
-    public static final String INFORMATION_SCHEMA = SystemInfoService.DEFAULT_CLUSTER + ":information_schema";
+    public static final String INFORMATION_SCHEMA = "information_schema";
 
     public static final int CROSS_JOIN_COST_PENALTY = 100000000;
+    public static final int CROSS_JOIN_RIGHT_COST_PENALTY = 1000 * 10000;
     public static final int BROADCAST_JOIN_MEM_EXCEED_PENALTY = 1000;
 
     //Statistics collection threshold
@@ -27,7 +26,7 @@ public class StatsConstants {
 
     //Histogram Statistics properties
     public static final String HISTOGRAM_BUCKET_NUM = "histogram_bucket_num";
-    public static final String HISTOGRAM_TOPN_SIZE = "histogram_topn_size";
+    public static final String HISTOGRAM_MCV_SIZE = "histogram_mcv_size";
     public static final String HISTOGRAM_SAMPLE_RATIO = "histogram_sample_ratio";
 
     /**

@@ -331,7 +331,7 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
 
-        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "test", "default_cluster", 1L, 1L, "host:port",
+        KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "test", 1L, 1L, "host:port",
                 "topic");
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList =
                 Deencapsulation.getField(routineLoadJob, "routineLoadTaskInfoList");
@@ -405,7 +405,7 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo3);
 
         KafkaRoutineLoadJob routineLoadJob =
-                new KafkaRoutineLoadJob(1L, "test", "default_cluster", 1L, 1L, "host:port", "topic");
+                new KafkaRoutineLoadJob(1L, "test", 1L, 1L, "host:port", "topic");
         List<RoutineLoadTaskInfo> routineLoadTaskInfoList =
                 Deencapsulation.getField(routineLoadJob, "routineLoadTaskInfoList");
         Map<Integer, Long> partitionIdToOffset = Maps.newHashMap();
@@ -659,39 +659,39 @@ public class GlobalTransactionMgrTest {
             }
         };
         Config.label_keep_max_second = 1;
-        long DB_ID = 1;
-        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(DB_ID).getTransactionNum());
+        long dbId = 1;
+        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         // 1. replay a normal finished transaction
         TransactionState state =
-                new TransactionState(DB_ID, new ArrayList<>(), 1, "label_a", null, LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState(dbId, new ArrayList<>(), 1, "label_a", null, LoadJobSourceType.BACKEND_STREAMING,
                         transactionSource, -1, -1);
         state.setTransactionStatus(TransactionStatus.ABORTED);
         state.setReason("fake reason");
         state.setFinishTime(System.currentTimeMillis() - 2000);
         masterTransMgr.replayUpsertTransactionState(state);
-        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(DB_ID).getTransactionNum());
+        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         // 2. replay a expired transaction
         TransactionState state2 =
-                new TransactionState(DB_ID, new ArrayList<>(), 2, "label_b", null, LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState(dbId, new ArrayList<>(), 2, "label_b", null, LoadJobSourceType.BACKEND_STREAMING,
                         transactionSource, -1, -1);
         state2.setTransactionStatus(TransactionStatus.ABORTED);
         state2.setReason("fake reason");
         state2.setFinishTime(System.currentTimeMillis());
         masterTransMgr.replayUpsertTransactionState(state2);
-        Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(DB_ID).getTransactionNum());
+        Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         Thread.sleep(2000);
         // 3. replay a valid transaction, let state expire
         TransactionState state3 =
-                new TransactionState(DB_ID, new ArrayList<>(), 3, "label_c", null, LoadJobSourceType.BACKEND_STREAMING,
+                new TransactionState(dbId, new ArrayList<>(), 3, "label_c", null, LoadJobSourceType.BACKEND_STREAMING,
                         transactionSource, -1, -1);
         state3.setTransactionStatus(TransactionStatus.ABORTED);
         state3.setReason("fake reason");
         state3.setFinishTime(System.currentTimeMillis());
         masterTransMgr.replayUpsertTransactionState(state3);
-        Assert.assertEquals(2, masterTransMgr.getDatabaseTransactionMgr(DB_ID).getTransactionNum());
+        Assert.assertEquals(2, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
 
         // 4. write (state, state2) to image
         File tempFile = File.createTempFile("GlobalTransactionMgrTest", ".image");
@@ -700,15 +700,15 @@ public class GlobalTransactionMgrTest {
         masterTransMgr.write(dos);
         dos.close();
 
-        masterTransMgr.removeDatabaseTransactionMgr(DB_ID);
-        masterTransMgr.addDatabaseTransactionMgr(DB_ID);
+        masterTransMgr.removeDatabaseTransactionMgr(dbId);
+        masterTransMgr.addDatabaseTransactionMgr(dbId);
 
         // 4. read & check if expired
         DataInputStream dis = new DataInputStream(new FileInputStream(tempFile));
-        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(DB_ID).getTransactionNum());
+        Assert.assertEquals(0, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         masterTransMgr.readFields(dis);
         dis.close();
-        Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(DB_ID).getTransactionNum());
+        Assert.assertEquals(1, masterTransMgr.getDatabaseTransactionMgr(dbId).getTransactionNum());
         tempFile.delete();
     }
 

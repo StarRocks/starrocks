@@ -40,7 +40,6 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker.ThrowingRunnable;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -55,7 +54,6 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionStatus;
-
 import junit.framework.AssertionFailedError;
 import mockit.Expectations;
 import mockit.Mock;
@@ -76,7 +74,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-abstract public class StarRocksHttpTestCase {
+public abstract class StarRocksHttpTestCase {
 
     public OkHttpClient networkClient = new OkHttpClient.Builder()
             .readTimeout(100, TimeUnit.SECONDS)
@@ -86,7 +84,6 @@ abstract public class StarRocksHttpTestCase {
 
     private static HttpServer httpServer;
 
-    public static final String CLUSTER_NAME = "default_cluster";
     public static final String DB_NAME = "testDb";
     public static final String TABLE_NAME = "testTbl";
 
@@ -233,7 +230,7 @@ abstract public class StarRocksHttpTestCase {
 
                     globalStateMgr.getDbNames();
                     minTimes = 0;
-                    result = Lists.newArrayList("default_cluster:testDb");
+                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getLoadInstance();
                     minTimes = 0;
@@ -300,7 +297,7 @@ abstract public class StarRocksHttpTestCase {
 
                     globalStateMgr.getDbNames();
                     minTimes = 0;
-                    result = Lists.newArrayList("default_cluster:testDb");
+                    result = Lists.newArrayList("testDb");
 
                     globalStateMgr.getLoadInstance();
                     minTimes = 0;
@@ -323,7 +320,7 @@ abstract public class StarRocksHttpTestCase {
                     minTimes = 0;
                     result = db;
 
-                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "default_cluster:testDb", "testTbl");
+                    globalStateMgr.getMetadataMgr().getTable("default_catalog", "testDb", "testTbl");
                     minTimes = 0;
                     result = table;
                 }

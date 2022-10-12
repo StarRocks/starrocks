@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import com.google.common.collect.Maps;
@@ -60,6 +60,10 @@ public class ExecPlan {
 
     public ArrayList<PlanFragment> getFragments() {
         return fragments;
+    }
+
+    public PlanFragment getTopFragment() {
+        return fragments.get(0);
     }
 
     public DescriptorTable getDescTbl() {

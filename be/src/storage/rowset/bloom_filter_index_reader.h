@@ -27,6 +27,7 @@
 #include "common/status.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
@@ -46,12 +47,8 @@ class BloomFilterIndexReader {
     friend class BloomFilterIndexIterator;
 
 public:
-    BloomFilterIndexReader()
-            : _load_once(),
-              _typeinfo(),
-              _algorithm(BLOCK_BLOOM_FILTER),
-              _hash_strategy(HASH_MURMUR3_X64_64),
-              _bloom_filter_reader() {}
+    BloomFilterIndexReader();
+    ~BloomFilterIndexReader();
 
     // Multiple callers may call this method concurrently, but only the first one
     // can load the data, the others will wait until the first one finished loading
@@ -68,7 +65,15 @@ public:
 
     const TypeInfoPtr& type_info() const { return _typeinfo; }
 
-    size_t mem_usage() const {
+    bool loaded() const { return invoked(_load_once); }
+
+private:
+    Status _do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
+                    bool kept_in_memory);
+
+    void _reset();
+
+    size_t _mem_usage() const {
         size_t size = sizeof(BloomFilterIndexReader);
         if (_bloom_filter_reader != nullptr) {
             size += _bloom_filter_reader->mem_usage();
@@ -76,16 +81,10 @@ public:
         return size;
     }
 
-    bool loaded() const { return invoked(_load_once); }
-
-private:
-    Status do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory);
-
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
-    BloomFilterAlgorithmPB _algorithm;
-    HashStrategyPB _hash_strategy;
+    BloomFilterAlgorithmPB _algorithm = BLOCK_BLOOM_FILTER;
+    HashStrategyPB _hash_strategy = HASH_MURMUR3_X64_64;
     std::unique_ptr<IndexedColumnReader> _bloom_filter_reader;
 };
 

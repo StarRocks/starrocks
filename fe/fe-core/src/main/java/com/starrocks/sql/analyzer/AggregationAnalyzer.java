@@ -1,6 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.google.common.base.Preconditions;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
@@ -27,8 +28,8 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
-import com.starrocks.analysis.SysVariableDesc;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
@@ -119,7 +120,8 @@ public class AggregationAnalyzer {
 
             if (groupingFields.contains(fieldId)) {
                 return true;
-            } else if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(), SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
+            } else if (!SqlModeHelper.check(session.getSessionVariable().getSqlMode(),
+                    SqlModeHelper.MODE_ONLY_FULL_GROUP_BY)) {
                 if (!analyzeState.getColumnNotInGroupBy().contains(node)) {
                     analyzeState.getColumnNotInGroupBy().add(node);
                 }
@@ -192,7 +194,10 @@ public class AggregationAnalyzer {
 
         @Override
         public Boolean visitExistsPredicate(ExistsPredicate node, Void context) {
-            return visit(node.getSubquery());
+            List<Subquery> subqueries = Lists.newArrayList();
+            node.collect(Subquery.class, subqueries);
+            Preconditions.checkState(subqueries.size() == 1, "Exist must have exact one subquery");
+            return visit(subqueries.get(0));
         }
 
         @Override
@@ -274,7 +279,7 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitSysVariableDesc(SysVariableDesc node, Void context) {
+        public Boolean visitVariableExpr(VariableExpr node, Void context) {
             return true;
         }
 

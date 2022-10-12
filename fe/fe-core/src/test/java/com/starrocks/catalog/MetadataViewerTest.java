@@ -23,11 +23,11 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate.Operator;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.backup.CatalogMocker;
 import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;

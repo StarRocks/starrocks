@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.server;
 
@@ -47,7 +47,7 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         List<String> internalListDbs = metadataMgr.listDbNames("default_catalog");
-        Assert.assertTrue(internalListDbs.contains("default_cluster:db1"));
+        Assert.assertTrue(internalListDbs.contains("db1"));
 
         List<String> externalListDbs = metadataMgr.listDbNames("hive_catalog");
         Assert.assertTrue(externalListDbs.contains("db2"));
@@ -65,13 +65,13 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        List<String> internalTables = metadataMgr.listTableNames("default_catalog", "default_cluster:db1");
+        List<String> internalTables = metadataMgr.listTableNames("default_catalog", "db1");
         Assert.assertTrue(internalTables.contains("tbl1"));
         try {
-            metadataMgr.listTableNames("default_catalog", "default_cluster:db2");
+            metadataMgr.listTableNames("default_catalog", "db2");
             Assert.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Database default_cluster:db2 doesn't exist"));
+            Assert.assertTrue(e.getMessage().contains("Database db2 doesn't exist"));
         }
 
 
@@ -92,7 +92,7 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        com.starrocks.catalog.Database database = metadataMgr.getDb("default_catalog", "default_cluster:db1");
+        com.starrocks.catalog.Database database = metadataMgr.getDb("default_catalog", "db1");
         Assert.assertNotNull(database);
         database = metadataMgr.getDb("default_catalog", "db1");
         Assert.assertNotNull(database);
@@ -130,7 +130,7 @@ public class MetadataMgrTest {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default_catalog", "default_cluster:db1", "tbl1");
+        com.starrocks.catalog.Table internalTable = metadataMgr.getTable("default_catalog", "db1", "tbl1");
         Assert.assertNotNull(internalTable);
         Assert.assertNull(metadataMgr.getTable("default_catalog", "not_exist_db", "xxx"));
         Assert.assertNull(metadataMgr.getTable("default_catalog", "db1", "not_exist_table"));

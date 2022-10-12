@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.server.GlobalStateMgr;
@@ -36,6 +37,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -106,7 +108,7 @@ public class HiveTableTest {
         properties.put("resource", resourceName);
         HiveTable table = new HiveTable(1000, "hive_table", columns, properties);
         Assert.assertEquals(hiveTable, table.getTableName());
-        Assert.assertEquals(hiveDb, table.getHiveDb());
+        Assert.assertEquals(hiveDb, table.getDbName());
         Assert.assertEquals(String.format("%s.%s", hiveDb, hiveTable), table.getHiveDbTable());
         Assert.assertEquals(hdfsPath, table.getHdfsPath());
         Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table.getPartitionColumns());
@@ -134,7 +136,51 @@ public class HiveTableTest {
     }
 
     @Test
-    public void testHiveColumnConvert() {
+    public void testHiveColumnConvert() throws DdlException {
+        // test case for hiveType from hms
         Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("BINARY", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("uniontype<int,double>", Type.UNKNOWN_TYPE));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("array<struct<col_int:int>>", Type.UNKNOWN_TYPE));
+        ScalarType keyType = ScalarType.createType(PrimitiveType.INT);
+        ScalarType valueType = ScalarType.createType(PrimitiveType.BIGINT);
+        MapType mapType = new MapType(keyType, valueType);
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("map<int,bigint>", mapType));
+        Assert.assertTrue(HiveMetaStoreTableUtils.validateColumnType("struct<col_int:int>", Type.UNKNOWN_TYPE));
+        // test case for hiveType mis input
+        Assert.assertEquals(Type.UNKNOWN_TYPE,
+                ColumnTypeConverter.fromHiveType("array<brray<int>>"));
+    }
+
+    @Test
+    public void testIsRefreshColumn() throws DdlException {
+        HiveTable hiveTable = new HiveTable();
+        FieldSchema col1Schema = new FieldSchema("col1", "BIGINT", "");
+        List<Column> columns = Lists.newArrayList();
+        Type srType = ColumnTypeConverter.fromHiveType(col1Schema.getType());
+        Column column = new Column(col1Schema.getName(), srType, true);
+        columns.add(column);
+        hiveTable.setNewFullSchema(columns);
+
+        Map<String, FieldSchema> col1HiveSchemaMap = new HashMap<>();
+        col1HiveSchemaMap.put(col1Schema.getName(), col1Schema);
+        // no fresh
+        Assert.assertFalse(hiveTable.isRefreshColumn(Lists.newArrayList(col1Schema)));
+
+        FieldSchema col2Schema = new FieldSchema("col2", "BIGINT", "");
+        Map<String, FieldSchema> col2HiveSchemaMap = new HashMap<>();
+        col2HiveSchemaMap.put(col2Schema.getName(), col2Schema);
+        // different col name
+        Assert.assertTrue(hiveTable.isRefreshColumn(Lists.newArrayList(col2Schema)));
+
+        // different col type
+        FieldSchema col3Schema = new FieldSchema("col2", "INT", "");
+        Map<String, FieldSchema> col3HiveSchemaMap = new HashMap<>();
+        col2HiveSchemaMap.put(col3Schema.getName(), col3Schema);
+        Assert.assertTrue(hiveTable.isRefreshColumn(Lists.newArrayList(col3Schema)));
+
+        col1HiveSchemaMap.put(col3Schema.getName(), col3Schema);
+        // different col size
+        col2HiveSchemaMap.put(col1Schema.getName(), col1Schema);
+        Assert.assertTrue(hiveTable.isRefreshColumn(Lists.newArrayList(col1Schema, col3Schema)));
     }
 }

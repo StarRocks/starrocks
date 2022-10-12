@@ -26,6 +26,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.io.EOFException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
@@ -34,6 +35,8 @@ import java.nio.charset.Charset;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CharsetEncoder;
 import java.nio.charset.CodingErrorAction;
+import java.util.zip.CheckedInputStream;
+import java.util.zip.CheckedOutputStream;
 
 /**
  * This class stores text using standard UTF8 encoding. It provides methods to
@@ -49,7 +52,7 @@ import java.nio.charset.CodingErrorAction;
 public class Text implements Writable {
     private static final Logger LOG = LogManager.getLogger(Text.class);
 
-    private static ThreadLocal<CharsetEncoder> ENCODER_FACTORY = new ThreadLocal<CharsetEncoder>() {
+    private static final ThreadLocal<CharsetEncoder> ENCODER_FACTORY = new ThreadLocal<CharsetEncoder>() {
         protected CharsetEncoder initialValue() {
             return Charset.forName("UTF-8").newEncoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
@@ -57,7 +60,7 @@ public class Text implements Writable {
         }
     };
 
-    private static ThreadLocal<CharsetDecoder> DECODER_FACTORY = new ThreadLocal<CharsetDecoder>() {
+    private static final ThreadLocal<CharsetDecoder> DECODER_FACTORY = new ThreadLocal<CharsetDecoder>() {
         protected CharsetDecoder initialValue() {
             return Charset.forName("UTF-8").newDecoder()
                     .onMalformedInput(CodingErrorAction.REPORT)
@@ -403,12 +406,42 @@ public class Text implements Writable {
     }
 
     /**
+     * Same as writeString(), but to a CheckedOutputStream
+     */
+    public static int writeStringWithChecksum(CheckedOutputStream cos, String s) throws IOException {
+        ByteBuffer byteBuffer = encode(s);
+        int length = byteBuffer.limit();
+        byte[] bytes = ByteBuffer.allocate(4).putInt(length).array();
+        cos.write(bytes);
+        cos.write(byteBuffer.array(), 0, length);
+        return length;
+    }
+
+    private static void readAndCheckEof(CheckedInputStream in, byte[] bytes, int expectLength) throws IOException {
+        int readRet = in.read(bytes, 0, expectLength);
+        if (readRet != expectLength) {
+            throw new EOFException(String.format("reach EOF: read expect %d actual %d!", expectLength, readRet));
+        }
+    }
+    /**
+     * Same as readString(), but to a CheckedInputStream
+     */
+    public static String readStringWithChecksum(CheckedInputStream in) throws IOException {
+        byte[] bytes = new byte[4];
+        readAndCheckEof(in, bytes, 4);
+        int length = ByteBuffer.wrap(bytes).getInt();
+        bytes = new byte[length];
+        readAndCheckEof(in, bytes, length);
+        return decode(bytes);
+    }
+
+    /**
      * Magic numbers for UTF-8. These are the number of bytes that
      * <em>follow</em> a given lead byte. Trailing bytes have the value -1. The
      * values 4 and 5 are presented in this table, even though valid UTF-8
      * cannot include the five and six byte sequences.
      */
-    static final int[] bytesFromUTF8 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    static final int[] BYTES_FROM_UTF_8 = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -438,7 +471,7 @@ public class Text implements Writable {
         bytes.mark();
         byte b = bytes.get();
         bytes.reset();
-        int extraBytesToRead = bytesFromUTF8[(b & 0xFF)];
+        int extraBytesToRead = BYTES_FROM_UTF_8[(b & 0xFF)];
         if (extraBytesToRead < 0) {
             return -1; // trailing byte!
         }
@@ -463,11 +496,11 @@ public class Text implements Writable {
             case 0:
                 ch += (bytes.get() & 0xFF);
         }
-        ch -= offsetsFromUTF8[extraBytesToRead];
+        ch -= OFFSETS_FROM_UTF_8[extraBytesToRead];
 
         return ch;
     }
 
-    static final int[] offsetsFromUTF8 = {0x00000000, 0x00003080, 0x000E2080,
+    static final int[] OFFSETS_FROM_UTF_8 = {0x00000000, 0x00003080, 0x000E2080,
             0x03C82080, 0xFA082080, 0x82082080};
 }

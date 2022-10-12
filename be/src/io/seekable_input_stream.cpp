@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "io/seekable_input_stream.h"
 
@@ -20,5 +20,7 @@ Status SeekableInputStream::skip(int64_t count) {
     ASSIGN_OR_RETURN(auto pos, position());
     return seek(pos + count);
 }
+
+void SeekableInputStream::set_size(int64_t count) {}
 
 } // namespace starrocks::io

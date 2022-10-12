@@ -115,6 +115,8 @@ public:
 private:
     friend class DataStreamMgr;
     class SenderQueue;
+    class NonPipelineSenderQueue;
+    class PipelineSenderQueue;
 
     DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtime_state, const RowDescriptor& row_desc,
                     const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int num_senders, bool is_merging,
@@ -146,7 +148,7 @@ private:
     // soft upper limit on the total amount of buffering allowed for this stream across
     // all sender queues. we stop acking incoming data once the amount of buffered data
     // exceeds this value
-    int _total_buffer_limit;
+    size_t _total_buffer_limit;
 
     // Row schema, copied from the caller of CreateRecvr().
     RowDescriptor _row_desc;
@@ -156,7 +158,7 @@ private:
     bool _is_merging;
 
     // total number of bytes held across all sender queues.
-    std::atomic<int> _num_buffered_bytes{0};
+    std::atomic<size_t> _num_buffered_bytes{0};
 
     // One or more queues of row batches received from senders. If _is_merging is true,
     // there is one SenderQueue for each sender. Otherwise, row batches from all senders
@@ -192,12 +194,15 @@ private:
     // Formula is: cumulative_time / _degree_of_parallelism, so the estimation may
     // not be that accurate, but enough to expose problems in profile analysis
     RuntimeProfile::Counter* _closure_block_timer;
+    RuntimeProfile::Counter* _closure_block_counter;
     RuntimeProfile::Counter* _process_total_timer = nullptr;
 
     // Total spent for senders putting data in the queue
     // TODO(hcf) remove these two metrics after non-pipeline offlined
     RuntimeProfile::Counter* _sender_total_timer = nullptr;
     RuntimeProfile::Counter* _sender_wait_lock_timer = nullptr;
+
+    RuntimeProfile::Counter* _buffer_unplug_counter = nullptr;
 
     // Sub plan query statistics receiver.
     std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr;

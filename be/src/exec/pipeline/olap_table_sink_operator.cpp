@@ -1,12 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/olap_table_sink_operator.h"
 
-#include "column/chunk.h"
 #include "exec/tablet_sink.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/exec_env.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"

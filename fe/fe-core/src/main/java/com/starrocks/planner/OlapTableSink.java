@@ -77,6 +77,7 @@ import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -94,12 +95,19 @@ public class OlapTableSink extends DataSink {
     // set after init called
     private TDataSink tDataSink;
 
+    private boolean enablePipelineLoad;
+
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds) {
+        this(dstTable, tupleDescriptor, partitionIds, true);
+    }
+
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, boolean enablePipelineLoad) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
+        this.enablePipelineLoad = enablePipelineLoad;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS) throws AnalysisException {
@@ -115,6 +123,7 @@ public class OlapTableSink extends DataSink {
         tSink.setDb_id(dbId);
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
         tSink.setIs_lake_table(dstTable.isLakeTable());
+        tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
@@ -136,6 +145,7 @@ public class OlapTableSink extends DataSink {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
 
         tSink.setTable_id(dstTable.getId());
+        tSink.setTable_name(dstTable.getName());
         tSink.setTuple_id(tupleDescriptor.getId().asInt());
         int numReplicas = 1;
         for (Partition partition : dstTable.getPartitions()) {
@@ -154,6 +164,7 @@ public class OlapTableSink extends DataSink {
     public String getExplainString(String prefix, TExplainLevel explainLevel) {
         StringBuilder strBuilder = new StringBuilder();
         strBuilder.append(prefix + "OLAP TABLE SINK\n");
+        strBuilder.append(prefix + "  TABLE: " + dstTable.getName() + "\n");
         strBuilder.append(prefix + "  TUPLE ID: " + tupleDescriptor.getId() + "\n");
         strBuilder.append(prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel));
         return strBuilder.toString();
@@ -206,14 +217,6 @@ public class OlapTableSink extends DataSink {
                 HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distInfo;
                 for (Column column : hashDistributionInfo.getDistributionColumns()) {
                     distColumns.add(column.getName());
-                }
-                break;
-            }
-            case RANDOM: {
-                for (Column column : table.getBaseSchema()) {
-                    if (column.isKey()) {
-                        distColumns.add(column.getName());
-                    }
                 }
                 break;
             }
@@ -342,9 +345,12 @@ public class OlapTableSink extends DataSink {
                                             + tablet.getId() + ", backends: " +
                                             Joiner.on(",").join(localTablet.getBackends()));
                         }
+                        // replicas[0] will be the primary replica
+                        List<Long> replicas = Lists.newArrayList(bePathsMap.keySet());
+                        Collections.shuffle(replicas);
                         locationParam
                                 .addToTablets(
-                                        new TTabletLocation(tablet.getId(), Lists.newArrayList(bePathsMap.keySet())));
+                                        new TTabletLocation(tablet.getId(), replicas));
                         allBePathsMap.putAll(bePathsMap);
                     }
                 }
@@ -371,7 +377,7 @@ public class OlapTableSink extends DataSink {
     }
 
     public boolean canUsePipeLine() {
-        return Config.enable_pipeline_load;
+        return Config.enable_pipeline_load && enablePipelineLoad;
     }
 }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.meta;
 
@@ -15,10 +15,10 @@ import java.util.regex.Pattern;
 
 // Used by sql's blacklist
 public class SqlBlackList {
-    private static final SqlBlackList instance = new SqlBlackList();
+    private static final SqlBlackList INSTANCE = new SqlBlackList();
 
     public static SqlBlackList getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public static void verifying(String sql) throws AnalysisException {

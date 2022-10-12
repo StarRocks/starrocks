@@ -1,9 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
-import avro.shaded.com.google.common.collect.ImmutableList;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -35,11 +35,11 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.Group;
 import com.starrocks.sql.optimizer.JoinHelper;
-import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -110,7 +110,6 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mortbay.log.Log;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -309,15 +308,19 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 Map<String, HiveColumnStats> hiveColumnStatisticMap =
                         tableWithStats.getTableLevelColumnStats(requiredColumns.stream().
                                 map(ColumnRefOperator::getName).collect(Collectors.toList()));
+                optimizerContext.getDumpInfo().getHMSTable(tableWithStats.getResourceName(),
+                                tableWithStats.getDbName(), tableWithStats.getTableName()).
+                        addTableLevelColumnStats(hiveColumnStatisticMap);
+
                 List<HiveColumnStats> hiveColumnStatisticList = requiredColumns.stream().map(requireColumn ->
                                 computeHiveColumnStatistics(requireColumn, hiveColumnStatisticMap.get(requireColumn.getName())))
                         .collect(Collectors.toList());
-                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats -> {
-                    return hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
-                            new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
-                                    hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
-                                    hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues());
-                }).collect(Collectors.toList());
+                columnStatisticList = hiveColumnStatisticList.stream().map(hiveColumnStats ->
+                                hiveColumnStats.isUnknown() ? ColumnStatistic.unknown() :
+                                        new ColumnStatistic(hiveColumnStats.getMinValue(), hiveColumnStats.getMaxValue(),
+                                                hiveColumnStats.getNumNulls() * 1.0 / Math.max(tableRowCount, 1),
+                                                hiveColumnStats.getAvgSize(), hiveColumnStats.getNumDistinctValues())).
+                        collect(Collectors.toList());
             } else {
                 LOG.warn("Session variable " + SessionVariable.ENABLE_HIVE_COLUMN_STATS + " is false");
             }
@@ -329,11 +332,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             }
         }
 
+        Statistics.Builder nativeBuilder = estimateScanColumns(table, colRefToColumnMetaMap);
+
         Preconditions.checkState(requiredColumns.size() == columnStatisticList.size());
         for (int i = 0; i < requiredColumns.size(); ++i) {
-            builder.addColumnStatistic(requiredColumns.get(i), columnStatisticList.get(i));
-            optimizerContext.getDumpInfo()
-                    .addTableStatistics(table, requiredColumns.get(i).getName(), columnStatisticList.get(i));
+            ColumnRefOperator columnRefOperator = requiredColumns.get(i);
+            ColumnStatistic columnStatistic = columnStatisticList.get(i);
+            // if column stats is unavailable from HMS, then use native column stats.
+            if (columnStatistic.isUnknown()) {
+                columnStatistic = nativeBuilder.getColumnStatistics(columnRefOperator);
+            }
+            builder.addColumnStatistic(columnRefOperator, columnStatistic);
         }
 
         return builder;
@@ -361,22 +370,14 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
         Preconditions.checkState(requiredColumnRefs.size() == columnStatisticList.size());
 
-        List<ColumnRefOperator> columnHasHistogram = new ArrayList<>();
-        for (ColumnRefOperator columnRefOperator : requiredColumnRefs) {
-            if (GlobalStateMgr.getCurrentAnalyzeMgr().getHistogramStatsMetaMap()
-                    .get(new Pair<>(table.getId(), columnRefOperator.getName())) != null) {
-                columnHasHistogram.add(columnRefOperator);
-            }
-        }
-
-        Map<ColumnRefOperator, Histogram> histogramStatistics =
-                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columnHasHistogram);
+        Map<String, Histogram> histogramStatistics =
+                GlobalStateMgr.getCurrentStatisticStorage().getHistogramStatistics(table, columns);
 
         for (int i = 0; i < requiredColumnRefs.size(); ++i) {
             ColumnStatistic columnStatistic;
-            if (histogramStatistics.containsKey(requiredColumnRefs.get(i))) {
+            if (histogramStatistics.containsKey(requiredColumnRefs.get(i).getName())) {
                 columnStatistic = ColumnStatistic.buildFrom(columnStatisticList.get(i)).setHistogram(
-                        histogramStatistics.get(requiredColumnRefs.get(i))).build();
+                        histogramStatistics.get(requiredColumnRefs.get(i).getName())).build();
             } else {
                 columnStatistic = columnStatisticList.get(i);
             }
@@ -496,7 +497,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 try {
                     rangeList = rangePartitionInfo.getSortedRangeMap(new HashSet<>(selectedPartitionId));
                 } catch (AnalysisException e) {
-                    Log.warn("get sorted range partition failed, msg : " + e.getMessage());
+                    LOG.warn("get sorted range partition failed, msg : " + e.getMessage());
                     return null;
                 }
                 if (rangeList.isEmpty()) {
@@ -578,12 +579,15 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
     private long computeHMSTableTableRowCount(Table table, Collection<Long> selectedPartitionIds,
                                               Map<Long, PartitionKey> idToPartitionKey) throws DdlException {
         HiveMetaStoreTable tableWithStats = (HiveMetaStoreTable) table;
+        HiveMetaStoreTableDumpInfo hiveMetaStoreTableDumpInfo = optimizerContext.getDumpInfo().getHMSTable(
+                tableWithStats.getResourceName(), tableWithStats.getDbName(), tableWithStats.getTableName());
 
         long numRows = -1;
         HiveTableStats tableStats = null;
         // 1. get row count from table stats
         try {
             tableStats = tableWithStats.getTableStats();
+            hiveMetaStoreTableDumpInfo.setHiveTableStats(tableStats);
         } catch (DdlException e) {
             LOG.warn("Table {} gets stats failed", table.getName(), e);
             throw e;
@@ -1358,14 +1362,34 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     private Void computeCTEConsume(Operator node, ExpressionContext context, int cteId,
                                    Map<ColumnRefOperator, ColumnRefOperator> columnRefMap) {
-        OptExpression produce = optimizerContext.getCteContext().getCTEProduce(cteId);
-        Statistics produceStatistics = produce.getGroupExpression().getGroup().getStatistics();
-        if (null == produceStatistics) {
-            produceStatistics = produce.getStatistics();
+        Optional<Statistics> produceStatisticsOp = optimizerContext.getCteContext().getCTEStatistics(cteId);
+
+        // The statistics of producer and children are equal theoretically, but statistics of children
+        // plan maybe more accurate in actually
+        if (!produceStatisticsOp.isPresent() && context.getChildrenStatistics().isEmpty()) {
+            Preconditions.checkState(false, "Impossible cte statistics");
         }
 
-        Preconditions.checkNotNull(produce.getStatistics());
+        if (!context.getChildrenStatistics().isEmpty()) {
+            //  use the statistics of children first
+            context.setStatistics(context.getChildStatistics(0));
+            Projection projection = node.getProjection();
+            if (projection != null) {
+                Statistics.Builder statisticsBuilder = Statistics.buildFrom(context.getStatistics());
+                Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());
+                for (ColumnRefOperator columnRefOperator : projection.getColumnRefMap().keySet()) {
+                    ScalarOperator mapOperator = projection.getColumnRefMap().get(columnRefOperator);
+                    statisticsBuilder.addColumnStatistic(columnRefOperator,
+                            ExpressionStatisticCalculator.calculate(mapOperator, context.getStatistics()));
+                }
+                context.setStatistics(statisticsBuilder.build());
+            }
+            return null;
+        }
 
+        // None children, may force CTE, use the statistics of producer
+        Preconditions.checkState(produceStatisticsOp.isPresent());
+        Statistics produceStatistics = produceStatisticsOp.get();
         Statistics.Builder builder = Statistics.builder();
         for (ColumnRefOperator ref : columnRefMap.keySet()) {
             ColumnRefOperator produceRef = columnRefMap.get(ref);
@@ -1380,13 +1404,17 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitLogicalCTEProduce(LogicalCTEProduceOperator node, ExpressionContext context) {
-        context.setStatistics(context.getChildStatistics(0));
+        Statistics statistics = context.getChildStatistics(0);
+        context.setStatistics(statistics);
+        optimizerContext.getCteContext().addCTEStatistics(node.getCteId(), context.getChildStatistics(0));
         return visitOperator(node, context);
     }
 
     @Override
     public Void visitPhysicalCTEProduce(PhysicalCTEProduceOperator node, ExpressionContext context) {
-        context.setStatistics(context.getChildStatistics(0));
+        Statistics statistics = context.getChildStatistics(0);
+        context.setStatistics(statistics);
+        optimizerContext.getCteContext().addCTEStatistics(node.getCteId(), context.getChildStatistics(0));
         return visitOperator(node, context);
     }
 

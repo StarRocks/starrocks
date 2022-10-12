@@ -131,7 +131,8 @@ public class LocalTabletTest {
         LocalTablet rTablet1 = LocalTablet.read(dis);
         Assert.assertEquals(1, rTablet1.getId());
         Assert.assertEquals(3, rTablet1.getImmutableReplicas().size());
-        Assert.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(), rTablet1.getImmutableReplicas().get(1).getVersion());
+        Assert.assertEquals(rTablet1.getImmutableReplicas().get(0).getVersion(),
+                rTablet1.getImmutableReplicas().get(1).getVersion());
 
         Assert.assertTrue(rTablet1.equals(tablet));
         Assert.assertTrue(rTablet1.equals(rTablet1));
@@ -161,7 +162,8 @@ public class LocalTabletTest {
         LocalTablet jTablet = GsonUtils.GSON.fromJson(jsonStr, LocalTablet.class);
         Assert.assertEquals(1, jTablet.getId());
         Assert.assertEquals(3, jTablet.getImmutableReplicas().size());
-        Assert.assertEquals(jTablet.getImmutableReplicas().get(0).getVersion(), jTablet.getImmutableReplicas().get(1).getVersion());
+        Assert.assertEquals(jTablet.getImmutableReplicas().get(0).getVersion(),
+                jTablet.getImmutableReplicas().get(1).getVersion());
     }
 
     @Test

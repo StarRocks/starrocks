@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
+import com.starrocks.sql.optimizer.operator.Projection;
 
 import java.util.Objects;
 
@@ -15,6 +16,12 @@ public class PhysicalNoCTEOperator extends PhysicalOperator {
     public PhysicalNoCTEOperator(int cteId) {
         super(OperatorType.PHYSICAL_NO_CTE);
         this.cteId = cteId;
+    }
+
+    public PhysicalNoCTEOperator(int cteId, Projection projection) {
+        super(OperatorType.PHYSICAL_NO_CTE);
+        this.cteId = cteId;
+        this.projection = projection;
     }
 
     public int getCteId() {
@@ -33,17 +40,7 @@ public class PhysicalNoCTEOperator extends PhysicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) {
-            return true;
-        }
-        if (o == null || getClass() != o.getClass()) {
-            return false;
-        }
-        if (!super.equals(o)) {
-            return false;
-        }
-        PhysicalNoCTEOperator that = (PhysicalNoCTEOperator) o;
-        return Objects.equals(cteId, that.cteId);
+        return false;
     }
 
     @Override

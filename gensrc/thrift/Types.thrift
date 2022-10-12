@@ -83,7 +83,8 @@ enum TPrimitiveType {
   DECIMAL32,
   DECIMAL64,
   DECIMAL128,
-  JSON
+  JSON,
+  FUNCTION
 }
 
 enum TTypeNodeType {
@@ -413,6 +414,7 @@ enum TLoadType {
 enum TLoadSourceType {
     RAW,
     KAFKA,
+    PULSAR
 }
 
 enum TOpType {

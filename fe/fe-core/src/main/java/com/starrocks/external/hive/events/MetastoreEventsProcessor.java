@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -158,9 +158,9 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     public void registerTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.put(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getTableName()), tbl);
+            tables.put(tbl.getResourceName(), new TableName(tbl.getDbName(), tbl.getTableName()), tbl);
             LOG.info("Succeed to register {}.{}.{} to Metastore event processor",
-                    tbl.getResourceName(), tbl.getHiveDb(), tbl.getTableName());
+                    tbl.getResourceName(), tbl.getDbName(), tbl.getTableName());
         } finally {
             tablesLock.writeLock().unlock();
         }
@@ -169,9 +169,9 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     public void unregisterTable(HiveTable tbl) {
         tablesLock.writeLock().lock();
         try {
-            tables.remove(tbl.getResourceName(), new TableName(tbl.getHiveDb(), tbl.getTableName()));
+            tables.remove(tbl.getResourceName(), new TableName(tbl.getDbName(), tbl.getTableName()));
             LOG.info("Succeed to remove {}.{}.{} from Metastore event processor",
-                    tbl.getResourceName(), tbl.getHiveDb(), tbl.getTableName());
+                    tbl.getResourceName(), tbl.getDbName(), tbl.getTableName());
         } finally {
             tablesLock.writeLock().unlock();
         }
@@ -209,8 +209,10 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
             throws MetastoreNotificationFetchException {
         Long lastSyncedEventId = null;
         try {
+            LOG.info("Start to pull events on resource [{}]", resourceName);
             HiveMetaClient client = hiveRepository.getClient(resourceName);
             if (client == null) {
+                LOG.warn("Client is null when pulling events on resource [{}]", resourceName);
                 return Collections.emptyList();
             }
 
@@ -218,18 +220,21 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
             // restart fe or just created hive table.
             if (lastSyncedEventId == null) {
                 lastSyncedEventIds.put(resourceName, client.getBaseHmsEventId());
+                LOG.info("Last synced event id is null when pulling events on resource [{}]", resourceName);
                 return Collections.emptyList();
             }
 
             CurrentNotificationEventId currentNotificationEventId = client.getCurrentNotificationEventId();
             long currentEventId = currentNotificationEventId.getEventId();
             if (currentEventId == lastSyncedEventId) {
+                LOG.info("Event id not updated when pulling events on resource [{}]", resourceName);
                 return Collections.emptyList();
             }
 
             int batchSize = getAllEvents ? -1 : Config.hms_events_batch_size_per_rpc;
             NotificationEventResponse response = client.getNextNotification(lastSyncedEventId, batchSize, null);
             if (response.getEvents().size() == 0) {
+                LOG.info("Event size is 0 when pulling events on resource [{}]", resourceName);
                 return Collections.emptyList();
             }
             LOG.info(String.format("Received %d events. Start event id : %d. Last synced id : %d on resource : %s",
@@ -342,7 +347,7 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
             return;
         }
 
-        LOG.debug("Notification events {} to be processed", events);
+        LOG.info("Notification events {} to be processed on resource [{}]", events, resourceName);
 
         if (Config.enable_hms_parallel_process_evens) {
             doExecuteWithPartialProgress(filteredEvents);
@@ -358,13 +363,14 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     protected void runAfterCatalogReady() {
         List<String> resources = Lists.newArrayList(tables.rowKeySet());
         resources.addAll(externalCatalogResources);
-
+        LOG.info("Start to pull [{}] events", resources);
         for (String resourceName : resources) {
             eventProcessorLock.writeLock().lock();
             List<NotificationEvent> events = Collections.emptyList();
             try {
                 events = getNextHMSEvents(resourceName);
                 if (!events.isEmpty()) {
+                    LOG.info("Events size are {} on resource [{}]", events.size(), resourceName);
                     processEvents(events, resourceName);
                 }
             } catch (MetastoreNotificationFetchException e) {

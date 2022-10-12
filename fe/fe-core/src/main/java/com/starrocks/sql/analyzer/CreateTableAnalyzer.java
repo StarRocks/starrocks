@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
@@ -6,12 +6,8 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.DistributionDesc;
-import com.starrocks.analysis.HashDistributionDesc;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
@@ -28,6 +24,10 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.external.elasticsearch.EsUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.HashDistributionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
@@ -45,13 +45,13 @@ import static com.starrocks.catalog.AggregateType.HLL_UNION;
 
 public class CreateTableAnalyzer {
 
-    private static final Logger logger = LoggerFactory.getLogger(CreateTableAnalyzer.class);
+    private static final Logger LOGGER = LoggerFactory.getLogger(CreateTableAnalyzer.class);
 
     private static final String DEFAULT_CHARSET_NAME = "utf8";
 
     private static final String DEFAULT_ENGINE_NAME = "olap";
 
-    private static final String elasticsearch = "elasticsearch";
+    private static final String ELASTICSEARCH = "elasticsearch";
 
     public enum EngineType {
         OLAP,
@@ -220,7 +220,7 @@ public class CreateTableAnalyzer {
             try {
                 columnDef.analyze(statement.isOlapOrLakeEngine());
             } catch (AnalysisException e) {
-                logger.error("Column definition analyze failed.", e);
+                LOGGER.error("Column definition analyze failed.", e);
                 throw new SemanticException(e.getMessage());
             }
 
@@ -284,7 +284,7 @@ public class CreateTableAnalyzer {
             statement.setDistributionDesc(distributionDesc);
             statement.setProperties(properties);
         } else {
-            if (engineName.equals(elasticsearch)) {
+            if (engineName.equals(ELASTICSEARCH)) {
                 EsUtil.analyzePartitionAndDistributionDesc(partitionDesc, distributionDesc);
             } else {
                 if (partitionDesc != null || distributionDesc != null) {

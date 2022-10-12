@@ -1,12 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
@@ -29,6 +29,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: t0\n" +
                 "    TUPLE ID: 1\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -42,6 +43,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: UNPARTITIONED\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: t0\n" +
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -61,6 +63,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  PARTITION: RANDOM\n" +
                 "\n" +
                 "  OLAP TABLE SINK\n" +
+                "    TABLE: t0\n" +
                 "    TUPLE ID: 2\n" +
                 "    RANDOM\n" +
                 "\n" +
@@ -224,7 +227,7 @@ public class InsertPlanTest extends PlanTestBase {
                 "  |  <slot 1> : 1: v1\n" +
                         "  |  <slot 6> : to_bitmap(CAST(1: v1 AS VARCHAR))\n" +
                         "  |  <slot 7> : CAST(2 AS BIGINT)\n" +
-                        "  |  <slot 8> : CAST(NULL AS BIGINT)\n"));
+                        "  |  <slot 8> : NULL\n"));
 
         explainString = getInsertExecPlan("insert into ti2 select * from ti2");
         Assert.assertTrue(explainString.contains("  1:Project\n" +
@@ -306,30 +309,37 @@ public class InsertPlanTest extends PlanTestBase {
                 "BUCKETS 3 " +
                 "PROPERTIES ( \"replication_num\" = \"1\", \"storage_format\" = \"v2\" );");
         String sql = "insert into duplicate_table_with_default values " +
-                "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, default, default, -18446744073709550633, default, default, -2.18);";
+                "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, " +
+                "default, default, -18446744073709550633, default, default, -2.18);";
         String explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("constant exprs: \n" +
-                "         '2020-06-25' | '2020-06-25 00:16:23' | 'beijing' | 'haidian' | FALSE | 87 | -31785 | 0 | 0 | -18446744073709550633 | -1.0 | 0.0 | -2.18"));
+                "         '2020-06-25' | '2020-06-25 00:16:23' | 'beijing' | 'haidian' | FALSE | " +
+                "87 | -31785 | 0 | 0 | -18446744073709550633 | -1.0 | 0.0 | -2.18"));
 
         // check multi rows value
         sql = "insert into duplicate_table_with_default values " +
-                "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, default, default, -18446744073709550633, default, default, -2.18), " +
-                "(default, '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, default, default, -18446744073709550633, default, default, -2.18)";
+                "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, " +
+                "default, default, -18446744073709550633, default, default, -2.18), " +
+                "(default, '2020-06-25 00:16:23', 'beijing', 'haidian', 0, 87, -31785, " +
+                "default, default, -18446744073709550633, default, default, -2.18)";
         explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("constant exprs: \n" +
-                "         '2020-06-25' | '2020-06-25 00:16:23' | 'beijing' | 'haidian' | FALSE | 87 | -31785 | 0 | 0 | -18446744073709550633 | -1.0 | 0.0 | -2.18\n" +
-                "         '1970-01-01' | '2020-06-25 00:16:23' | 'beijing' | 'haidian' | FALSE | 87 | -31785 | 0 | 0 | -18446744073709550633 | -1.0 | 0.0 | -2.18"));
+                "         '2020-06-25' | '2020-06-25 00:16:23' | 'beijing' | 'haidian' | FALSE " +
+                "| 87 | -31785 | 0 | 0 | -18446744073709550633 | -1.0 | 0.0 | -2.18\n" +
+                "         '1970-01-01' | '2020-06-25 00:16:23' | 'beijing' | 'haidian' | FALSE " +
+                "| 87 | -31785 | 0 | 0 | -18446744073709550633 | -1.0 | 0.0 | -2.18"));
 
         sql = "insert into duplicate_table_with_default values " +
-                "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', default, 87, -31785, default, default, -18446744073709550633, default, default, -2.18);";
+                "('2020-06-25', '2020-06-25 00:16:23', 'beijing', 'haidian', default, 87, -31785, " +
+                "default, default, -18446744073709550633, default, default, -2.18);";
         try {
             getInsertExecPlan(sql);
         } catch (SemanticException e) {
             Assert.assertTrue(e.getMessage().equals("Column has no default value, column=k5"));
         }
 
-        sql =
-                "insert into duplicate_table_with_default(K1,k2,k3) values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
+        sql = "insert into duplicate_table_with_default(K1,k2,k3) " +
+                        "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
     }
@@ -574,6 +584,7 @@ public class InsertPlanTest extends PlanTestBase {
             String sql = "explain insert into t0 select * from t0";
             String plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: t0\n" +
                     "    TUPLE ID: 1\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -584,6 +595,7 @@ public class InsertPlanTest extends PlanTestBase {
             sql = "explain insert into t0(v1, v2) select v1, v2 from t0;";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: t0\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -600,6 +612,7 @@ public class InsertPlanTest extends PlanTestBase {
             String sql = "explain insert into tprimary select * from tprimary";
             String plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: tprimary\n" +
                     "    TUPLE ID: 1\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -621,6 +634,7 @@ public class InsertPlanTest extends PlanTestBase {
             sql = "explain insert into tprimary select pk, min(v1), max(v2) from tprimary group by pk";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: tprimary\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -633,6 +647,7 @@ public class InsertPlanTest extends PlanTestBase {
             String sql = "explain insert into baseall select * from baseall";
             String plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: baseall\n" +
                     "    TUPLE ID: 1\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -641,33 +656,40 @@ public class InsertPlanTest extends PlanTestBase {
 
             // Group by columns is different from the key columns, so extra exchange is needed
             sql =
-                    "explain insert into baseall select min(k1), max(k2), min(k3), max(k4), min(k5), max(k6), min(k10), max(k11), min(k7), k8, k9 from baseall group by k8, k9";
+                    "explain insert into baseall select min(k1), max(k2), min(k3), max(k4), min(k5), max(k6), " +
+                            "min(k10), max(k11), min(k7), k8, k9 from baseall group by k8, k9";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  STREAM DATA SINK\n" +
                     "    EXCHANGE ID: 04\n" +
                     "    HASH_PARTITIONED: 12: min, 13: max, 14: min, 15: max, 16: min, 17: max, 18: min, 19: max, 20: min\n" +
                     "\n" +
                     "  3:AGGREGATE (merge finalize)\n" +
-                    "  |  output: max(17: max), min(18: min), max(19: max), min(20: min), min(12: min), max(13: max), min(14: min), max(15: max), min(16: min)\n" +
+                    "  |  output: max(17: max), min(18: min), max(19: max), min(20: min), " +
+                    "min(12: min), max(13: max), min(14: min), max(15: max), min(16: min)\n" +
                     "  |  group by: 10: k8, 11: k9");
 
             // Group by columns are compatible with the key columns, so there is no need to add extra exchange node
             sql =
-                    "explain insert into baseall select k1, k2, min(k3), max(k4), min(k5), max(k6), min(k10), max(k11), min(k7), min(k8), max(k9) from baseall group by k1, k2";
+                    "explain insert into baseall select k1, k2, min(k3), max(k4), min(k5), max(k6), " +
+                            "min(k10), max(k11), min(k7), min(k8), max(k9) from baseall group by k1, k2";
             plan = getInsertExecPlan(sql);
             assertContains(plan, "  OLAP TABLE SINK\n" +
+                    "    TABLE: baseall\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
                     "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: max(8: k11), min(9: k7), min(10: k8), max(11: k9), min(3: k3), max(4: k4), min(5: k5), max(6: k6), min(7: k10)\n" +
+                    "  |  output: max(8: k11), min(9: k7), min(10: k8), max(11: k9), min(3: k3), " +
+                    "max(4: k4), min(5: k5), max(6: k6), min(7: k10)\n" +
                     "  |  group by: 1: k1, 2: k2");
 
             // Group by columns are compatible with the key columns, so there is no need to add extra exchange node
             sql =
-                    "explain insert into baseall select k1, k2, k3, k4, k5, k6, k10, k11, k7, min(k8), max(k9) from baseall group by k1, k2, k3, k4, k5, k6, k10, k11, k7";
+                    "explain insert into baseall select k1, k2, k3, k4, k5, k6, k10, k11, k7, min(k8), " +
+                            "max(k9) from baseall group by k1, k2, k3, k4, k5, k6, k10, k11, k7";
             plan = getInsertExecPlan(sql);
-            assertContains(plan, "  OLAP TABLE SINK\n" +
+            assertContains(plan, " OLAP TABLE SINK\n" +
+                    "    TABLE: baseall\n" +
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
@@ -677,5 +699,41 @@ public class InsertPlanTest extends PlanTestBase {
         }
         InsertPlanner.enableSingleReplicationShuffle = false;
         FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testInsertSelectWithConstant() throws Exception {
+        String explainString = getInsertExecPlan("insert into tarray select 1,null,null from tarray");
+        System.out.printf("%s\n", explainString);
+        Assert.assertTrue(explainString.contains("PLAN FRAGMENT 0\n" +
+                " OUTPUT EXPRS:7: v1 | 8: v2 | 9: v3\n" +
+                "  PARTITION: RANDOM\n" +
+                "\n" +
+                "  OLAP TABLE SINK\n" +
+                "    TABLE: tarray\n" +
+                "    TUPLE ID: 2\n" +
+                "    RANDOM\n" +
+                "\n" +
+                "  1:Project\n" +
+                "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
+                "  |  <slot 8> : NULL\n" +
+                "  |  <slot 9> : NULL"));
+    }
+
+    @Test
+    public void testInsertAggLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        InsertPlanner.enableSingleReplicationShuffle = true;
+        {
+            // KesType is AGG_KEYS
+            String sql = "explain insert into baseall select * from baseall limit 1";
+            String plan = getInsertExecPlan(sql);
+            assertContains(plan, "STREAM DATA SINK\n" +
+                    "    EXCHANGE ID: 01\n" +
+                    "    UNPARTITIONED");
+
+            InsertPlanner.enableSingleReplicationShuffle = false;
+            FeConstants.runningUnitTest = false;
+        }
     }
 }

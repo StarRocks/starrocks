@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/like_predicate.h"
 
@@ -29,24 +29,52 @@ static const re2::RE2 LIKE_SUBSTRING_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+)(?:%+))
 static const re2::RE2 LIKE_ENDS_WITH_RE(R"((?:%+)(((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
 static const re2::RE2 LIKE_STARTS_WITH_RE(R"((((\\%)|(\\_)|([^%_]))+)(?:%+))", re2::RE2::Quiet);
 static const re2::RE2 LIKE_EQUALS_RE(R"((((\\%)|(\\_)|([^%_]))+))", re2::RE2::Quiet);
+static const char* PROMPT_INFO = " so we switch to use re2.";
 
-Status LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
-                                                   starrocks_udf::FunctionContext* context, const Slice& slice) {
+bool LikePredicate::hs_compile_and_alloc_scratch(const std::string& pattern, LikePredicateState* state,
+                                                 starrocks_udf::FunctionContext* context, const Slice& slice) {
     if (hs_compile(pattern.c_str(), HS_FLAG_ALLOWEMPTY | HS_FLAG_DOTALL | HS_FLAG_UTF8 | HS_FLAG_SINGLEMATCH,
                    HS_MODE_BLOCK, nullptr, &state->database, &state->compile_err) != HS_SUCCESS) {
         std::stringstream error;
-        error << "Invalid regex expression: " << slice.data << ": " << state->compile_err->message;
-        context->set_error(error.str().c_str());
+        error << "Invalid hyperscan expression: " << std::string(slice.data, slice.size) << ": "
+              << state->compile_err->message << PROMPT_INFO;
+        LOG(WARNING) << error.str().c_str();
         hs_free_compile_error(state->compile_err);
-        return Status::InvalidArgument(error.str());
+        return false;
     }
 
     if (hs_alloc_scratch(state->database, &state->scratch) != HS_SUCCESS) {
         std::stringstream error;
-        error << "ERROR: Unable to allocate scratch space.";
-        context->set_error(error.str().c_str());
+        error << "ERROR: Unable to allocate scratch space," << PROMPT_INFO;
+        LOG(WARNING) << error.str().c_str();
         hs_free_database(state->database);
-        return Status::InvalidArgument(error.str());
+        return false;
+    }
+
+    return true;
+}
+
+template <bool full_match>
+Status LikePredicate::compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
+                                                    starrocks_udf::FunctionContext* context, const Slice& slice) {
+    if (!hs_compile_and_alloc_scratch(pattern, state, context, slice)) {
+        RE2::Options opts;
+        opts.set_never_nl(false);
+        opts.set_dot_nl(true);
+        opts.set_log_errors(false);
+
+        state->re2 = std::make_shared<re2::RE2>(pattern, opts);
+        if (!state->re2->ok()) {
+            std::stringstream error;
+            error << "Invalid re2 expression: " << pattern;
+            return Status::InvalidArgument(error.str());
+        }
+
+        if constexpr (full_match) {
+            state->function = &like_fn_with_long_constant_pattern;
+        } else {
+            state->function = &regex_fn_with_long_constant_pattern;
+        }
     }
 
     return Status::OK();
@@ -98,8 +126,9 @@ Status LikePredicate::like_prepare(starrocks_udf::FunctionContext* context,
         state->function = &constant_substring_fn;
     } else {
         auto re_pattern = LikePredicate::template convert_like_pattern<true>(context, pattern);
-        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
+        RETURN_IF_ERROR(compile_with_hyperscan_or_re2<true>(re_pattern, state, context, pattern));
     }
+
     return Status::OK();
 }
 
@@ -159,8 +188,7 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
         state->set_search_string(search_string);
         state->function = &constant_substring_fn;
     } else {
-        std::string re_pattern(pattern.data, pattern.size);
-        RETURN_IF_ERROR(hs_compile_and_alloc_scratch(re_pattern, state, context, pattern));
+        RETURN_IF_ERROR(compile_with_hyperscan_or_re2<false>(pattern_str, state, context, pattern));
     }
 
     return Status::OK();
@@ -188,6 +216,44 @@ ColumnPtr LikePredicate::like_fn(FunctionContext* context, const starrocks::vect
 
 ColumnPtr LikePredicate::regex_fn(FunctionContext* context, const Columns& columns) {
     return regex_match(context, columns, false);
+}
+
+ColumnPtr LikePredicate::like_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+    return match_fn_with_long_constant_pattern<true>(context, columns);
+}
+
+ColumnPtr LikePredicate::regex_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+    return match_fn_with_long_constant_pattern<false>(context, columns);
+}
+
+template <bool full_match>
+ColumnPtr LikePredicate::match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns) {
+    auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+
+    const auto& value_column = VECTORIZED_FN_ARGS(0);
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
+
+    ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
+    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
+
+    for (int row = 0; row < num_rows; ++row) {
+        if (value_viewer.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        bool v = false;
+        if constexpr (full_match) {
+            v = RE2::FullMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
+                               *(state->re2));
+        } else {
+            v = RE2::PartialMatch(re2::StringPiece(value_viewer.value(row).data, value_viewer.value(row).size),
+                                  *(state->re2));
+        }
+        result.append(v);
+    }
+
+    return result.build(all_const);
 }
 
 // constant_ends
@@ -346,7 +412,7 @@ ColumnPtr LikePredicate::_predicate_const_regex(FunctionContext* context, Column
 
         bool v = false;
         auto value_size = value_viewer.value(row).size;
-        auto status = hs_scan(
+        [[maybe_unused]] auto status = hs_scan(
                 // Use &_DUMMY_STRING_FOR_EMPTY_PATTERN instead of nullptr to avoid crash.
                 state->database, (value_size) ? value_viewer.value(row).data : &_DUMMY_STRING_FOR_EMPTY_PATTERN,
                 value_size, 0, scratch,

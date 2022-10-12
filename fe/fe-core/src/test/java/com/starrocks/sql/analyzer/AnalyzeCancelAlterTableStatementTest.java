@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -35,20 +36,26 @@ public class AnalyzeCancelAlterTableStatementTest {
     public void testCancelRollup()  {
         CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
                 "cancel alter table rollup from db.tbl (1, 2, 3)");
-        Assert.assertEquals("CANCEL ALTER ROLLUP FROM `db`.`tbl` (1,2,3)", stmt.toSql());
+        Assert.assertEquals("db", stmt.getDbName());
+        Assert.assertEquals(ShowAlterStmt.AlterType.ROLLUP, stmt.getAlterType());
+        Assert.assertEquals("tbl", stmt.getTableName());
     }
 
     @Test
     public void testCancelAlterColumn() {
         CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
-                "CANCEL ALTER TABLE COLUMN FROM tbl");
-        Assert.assertEquals("CANCEL ALTER COLUMN FROM `test`.`tbl`", stmt.toSql());
+                "CANCEL ALTER TABLE COLUMN FROM t0");
+        Assert.assertEquals("test", stmt.getDbName());
+        Assert.assertEquals(ShowAlterStmt.AlterType.COLUMN, stmt.getAlterType());
+        Assert.assertEquals("t0", stmt.getTableName());
     }
 
     @Test
     public void testCancelMaterializedView() {
         CancelAlterTableStmt stmt = (CancelAlterTableStmt) analyzeSuccess(
                 "cancel alter materialized view from materialized_view_test");
-        Assert.assertEquals("CANCEL ALTER MATERIALIZED_VIEW FROM `test`.`materialized_view_test`", stmt.toSql());
+        Assert.assertEquals("test", stmt.getDbName());
+        Assert.assertEquals("materialized_view_test", stmt.getTableName());
+        Assert.assertEquals(ShowAlterStmt.AlterType.MATERIALIZED_VIEW, stmt.getAlterType());
     }
 }

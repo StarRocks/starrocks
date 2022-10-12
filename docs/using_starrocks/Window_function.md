@@ -469,6 +469,8 @@ order by closing_date;
 
 ### MAX()
 
+Returns the maximum value of the specified rows in the current window.
+
 Syntax：
 
 ~~~SQL
@@ -477,7 +479,7 @@ MAX([DISTINCT | ALL] expression) [OVER (analytic_clause)]
 
 Example 8:
 
-Calculate the maximum value of rows ranging from the first row to the row after the current row.
+Calculate the maximum value of rows from the first row to the row after the current row.
 
 ~~~SQL
 select x, property,
@@ -504,7 +506,23 @@ where property in ('prime','square');
 +---+----------+---------------+
 ~~~
 
+From StarRocks 2.4 onwards, you can specify the row range as `rows between n preceding and n following`, which means you can capture `n` rows before the current row and `n` rows after the current row.
+
+Example statement:
+
+~~~sql
+select x, property,
+    max(x)
+        over (
+            order by property, x
+            rows between 3 preceding and 2 following) as 'local maximum'
+from int_t
+where property in ('prime','square');
+~~~
+
 ### MIN()
+
+Returns the minimum value of the specified rows in the current window.
 
 Syntax：
 
@@ -514,7 +532,7 @@ MIN([DISTINCT | ALL] expression) [OVER (analytic_clause)]
 
 Example 9:
 
-Calculate the minimum value of rows ranging from the first row to the row after the current row.
+Calculate the minimum value of rows from the first row to the row after the current row.
 
 ~~~SQL
 select x, property,
@@ -539,6 +557,20 @@ where property in ('prime','square');
 | 4 | square   | 1             |
 | 1 | square   | 1             |
 +---+----------+---------------+
+~~~
+
+From StarRocks 2.4 onwards, you can specify the row range as `rows between n preceding and n following`, which means you can capture `n` rows before the current row and `n` rows after the current row.
+
+Example statement:
+
+~~~sql
+select x, property,
+    min(x)
+    over (
+          order by property, x desc
+          rows between 3 preceding and 2 following) as 'local minimum'
+from int_t
+where property in ('prime','square');
 ~~~
 
 ### RANK()

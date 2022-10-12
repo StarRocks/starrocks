@@ -1,14 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/chunks_sorter.h"
 
 #include <gtest/gtest.h>
 
 #include <cstdio>
+#include <memory>
 
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/nullable_column.h"
+#include "column/vectorized_fwd.h"
+#include "common/object_pool.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_topn.h"
 #include "exec/vectorized/sorting/sort_helper.h"
@@ -293,6 +296,8 @@ TEST_F(ChunksSorterTest, full_sort_incremental) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -384,8 +389,8 @@ TEST_F(ChunksSorterTest, topn_sort_limit_prune) {
             Permutation perm = make_permutation(column->size());
             Tie tie(column->size(), 1);
 
-            sort_and_tie_helper_nullable_vertical(false, data_columns, null_pred, true, true, perm, tie, range, true,
-                                                  limit, &limited);
+            sort_and_tie_helper_nullable_vertical(false, data_columns, null_pred, SortDesc(true, true), perm, tie,
+                                                  range, true, limit, &limited);
             EXPECT_EQ(expected[limit], limited);
         }
     }
@@ -408,6 +413,8 @@ TEST_F(ChunksSorterTest, topn_sort_with_limit) {
         std::vector<ExprContext*> sort_exprs;
         sort_exprs.push_back(new ExprContext(column));
         sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+        ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+        ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
         constexpr int kTotalRows = 16;
         for (int limit = 1; limit < kTotalRows; limit++) {
@@ -442,6 +449,8 @@ TEST_F(ChunksSorterTest, rank_topn) {
     std::vector<bool> is_null_first{true};
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_ranking_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     std::vector<int32_t> expected_perm = {1, 2, 3, 4, 5, 6, 6, 6, 7, 7, 7, 11, 12, 13, 14, 15, 16, 16, 16, 17, 17, 17};
     std::vector<int32_t> res_num_rows_by_limit = {-1, 1,  2,  3,  4,  5,  8,  8,  8,  11, 11, 11,
@@ -492,6 +501,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_first) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -525,6 +536,8 @@ TEST_F(ChunksSorterTest, full_sort_by_2_columns_null_last) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -561,6 +574,8 @@ TEST_F(ChunksSorterTest, full_sort_by_3_columns) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -600,6 +615,8 @@ TEST_F(ChunksSorterTest, full_sort_by_4_columns) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterFullSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "");
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
@@ -637,6 +654,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2, 7, TTopNType::ROW_NUMBER,
                             2);
@@ -674,6 +693,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     sort_exprs.push_back(new ExprContext(_expr_region.get()));
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     int offset = 7;
     for (int limit = 8; limit + offset <= 16; limit++) {
@@ -722,6 +743,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
     std::vector<ExprContext*> sort_exprs;
     sort_exprs.push_back(new ExprContext(_expr_nation.get()));
     sort_exprs.push_back(new ExprContext(_expr_cust_key.get()));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     // partial sort
     ChunksSorterTopn full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1, 6,
@@ -770,7 +793,8 @@ TEST_F(ChunksSorterTest, stable_sort) {
     }
 
     SmallPermutation perm = create_small_permutation(N);
-    stable_sort_and_tie_columns(false, columns, {1, 1}, {1, 1}, &perm);
+    SortDescs sort_desc(std::vector<int>{1, 1}, std::vector<int>{1, 1});
+    stable_sort_and_tie_columns(false, columns, sort_desc, &perm);
 
     bool sorted = std::is_sorted(perm.begin(), perm.end(), [&](SmallPermuteItem lhs, SmallPermuteItem rhs) {
         int x = col1->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *col1, 1);
@@ -790,6 +814,82 @@ TEST_F(ChunksSorterTest, stable_sort) {
     ASSERT_EQ(expect, result);
 }
 
+void pack_nullable(ChunkPtr chunk) {
+    for (auto& col : chunk->columns()) {
+        col = std::make_shared<NullableColumn>(col, std::make_shared<NullColumn>(col->size()));
+    }
+}
+
+TEST_F(ChunksSorterTest, get_filter_test) {
+    auto c0 = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 0);
+    auto c1 = std::make_unique<ColumnRef>(TypeDescriptor(TYPE_INT), 1);
+    ObjectPool pool;
+
+    std::vector<ExprContext*> sort_exprs;
+    sort_exprs.push_back(pool.add(new ExprContext(c0.get())));
+    sort_exprs.push_back(pool.add(new ExprContext(c1.get())));
+    ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+    ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
+
+    ChunkPtr merged_chunk = std::make_shared<Chunk>();
+    {
+        auto c0_merged = Int32Column::create();
+        c0_merged->append(3);
+        c0_merged->append(10);
+        auto c1_merged = Int32Column::create();
+        c1_merged->append(5);
+        c1_merged->append(0);
+        merged_chunk->append_column(c0_merged, 0);
+        merged_chunk->append_column(c1_merged, 1);
+    }
+    pack_nullable(merged_chunk);
+
+    DataSegment merged_segment;
+    merged_segment.init(&sort_exprs, merged_chunk);
+
+    ChunkPtr unmerged_chunk = std::make_shared<Chunk>();
+    {
+        auto c0_unmerged = Int32Column::create();
+        int c0_datas[] = {0, 3, 10, 10};
+        c0_unmerged->append_numbers(c0_datas, sizeof(c0_datas));
+        auto c1_unmerged = Int32Column::create();
+        int c1_datas[] = {1, 5, 30, 30};
+        c1_unmerged->append_numbers(c1_datas, sizeof(c1_datas));
+
+        unmerged_chunk->append_column(c0_unmerged, 0);
+        unmerged_chunk->append_column(c1_unmerged, 1);
+    }
+    pack_nullable(unmerged_chunk);
+
+    DataSegment unmerged_segment;
+    unmerged_segment.init(&sort_exprs, unmerged_chunk);
+
+    std::vector<DataSegment> segments;
+    segments.push_back(std::move(unmerged_segment));
+
+    std::vector<std::vector<uint8_t>> filter_array;
+    filter_array.resize(1);
+    filter_array.resize(unmerged_chunk->num_rows());
+
+    std::vector<int> sort_order_flags = {1, 1};
+
+    std::vector<int> null_first_flags = {1, 1};
+
+    SortDescs desc(sort_order_flags, null_first_flags);
+
+    size_t rows_to_sort = 2;
+    uint32_t smaller_num, include_num;
+    auto st = merged_segment.get_filter_array(segments, rows_to_sort, filter_array, desc, smaller_num, include_num);
+    ASSERT_OK(st);
+
+    size_t inc = 0;
+    for (int i = 0; i < filter_array[0].size(); ++i) {
+        inc += filter_array[0][i] == DataSegment::INCLUDE_IN_SEGMENT;
+    }
+
+    ASSERT_EQ(include_num, inc);
+}
+
 TEST_F(ChunksSorterTest, column_incremental_sort) {
     TypeDescriptor type_desc = TypeDescriptor(TYPE_INT);
     ColumnPtr nullable_column = ColumnHelper::create_column(type_desc, true);
@@ -798,10 +898,10 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     SmallPermutation permutation;
     Tie tie;
     std::pair<int, int> range{0, 0};
-    sort_and_tie_column(false, nullable_column, true, true, permutation, tie, range, false);
-    sort_and_tie_column(false, nullable_column, true, false, permutation, tie, range, false);
-    sort_and_tie_column(false, nullable_column, false, false, permutation, tie, range, false);
-    sort_and_tie_column(false, nullable_column, false, true, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, true), permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, false), permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, false), permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, true), permutation, tie, range, false);
 
     // sort all null column
     const int kNullCount = 5;
@@ -812,10 +912,10 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     }
     tie.resize(kNullCount);
     range = {0, kNullCount};
-    sort_and_tie_column(false, nullable_column, true, true, permutation, tie, range, false);
-    sort_and_tie_column(false, nullable_column, true, false, permutation, tie, range, false);
-    sort_and_tie_column(false, nullable_column, false, false, permutation, tie, range, false);
-    sort_and_tie_column(false, nullable_column, false, true, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, true), permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, false), permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, false), permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, true), permutation, tie, range, false);
 
     // sort 1 element with 5 nulls
     SmallPermutation expect_perm;
@@ -823,28 +923,28 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
 
-    sort_and_tie_column(false, nullable_column, true, true, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, true), permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
 
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
-    sort_and_tie_column(false, nullable_column, true, false, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, false), permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
 
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
-    sort_and_tie_column(false, nullable_column, false, false, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, false), permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
 
     reset_permutation(permutation, kNullCount + 1);
     tie = Tie(kNullCount + 1, 0);
-    sort_and_tie_column(false, nullable_column, false, true, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, true), permutation, tie, range, false);
     reset_permutation(expect_perm, kNullCount + 1);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({0, 0, 0, 0, 0, 0}), tie);
@@ -856,19 +956,19 @@ TEST_F(ChunksSorterTest, column_incremental_sort) {
     reset_permutation(permutation, 1);
     tie = Tie(1, 1);
 
-    sort_and_tie_column(false, nullable_column, true, true, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, true), permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 
-    sort_and_tie_column(false, nullable_column, true, false, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(true, false), permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 
-    sort_and_tie_column(false, nullable_column, false, false, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, false), permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 
-    sort_and_tie_column(false, nullable_column, false, true, permutation, tie, range, false);
+    sort_and_tie_column(false, nullable_column, SortDesc(false, true), permutation, tie, range, false);
     EXPECT_EQ(expect_perm, permutation);
     EXPECT_EQ(Tie({1}), tie);
 }

@@ -1,8 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/analytor.h"
 
-#include <algorithm>
 #include <cmath>
 #include <ios>
 #include <memory>
@@ -687,6 +686,17 @@ std::string Analytor::debug_string() const {
        << ", frame=(" << _rows_start_offset << ", " << _rows_end_offset << ")";
 
     return ss.str();
+}
+
+Status Analytor::check_has_error() {
+    for (const auto* ctx : _agg_fn_ctxs) {
+        if (ctx != nullptr) {
+            if (ctx->has_error()) {
+                return Status::RuntimeError(ctx->error_msg());
+            }
+        }
+    }
+    return Status::OK();
 }
 
 void Analytor::_update_window_batch_lead_lag(int64_t peer_group_start, int64_t peer_group_end, int64_t frame_start,

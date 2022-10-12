@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 // This file is based on code available under the Apache license here:
 //   https://github.com/aliyun/datalake-catalog-metastore-client/blob/master/metastore-client-hive/metastore-client-hive3/src/main/java/com/aliyun/datalake/metastore/hive2/ProxyMetaStoreClient.java
 
@@ -151,7 +151,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class DLFProxyMetaStoreClient implements IMetaStoreClient {
-    private static final Logger logger =
+    private static final Logger LOGGER =
             LoggerFactory.getLogger(com.aliyun.datalake.metastore.hive2.ProxyMetaStoreClient.class);
     private static final String HIVE_FACTORY_CLASS = "org.apache.hadoop.hive.ql.metadata" +
             ".SessionHiveMetaStoreClientFactory";
@@ -174,7 +174,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
     private boolean allowFailure = false;
 
     // copy Hive conf
-    private Configuration hiveConf;
+    private final Configuration hiveConf;
 
     private final String readWriteClientType;
 
@@ -185,7 +185,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
     public DLFProxyMetaStoreClient(Configuration hiveConf, HiveMetaHookLoader hiveMetaHookLoader, Boolean allowEmbedded)
             throws MetaException {
         long startTime = System.currentTimeMillis();
-        logger.info("ProxyMetaStoreClient start, datalake-metastore-client-version:{}",
+        LOGGER.info("ProxyMetaStoreClient start, datalake-metastore-client-version:{}",
                 Version.DATALAKE_METASTORE_CLIENT_VERSION);
         this.hiveConf = new HiveConf((HiveConf) hiveConf);
 
@@ -210,7 +210,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
 
         readWriteClientType = this.readWriteClient instanceof DlfSessionMetaStoreClient ? "dlf" : "hive";
 
-        logger.info("ProxyMetaStoreClient end, cost:{}ms", System.currentTimeMillis() - startTime);
+        LOGGER.info("ProxyMetaStoreClient end, cost:{}ms", System.currentTimeMillis() - startTime);
     }
 
     public static Map<String, org.apache.hadoop.hive.ql.metadata.Table> getTempTablesForDatabase(String dbName) {
@@ -317,7 +317,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
         try {
             return call(this.readWriteClient, client -> client.isCompatibleWith(conf), "isCompatibleWith", conf);
         } catch (TException e) {
-            logger.error(e.getMessage(), e);
+            LOGGER.error(e.getMessage(), e);
         }
         return false;
     }
@@ -327,7 +327,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
         try {
             run(client -> client.setHiveAddedJars(s), "setHiveAddedJars", s);
         } catch (TException e) {
-            logger.error(e.getMessage(), e);
+            LOGGER.error(e.getMessage(), e);
         }
     }
 
@@ -1942,7 +1942,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
         try {
             run(client -> client.flushCache(), "flushCache");
         } catch (TException e) {
-            logger.info(e.getMessage(), e);
+            LOGGER.info(e.getMessage(), e);
         }
     }
 
@@ -1976,7 +1976,7 @@ public class DLFProxyMetaStoreClient implements IMetaStoreClient {
         try {
             return call(this.readWriteClient, client -> client.isSameConfObj(conf), "isSameConfObj", conf);
         } catch (TException e) {
-            logger.error(e.getMessage(), e);
+            LOGGER.error(e.getMessage(), e);
         }
         return false;
     }

@@ -51,13 +51,37 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 | heartbeat_service_port | 9050                                | The port that is used by the BE to receive heartbeats from an FE. |
 | brpc                   | 8060                                | The port that is used for communication between the BEs in a cluster. |
 
+### Start a Compute Node (Optional)
+
+#### Check the configuration of the Compute Node
+
+|Configuration|Description|Default|
+|---|---|---|
+|thrift_port|Thrift Server port of the Compute Node. The port is used to receive requests from FE.|9060|
+|webserver_port|HTTP Server port of the Compute Node.|8040|
+|heartbeat_service_port|Thrift server port of the Compute Node. The port is used to receive requests from FE.|9050|
+|brpc_port|RPC port between BE and the Compute Node.|8060|
+
+#### Start the Compute Node process
+
+Navigate to the deployment directory of the Compute Node and start the Compute Node process.
+
+```shell
+cd StarRocks-x.x.x/be
+sh bin/start_cn.sh --daemon
+```
+
 ### Check the health status of a cluster
 
-After you set up the BEs and FEs of a cluster, you need to check the statuses of FEs and BEs to ensure the FEs and BEs are started normally:
+After you set up the FEs, BEs, and CNs of a cluster, you need to check their statuses to ensure they are started normally:
 
-- Run `http://be_host:be_http_port/api/health` to check the statuses of BEs. If `{"status": "OK", "msg": "To Be Added"}` is returned, the BEs have properly started.
+- Run `http://be_host:be_http_port/api/health` to check the statuses of BEs. If `{"status": "OK", "msg": "To Be Added"}` is returned, the BEs are properly started.
 
-- Run `http://fe_host:fe_http_port/api/bootstrap` to check the statuses of FEs. If `{"status": "OK", "msg": "Success"}` is returned, the FEs have properly started.
+- Run `http://fe_host:fe_http_port/api/bootstrap` to check the statuses of FEs. If `{"status": "OK", "msg": "Success"}` is returned, the FEs are properly started.
+
+- Run `http://cn_host:cn_http_port/api/health` to check the statuses of Compute Nodes. If `{"status": "OK", "msg": "To Be Added"}` is returned, the Compute Nodes are properly started.
+
+After the Compute Nodes are started properly, you need to set the system variables `prefer_compute_node`, and `use_compute_nodes` to allow them to scale the computing resources out during queries. See [System Variables](../reference/System_variable.md) for more information.
 
 ### Stop a cluster
 
@@ -66,6 +90,15 @@ To stop a cluster, you need to stop all the FEs and BEs in the cluster:
 - Go to the deployment directory of each FE and run `sh bin/stop_fe.sh`.
 
 - Go to the deployment directory of each BE and run `sh bin/stop_be.sh`.
+
+#### Stop a Compute Node
+
+Navigate to the deployment directory of the Compute Node and stop the Compute Node process.
+
+```shell
+cd StarRocks-x.x.x/be
+sh bin/stop_cn.sh
+```
 
 ### Upgrade a cluster
 
@@ -125,6 +158,16 @@ sh bin/start_fe.sh --daemon
 
 ps aux | grep StarRocksFE
 ```
+
+##### Upgrade a Compute Node
+
+Since the Compute Node node is stateless, you only need to replace the binary file and restart the process. We recommend to stop it gracefully.
+
+```shell
+sh bin/stop_cn.sh --graceful
+```
+
+By using this method, the Compute Node waits until the currently running task finishes before exiting the process.
 
 ##### Upgrade a Broker
 

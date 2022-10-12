@@ -17,15 +17,11 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.common.UserException;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
-// Set variables statement. Now only support simple string
 public class SetStmt extends StatementBase {
-    // variables to modify
     private final List<SetVar> setVars;
 
     public SetStmt(List<SetVar> setVars) {
@@ -44,20 +40,6 @@ public class SetStmt extends StatementBase {
             }
         }
         return false;
-    }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws UserException {
-        analyze();
-    }
-
-    public void analyze()  {
-        if (setVars == null || setVars.isEmpty()) {
-            throw new SemanticException("Empty set statement.");
-        }
-        for (SetVar var : setVars) {
-            var.analyze();
-        }
     }
 
     @Override
@@ -97,10 +79,7 @@ public class SetStmt extends StatementBase {
 
     @Override
     public boolean isSupportNewPlanner() {
-        return setVars.stream().noneMatch(var -> var instanceof SetNamesVar ||
-                var instanceof SetPassVar ||
-                var instanceof SetTransaction ||
-                var instanceof SetUserPropertyVar);
+        return setVars.stream().noneMatch(var -> var instanceof SetTransaction);
     }
 
     @Override

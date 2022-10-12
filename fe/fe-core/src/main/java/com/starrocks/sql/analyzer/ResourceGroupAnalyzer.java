@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
@@ -46,14 +46,14 @@ public class ResourceGroupAnalyzer {
                 String key = ((SlotRef) lhs).getColumnName();
                 String value = ((StringLiteral) rhs).getValue();
                 if (key.equalsIgnoreCase(ResourceGroup.USER)) {
-                    if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                    if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.USER,
                                         eqPred.toSql()));
                     }
                     classifier.setUser(value);
                 } else if (key.equalsIgnoreCase(ResourceGroup.ROLE)) {
-                    if (!ResourceGroupClassifier.UseRolePattern.matcher(value).matches()) {
+                    if (!ResourceGroupClassifier.USE_ROLE_PATTERN.matcher(value).matches()) {
                         throw new SemanticException(
                                 String.format("Illegal classifier specifier '%s': '%s'", ResourceGroup.ROLE,
                                         eqPred.toSql()));
@@ -187,11 +187,12 @@ public class ResourceGroupAnalyzer {
             if (key.equalsIgnoreCase(ResourceGroup.GROUP_TYPE)) {
                 try {
                     resourceGroup.setResourceGroupType(TWorkGroupType.valueOf("WG_" + value.toUpperCase()));
-                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL) {
-                        throw new SemanticException("Only support 'normal' type");
+                    if (resourceGroup.getResourceGroupType() != TWorkGroupType.WG_NORMAL &&
+                            resourceGroup.getResourceGroupType() != TWorkGroupType.WG_SHORT_QUERY) {
+                        throw new SemanticException("Only support 'normal' and 'short_query' type");
                     }
                 } catch (Exception ignored) {
-                    throw new SemanticException("Only support 'normal' type");
+                    throw new SemanticException("Only support 'normal' and 'short_query' type");
                 }
                 continue;
             }

@@ -92,9 +92,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         super(-1, LoadDataSourceType.KAFKA);
     }
 
-    public KafkaRoutineLoadJob(Long id, String name, String clusterName,
+    public KafkaRoutineLoadJob(Long id, String name,
                                long dbId, long tableId, String brokerList, String topic) {
-        super(id, name, clusterName, dbId, tableId, LoadDataSourceType.KAFKA);
+        super(id, name, dbId, tableId, LoadDataSourceType.KAFKA);
         this.brokerList = brokerList;
         this.topic = topic;
         this.progress = new KafkaProgress();
@@ -382,8 +382,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         // init kafka routine load job
         long id = GlobalStateMgr.getCurrentState().getNextId();
         KafkaRoutineLoadJob kafkaRoutineLoadJob = new KafkaRoutineLoadJob(id, stmt.getName(),
-                SystemInfoService.DEFAULT_CLUSTER, db.getId(), tableId,
-                stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
+                db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
         kafkaRoutineLoadJob.checkCustomPartition();

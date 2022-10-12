@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.journal;
 
@@ -8,7 +8,6 @@ import com.starrocks.common.util.Util;
 import com.starrocks.metric.MetricRepo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mortbay.log.Log;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -202,7 +201,7 @@ public class JournalWriter {
             }
         }
         if (journalQueue.size() > Config.metadata_journal_max_batch_cnt) {
-            Log.warn("journal has piled up: {} in queue after consume", journalQueue.size());
+            LOG.warn("journal has piled up: {} in queue after consume", journalQueue.size());
         }
     }
 

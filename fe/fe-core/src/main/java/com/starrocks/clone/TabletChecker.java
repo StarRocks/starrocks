@@ -26,8 +26,6 @@ import com.google.common.collect.HashBasedTable;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.collect.Table.Cell;
-import com.starrocks.analysis.AdminCancelRepairTableStmt;
-import com.starrocks.analysis.AdminRepairTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -45,6 +43,8 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
+import com.starrocks.sql.ast.AdminRepairTableStmt;
 import com.starrocks.system.SystemInfoService;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -61,8 +61,6 @@ import java.util.stream.Collectors;
  */
 public class TabletChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
-
-    private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
 
     private GlobalStateMgr globalStateMgr;
     private SystemInfoService infoService;
@@ -117,7 +115,7 @@ public class TabletChecker extends LeaderDaemon {
 
     public TabletChecker(GlobalStateMgr globalStateMgr, SystemInfoService infoService, TabletScheduler tabletScheduler,
                          TabletSchedulerStat stat) {
-        super("tablet checker", CHECK_INTERVAL_MS);
+        super("tablet checker", Config.tablet_sched_checker_interval_seconds * 1000L);
         this.globalStateMgr = globalStateMgr;
         this.infoService = infoService;
         this.tabletScheduler = tabletScheduler;
@@ -216,7 +214,16 @@ public class TabletChecker extends LeaderDaemon {
      * to the queue again in the next `TabletChecker` round.
      */
     private boolean tryChooseSrcBeforeSchedule(TabletSchedCtx tabletCtx) {
-        return !(tabletCtx.needCloneFromSource() && tabletCtx.getHealthyReplicas().size() == 0);
+        if (tabletCtx.needCloneFromSource()) {
+            if (tabletCtx.getReplicas().size() == 1 && Config.recover_with_empty_tablet) {
+                // in this case, we need to forcefully create an empty replica to recover
+                return true;
+            } else {
+                return tabletCtx.getHealthyReplicas().size() != 0;
+            }
+        } else {
+            return true;
+        }
     }
 
     private void doCheck(boolean checkInPrios) {

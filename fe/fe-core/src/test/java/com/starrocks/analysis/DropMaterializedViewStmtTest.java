@@ -58,7 +58,7 @@ public class DropMaterializedViewStmtTest {
 
     @Before
     public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
         MockedAuth.mockedAuth(auth);
         globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
         analyzer = new Analyzer(globalStateMgr, connectContext);
@@ -114,71 +114,5 @@ public class DropMaterializedViewStmtTest {
                 return "default";
             }
         };
-    }
-
-    @Test
-    public void testEmptyMVName() {
-        DropMaterializedViewStmt stmt =
-                new DropMaterializedViewStmt(false, new TableName("", ""), new TableName("", ""));
-        try {
-            stmt.analyze(analyzer);
-            Assert.fail();
-        } catch (UserException e) {
-            Assert.assertTrue(e.getMessage().contains("mush specify database name"));
-        }
-    }
-
-    @Test
-    public void testRepeatedDB() {
-        DropMaterializedViewStmt stmt =
-                new DropMaterializedViewStmt(false, new TableName("test", "mvname"),
-                        new TableName("test", "table"));
-        try {
-            stmt.analyze(analyzer);
-            Assert.fail();
-        } catch (UserException e) {
-            Assert.assertTrue(e.getMessage().contains("mush specify database name"));
-        }
-    }
-
-    @Test
-    public void testFromDB() {
-        DropMaterializedViewStmt stmt =
-                new DropMaterializedViewStmt(false, new TableName("test", "mvname"),
-                        new TableName("", "table"));
-        try {
-            stmt.analyze(analyzer);
-            Assert.fail();
-        } catch (UserException e) {
-            Assert.assertTrue(e.getMessage().contains("mush specify database name explicitly"));
-        }
-    }
-
-    @Test
-    public void testNormal() {
-        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false,
-                new TableName("test", "mvname"), null);
-        try {
-            stmt.analyze(analyzer);
-        } catch (UserException e) {
-            e.printStackTrace();
-            Assert.fail();
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testIfExists() throws UserException {
-        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(false,
-                new TableName("test", "mvname2"), null);
-        stmt.analyze(analyzer);
-    }
-
-    @Test
-    public void testIfNotExists() throws UserException {
-        DropMaterializedViewStmt stmt = new DropMaterializedViewStmt(true,
-                new TableName("test", "mvname2"), null);
-        stmt.analyze(analyzer);
     }
 }

@@ -10,11 +10,9 @@ StarRocks' query statement basically conforms to the SQL92 standard. Here is a b
 
 Join operations combine data from two or more tables and then return a result set of some columns from some of them.
 
-StarRocks currently supports inner join, outer join, semi join, anti join, cross join.
+StarRocks supports self joins, cross joins, inner joins, outer joins, semi joins, and anti joins. Outer joins include left joins, right joins, and full joins.
 
-In addition to equal join, unequal join is also supported in inner join condition. For performance reasons, equal join is recommended.
-
-Other joins only support equal join. The syntax of the connection is defined as follows:
+The syntax of the connection is defined as follows:
 
 ```sql
 SELECT select_list FROM
@@ -43,7 +41,7 @@ table_or_subquery1 CROSS JOIN table_or_subquery2
 [ WHERE where_clauses ]
 ```
 
-#### Self-Join
+#### Self Join
 
 StarRocks supports self-joins, which are self-joins and self-joins. For example, different columns of the same table are joined.
 
@@ -69,7 +67,7 @@ SELECT * FROM t1, t2;
 SELECT * FROM t1 CROSS JOIN t2;
 ```
 
-#### Inner join
+#### Inner Join
 
 Inner join is the most well-known and commonly used join. Returns results from columns requested by two similar tables, joined if the columns of both tables contain the same value.
 
@@ -87,7 +85,7 @@ SELECT t1.id, c1, c2 FROM t1 JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Outer join
+#### Outer Join
 
 Outer join returns the left or right table or all rows of both. If there is no matching data in another table, set it to NULL. For example:
 
@@ -113,7 +111,7 @@ SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id = t2.id;
 SELECT t1.id, c1, c2 FROM t1 INNER JOIN t2 ON t1.id > t2.id;
 ```
 
-#### Semi join
+#### Semi Join
 
 Left semi join returns only the rows in the left table that match the data in the right table, regardless of how many rows match the data in the right table.
 
@@ -125,7 +123,7 @@ For example:
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT SEMI JOIN t2 ON t1.id = t2.id;
 ```
 
-#### Anti join
+#### Anti Join
 
 Left anti join only returns rows from the left table that do not match the right table.
 
@@ -134,6 +132,34 @@ Right anti join reverses this comparison, returning only rows from the right tab
 ```sql
 SELECT t1.c1, t1.c2, t1.c2 FROM t1 LEFT ANTI JOIN t2 ON t1.id = t2.id;
 ```
+
+#### Equi-join and Non-equi-join
+
+The various joins supported by StarRocks can be classified as equi-joins and non-equi-joins depending on the join conditions specified in the joins.
+
+| **Equi****-joins**         | Self joins, cross joins, inner joins, outer joins, semi joins, and anti joins |
+| -------------------------- | ------------------------------------------------------------ |
+| **Non-****equi****-joins** | cross joins, inner joins, and outer joins                    |
+
+- Equi-joins
+  
+  An equi-join uses a join condition in which two join items are combined by the `=` operator. Example: `a JOIN b ON a.id = b.id`.
+
+- Non-equi-joins
+  
+  A non-equi-join uses a join condition in which two join items are combined by a comparison operator such as `<`, `<=`, `>`, `>=`, or `<>`. Example: `a JOIN b ON a.id < b.id`. Non-equi-joins run slower than equi-joins. We recommend that you exercise caution when you use non-equi-joins.
+
+  The following two examples show how to run non-equi-joins:
+
+  ```SQL
+  SELECT t1.id, c1, c2 
+  FROM t1 
+  INNER JOIN t2 ON t1.id < t2.id;
+    
+  SELECT t1.id, c1, c2 
+  FROM t1 
+  LEFT JOIN t2 ON t1.id > t2.id;
+  ```
 
 ### Order by
 
@@ -735,7 +761,3 @@ select sum(tiny_column) as total_count from big_table;
 
 select one.tiny_column, two.int_column from small_table one, <br/> big_table two where one.tiny_column = two.tiny_column;
 ```
-
-## Keyword
-
-SELECT

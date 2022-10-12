@@ -21,19 +21,12 @@
 
 #include "storage/data_dir.h"
 
-#include <mntent.h>
-#include <sys/file.h>
-#include <sys/stat.h>
-#include <utime.h>
-
 #include <filesystem>
-#include <fstream>
 #include <set>
 #include <sstream>
 #include <utility>
 
 #include "common/config.h"
-#include "common/version.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
@@ -236,8 +229,8 @@ Status DataDir::load() {
     LOG(INFO) << "begin loading rowset from meta";
     auto load_rowset_func = [&dir_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                 std::string_view meta_str) -> bool {
-        auto rowset_meta = std::make_shared<RowsetMeta>();
-        bool parsed = rowset_meta->init(meta_str);
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error

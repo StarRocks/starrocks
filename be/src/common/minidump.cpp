@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 //
 #include "common/minidump.h"
 
@@ -11,12 +11,10 @@
 #include <ctime>
 #include <filesystem>
 #include <fstream>
-#include <iomanip>
 #include <map>
 #include <memory>
 #include <sstream>
 #include <system_error>
-#include <thread>
 
 #include "common/config.h"
 #include "util/logging.h"

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "storage/task/engine_storage_migration_task.h"
 
 #include <gtest/gtest.h>
@@ -47,13 +47,13 @@ public:
         set_default_create_tablet_request(&request);
         auto res = StorageEngine::instance()->create_tablet(request);
         ASSERT_TRUE(res.ok()) << res.to_string();
-        TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
+        TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
         ASSERT_TRUE(tablet != nullptr);
         const TabletSchema& tablet_schema = tablet->tablet_schema();
 
         // create rowset
-        RowsetWriterContext rowset_writer_context(kDataFormatUnknown, config::storage_format_version);
+        RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema);
         std::unique_ptr<RowsetWriter> rowset_writer;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
@@ -157,7 +157,7 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -166,15 +166,15 @@ public:
     }
 
     void do_cycle_migration() {
-        TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
+        TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
         ASSERT_TRUE(tablet != nullptr);
         ASSERT_EQ(tablet->tablet_id(), 12345);
         DataDir* source_path = tablet->data_dir();
         tablet.reset();
         DataDir* dest_path = nullptr;
-        DataDir* data_dir_1 = starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0];
-        DataDir* data_dir_2 = starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[1];
+        DataDir* data_dir_1 = starrocks::StorageEngine::instance()->get_stores()[0];
+        DataDir* data_dir_2 = starrocks::StorageEngine::instance()->get_stores()[1];
         if (source_path == data_dir_1) {
             dest_path = data_dir_2;
         } else {
@@ -189,15 +189,15 @@ public:
     }
 
     void do_migration_fail() {
-        TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
+        TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
         ASSERT_TRUE(tablet != nullptr);
         ASSERT_EQ(tablet->tablet_id(), 12345);
         DataDir* source_path = tablet->data_dir();
         tablet.reset();
         DataDir* dest_path = nullptr;
-        DataDir* data_dir_1 = starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[0];
-        DataDir* data_dir_2 = starrocks::ExecEnv::GetInstance()->storage_engine()->get_stores()[1];
+        DataDir* data_dir_1 = starrocks::StorageEngine::instance()->get_stores()[0];
+        DataDir* data_dir_2 = starrocks::StorageEngine::instance()->get_stores()[1];
         if (source_path == data_dir_1) {
             dest_path = data_dir_2;
         } else {
@@ -212,6 +212,7 @@ private:
     PrimitiveType _primitive_type[3] = {PrimitiveType::TYPE_INT, PrimitiveType::TYPE_VARCHAR, PrimitiveType::TYPE_INT};
 
     std::string _names[3] = {"k1", "k2", "v1"};
+    RuntimeState _runtime_state;
     ObjectPool _pool;
 };
 
@@ -220,7 +221,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_cycle_migration) {
 }
 
 TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) {
-    TabletManager* tablet_manager = starrocks::ExecEnv::GetInstance()->storage_engine()->tablet_manager();
+    TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
     TabletUid old_tablet_uid;
     {
         TabletSharedPtr tablet = tablet_manager->get_tablet(12345);
@@ -280,7 +281,7 @@ TEST_F(EngineStorageMigrationTaskTest, test_concurrent_ingestion_and_migration) 
     // clean trash and unused txns after commit
     // it will clean no tablet and txns
     tablet_manager->start_trash_sweep();
-    starrocks::ExecEnv::GetInstance()->storage_engine()->_clean_unused_txns();
+    starrocks::StorageEngine::instance()->_clean_unused_txns();
 
     std::map<TabletInfo, RowsetSharedPtr> tablet_related_rs;
     StorageEngine::instance()->txn_manager()->get_txn_related_tablets(2222, 10, &tablet_related_rs);
@@ -341,15 +342,11 @@ int main(int argc, char** argv) {
         exit(-1);
     }
 
-    std::unique_ptr<starrocks::MemTracker> table_meta_mem_tracker = std::make_unique<starrocks::MemTracker>();
-    std::unique_ptr<starrocks::MemTracker> schema_change_mem_tracker = std::make_unique<starrocks::MemTracker>();
     std::unique_ptr<starrocks::MemTracker> compaction_mem_tracker = std::make_unique<starrocks::MemTracker>();
     std::unique_ptr<starrocks::MemTracker> update_mem_tracker = std::make_unique<starrocks::MemTracker>();
     starrocks::StorageEngine* engine = nullptr;
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.tablet_meta_mem_tracker = table_meta_mem_tracker.get();
-    options.schema_change_mem_tracker = schema_change_mem_tracker.get();
     options.compaction_mem_tracker = compaction_mem_tracker.get();
     options.update_mem_tracker = update_mem_tracker.get();
     starrocks::Status s = starrocks::StorageEngine::open(options, &engine);
@@ -363,7 +360,6 @@ int main(int argc, char** argv) {
     auto* exec_env = starrocks::ExecEnv::GetInstance();
     exec_env->init_mem_tracker();
     starrocks::ExecEnv::init(exec_env, paths);
-    exec_env->set_storage_engine(engine);
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
@@ -373,7 +369,6 @@ int main(int argc, char** argv) {
     // delete engine
     engine->stop();
     delete engine;
-    exec_env->set_storage_engine(nullptr);
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     starrocks::ExecEnv::destroy(exec_env);

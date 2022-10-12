@@ -25,7 +25,6 @@
 #include <algorithm>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 
 #include "Adaptor.hh"
 #include "LzoDecompressor.hh"

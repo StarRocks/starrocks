@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
+
+#include <type_traits>
 
 #include "column/column.h"
 
@@ -79,6 +81,7 @@ public:
     // State management methods:
     virtual size_t size() const = 0;
     virtual size_t alignof_size() const = 0;
+    virtual bool is_pod_state() const { return false; }
     virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
     virtual void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
 
@@ -154,6 +157,8 @@ public:
     size_t size() const final { return sizeof(State); }
 
     size_t alignof_size() const final { return alignof(State); }
+
+    bool is_pod_state() const { return std::is_trivially_destructible_v<State>; }
 };
 
 template <typename State, typename Derived>

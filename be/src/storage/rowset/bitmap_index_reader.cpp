@@ -30,13 +30,37 @@
 
 namespace starrocks {
 
-StatusOr<bool> BitmapIndexReader::load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
-                                       bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory); });
+BitmapIndexReader::BitmapIndexReader() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), sizeof(BitmapIndexReader));
 }
 
-Status BitmapIndexReader::do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
-                                  bool use_page_cache, bool kept_in_memory) {
+BitmapIndexReader::~BitmapIndexReader() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bitmap_index_mem_tracker(), _mem_usage());
+}
+
+StatusOr<bool> BitmapIndexReader::load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
+                                       bool use_page_cache, bool kept_in_memory) {
+    return success_once(_load_once, [&]() {
+        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bitmap_index_mem_tracker(),
+                                     _mem_usage() - sizeof(BitmapIndexReader));
+        } else {
+            _reset();
+        }
+        return st;
+    });
+}
+
+void BitmapIndexReader::_reset() {
+    _typeinfo.reset();
+    _dict_column_reader.reset();
+    _bitmap_column_reader.reset();
+    _has_null = false;
+}
+
+Status BitmapIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta,
+                                   bool use_page_cache, bool kept_in_memory) {
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     const IndexedColumnMetaPB& dict_meta = meta.dict_column();
     const IndexedColumnMetaPB& bitmap_meta = meta.bitmap_column();

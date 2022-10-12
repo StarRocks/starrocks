@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <memory>
 #include <vector>
@@ -31,6 +31,7 @@ template <typename T>
 using Buffer = std::vector<T>;
 
 class ArrayColumn;
+class MapColumn;
 class NullableColumn;
 class ConstColumn;
 

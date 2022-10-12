@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -33,11 +34,13 @@ import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.hudi.avro.HoodieAvroUtils;
-import org.apache.hudi.common.model.HoodieFileFormat;
+import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
+import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.util.Option;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -47,11 +50,14 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
+import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getTypeInfoFromTypeString;
 
 /**
  * Currently, we depend on Hive metastore to obtain table/partition path and statistics.
@@ -70,15 +76,23 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_HUDI_PROPERTIES = "hudiProperties";
 
     public static final String HUDI_TABLE_TYPE = "hudi.table.type";
-    public static final String HUDI_TABLE_PRIMARY_KEY = "hudi.table.primaryKey";
-    public static final String HUDI_TABLE_PRE_COMBINE_FIELD = "hudi.table.preCombineField";
     public static final String HUDI_BASE_PATH = "hudi.table.base.path";
-    public static final String HUDI_TABLE_BASE_FILE_FORMAT = "hudi.table.base.file.format";
+    public static final String HUDI_TABLE_SERDE_LIB = "hudi.table.serde.lib";
+    public static final String HUDI_TABLE_INPUT_FOAMT = "hudi.table.input.format";
+    public static final String HUDI_TABLE_COLUMN_NAMES = "hudi.table.column.names";
+    public static final String HUDI_TABLE_COLUMN_TYPES = "hudi.table.column.types";
     public static final String HUDI_DB = "database";
     public static final String HUDI_TABLE = "table";
     public static final String HUDI_RESOURCE = "resource";
 
-    public enum HoodieTableType {
+    public static final String COW_INPUT_FORMAT = "org.apache.hudi.hadoop.HoodieParquetInputFormat";
+    public static final String COW_INPUT_FORMAT_LEGACY = "com.uber.hoodie.hadoop.HoodieInputFormat";
+    public static final String MOR_RO_INPUT_FORMAT = "org.apache.hudi.hadoop.HoodieParquetInputFormat";
+    public static final String MOR_RO_INPUT_FORMAT_LEGACY = "com.uber.hoodie.hadoop.HoodieInputFormat";
+    public static final String MOR_RT_INPUT_FORMAT = "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat";
+    public static final String MOR_RT_INPUT_FORMAT_LEGACY = "com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat";
+
+    public enum HudiTableType {
         COW, MOR, UNKNOWN
     }
 
@@ -105,7 +119,7 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         initHmsTableInfo();
     }
 
-    public String getDb() {
+    public String getDbName() {
         return db;
     }
 
@@ -117,12 +131,21 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return resourceName;
     }
 
-    public org.apache.hudi.common.model.HoodieTableType getTableType() {
-        return org.apache.hudi.common.model.HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
+    @Override
+    public String getCatalogName() {
+        return null;
+    }
+
+    public HoodieTableType getTableType() {
+        return HoodieTableType.valueOf(hudiProperties.get(HUDI_TABLE_TYPE));
     }
 
     public String getHudiBasePath() {
         return hudiProperties.get(HUDI_BASE_PATH);
+    }
+
+    public String getHudiInputFormat() {
+        return hudiProperties.get(HUDI_TABLE_INPUT_FOAMT);
     }
 
     @Override
@@ -148,16 +171,30 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return dataColumnNames;
     }
 
-    public static HoodieTableType fromInputFormat(String inputFormat) {
+    @Override
+    public boolean isUnPartitioned() {
+        return partColumnNames.size() == 0;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        return Joiner.on(":").join(table, createTime);
+    }
+
+    public static boolean isHudiTable(String inputFormat) {
+        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
+    }
+
+    public static HudiTableType fromInputFormat(String inputFormat) {
         switch (inputFormat) {
-            case "org.apache.hudi.hadoop.HoodieParquetInputFormat":
-            case "com.uber.hoodie.hadoop.HoodieInputFormat":
-                return HoodieTableType.COW;
-            case "org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat":
-            case "com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat":
-                return HoodieTableType.MOR;
+            case COW_INPUT_FORMAT:
+            case COW_INPUT_FORMAT_LEGACY:
+                return HudiTableType.COW;
+            case MOR_RT_INPUT_FORMAT:
+            case MOR_RT_INPUT_FORMAT_LEGACY:
+                return HudiTableType.MOR;
             default:
-                return HoodieTableType.UNKNOWN;
+                return HudiTableType.UNKNOWN;
         }
     }
 
@@ -254,15 +291,45 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 throw new DdlException("Resource [" + resourceName + "] is not hudi resource");
             }
         }
-
         this.resourceName = resourceName;
 
         org.apache.hadoop.hive.metastore.api.Table metastoreTable =
-                HudiTable.validate(resourceName, this.db, this.table, this.fullSchema);
+                GlobalStateMgr.getCurrentState().getHiveRepository().getTable(resourceName, this.db, this.table);
+        Schema tableSchema = HudiTable.loadHudiSchema(metastoreTable);
+        this.createTime = metastoreTable.getCreateTime();
+
+        for (Column column : this.fullSchema) {
+            if (!column.isAllowNull()) {
+                throw new DdlException(
+                        "Hudi extern table does not support no-nullable column: [" + column.getName() + "]");
+            }
+            Schema.Field hudiColumn = tableSchema.getField(column.getName());
+            if (hudiColumn == null) {
+                throw new DdlException("Column [" + column.getName() + "] not exists in hudi.");
+            }
+            // for each column in hudi schema, we should transfer hudi column type to starrocks type
+            // after that, we should check column type whether is same
+            // Only internal catalog like hudi external table need to validate column type
+            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
+                    !validColumnType(hudiColumn.schema(), column.getType())) {
+                throw new DdlException("Can not convert hudi column type [" + hudiColumn.schema().toString() + "] " +
+                        "to starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName()
+                        + ", starrocks type should be "
+                        + HiveMetaStoreTableUtils.convertHudiTableColumnType(hudiColumn.schema()).toSql());
+            }
+        }
 
         String hudiBasePath = metastoreTable.getSd().getLocation();
         if (!Strings.isNullOrEmpty(hudiBasePath)) {
             hudiProperties.put(HUDI_BASE_PATH, hudiBasePath);
+        }
+        String serdeLib = metastoreTable.getSd().getSerdeInfo().getSerializationLib();
+        if (!Strings.isNullOrEmpty(serdeLib)) {
+            hudiProperties.put(HUDI_TABLE_SERDE_LIB, serdeLib);
+        }
+        String inputFormat = metastoreTable.getSd().getInputFormat();
+        if (!Strings.isNullOrEmpty(inputFormat)) {
+            hudiProperties.put(HUDI_TABLE_INPUT_FOAMT, inputFormat);
         }
 
         Configuration conf = new Configuration();
@@ -270,31 +337,32 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         HoodieTableConfig hudiTableConfig = metaClient.getTableConfig();
 
-        Schema tableSchema;
-        try {
-            tableSchema = loadHudiSchema(metastoreTable);
-        } catch (Exception e) {
-            throw new DdlException("Cannot get hudi table schema.");
-        }
-
-        org.apache.hudi.common.model.HoodieTableType hudiTableType = hudiTableConfig.getTableType();
-        if (hudiTableType == org.apache.hudi.common.model.HoodieTableType.MERGE_ON_READ) {
-            throw new DdlException("MERGE_ON_READ type of hudi table is NOT supported.");
-        }
+        HoodieTableType hudiTableType = metaClient.getTableType();
         hudiProperties.put(HUDI_TABLE_TYPE, hudiTableType.name());
 
-        Option<String[]> hudiTablePrimaryKey = hudiTableConfig.getRecordKeyFields();
-        if (hudiTablePrimaryKey.isPresent()) {
-            hudiProperties.put(HUDI_TABLE_PRIMARY_KEY, hudiTableConfig.getRecordKeyFieldProp());
-        }
+        StringBuilder columnNamesBuilder = new StringBuilder();
+        StringBuilder columnTypesBuilder = new StringBuilder();
+        List<FieldSchema> allFields = metastoreTable.getSd().getCols();
+        allFields.addAll(metastoreTable.getPartitionKeys());
 
-        String hudiTablePreCombineField = hudiTableConfig.getPreCombineField();
-        if (!Strings.isNullOrEmpty(hudiTablePreCombineField)) {
-            hudiProperties.put(HUDI_TABLE_PRE_COMBINE_FIELD, hudiTablePreCombineField);
+        boolean isFirst = true;
+        for (Schema.Field hudiField : tableSchema.getFields()) {
+            if (!isFirst) {
+                columnNamesBuilder.append(",");
+                columnTypesBuilder.append(":");
+            }
+            Optional<FieldSchema> field = allFields.stream()
+                    .filter(f -> f.getName().equals(hudiField.name().toLowerCase(Locale.ROOT))).findFirst();
+            if (!field.isPresent()) {
+                throw new DdlException("Hudi column [" + hudiField.name() + "] not exists in hive metastore.");
+            }
+            TypeInfo fieldInfo = getTypeInfoFromTypeString(field.get().getType());
+            columnNamesBuilder.append(field.get().getName());
+            columnTypesBuilder.append(fieldInfo.getTypeName());
+            isFirst = false;
         }
-
-        HoodieFileFormat hudiBaseFileFormat = hudiTableConfig.getBaseFileFormat();
-        hudiProperties.put(HUDI_TABLE_BASE_FILE_FORMAT, hudiBaseFileFormat.name());
+        hudiProperties.put(HUDI_TABLE_COLUMN_NAMES, columnNamesBuilder.toString());
+        hudiProperties.put(HUDI_TABLE_COLUMN_TYPES, columnTypesBuilder.toString());
 
         Option<String[]> hudiPartitionFields = hudiTableConfig.getPartitionFields();
         if (hudiPartitionFields.isPresent()) {
@@ -323,7 +391,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
                 this.dataColumnNames.add(hudiField.name());
             }
         }
-
         if (!copiedProps.isEmpty()) {
             throw new DdlException("Unknown table properties: " + copiedProps);
         }
@@ -497,6 +564,18 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
             tPartition.setLocation(tPartitionLocation);
             tHudiTable.putToPartitions(partitionId, tPartition);
         }
+
+        Configuration conf = new Configuration();
+        HoodieTableMetaClient metaClient =
+                HoodieTableMetaClient.builder().setConf(conf).setBasePath(getHudiBasePath()).build();
+        HoodieTimeline timeline = metaClient.getActiveTimeline().filterCompletedAndCompactionInstants();
+        String queryInstant = timeline.lastInstant().get().getTimestamp();
+        tHudiTable.setInstant_time(queryInstant);
+        tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
+        tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));
+        tHudiTable.setInput_format(hudiProperties.get(HUDI_TABLE_INPUT_FOAMT));
+        tHudiTable.setSerde_lib(hudiProperties.get(HUDI_TABLE_SERDE_LIB));
+        tHudiTable.setIs_mor_table(getTableType() == HoodieTableType.MERGE_ON_READ);
 
         TTableDescriptor tTableDescriptor =
                 new TTableDescriptor(id, TTableType.HUDI_TABLE, fullSchema.size(), 0, table, db);

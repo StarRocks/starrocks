@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake.delete;
 
@@ -30,19 +30,17 @@ import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.qe.QueryStateException;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TabletCommitInfo;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 /**
@@ -95,17 +93,13 @@ public class LakeDeleteJob extends DeleteJob {
                 if (backend == null) {
                     throw new DdlException("Backend " + entry.getKey() + " has been dropped");
                 }
-                TNetworkAddress address = new TNetworkAddress();
-                address.setHostname(backend.getHost());
-                address.setPort(backend.getBrpcPort());
-
-                LakeServiceClient client = new LakeServiceClient(address);
                 DeleteDataRequest request = new DeleteDataRequest();
                 request.tabletIds = entry.getValue();
                 request.txnId = getTransactionId();
                 request.deletePredicate = deletePredicate;
 
-                Future<DeleteDataResponse> responseFuture = client.deleteData(request);
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<DeleteDataResponse> responseFuture = lakeService.deleteData(request);
                 responseList.add(responseFuture);
             }
 
@@ -117,7 +111,7 @@ public class LakeDeleteJob extends DeleteJob {
                             + response.failedTablets.size());
                 }
             }
-        } catch (RpcException | ExecutionException | InterruptedException e) {
+        } catch (Throwable e) {
             cancel(DeleteHandler.CancelType.UNKNOWN, e.getMessage());
             throw new DdlException(e.getMessage());
         }

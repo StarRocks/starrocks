@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/conjunctive_predicates.h"
 
@@ -16,11 +16,12 @@
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
-#include "testutil//assert.h"
+#include "testutil/assert.h"
 
 namespace starrocks::vectorized {
 
@@ -287,7 +288,7 @@ public:
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
         std::vector<bool> nullable_tuples = std::vector<bool>{true};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -327,6 +328,7 @@ public:
     }
 
 protected:
+    RuntimeState _runtime_state;
     ObjectPool _pool;
 };
 
@@ -336,12 +338,13 @@ TEST_P(ConjunctiveTestFixture, test_parse_conjuncts) {
     auto [op, ptype] = GetParam();
 
     _pool.clear();
-    MemTracker mem_tracker;
     TupleDescriptor* tuple_desc = _create_tuple_desc(ptype);
     std::vector<std::string> key_column_names = {"c1"};
     SlotDescriptor* slot = tuple_desc->slots()[0];
     std::vector<ExprContext*> conjunct_ctxs = {_pool.add(new ExprContext(build_predicate(ptype, op, slot)))};
-    auto tablet_schema = TabletSchema::create(&mem_tracker, create_tablet_schema(ptype));
+    ASSERT_OK(Expr::prepare(conjunct_ctxs, &_runtime_state));
+    ASSERT_OK(Expr::open(conjunct_ctxs, &_runtime_state));
+    auto tablet_schema = TabletSchema::create(create_tablet_schema(ptype));
 
     OlapScanConjunctsManager cm;
     cm.conjunct_ctxs_ptr = &conjunct_ctxs;

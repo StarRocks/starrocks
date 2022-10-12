@@ -38,7 +38,6 @@
 #include "runtime/mem_tracker.h"
 #include "storage/storage_engine.h"
 #include "storage/update_manager.h"
-#include "util/debug_util.h"
 #include "util/pretty_printer.h"
 
 namespace starrocks {
@@ -76,6 +75,7 @@ void logs_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* ou
 void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h2>Configurations</h2>";
     (*output) << "<pre>";
+    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
     for (const auto& it : *(config::full_conf_map)) {
         (*output) << it.first << "=" << it.second << std::endl;
     }
@@ -119,8 +119,8 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
         } else if (iter->second == "load") {
             start_mem_tracker = ExecEnv::GetInstance()->load_mem_tracker();
             cur_level = 2;
-        } else if (iter->second == "tablet_meta") {
-            start_mem_tracker = ExecEnv::GetInstance()->tablet_meta_mem_tracker();
+        } else if (iter->second == "metadata") {
+            start_mem_tracker = ExecEnv::GetInstance()->metadata_mem_tracker();
             cur_level = 2;
         } else if (iter->second == "query_pool") {
             start_mem_tracker = ExecEnv::GetInstance()->query_pool_mem_tracker();
@@ -159,8 +159,8 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
     // Metadata memory statistics use the old memory framework,
     // not in RootMemTrackerTree, so it needs to be added here
-    MemTracker* meta_mem_tracker = ExecEnv::GetInstance()->tablet_meta_mem_tracker();
-    MemTracker::SimpleItem meta_item{"tablet_meta",
+    MemTracker* meta_mem_tracker = ExecEnv::GetInstance()->metadata_mem_tracker();
+    MemTracker::SimpleItem meta_item{"metadata",
                                      "process",
                                      2,
                                      meta_mem_tracker->limit(),
@@ -235,7 +235,7 @@ void mem_usage_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMa
     (*output) << tmp << "</pre>";
 #endif
     (*output) << "<pre>";
-    string stats = ExecEnv::GetInstance()->storage_engine()->update_manager()->detail_memory_stats();
+    string stats = StorageEngine::instance()->update_manager()->detail_memory_stats();
     (*output) << stats << "</pre>";
 }
 

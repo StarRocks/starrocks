@@ -128,6 +128,13 @@ BUILD_SYSTEM=${BUILD_SYSTEM:-make}
 BUILD_DIR=starrocks_build
 MACHINE_TYPE=$(uname -m)
 
+# handle mac m1 platform, change arm64 to aarch64
+if [[ "${MACHINE_TYPE}" == "arm64" ]]; then 
+    MACHINE_TYPE="aarch64"
+fi
+
+echo "machine type : $MACHINE_TYPE"
+
 check_if_source_exist() {
     if [ -z $1 ]; then
         echo "dir should specified to check if exist."
@@ -508,6 +515,20 @@ build_librdkafka() {
     ./configure --prefix=$TP_INSTALL_DIR --enable-static --disable-sasl
     make -j$PARALLEL
     make install
+}
+
+# pulsar
+build_pulsar() {
+    check_if_source_exist $PULSAR_SOURCE
+
+    cd $TP_SOURCE_DIR/$PULSAR_SOURCE/pulsar-client-cpp
+
+    $CMAKE_CMD -DCMAKE_LIBRARY_PATH=$TP_INSTALL_DIR/lib -DCMAKE_INCLUDE_PATH=$TP_INSTALL_DIR/include \
+        -DPROTOC_PATH=$TP_INSTALL_DIR/bin/protoc -DBUILD_TESTS=OFF -DBUILD_PYTHON_WRAPPER=OFF -DBUILD_DYNAMIC_LIB=OFF .
+    ${BUILD_SYSTEM} -j$PARALLEL
+
+    cp lib/libpulsar.a $TP_INSTALL_DIR/lib/
+    cp -r include/pulsar $TP_INSTALL_DIR/include/
 }
 
 # flatbuffers
@@ -904,6 +925,33 @@ build_jemalloc() {
     export CFLAGS=$OLD_CFLAGS
 }
 
+# google benchmark
+build_benchmark() {
+    check_if_source_exist $BENCHMARK_SOURCE
+    cd $TP_SOURCE_DIR/$BENCHMARK_SOURCE
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+    cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
+          -DBENCHMARK_ENABLE_GTEST_TESTS=off \
+          -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+          -DCMAKE_BUILD_TYPE=Release ../
+    ${BUILD_SYSTEM} -j$PARALLEL
+    ${BUILD_SYSTEM} install
+}
+
+# fast float
+build_fast_float() {
+    check_if_source_exist $FAST_FLOAT_SOURCE
+    cd $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE
+    cp -r $TP_SOURCE_DIR/$FAST_FLOAT_SOURCE/include $STARROCKS_THIRDPARTY/installed
+}
+
+build_cachelib() {
+    check_if_source_exist $CACHELIB_SOURCE
+    mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -930,6 +978,7 @@ build_leveldb
 build_brpc
 build_rocksdb
 build_librdkafka
+build_pulsar
 build_flatbuffers
 build_arrow
 build_s2
@@ -948,6 +997,9 @@ build_aws_cpp_sdk
 build_vpack
 build_opentelemetry
 build_jemalloc
+build_benchmark
+build_fast_float
+build_cachelib
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

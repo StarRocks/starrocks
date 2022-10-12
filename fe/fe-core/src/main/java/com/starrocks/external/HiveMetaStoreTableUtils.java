@@ -1,20 +1,25 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ConnectorDatabaseId;
@@ -23,9 +28,9 @@ import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveTableStats;
-import com.starrocks.external.hive.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.PlannerProfile;
+import com.starrocks.sql.ast.PartitionValue;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
@@ -35,14 +40,19 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class HiveMetaStoreTableUtils {
     private static final Logger LOG = LogManager.getLogger(HiveMetaStoreTableUtils.class);
-    public static final IdGenerator<ConnectorTableId> connectorTableIdIdGenerator = ConnectorTableId.createGenerator();
-    public static final IdGenerator<ConnectorDatabaseId> connectorDbIdIdGenerator = ConnectorDatabaseId.createGenerator();
+    public static final IdGenerator<ConnectorTableId> CONNECTOR_TABLE_ID_ID_GENERATOR =
+            ConnectorTableId.createGenerator();
+    public static final IdGenerator<ConnectorDatabaseId> CONNECTOR_DATABASE_ID_ID_GENERATOR =
+            ConnectorDatabaseId.createGenerator();
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
 
     public static Map<String, HiveColumnStats> getTableLevelColumnStats(HiveMetaStoreTableInfo hmsTable,
                                                                         List<String> columnNames) throws DdlException {
@@ -105,7 +115,7 @@ public class HiveMetaStoreTableUtils {
     }
 
     public static List<FieldSchema> getAllHiveColumns(Table table) {
-        ImmutableList.Builder<FieldSchema> allColumns =  ImmutableList.builder();
+        ImmutableList.Builder<FieldSchema> allColumns = ImmutableList.builder();
         List<FieldSchema> unHivePartColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
         return allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
@@ -117,7 +127,7 @@ public class HiveMetaStoreTableUtils {
         }
 
         // for type with length, like char(10), we only check the type and ignore the length
-        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
+        String typeUpperCase = ColumnTypeConverter.getTypeKeyword(hiveType).toUpperCase();
         PrimitiveType primitiveType = type.getPrimitiveType();
         switch (typeUpperCase) {
             case "TINYINT":
@@ -151,75 +161,26 @@ public class HiveMetaStoreTableUtils {
             case "BOOLEAN":
                 return primitiveType == PrimitiveType.BOOLEAN;
             case "ARRAY":
+                if (type.equals(Type.UNKNOWN_TYPE)) {
+                    return !HIVE_UNSUPPORTED_TYPES.stream().filter(hiveType.toUpperCase()::contains)
+                            .collect(Collectors.toList()).isEmpty();
+                }
                 if (!type.isArrayType()) {
                     return false;
                 }
                 return validateColumnType(hiveType.substring(hiveType.indexOf('<') + 1, hiveType.length() - 1),
                         ((ArrayType) type).getItemType());
+            case "MAP":
+                if (!type.isMapType()) {
+                    return false;
+                }
+                String[] kvStr = ColumnTypeConverter.getKeyValueStr(hiveType);
+                return validateColumnType(kvStr[0], ((MapType) type).getKeyType()) &&
+                        validateColumnType(kvStr[1], ((MapType) type).getValueType());
+
             default:
                 // for BINARY and other types, we transfer it to UNKNOWN_TYPE
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
-        }
-    }
-
-    public static Type convertHiveTableColumnType(String hiveType) throws DdlException {
-        String typeUpperCase = Utils.getTypeKeyword(hiveType).toUpperCase();
-        PrimitiveType primitiveType;
-        switch (typeUpperCase) {
-            case "TINYINT":
-                primitiveType = PrimitiveType.TINYINT;
-                break;
-            case "SMALLINT":
-                primitiveType = PrimitiveType.SMALLINT;
-                break;
-            case "INT":
-            case "INTEGER":
-                primitiveType = PrimitiveType.INT;
-                break;
-            case "BIGINT":
-                primitiveType = PrimitiveType.BIGINT;
-                break;
-            case "FLOAT":
-                primitiveType = PrimitiveType.FLOAT;
-                break;
-            case "DOUBLE":
-            case "DOUBLE PRECISION":
-                primitiveType = PrimitiveType.DOUBLE;
-                break;
-            case "DECIMAL":
-            case "NUMERIC":
-                primitiveType = PrimitiveType.DECIMAL32;
-                break;
-            case "TIMESTAMP":
-                primitiveType = PrimitiveType.DATETIME;
-                break;
-            case "DATE":
-                primitiveType = PrimitiveType.DATE;
-                break;
-            case "STRING":
-                return ScalarType.createDefaultString();
-            case "VARCHAR":
-                return ScalarType.createVarcharType(Utils.getVarcharLength(hiveType));
-            case "CHAR":
-                return ScalarType.createCharType(Utils.getCharLength(hiveType));
-            case "BOOLEAN":
-                primitiveType = PrimitiveType.BOOLEAN;
-                break;
-            case "ARRAY":
-                Type type = Utils.convertToArrayType(hiveType);
-                if (type.isArrayType()) {
-                    return type;
-                }
-            default:
-                primitiveType = PrimitiveType.UNKNOWN_TYPE;
-                break;
-        }
-
-        if (primitiveType != PrimitiveType.DECIMAL32) {
-            return ScalarType.createType(primitiveType);
-        } else {
-            int[] parts = Utils.getPrecisionAndScale(hiveType);
-            return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
         }
     }
 
@@ -325,7 +286,7 @@ public class HiveMetaStoreTableUtils {
         List<FieldSchema> allHiveColumns = getAllHiveColumns(hiveTable);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertHiveTableColumnType(fieldSchema.getType());
+            Type srType = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchema.add(column);
         }
@@ -336,7 +297,7 @@ public class HiveMetaStoreTableUtils {
         properties.put(HiveTable.HIVE_METASTORE_URIS, resoureName);
         properties.put(HiveTable.HIVE_RESOURCE, resoureName);
 
-        return new HiveTable(connectorTableIdIdGenerator.getNextId().asInt(), hiveTable.getTableName(),
+        return new HiveTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), hiveTable.getTableName(),
                 fullSchema, properties, hiveTable);
     }
 
@@ -360,12 +321,12 @@ public class HiveMetaStoreTableUtils {
         properties.put(HudiTable.HUDI_TABLE, hmsTable.getTableName());
         properties.put(HudiTable.HUDI_RESOURCE, resourceName);
 
-        return new HudiTable(connectorTableIdIdGenerator.getNextId().asInt(), hudiSchema.getName(),
+        return new HudiTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), hudiSchema.getName(),
                 fullSchema, properties);
     }
 
     public static Database convertToSRDatabase(String dbName) {
-        return new Database(connectorDbIdIdGenerator.getNextId().asInt(), dbName);
+        return new Database(CONNECTOR_DATABASE_ID_ID_GENERATOR.getNextId().asInt(), dbName);
     }
 
     public static long doGetPartitionStatsRowCount(HiveMetaStoreTableInfo hmsTable,
@@ -413,5 +374,52 @@ public class HiveMetaStoreTableUtils {
     // We will reconstruct this part later. The concept of resource will not be used for external catalog
     public static boolean isInternalCatalog(String resourceName) {
         return !resourceName.startsWith("thrift://");
+    }
+
+    // Map partition values to partition ranges, eg
+    // [NULL,1992-01-01,1992-01-02,1992-01-03]
+    //               ||
+    //               \/
+    // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, 9999-12-31)
+    public static Map<String, Range<PartitionKey>> getPartitionRange(HiveMetaStoreTable hiveMetaStoreTable,
+                                                                     Column partitionColumn)
+            throws DdlException, AnalysisException {
+        Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
+        Map<PartitionKey, Long> partitionKeyMap = hiveMetaStoreTable.getPartitionKeys();
+        Map<String, PartitionKey> partitionMap = Maps.newHashMap();
+        for (Map.Entry<PartitionKey, Long> entry : partitionKeyMap.entrySet()) {
+            String partitionName = "p" + entry.getKey().getKeys().get(0).getStringValue();
+            // generate legal partition name
+            partitionName = partitionName.replaceAll("[^a-zA-Z0-9_]*", "");
+            partitionMap.put(partitionName, entry.getKey());
+        }
+        LinkedHashMap<String, PartitionKey> sortedPartitionLinkMap = partitionMap.entrySet().stream()
+                .sorted(Map.Entry.comparingByValue(PartitionKey::compareTo))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue, (e1, e2) -> e1, LinkedHashMap::new));
+        int index = 0;
+        PartitionKey lastPartitionKey = null;
+        String lastPartitionName = null;
+        for (Map.Entry<String, PartitionKey> entry : sortedPartitionLinkMap.entrySet()) {
+            if (index == 0) {
+                lastPartitionName = entry.getKey();
+                lastPartitionKey = entry.getValue();
+                if (lastPartitionKey.getKeys().get(0).isNullable()) {
+                    // If partition key is NULL literal, rewrite it to min value.
+                    lastPartitionKey = PartitionKey.createInfinityPartitionKey(ImmutableList.of(partitionColumn), false);
+                }
+                ++index;
+                continue;
+            }
+            partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey, entry.getValue()));
+            lastPartitionName = entry.getKey();
+            lastPartitionKey = entry.getValue();
+        }
+        if (lastPartitionName != null) {
+            partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey,
+                    PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue(
+                            LiteralExpr.createMaxValue(partitionColumn.getType()).getStringValue())),
+                            ImmutableList.of(partitionColumn))));
+        }
+        return partitionRangeMap;
     }
 }

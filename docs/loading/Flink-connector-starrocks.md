@@ -1,4 +1,4 @@
-# Load data by using flink-connector-starrocks
+# Continuously load data from Apache Flink® 
 
 This topic describes how to load data from Apache Flink® to StarRocks.
 
@@ -15,19 +15,12 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 
     ```Plain%20Text
     <dependency>
-
         <groupId>com.starrocks</groupId>
-
         <artifactId>flink-connector-starrocks</artifactId>
-
         <!-- for flink-1.11, flink-1.12 -->
-
         <version>x.x.x_flink-1.11</version>
-
         <!-- for flink-1.13 -->
-
         <version>x.x.x_flink-1.13</version>
-
     </dependency>
     ```
 
@@ -35,175 +28,103 @@ To load data from Apache Flink® into StarRocks by using flink-connector-starroc
 
     - Load data as raw JSON string streams.
 
-        ```Plain%20Text
+        ```java
         // -------- sink with raw json string stream --------
-
         fromElements(new String[]{
-
             "{\"score\": \"99\", \"name\": \"stephen\"}",
-
             "{\"score\": \"100\", \"name\": \"lebron\"}"
-
         }).addSink(
-
             StarRocksSink.sink(
-
                 // the sink options
-
                 StarRocksSinkOptions.builder()
-
                     .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
-
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
-
                     .withProperty("username", "xxx")
-
                     .withProperty("password", "xxx")
-
                     .withProperty("table-name", "xxx")
-
                     .withProperty("database-name", "xxx")
-
+                    // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
+                    // .withProperty("sink.properties.partial_update", "true")
+                    // .withProperty("sink.properties.columns", "k1,k2,k3")
                     .withProperty("sink.properties.format", "json")
-
                     .withProperty("sink.properties.strip_outer_array", "true")
-
                     .build()
-
             )
-
         );
 
-
-
-
-
         // -------- sink with stream transformation --------
-
         class RowData {
-
             public int score;
-
             public String name;
-
             public RowData(int score, String name) {
-
                 ......
-
             }
-
         }
-
         fromElements(
-
             new RowData[]{
-
                 new RowData(99, "stephen"),
-
                 new RowData(100, "lebron")
-
             }
-
         ).addSink(
-
             StarRocksSink.sink(
-
                 // the table structure
-
                 TableSchema.builder()
-
                     .field("score", DataTypes.INT())
-
                     .field("name", DataTypes.VARCHAR(20))
-
                     .build(),
-
                 // the sink options
-
                 StarRocksSinkOptions.builder()
-
                     .withProperty("jdbc-url", "jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx")
-
                     .withProperty("load-url", "fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port")
-
                     .withProperty("username", "xxx")
-
                     .withProperty("password", "xxx")
-
                     .withProperty("table-name", "xxx")
-
                     .withProperty("database-name", "xxx")
-
+                    // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
+                    // .withProperty("sink.properties.partial_update", "true")
+                    // .withProperty("sink.properties.columns", "k1,k2,k3")
                     .withProperty("sink.properties.format", "csv")  
-
                     .withProperty("sink.properties.column_separator", "\\x01")
-
                     .withProperty("sink.properties.row_delimiter", "\\x02")
-
                     .build(),
-
                 // set the slots with streamRowData
-
                 (slots, streamRowData) -> {
-
                     slots[0] = streamRowData.score;
-
                     slots[1] = streamRowData.name;
-
                 }
-
             )
-
         );
         ```
 
     - Load data as tables.  
 
-        ```Plain%20Text
+        ```java
         // create a table with `structure` and `properties`
-
         // Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
-
         tEnv.executeSql(
-
             "CREATE TABLE USER_RESULT(" +
-
                 "name VARCHAR," +
-
                 "score BIGINT" +
-
             ") WITH ( " +
-
                 "'connector' = 'starrocks'," +
-
                 "'jdbc-url'='jdbc:mysql://fe1_ip:query_port,fe2_ip:query_port,fe3_ip:query_port?xxxxx'," +
-
                 "'load-url'='fe1_ip:http_port;fe2_ip:http_port;fe3_ip:http_port'," +
-
                 "'database-name' = 'xxx'," +
-
                 "'table-name' = 'xxx'," +
-
                 "'username' = 'xxx'," +
-
                 "'password' = 'xxx'," +
-
                 "'sink.buffer-flush.max-rows' = '1000000'," +
-
                 "'sink.buffer-flush.max-bytes' = '300000000'," +
-
                 "'sink.buffer-flush.interval-ms' = '5000'," +
-
+                // Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring the following two properties.
+                // "'sink.properties.partial_update' = 'true'," +
+                // "'sink.properties.row_delimiter' = 'k1,k2,k3'," + 
                 "'sink.properties.column_separator' = '\\x01'," +
-
                 "'sink.properties.row_delimiter' = '\\x02'," +
-
                 "'sink.max-retries' = '3'" +
-
-                "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
-
+                // stream load properties like `'sink.properties.columns' = 'k1, v1'`
+                "'sink.properties.*' = 'xxx'" + 
             ")"
-
         );
         ```
 
@@ -224,7 +145,7 @@ The following table describes the `sink` options that you can configure when you
 | sink.buffer-flush.interval-ms | No           | 300000            | STRING        | The interval at which data is flushed. Valid values: 1000 to 3600000. Unit: ms. |
 | sink.max-retries              | No           | 1                 | STRING        | The number of times that the system retries to perform the Stream Load. Valid values: 0 to 10. |
 | sink.connect.timeout-ms       | No           | 1000              | STRING        | The period of time after which the stream load times out. Valid values: 100 to 60000. Unit: ms. |
-| sink.properties.*             | No           | NONE              | STRING        | The properties of the stream load. The properties include k1, k2, and k3. |
+| sink.properties.*             | No           | NONE              | STRING        | The properties of the stream load. The properties include k1, k2, and k3. Since 2.4, the flink-connector-starrocks supports partial updates for Primary Key model. |
 
 ## Usage notes
 
@@ -240,4 +161,4 @@ When you load data from Apache Flink® into StarRocks, take note of the followin
 
 - If data loading pauses, you can increase the memory of the Flink task.
 
-- If the preceding code runs as expected and StarRocks can receive data, but the data loading fails, check whether your machine can access the HTTP port of the backends (BEs) in your StarRocks cluster. If you can successfully ping the HTTP port returned by the execution of the SHOW BACKENDS command in your StarRocks cluster, your machine can access the HTTP port of the backends (BEs) in your StarRocks cluster. For example, a machine has a public IP address and a private IP address, the HTTP ports of frontends (FEs) and BEs can be accessed through the public IP address of the FEs and BEs, the IP address that is bounded with your StarRocks cluster is the private IP address, and the value of `loadurl` for the Flink task is the HTTP port of the public IP address of the FEs. The FEs forwards the data loading task to the private IP address of the BEs. In this example, if the machine cannot ping the private IP address of the BEs, the data loading fails.
+- If the preceding code runs as expected and StarRocks can receive data, but the data loading fails, check whether your machine can access the HTTP port of the backends (BEs) in your StarRocks cluster. If you can successfully ping the HTTP port returned by the execution of the SHOW BACKENDS command in your StarRocks cluster, your machine can access the HTTP port of the BEs in your StarRocks cluster. For example, a machine has a public IP address and a private IP address, the HTTP ports of frontends (FEs) and BEs can be accessed through the public IP address of the FEs and BEs, the IP address that is bounded with your StarRocks cluster is the private IP address, and the value of `loadurl` for the Flink task is the HTTP port of the public IP address of the FEs. The FEs forwards the data loading task to the private IP address of the BEs. In this example, if the machine cannot ping the private IP address of the BEs, the data loading fails.

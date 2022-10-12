@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.scalar;
 
@@ -19,6 +19,14 @@ public class CaseWhenOperator extends CallOperator {
 
     public CaseWhenOperator(CaseWhenOperator other, List<ScalarOperator> children) {
         super("CaseWhen", other.type, children);
+        this.hasCase = other.hasCase;
+        this.hasElse = other.hasElse;
+        this.whenStart = other.whenStart;
+        this.whenEnd = other.whenEnd;
+    }
+
+    public CaseWhenOperator(Type returnType, CaseWhenOperator other) {
+        super("CaseWhen", returnType, other.arguments);
         this.hasCase = other.hasCase;
         this.hasElse = other.hasElse;
         this.whenStart = other.whenStart;

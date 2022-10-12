@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -106,6 +106,7 @@ public:
      * @return ARRAY_BIGINT
      */
     DEFINE_VECTORIZED_FN(bitmap_to_array);
+    static void detect_bitmap_cardinality(size_t* data_size, const int64_t cardinality);
 
     /**
      * @param:

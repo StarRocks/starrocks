@@ -1,16 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "exec/pipeline/exec_state_reporter.h"
 
 #include <thrift/Thrift.h>
 #include <thrift/protocol/TDebugProtocol.h>
 
 #include "agent/master_info.h"
-#include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
 #include "runtime/exec_env.h"
-#include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 
 namespace starrocks::pipeline {
@@ -49,10 +45,10 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
 
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        params.__set_loaded_rows(runtime_state->num_rows_load_total());
+        runtime_state->update_report_load_status(&params);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            params.__set_loaded_rows(runtime_state->num_rows_load_total());
+            runtime_state->update_report_load_status(&params);
         }
         if (fragment_ctx->is_report_profile()) {
             profile->to_thrift(&params.profile);
@@ -65,7 +61,7 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
                 params.delta_urls.push_back(to_http_path(exec_env->token(), it));
             }
         }
-        if (runtime_state->num_rows_load_total() > 0 || runtime_state->num_rows_load_filtered() > 0) {
+        if (runtime_state->num_rows_load_from_sink() > 0 || runtime_state->num_rows_load_filtered() > 0) {
             params.__isset.load_counters = true;
             // TODO(zc)
             static std::string s_dpp_normal_all = "dpp.norm.ALL";
@@ -73,10 +69,10 @@ TReportExecStatusParams ExecStateReporter::create_report_exec_status_params(Frag
             static std::string s_unselected_rows = "unselected.rows";
             static std::string s_loaded_bytes = "loaded.bytes";
 
-            params.load_counters.emplace(s_dpp_normal_all, std::to_string(runtime_state->num_rows_load_success()));
+            params.load_counters.emplace(s_dpp_normal_all, std::to_string(runtime_state->num_rows_load_sink_success()));
             params.load_counters.emplace(s_dpp_abnormal_all, std::to_string(runtime_state->num_rows_load_filtered()));
             params.load_counters.emplace(s_unselected_rows, std::to_string(runtime_state->num_rows_load_unselected()));
-            params.load_counters.emplace(s_loaded_bytes, std::to_string(runtime_state->num_bytes_load_total()));
+            params.load_counters.emplace(s_loaded_bytes, std::to_string(runtime_state->num_bytes_load_from_sink()));
         }
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));

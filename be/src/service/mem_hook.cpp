@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #ifdef USE_JEMALLOC
 #include "jemalloc/jemalloc.h"
@@ -9,7 +9,6 @@
 
 #include <atomic>
 #include <iostream>
-#include <new>
 
 #include "common/compiler_util.h"
 

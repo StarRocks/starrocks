@@ -1,5 +1,18 @@
 # StarRocks version 2.0
 
+## 2.0.9
+
+Release date: August 6, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- For a Broker Load job, if the broker is heavily loaded, internal heartbeats may time out, causing data loss. [#8282](https://github.com/StarRocks/starrocks/issues/8282)
+- For a Broker Load job, if the destination StarRocks table does not have the column specified by the `COLUMNS FROM PATH AS` parameter, the BEs stop running. [#5346](https://github.com/StarRocks/starrocks/issues/5346)
+- Some queries are forwarded to the Leader FE, causing the `/api/query_detail` action to return incorrect execution information about SQL statements such as SHOW FRONTENDS. [#9185](https://github.com/StarRocks/starrocks/issues/9185)
+- When multiple Broker Load jobs are created to load the same HDFS data file, if one job encounters exceptions, the other jobs may not be able to properly read data either and consequently fail. [#9506](https://github.com/StarRocks/starrocks/issues/9506)
+
 ## 2.0.8
 
 Release date: July 15, 2022

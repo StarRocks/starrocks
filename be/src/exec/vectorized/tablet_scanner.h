@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -70,7 +70,7 @@ private:
     OlapScanNode* _parent = nullptr;
 
     using PredicatePtr = std::unique_ptr<ColumnPredicate>;
-
+    ObjectPool _pool;
     std::vector<ExprContext*> _conjunct_ctxs;
     ConjunctivePredicates _predicates;
     std::vector<uint8_t> _selection;

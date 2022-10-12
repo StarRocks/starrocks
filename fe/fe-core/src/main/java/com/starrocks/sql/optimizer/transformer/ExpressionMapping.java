@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.transformer;
 
 import com.google.common.collect.Lists;
@@ -92,16 +92,16 @@ public class ExpressionMapping {
         fieldMappings.toArray(this.fieldMappings);
     }
 
-    public void put(Expr expression, ColumnRefOperator variable) {
+    public void put(Expr expression, ColumnRefOperator columnRefOperator) {
         if (expression instanceof FieldReference) {
-            fieldMappings[((FieldReference) expression).getFieldIndex()] = variable;
+            fieldMappings[((FieldReference) expression).getFieldIndex()] = columnRefOperator;
         }
 
         if (expression instanceof SlotRef) {
-            scope.tryResolveFeild((SlotRef) expression)
-                    .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = variable);
+            scope.tryResolveField((SlotRef) expression)
+                    .ifPresent(field -> fieldMappings[field.getRelationFieldIndex()] = columnRefOperator);
         }
-        expressionToColumns.put(expression, variable);
+        expressionToColumns.put(expression, columnRefOperator);
     }
 
     public boolean hasExpression(Expr expr) {

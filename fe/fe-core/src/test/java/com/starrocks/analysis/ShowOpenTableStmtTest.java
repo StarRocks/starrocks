@@ -21,22 +21,15 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
-import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.ShowCatalogsStmt;
-import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.ast.ShowOpenTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.Locale;
 
 public class ShowOpenTableStmtTest {
 
@@ -57,7 +50,6 @@ public class ShowOpenTableStmtTest {
     @Test
     public void testNormal() throws Exception {
         ShowOpenTableStmt stmt = (ShowOpenTableStmt) UtFrameUtils.parseStmtWithNewParser("SHOW OPEN TABLES", ctx);
-        Assert.assertEquals("SHOW OPEN TABLES", stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals(4, metaData.getColumnCount());

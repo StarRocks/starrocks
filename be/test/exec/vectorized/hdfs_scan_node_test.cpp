@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 // #include "exec/vectorized/hdfs_scan_node.h"
 #include <gtest/gtest.h>
@@ -24,8 +24,6 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        auto* engine = StorageEngine::instance();
-        _exec_env->set_storage_engine(engine);
 
         _create_runtime_state();
         _pool = _runtime_state->obj_pool();
@@ -238,7 +236,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     THdfsPartition partition;
     std::map<int64_t, THdfsPartition> p_map;
@@ -274,7 +272,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     tuple_desc_builder.add_slot(slot4);
     tuple_desc_builder.build(&table_desc_builder);
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state.get(), _pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     // hdfs table
     THdfsTable t_hdfs_table;
@@ -345,7 +343,7 @@ DescriptorTbl* HdfsScanNodeTest::_create_table_desc_for_filter_partition() {
     TTableDescriptor tdesc;
     tdesc.__set_hdfsTable(t_hdfs_table);
     _table_desc = _pool->add(new HdfsTableDescriptor(tdesc, _pool));
-    _table_desc->create_key_exprs(_pool, _runtime_state->chunk_size());
+    _table_desc->create_key_exprs(_runtime_state.get(), _pool, _runtime_state->chunk_size());
     tbl->get_tuple_descriptor(0)->set_table_desc(_table_desc);
 
     return tbl;

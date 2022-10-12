@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/utility_functions.h"
 
@@ -103,6 +103,13 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         std::set<int128_t> vals;
         vals.insert(col->get_data().begin(), col->get_data().end());
         ASSERT_EQ(vals.size(), chunk_size);
+    }
+
+    {
+        Columns columns;
+        ColumnPtr result = UtilityFunctions::host_name(ctx, columns);
+        ColumnViewer<TYPE_VARCHAR> column_viewer(result);
+        ASSERT_EQ(column_viewer.size(), 1);
     }
 }
 

@@ -1,13 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.PartitionDesc;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.PartitionDesc;
 import org.apache.commons.lang.NotImplementedException;
 import org.junit.Before;
 import org.junit.Test;
@@ -49,7 +49,7 @@ public class PartitionDescTest {
     }
 
     @Test(expected = NotImplementedException.class)
-    public void TestToPartitionInfo() throws DdlException {
+    public void testToPartitionInfo() throws DdlException {
         Column id = new Column("id", Type.BIGINT);
         List<Column> columns = Lists.newArrayList(id);
         Map<String, Long> partitionNameToId = new HashMap<>();

@@ -1,13 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.velocity.VelocityContext;
 
@@ -36,31 +37,37 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
                     + "    GROUP BY t0.`$columnName` "
                     + ") as t1";
 
-    protected static final String INSERT_STATISTIC_TEMPLATE = "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
+    protected static final String INSERT_STATISTIC_TEMPLATE =
+            "INSERT INTO " + StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 
-    public SampleStatisticsCollectJob(Database db, OlapTable table, List<String> columns,
+    public SampleStatisticsCollectJob(Database db, Table table, List<String> columns,
                                       StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
                                       Map<String, String> properties) {
         super(db, table, columns, type, scheduleType, properties);
     }
 
     @Override
-    public void collect() throws Exception {
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long sampleRowCount = Long.parseLong(properties.getOrDefault(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                 String.valueOf(Config.statistic_sample_collect_rows)));
 
-        int partitionSize = (int) (Config.statistic_collect_max_row_count_per_query
-                / (sampleRowCount * columns.size()) + 1);
+        List<List<String>> collectSQLList = Lists.partition(columns, splitColumns(sampleRowCount));
+        long finishedSQLNum = 0;
+        long totalCollectSQL = collectSQLList.size();
 
-        for (List<String> splitColItem : Lists.partition(columns, partitionSize)) {
+        for (List<String> splitColItem : collectSQLList) {
             String sql = buildSampleInsertSQL(db.getId(), table.getId(), splitColItem, sampleRowCount);
-            collectStatisticSync(sql);
+            collectStatisticSync(sql, context);
+
+            finishedSQLNum++;
+            analyzeStatus.setProgress(finishedSQLNum * 100 / totalCollectSQL);
+            GlobalStateMgr.getCurrentAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
         }
     }
 
     private String buildSampleInsertSQL(Long dbId, Long tableId, List<String> columnNames, long rows) {
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        OlapTable table = (OlapTable) db.getTable(tableId);
+        Table table = db.getTable(tableId);
 
         long hitRows = 1;
         long totalRows = 0;

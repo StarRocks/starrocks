@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "aggregate_distinct_streaming_sink_operator.h"
 
@@ -144,5 +144,9 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const size_t 
     }
 
     return Status::OK();
+}
+Status AggregateDistinctStreamingSinkOperator::reset_state(std::vector<vectorized::ChunkPtr>&& chunks) {
+    _is_finished = false;
+    return _aggregator->reset_state(std::move(chunks));
 }
 } // namespace starrocks::pipeline

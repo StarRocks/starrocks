@@ -21,7 +21,7 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.AssertNumRowsElement;
+import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.thrift.TAssertNumRowsNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;

@@ -1,16 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
-#include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/exec_node.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
+
 class CrossJoinNode final : public ExecNode {
 public:
     CrossJoinNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs);
@@ -68,6 +68,10 @@ private:
     void _init_row_desc();
     void _init_chunk(ChunkPtr* chunk);
 
+    TJoinOp::type _join_op;
+    std::vector<ExprContext*> _join_conjuncts;
+    std::string _sql_join_conjuncts;
+
     // previsou saved chunk.
     ChunkPtr _pre_output_chunk = nullptr;
     // used as right table's chunk.
@@ -111,5 +115,5 @@ private:
 
     std::vector<RuntimeFilterBuildDescriptor*> _build_runtime_filters;
 };
-} // namespace vectorized
-} // namespace starrocks
+
+} // namespace starrocks::vectorized

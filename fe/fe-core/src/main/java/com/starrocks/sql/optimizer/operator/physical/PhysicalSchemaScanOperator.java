@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.physical;
 
@@ -31,5 +31,10 @@ public class PhysicalSchemaScanOperator extends PhysicalScanOperator {
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
         return visitor.visitPhysicalSchemaScan(optExpression, context);
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return false;
     }
 }

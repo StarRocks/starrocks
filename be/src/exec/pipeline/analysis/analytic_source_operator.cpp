@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "analytic_source_operator.h"
 
@@ -22,6 +22,9 @@ void AnalyticSourceOperator::close(RuntimeState* state) {
 }
 
 StatusOr<vectorized::ChunkPtr> AnalyticSourceOperator::pull_chunk(RuntimeState* state) {
-    return _analytor->poll_chunk_buffer();
+    auto chunk = _analytor->poll_chunk_buffer();
+    eval_runtime_bloom_filters(chunk.get());
+    RETURN_IF_ERROR(eval_conjuncts_and_in_filters({}, chunk.get()));
+    return chunk;
 }
 } // namespace starrocks::pipeline

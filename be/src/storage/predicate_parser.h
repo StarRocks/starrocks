@@ -1,4 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+#pragma once
 
 #include <string>
 
@@ -18,7 +20,10 @@ class PredicateParser {
 public:
     explicit PredicateParser(const TabletSchema& schema) : _schema(schema) {}
 
+    // check if an expression can be pushed down to the storage level
     bool can_pushdown(const ColumnPredicate* predicate) const;
+
+    bool can_pushdown(const SlotDescriptor* slot_desc) const;
 
     // Parse |condition| into a predicate that can be pushed down.
     // return nullptr if parse failed.

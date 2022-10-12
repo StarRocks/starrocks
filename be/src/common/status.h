@@ -11,7 +11,7 @@
 #include "common/logging.h"
 #include "gen_cpp/StatusCode_types.h" // for TStatus
 #include "util/slice.h"               // for Slice
-
+#include "util/time.h"
 namespace starrocks {
 
 class StatusPB;
@@ -28,6 +28,13 @@ public:
             delete[] _state;
         }
     }
+
+#if defined(ENABLE_STATUS_FAILED)
+    static int32_t get_cardinality_of_inject();
+    static inline std::unordered_map<std::string, bool> dircetory_enable;
+    static void access_directory_of_inject();
+    static bool in_directory_of_inject(const std::string&);
+#endif
 
     // Copy c'tor makes copy of error detail so Status can be returned by value
     Status(const Status& s) : _state(s._state == nullptr ? nullptr : copy_state(s._state)) {}
@@ -287,14 +294,93 @@ inline const Status& to_status(const StatusOr<T>& st) {
 #define AS_STRING_INTERNAL(x) #x
 #endif
 
-// Some generally useful macros.
-#define RETURN_IF_ERROR(stmt)                                                                         \
+#define RETURN_IF_ERROR_INTERNAL(stmt)                                                                \
     do {                                                                                              \
         auto&& status__ = (stmt);                                                                     \
         if (UNLIKELY(!status__.ok())) {                                                               \
             return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
         }                                                                                             \
     } while (false)
+
+#if defined(ENABLE_STATUS_FAILED)
+struct StatusInstance {
+    static constexpr Status (*random[])(const Slice& msg) = {&Status::Unknown,
+                                                             &Status::PublishTimeout,
+                                                             &Status::MemoryAllocFailed,
+                                                             &Status::BufferAllocFailed,
+                                                             &Status::InvalidArgument,
+                                                             &Status::MinimumReservationUnavailable,
+                                                             &Status::Corruption,
+                                                             &Status::IOError,
+                                                             &Status::NotFound,
+                                                             &Status::AlreadyExist,
+                                                             &Status::NotSupported,
+                                                             &Status::EndOfFile,
+                                                             &Status::ServiceUnavailable,
+                                                             &Status::Uninitialized,
+                                                             &Status::Aborted,
+                                                             &Status::DataQualityError,
+                                                             &Status::VersionAlreadyMerged,
+                                                             &Status::DuplicateRpcInvocation,
+                                                             &Status::JsonFormatError,
+                                                             &Status::GlobalDictError,
+                                                             &Status::TransactionInProcessing,
+                                                             &Status::TransactionNotExists,
+                                                             &Status::LabelAlreadyExists,
+                                                             &Status::ResourceBusy};
+
+    static constexpr TStatusCode::type codes[] = {TStatusCode::UNKNOWN,
+                                                  TStatusCode::PUBLISH_TIMEOUT,
+                                                  TStatusCode::MEM_ALLOC_FAILED,
+                                                  TStatusCode::BUFFER_ALLOCATION_FAILED,
+                                                  TStatusCode::INVALID_ARGUMENT,
+                                                  TStatusCode::MINIMUM_RESERVATION_UNAVAILABLE,
+                                                  TStatusCode::CORRUPTION,
+                                                  TStatusCode::IO_ERROR,
+                                                  TStatusCode::NOT_FOUND,
+                                                  TStatusCode::ALREADY_EXIST,
+                                                  TStatusCode::NOT_IMPLEMENTED_ERROR,
+                                                  TStatusCode::END_OF_FILE,
+                                                  TStatusCode::SERVICE_UNAVAILABLE,
+                                                  TStatusCode::UNINITIALIZED,
+                                                  TStatusCode::ABORTED,
+                                                  TStatusCode::DATA_QUALITY_ERROR,
+                                                  TStatusCode::OLAP_ERR_VERSION_ALREADY_MERGED,
+                                                  TStatusCode::DUPLICATE_RPC_INVOCATION,
+                                                  TStatusCode::DATA_QUALITY_ERROR,
+                                                  TStatusCode::GLOBAL_DICT_ERROR,
+                                                  TStatusCode::TXN_IN_PROCESSING,
+                                                  TStatusCode::TXN_NOT_EXISTS,
+                                                  TStatusCode::LABEL_ALREADY_EXISTS,
+                                                  TStatusCode::RESOURCE_BUSY};
+
+    static constexpr int SIZE = sizeof(random) / sizeof(Status(*)(const Slice& msg));
+};
+
+#define RETURN_INJECT(index)                                                         \
+    std::stringstream ss;                                                            \
+    ss << "INJECT ERROR: " << __FILE__ << " " << __LINE__ << " "                     \
+       << starrocks::StatusInstance::codes[index % starrocks::StatusInstance::SIZE]; \
+    return starrocks::StatusInstance::random[index % starrocks::StatusInstance::SIZE](ss.str());
+
+#define RETURN_IF_ERROR(stmt)                                                                             \
+    do {                                                                                                  \
+        uint32_t seed = starrocks::GetCurrentTimeNanos();                                                 \
+        seed = ::rand_r(&seed);                                                                           \
+        uint32_t boundary_value = RAND_MAX / (1.0 * starrocks::Status::get_cardinality_of_inject());      \
+        /* Pre-condition of inject errors: probability and File scope*/                                   \
+        if (seed <= boundary_value && starrocks::Status::in_directory_of_inject(__FILE__)) {              \
+            RETURN_INJECT(seed);                                                                          \
+        } else {                                                                                          \
+            auto&& status__ = (stmt);                                                                     \
+            if (UNLIKELY(!status__.ok())) {                                                               \
+                return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+            }                                                                                             \
+        }                                                                                                 \
+    } while (false)
+#else
+#define RETURN_IF_ERROR(stmt) RETURN_IF_ERROR_INTERNAL(stmt)
+#endif
 
 #define EXIT_IF_ERROR(stmt)                        \
     do {                                           \
@@ -320,7 +406,7 @@ inline const Status& to_status(const StatusOr<T>& st) {
         auto&& st__ = (stmt);                                        \
         if (UNLIKELY(!st__.ok())) {                                  \
             LOG(WARNING) << (warning_prefix) << ", error: " << st__; \
-            return st__;                                             \
+            return std::move(st__);                                  \
         }                                                            \
     } while (0);
 

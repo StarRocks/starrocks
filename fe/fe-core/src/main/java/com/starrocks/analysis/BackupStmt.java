@@ -17,6 +17,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.sql.ast.AstVisitor;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Maps;
 import com.starrocks.common.AnalysisException;
@@ -47,6 +48,14 @@ public class BackupStmt extends AbstractBackupStmt {
 
     public BackupType getType() {
         return type;
+    }
+
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
+    }
+
+    public void setType(BackupType type) {
+        this.type = type;
     }
 
     @Override
@@ -102,4 +111,15 @@ public class BackupStmt extends AbstractBackupStmt {
         sb.append("\n)");
         return sb.toString();
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitBackupStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
+    }
+
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.ObjectStorageUtils;
+import com.starrocks.external.Utils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.logging.log4j.LogManager;
@@ -51,14 +52,14 @@ public class HiveMetaCache {
     // HivePartitionKeysKey => ImmutableMap<PartitionKey -> PartitionId>
     // for unPartitioned table, partition map is: ImmutableMap<>.of(new PartitionKey(), PartitionId)
     LoadingCache<HivePartitionKeysKey, ImmutableMap<PartitionKey, Long>> partitionKeysCache;
-    // HivePartitionKey => Partitions
-    LoadingCache<HivePartitionKey, HivePartition> partitionsCache;
+    // HivePartitionName => Partitions
+    LoadingCache<HivePartitionName, HivePartition> partitionsCache;
 
     // statistic cache
     // HiveTableKey => HiveTableStatistic
     LoadingCache<HiveTableKey, HiveTableStats> tableStatsCache;
-    // HivePartitionKey => PartitionStatistic
-    LoadingCache<HivePartitionKey, HivePartitionStats> partitionStatsCache;
+    // HivePartitionName => PartitionStatistic
+    LoadingCache<HivePartitionName, HivePartitionStats> partitionStatsCache;
 
     // HiveTableColumnsKey => ImmutableMap<ColumnName -> HiveColumnStats>
     LoadingCache<HiveTableColumnsKey, ImmutableMap<String, HiveColumnStats>> tableColumnStatsCache;
@@ -91,9 +92,9 @@ public class HiveMetaCache {
                 }, executor));
 
         partitionsCache = newCacheBuilder(MAX_PARTITION_CACHE_SIZE)
-                .build(asyncReloading(new CacheLoader<HivePartitionKey, HivePartition>() {
+                .build(asyncReloading(new CacheLoader<HivePartitionName, HivePartition>() {
                     @Override
-                    public HivePartition load(HivePartitionKey key) throws Exception {
+                    public HivePartition load(HivePartitionName key) throws Exception {
                         return loadPartition(key);
                     }
                 }, executor));
@@ -107,9 +108,9 @@ public class HiveMetaCache {
                 }, executor));
 
         partitionStatsCache = newCacheBuilder(MAX_PARTITION_CACHE_SIZE)
-                .build(asyncReloading(new CacheLoader<HivePartitionKey, HivePartitionStats>() {
+                .build(asyncReloading(new CacheLoader<HivePartitionName, HivePartitionStats>() {
                     @Override
-                    public HivePartitionStats load(HivePartitionKey key) throws Exception {
+                    public HivePartitionStats load(HivePartitionName key) throws Exception {
                         return loadPartitionStats(key);
                     }
                 }, executor));
@@ -177,7 +178,7 @@ public class HiveMetaCache {
         return ImmutableMap.copyOf(partitionKeys);
     }
 
-    private HivePartition loadPartition(HivePartitionKey key) throws DdlException {
+    private HivePartition loadPartition(HivePartitionName key) throws DdlException {
         if (key.getTableType() == Table.TableType.HUDI) {
             return client.getHudiPartition(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
         } else {
@@ -189,7 +190,7 @@ public class HiveMetaCache {
         return client.getTableStats(key.getDatabaseName(), key.getTableName());
     }
 
-    private HivePartitionStats loadPartitionStats(HivePartitionKey key) throws Exception {
+    private HivePartitionStats loadPartitionStats(HivePartitionName key) throws Exception {
         HivePartitionStats partitionStats =
                 client.getPartitionStats(key.getDatabaseName(), key.getTableName(), key.getPartitionValues());
         HivePartition partition = partitionsCache.get(key);
@@ -237,7 +238,7 @@ public class HiveMetaCache {
         List<String> partitionValues = Utils.getPartitionValues(partitionKey,
                 hmsTable.getTableType() == Table.TableType.HUDI);
         try {
-            return partitionsCache.get(new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+            return partitionsCache.get(new HivePartitionName(hmsTable.getDb(), hmsTable.getTable(),
                     hmsTable.getTableType(), partitionValues));
         } catch (ExecutionException e) {
             throw new DdlException("get partition detail failed: " + e.getMessage());
@@ -256,8 +257,8 @@ public class HiveMetaCache {
                                                 PartitionKey partitionKey) throws DdlException {
         List<String> partValues =
                 Utils.getPartitionValues(partitionKey, hmsTable.getTableType() == Table.TableType.HUDI);
-        HivePartitionKey key =
-                new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partValues);
+        HivePartitionName key =
+                new HivePartitionName(hmsTable.getDb(), hmsTable.getTable(), hmsTable.getTableType(), partValues);
         try {
             return partitionStatsCache.get(key);
         } catch (ExecutionException e) {
@@ -289,7 +290,7 @@ public class HiveMetaCache {
         }
     }
 
-    private List<String> loadAllDatabaseNames() throws DdlException {
+    private List<String> loadAllDatabaseNames() {
         return client.getAllDatabaseNames();
     }
 
@@ -323,7 +324,7 @@ public class HiveMetaCache {
     private Table loadTable(HiveTableName hiveTableName) throws TException, DdlException {
         org.apache.hadoop.hive.metastore.api.Table hiveTable = client.getTable(hiveTableName);
         Table table = null;
-        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HoodieTableType.UNKNOWN) {
+        if (HudiTable.fromInputFormat(hiveTable.getSd().getInputFormat()) != HudiTable.HudiTableType.UNKNOWN) {
             table = HiveMetaStoreTableUtils.convertHudiConnTableToSRTable(hiveTable, resourceName);
         } else {
             table = HiveMetaStoreTableUtils.convertHiveConnTableToSRTable(hiveTable, resourceName);
@@ -352,7 +353,7 @@ public class HiveMetaCache {
         return HiveMetaStoreTableUtils.convertToSRDatabase(dbName);
     }
 
-    public void alterTableByEvent(HiveTableKey tableKey, HivePartitionKey hivePartitionKey,
+    public void alterTableByEvent(HiveTableKey tableKey, HivePartitionName hivePartitionKey,
                                   StorageDescriptor sd, Map<String, String> params) throws Exception {
         HiveTableStats tableStats = new HiveTableStats(Utils.getRowCount(params), Utils.getTotalSize(params));
         tableStatsCache.put(tableKey, tableStats);
@@ -360,7 +361,7 @@ public class HiveMetaCache {
     }
 
     public synchronized void addPartitionKeyByEvent(HivePartitionKeysKey hivePartitionKeysKey,
-                                                    PartitionKey partitionKey, HivePartitionKey hivePartitionKey) {
+                                                    PartitionKey partitionKey, HivePartitionName hivePartitionKey) {
         ImmutableMap<PartitionKey, Long> cachedPartitions = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
         if (cachedPartitions == null) {
             return;
@@ -373,15 +374,15 @@ public class HiveMetaCache {
     }
 
     private HivePartition getPartitionByEvent(StorageDescriptor sd) throws Exception {
-        HdfsFileFormat format = HdfsFileFormat.fromHdfsInputFormatClass(sd.getInputFormat());
+        RemoteFileInputFormat format = RemoteFileInputFormat.fromHdfsInputFormatClass(sd.getInputFormat());
         String path = ObjectStorageUtils.formatObjectStoragePath(sd.getLocation());
         boolean isSplittable = ObjectStorageUtils.isObjectStorage(path) ||
-                HdfsFileFormat.isSplittable(sd.getInputFormat());
+                RemoteFileInputFormat.isSplittable(sd.getInputFormat());
         List<HdfsFileDesc> fileDescs = client.getHdfsFileDescs(path, isSplittable, sd);
         return new HivePartition(format, ImmutableList.copyOf(fileDescs), path);
     }
 
-    public void alterPartitionByEvent(HivePartitionKey hivePartitionKey,
+    public void alterPartitionByEvent(HivePartitionName hivePartitionKey,
                                       StorageDescriptor sd, Map<String, String> params) throws Exception {
         HivePartition updatedHivePartition = getPartitionByEvent(sd);
         partitionsCache.put(hivePartitionKey, updatedHivePartition);
@@ -396,7 +397,7 @@ public class HiveMetaCache {
     }
 
     public synchronized void dropPartitionKeyByEvent(HivePartitionKeysKey hivePartitionKeysKey,
-                                                     PartitionKey partitionKey, HivePartitionKey hivePartitionKey) {
+                                                     PartitionKey partitionKey, HivePartitionName hivePartitionKey) {
         ImmutableMap<PartitionKey, Long> cachedPartitions = partitionKeysCache.getIfPresent(hivePartitionKeysKey);
         if (cachedPartitions == null) {
             return;
@@ -419,7 +420,7 @@ public class HiveMetaCache {
         return exist;
     }
 
-    public boolean partitionExistInCache(HivePartitionKey partitionKey) {
+    public boolean partitionExistInCache(HivePartitionName partitionKey) {
         boolean exist = partitionsCache.getIfPresent(partitionKey) != null;
         if (!HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
             boolean connectorTableExist = getTableFromCache(
@@ -465,8 +466,8 @@ public class HiveMetaCache {
 
             // for unpartition table, refresh the partition info, because there is only one partition
             if (partColumns.size() <= 0) {
-                HivePartitionKey hivePartitionKey =
-                        new HivePartitionKey(dbName, tableName, tableType, new ArrayList<>());
+                HivePartitionName hivePartitionKey =
+                        new HivePartitionName(dbName, tableName, tableType, new ArrayList<>());
                 partitionsCache.put(hivePartitionKey, loadPartition(hivePartitionKey));
                 partitionStatsCache.put(hivePartitionKey, loadPartitionStats(hivePartitionKey));
             }
@@ -483,7 +484,7 @@ public class HiveMetaCache {
         try {
             for (String partName : partNames) {
                 List<String> partValues = client.partitionNameToVals(partName);
-                HivePartitionKey key = new HivePartitionKey(hmsTable.getDb(), hmsTable.getTable(),
+                HivePartitionName key = new HivePartitionName(hmsTable.getDb(), hmsTable.getTable(),
                         hmsTable.getTableType(), partValues);
                 partitionsCache.put(key, loadPartition(key));
                 partitionStatsCache.put(key, loadPartitionStats(key));
@@ -522,8 +523,8 @@ public class HiveMetaCache {
         tableColumnStatsCache.invalidate(new HiveTableColumnsKey(dbName, tableName, null, null, tableType));
         if (partitionKeys != null) {
             for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
-                HivePartitionKey pKey =
-                        new HivePartitionKey(dbName, tableName, tableType,
+                HivePartitionName pKey =
+                        new HivePartitionName(dbName, tableName, tableType,
                                 Utils.getPartitionValues(entry.getKey(), tableType == Table.TableType.HUDI));
                 partitionsCache.invalidate(pKey);
                 partitionStatsCache.invalidate(pKey);
@@ -532,7 +533,7 @@ public class HiveMetaCache {
 
         if (!HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
             if (partitionKeys != null) {
-                List<HivePartitionKey> residualToRemove = partitionsCache.asMap().keySet().stream()
+                List<HivePartitionName> residualToRemove = partitionsCache.asMap().keySet().stream()
                         .filter(key -> key.approximateMatchTable(dbName, tableName))
                         .collect(Collectors.toList());
                 partitionsCache.invalidateAll(residualToRemove);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -45,10 +45,12 @@ public:
 
     StatusOr<Tablet> get_tablet(int64_t tablet_id);
 
-    Status drop_tablet(int64_t tablet_id);
+    Status delete_tablet(int64_t tablet_id);
 
     Status publish_version(int64_t tablet_id, int64_t base_version, int64_t new_version, const int64_t* txns,
                            int txns_size);
+
+    void abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size);
 
     StatusOr<CompactionTaskPtr> compact(int64_t tablet_id, int64_t version, int64_t txn_id);
 
@@ -70,11 +72,24 @@ public:
 
     StatusOr<TxnLogPtr> get_txn_log(int64_t tablet_id, int64_t txn_id);
 
+    StatusOr<TxnLogPtr> get_txn_vlog(int64_t tablet_id, int64_t version);
+
     StatusOr<TxnLogPtr> get_txn_log(const std::string& path, bool fill_cache = true);
 
     StatusOr<TxnLogIter> list_txn_log(int64_t tablet_id, bool filter_tablet);
 
     Status delete_txn_log(int64_t tablet_id, int64_t txn_id);
+
+    Status delete_txn_vlog(int64_t tablet_id, int64_t version);
+
+    Status delete_segment(int64_t tablet_id, std::string_view segment_name);
+
+    // Transform a txn log into versioned txn log(i.e., rename `{tablet_id}_{txn_id}.log` to `{tablet_id}_{log_version}.vlog`)
+    Status publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version);
+
+    Status put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
+
+    Status delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time);
 
     void prune_metacache();
 
@@ -91,7 +106,11 @@ public:
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const;
 
+    std::string txn_vlog_location(int64_t tablet_id, int64_t version) const;
+
     std::string segment_location(int64_t tablet_id, std::string_view segment_name) const;
+
+    std::string tablet_metadata_lock_location(int64_t tablet_id, int64_t version, int64_t expire_time) const;
 
     const LocationProvider* location_provider() const { return _location_provider; }
 

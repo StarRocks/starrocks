@@ -31,7 +31,6 @@ import com.starrocks.analysis.BackupStmt.BackupType;
 import com.starrocks.analysis.CancelBackupStmt;
 import com.starrocks.analysis.CreateRepositoryStmt;
 import com.starrocks.analysis.DropRepositoryStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
@@ -52,7 +51,10 @@ import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
+import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
@@ -177,12 +179,14 @@ public class BackupHandler extends LeaderDaemon implements Writable {
 
     // handle create repository stmt
     public void createRepository(CreateRepositoryStmt stmt) throws DdlException {
-        if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
-            ErrorReport
-                    .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
+        if (stmt.hasBroker()) {
+            if (!globalStateMgr.getBrokerMgr().containsBroker(stmt.getBrokerName())) {
+                ErrorReport
+                        .reportDdlException(ErrorCode.ERR_COMMON_ERROR, "broker does not exist: " + stmt.getBrokerName());
+            }
         }
 
-        BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties());
+        BlobStorage storage = new BlobStorage(stmt.getBrokerName(), stmt.getProperties(), stmt.hasBroker());
         long repoId = globalStateMgr.getNextId();
         Repository repo = new Repository(repoId, stmt.getName(), stmt.isReadOnly(), stmt.getLocation(), storage);
 
@@ -278,10 +282,11 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Check if backup objects are valid
-        // This is just a pre-check to avoid most of invalid backup requests.
+        // This is just a pre-check to avoid most of the invalid backup requests.
         // Also calculate the signature for incremental backup check.
         List<TableRef> tblRefs = stmt.getTableRefs();
         BackupMeta curBackupMeta = null;
+        TableType t = TableType.OLAP;
         db.readLock();
         try {
             List<Table> backupTbls = Lists.newArrayList();
@@ -290,9 +295,19 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                 Table tbl = db.getTable(tblName);
                 if (tbl == null) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
+                    return;
                 }
-                if (tbl.getType() != TableType.OLAP) {
+                if (!tbl.isOlapOrLakeTable()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tblName);
+                }
+
+                if (tbl.isLakeTable()) {
+                    t = TableType.LAKE;
+                }
+
+                if (t == TableType.LAKE && tbl.isOlapTable()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, tblName);
+                    return;
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
@@ -370,10 +385,14 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         }
 
         // Create a backup job
-        BackupJob backupJob = new BackupJob(stmt.getLabel(), db.getId(),
-                db.getOriginName(),
-                tblRefs, stmt.getTimeoutMs(),
-                globalStateMgr, repository.getId());
+        BackupJob backupJob = null;
+        if (t == TableType.OLAP) {
+            backupJob = new BackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
+                    globalStateMgr, repository.getId());
+        } else if (t == TableType.LAKE) {
+            backupJob = new LakeBackupJob(stmt.getLabel(), db.getId(), db.getOriginName(), tblRefs, stmt.getTimeoutMs(),
+                    globalStateMgr, repository.getId());
+        }
         // write log
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
@@ -397,19 +416,61 @@ public class BackupHandler extends LeaderDaemon implements Writable {
         // Also remove all unrelated objs
         Preconditions.checkState(infos.size() == 1);
         BackupJobInfo jobInfo = infos.get(0);
-        checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+        // If TableRefs is empty, it means that we do not specify any table in Restore stmt.
+        // So, we should restore all table in current database.
+        if (stmt.getTableRefs().size() != 0) {
+            checkAndFilterRestoreObjsExistInSnapshot(jobInfo, stmt.getTableRefs());
+        }
 
+        TableType t = TableType.OLAP;
+        BackupMeta backupMeta = downloadAndDeserializeMetaInfo(jobInfo, repository, stmt);
         // Create a restore job
-        RestoreJob restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                db.getId(), db.getFullName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
-                stmt.getTimeoutMs(), stmt.getMetaVersion(), stmt.getStarRocksMetaVersion(), globalStateMgr,
-                repository.getId());
+        RestoreJob restoreJob = null;
+        if (backupMeta != null) {
+            for (BackupTableInfo tblInfo : jobInfo.tables.values()) {
+                Table remoteTbl = backupMeta.getTable(tblInfo.name);
+                if (remoteTbl.isLakeTable()) {
+                    t = TableType.LAKE;
+                }
+                if (t == TableType.LAKE && remoteTbl.isOlapTable()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_BAD_TABLE_ERROR, remoteTbl.getName());
+                }
+            }
+        }
+        if (t == TableType.OLAP) {
+            restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
+        } else {
+            restoreJob = new LakeRestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
+                    db.getId(), db.getOriginName(), jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                    stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta);
+        }
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
         dbIdToBackupOrRestoreJob.put(db.getId(), restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
+    }
+
+    private BackupMeta downloadAndDeserializeMetaInfo(BackupJobInfo jobInfo, Repository repo, RestoreStmt stmt) {
+        // the meta version is used when reading backup meta from file.
+        // we do not persist this field, because this is just a temporary solution.
+        // the true meta version should be getting from backup job info, which is saved when doing backup job.
+        // But the earlier version of StarRocks do not save the meta version in backup job info, so we allow user to
+        // set this 'metaVersion' in restore stmt.
+        // NOTICE: because we do not persist it, this info may be lost if Frontend restart,
+        // and if you don't want to lose it, backup your data again by using latest StarRocks version.
+        List<BackupMeta> backupMetas = Lists.newArrayList();
+        Status st = repo.getSnapshotMetaFile(jobInfo.name, backupMetas,
+                stmt.getMetaVersion() == -1 ? jobInfo.metaVersion : stmt.getMetaVersion(),
+                stmt.getStarRocksMetaVersion() == -1 ? jobInfo.starrocksMetaVersion : stmt.getStarRocksMetaVersion());
+        if (!st.ok()) {
+            return null;
+        }
+        Preconditions.checkState(backupMetas.size() == 1);
+        return backupMetas.get(0);
     }
 
     private void checkAndFilterRestoreObjsExistInSnapshot(BackupJobInfo jobInfo, List<TableRef> tblRefs)

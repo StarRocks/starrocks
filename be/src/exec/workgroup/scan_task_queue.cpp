@@ -1,28 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/workgroup/scan_task_queue.h"
 
+#include "common/status.h"
 #include "exec/workgroup/work_group.h"
 #include "exec/workgroup/work_group_fwd.h"
 
 namespace starrocks::workgroup {
 
-/// FifoScanTaskQueue.
-StatusOr<ScanTask> FifoScanTaskQueue::take(int worker_id) {
-    auto task = std::move(_queue.front());
-    _queue.pop();
-    return task;
-}
-
-bool FifoScanTaskQueue::try_offer(ScanTask task) {
-    _queue.emplace(std::move(task));
-    return true;
-}
-
 /// PriorityScanTaskQueue.
 PriorityScanTaskQueue::PriorityScanTaskQueue(size_t max_elements) : _queue(max_elements) {}
 
-StatusOr<ScanTask> PriorityScanTaskQueue::take(int worker_id) {
+StatusOr<ScanTask> PriorityScanTaskQueue::take() {
     ScanTask task;
     if (_queue.blocking_get(&task)) {
         return task;
@@ -35,8 +24,13 @@ bool PriorityScanTaskQueue::try_offer(ScanTask task) {
     return _queue.blocking_put(std::move(task));
 }
 
-/// ScanTaskQueueWithWorkGroup.
-void ScanTaskQueueWithWorkGroup::close() {
+/// WorkGroupScanTaskQueue.
+bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
+        const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const {
+    return lhs->vruntime_ns() < rhs->vruntime_ns();
+}
+
+void WorkGroupScanTaskQueue::close() {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
     if (_is_closed) {
@@ -47,168 +41,195 @@ void ScanTaskQueueWithWorkGroup::close() {
     _cv.notify_all();
 }
 
-void ScanTaskQueueWithWorkGroup::_cal_wg_cpu_real_use_ratio() {
-    int64_t total_run_time = 0;
-    std::vector<int64_t> growth_times;
-    growth_times.reserve(_ready_wgs.size());
-    for (auto& wg : _ready_wgs) {
-        growth_times.emplace_back(wg->growth_real_runtime_ns());
-        total_run_time += growth_times.back();
-        wg->update_last_real_runtime_ns(wg->real_runtime_ns());
-    }
-
-    int i = 0;
-    for (auto& wg : _ready_wgs) {
-        double cpu_actual_use_ratio = 0.0;
-        if (total_run_time != 0) {
-            cpu_actual_use_ratio = ((double)growth_times[i] / (total_run_time));
-        }
-        wg->set_cpu_actual_use_ratio(cpu_actual_use_ratio);
-        i++;
-    }
-}
-
-StatusOr<ScanTask> ScanTaskQueueWithWorkGroup::take(int worker_id) {
+StatusOr<ScanTask> WorkGroupScanTaskQueue::take() {
     std::unique_lock<std::mutex> lock(_global_mutex);
 
-    if (_is_closed) {
-        return Status::Cancelled("Shutdown");
-    }
-    while (_ready_wgs.empty()) {
-        _cv.wait(lock);
+    workgroup::WorkGroupScanSchedEntity* wg_entity = nullptr;
+    while (wg_entity == nullptr) {
         if (_is_closed) {
             return Status::Cancelled("Shutdown");
         }
+
+        _update_bandwidth_control_period();
+
+        if (_wg_entities.empty()) {
+            _cv.wait(lock);
+        } else if (wg_entity = _take_next_wg(); wg_entity == nullptr) {
+            int64_t cur_ns = MonotonicNanos();
+            int64_t sleep_ns = _bandwidth_control_period_end_ns - cur_ns;
+            if (sleep_ns <= 0) {
+                continue;
+            }
+
+            // All the ready tasks are throttled, so wait until the new period or a new task comes.
+            _cv.wait_for(lock, std::chrono::nanoseconds(sleep_ns));
+        }
     }
 
-    _maybe_adjust_weight();
-
-    WorkGroupPtr wg = _select_next_wg(worker_id);
-    if (wg->scan_task_queue()->size() == 1) {
-        _ready_wgs.erase(wg);
+    // If wg only contains one ready task, it will be not ready anymore
+    // after taking away the only one task.
+    if (wg_entity->queue()->size() == 1) {
+        _dequeue_workgroup(wg_entity);
     }
 
-    _total_task_num--;
+    _num_tasks--;
 
-    return wg->scan_task_queue()->take(worker_id);
+    return wg_entity->queue()->take();
 }
 
-bool ScanTaskQueueWithWorkGroup::try_offer(ScanTask task) {
+bool WorkGroupScanTaskQueue::try_offer(ScanTask task) {
     std::lock_guard<std::mutex> lock(_global_mutex);
 
-    WorkGroupPtr wg = task.workgroup;
-    wg->scan_task_queue()->try_offer(std::move(task));
-    if (_ready_wgs.find(wg) == _ready_wgs.end()) {
-        _ready_wgs.emplace(wg);
+    auto* wg_entity = _sched_entity(task.workgroup);
+    wg_entity->set_in_queue(this);
+    RETURN_IF_UNLIKELY(!wg_entity->queue()->try_offer(std::move(task)), false);
+
+    if (_wg_entities.find(wg_entity) == _wg_entities.end()) {
+        _enqueue_workgroup(wg_entity);
     }
 
-    _total_task_num++;
+    _num_tasks++;
     _cv.notify_one();
     return true;
 }
 
-void ScanTaskQueueWithWorkGroup::_maybe_adjust_weight() {
-    if (--_remaining_schedule_num_period > 0) {
-        return;
+void WorkGroupScanTaskQueue::update_statistics(WorkGroup* wg, int64_t runtime_ns) {
+    std::lock_guard<std::mutex> lock(_global_mutex);
+
+    auto* wg_entity = _sched_entity(wg);
+
+    // Update bandwidth control information.
+    _update_bandwidth_control_period();
+    if (!wg_entity->is_sq_wg()) {
+        _bandwidth_usage_ns += runtime_ns;
     }
 
-    _cal_wg_cpu_real_use_ratio();
+    // Update sched entity information.
+    bool is_in_queue = _wg_entities.find(wg_entity) != _wg_entities.end();
+    if (is_in_queue) {
+        _wg_entities.erase(wg_entity);
+    }
+    DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
+    wg_entity->incr_runtime_ns(runtime_ns);
+    if (is_in_queue) {
+        _wg_entities.emplace(wg_entity);
+        _update_min_wg();
+    }
+}
 
-    int num_tasks = 0;
-    // calculate all wg factors
-    for (auto& wg : _ready_wgs) {
-        wg->estimate_trend_factor_period();
-        num_tasks += wg->scan_task_queue()->size();
+bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccounted_runtime_ns) const {
+    if (_throttled(_sched_entity(wg), unaccounted_runtime_ns)) {
+        return true;
     }
 
-    _remaining_schedule_num_period = std::min(MAX_SCHEDULE_NUM_PERIOD, num_tasks);
+    // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
+    auto* wg_entity = _sched_entity(wg);
+    return _min_wg_entity.load() != wg_entity &&
+           _min_vruntime_ns.load() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
+}
 
-    // negative_total_diff_factor Accumulate All Under-resourced WorkGroup
-    // positive_total_diff_factor Cumulative All Resource Excess WorkGroup
-    double positive_total_diff_factor = 0.0;
-    double negative_total_diff_factor = 0.0;
-    for (auto const& wg : _ready_wgs) {
-        if (wg->get_diff_factor() > 0) {
-            positive_total_diff_factor += wg->get_diff_factor();
-        } else {
-            negative_total_diff_factor += wg->get_diff_factor();
-        }
+bool WorkGroupScanTaskQueue::_throttled(const workgroup::WorkGroupScanSchedEntity* wg_entity,
+                                        int64_t unaccounted_runtime_ns) const {
+    if (wg_entity->is_sq_wg()) {
+        return false;
+    }
+    if (!workgroup::WorkGroupManager::instance()->is_sq_wg_running()) {
+        return false;
     }
 
-    // If positive_total_diff_factor <= 0, This means that all WorkGs have no excess resources
-    // So we don't need to adjust it and keep the original limit
-    if (positive_total_diff_factor <= 0) {
-        for (auto& wg : _ready_wgs) {
-            wg->set_select_factor(wg->get_cpu_expected_use_ratio());
-        }
-        return;
-    }
+    int64_t bandwidth_usage = unaccounted_runtime_ns + _bandwidth_usage_ns;
+    return bandwidth_usage >= _bandwidth_quota_ns();
+}
 
-    // As an example
-    // There are two WorkGroups A and B
-    // A _expect_factor : 0.18757812499999998, and _cpu_expect_use_ratio : 0.7, _diff_factor : 0.512421875
-    // B _expect_factor : 0.6749999999999999, and _cpu_expect_use_ratio : 0.3, _diff_factor :  -0.37499999999999994
-    // so 0.18757812499999998 + 0.6749999999999999 < 1.0, it mean resource is enough, and available is  -0.37499999999999994 + 0.512421875
-
-    if (positive_total_diff_factor + negative_total_diff_factor > 0) {
-        // if positive_total_diff_factor + negative_total_diff_factor > 0
-        // This means that the resources are sufficient
-        // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
-        // Then increase the proportion of resources for those WorkGs that are under-resourced
-        for (auto& wg : _ready_wgs) {
-            if (wg->get_diff_factor() < 0) {
-                wg->update_select_factor(0 - negative_total_diff_factor * wg->get_diff_factor() /
-                                                     negative_total_diff_factor);
-            } else if (wg->get_diff_factor() > 0) {
-                wg->update_select_factor(negative_total_diff_factor * wg->get_diff_factor() /
-                                         positive_total_diff_factor);
-            }
-        }
+void WorkGroupScanTaskQueue::_update_min_wg() {
+    auto* min_wg_entity = _take_next_wg();
+    if (min_wg_entity == nullptr) {
+        _min_vruntime_ns = std::numeric_limits<int64_t>::max();
+        _min_wg_entity = nullptr;
     } else {
-        // if positive_total_diff_factor + negative_total_diff_factor <= 0
-        // This means that there are not enough resources, but some WorkGs are still over-resourced
-        // So we can reduce the proportion of resources in the WorkGroup that are over-resourced
-        // Then increase the proportion of resources for those WorkGs that are under-resourced
-        for (auto& wg : _ready_wgs) {
-            if (wg->get_diff_factor() < 0) {
-                wg->update_select_factor(positive_total_diff_factor * wg->get_diff_factor() /
-                                         negative_total_diff_factor);
-            } else if (wg->get_diff_factor() > 0) {
-                wg->update_select_factor(0 - positive_total_diff_factor * wg->get_diff_factor() /
-                                                     positive_total_diff_factor);
-            }
+        _min_vruntime_ns = min_wg_entity->vruntime_ns();
+        _min_wg_entity = min_wg_entity;
+    }
+}
+
+workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_take_next_wg() {
+    workgroup::WorkGroupScanSchedEntity* min_unthrottled_wg_entity = nullptr;
+    for (const auto& wg_entity : _wg_entities) {
+        if (!_throttled(wg_entity)) {
+            min_unthrottled_wg_entity = wg_entity;
+            break;
+        }
+    }
+
+    return min_unthrottled_wg_entity;
+}
+
+void WorkGroupScanTaskQueue::_enqueue_workgroup(workgroup::WorkGroupScanSchedEntity* wg_entity) {
+    _sum_cpu_limit += wg_entity->cpu_limit();
+
+    if (auto* min_wg_entity = _min_wg_entity.load(); min_wg_entity != nullptr) {
+        // The workgroup maybe leaves for a long time, which results in that the runtime of it
+        // may be much smaller than the other workgroups. If the runtime isn't adjusted, the others
+        // will starve. Therefore, the runtime is adjusted according the minimum vruntime in _ready_wgs,
+        // and give it half of ideal runtime in a schedule period as compensation.
+        int64_t new_vruntime_ns = std::min(min_wg_entity->vruntime_ns() - _ideal_runtime_ns(wg_entity) / 2,
+                                           min_wg_entity->runtime_ns() / int64_t(wg_entity->cpu_limit()));
+        int64_t diff_vruntime_ns = new_vruntime_ns - wg_entity->vruntime_ns();
+        if (diff_vruntime_ns > 0) {
+            DCHECK(_wg_entities.find(wg_entity) == _wg_entities.end());
+            wg_entity->incr_runtime_ns(diff_vruntime_ns * wg_entity->cpu_limit());
+        }
+    }
+
+    _wg_entities.emplace(wg_entity);
+    _update_min_wg();
+}
+
+void WorkGroupScanTaskQueue::_dequeue_workgroup(workgroup::WorkGroupScanSchedEntity* wg_entity) {
+    _sum_cpu_limit -= wg_entity->cpu_limit();
+    _wg_entities.erase(wg_entity);
+    _update_min_wg();
+}
+
+int64_t WorkGroupScanTaskQueue::_ideal_runtime_ns(workgroup::WorkGroupScanSchedEntity* wg_entity) const {
+    return SCHEDULE_PERIOD_PER_WG_NS * _wg_entities.size() * wg_entity->cpu_limit() / _sum_cpu_limit;
+}
+
+void WorkGroupScanTaskQueue::_update_bandwidth_control_period() {
+    int64_t cur_ns = MonotonicNanos();
+    if (_bandwidth_control_period_end_ns == 0 || _bandwidth_control_period_end_ns <= cur_ns) {
+        _bandwidth_control_period_end_ns = cur_ns + BANDWIDTH_CONTROL_PERIOD_NS;
+
+        int64_t bandwidth_quota = _bandwidth_quota_ns();
+        int64_t bandwidth_usage = _bandwidth_usage_ns.load();
+        if (bandwidth_usage <= bandwidth_quota) {
+            _bandwidth_usage_ns = 0;
+        } else if (bandwidth_usage < 2 * bandwidth_quota) {
+            _bandwidth_usage_ns -= bandwidth_quota;
+        } else {
+            _bandwidth_usage_ns = bandwidth_quota;
         }
     }
 }
 
-WorkGroupPtr ScanTaskQueueWithWorkGroup::_select_next_wg(int worker_id) {
-    auto owner_wgs = workgroup::WorkGroupManager::instance()->get_owners_of_scan_worker(_type, worker_id);
+int64_t WorkGroupScanTaskQueue::_bandwidth_quota_ns() const {
+    return BANDWIDTH_CONTROL_PERIOD_NS * workgroup::WorkGroupManager::instance()->normal_workgroup_cpu_hard_limit();
+}
 
-    WorkGroupPtr max_owner_wg = nullptr;
-    WorkGroupPtr max_other_wg = nullptr;
-    double total = 0;
-    for (auto wg : _ready_wgs) {
-        wg->update_cur_select_factor(wg->get_select_factor());
-        total += wg->get_select_factor();
-
-        if (owner_wgs->find(wg) != owner_wgs->end()) {
-            if (max_owner_wg == nullptr || wg->get_cur_select_factor() > max_owner_wg->get_cur_select_factor()) {
-                max_owner_wg = wg;
-            }
-        } else if (max_other_wg == nullptr || wg->get_cur_select_factor() > max_other_wg->get_cur_select_factor()) {
-            max_other_wg = wg;
-        }
+workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(workgroup::WorkGroup* wg) {
+    if (_sched_entity_type == SchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
     }
+}
 
-    // Try to take task from any owner workgroup first.
-    if (max_owner_wg != nullptr) {
-        max_owner_wg->update_cur_select_factor(0 - total);
-        return max_owner_wg;
+const workgroup::WorkGroupScanSchedEntity* WorkGroupScanTaskQueue::_sched_entity(const workgroup::WorkGroup* wg) const {
+    if (_sched_entity_type == SchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
     }
-
-    // All the owner workgroups don't have ready tasks, so select the other workgroup.
-    max_other_wg->update_cur_select_factor(0 - total);
-    return max_other_wg;
 }
 
 } // namespace starrocks::workgroup

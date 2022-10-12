@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/join_hash_map.h"
 
@@ -6,6 +6,7 @@
 
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
+#include "runtime/mem_tracker.h"
 
 namespace starrocks::vectorized {
 class JoinHashMapTest : public ::testing::Test {
@@ -37,11 +38,14 @@ protected:
     static void add_tuple_descriptor(TDescriptorTableBuilder* table_desc_builder, PrimitiveType column_type,
                                      bool nullable, size_t column_count = 3);
     static std::shared_ptr<RuntimeProfile> create_runtime_profile();
-    static std::shared_ptr<RowDescriptor> create_row_desc(const std::shared_ptr<ObjectPool>& object_pool,
+    static std::shared_ptr<RowDescriptor> create_row_desc(RuntimeState* state,
+                                                          const std::shared_ptr<ObjectPool>& object_pool,
                                                           TDescriptorTableBuilder* table_desc_builder, bool nullable);
-    static std::shared_ptr<RowDescriptor> create_probe_desc(const std::shared_ptr<ObjectPool>& object_pool,
+    static std::shared_ptr<RowDescriptor> create_probe_desc(RuntimeState* state,
+                                                            const std::shared_ptr<ObjectPool>& object_pool,
                                                             TDescriptorTableBuilder* probe_desc_builder, bool nullable);
-    static std::shared_ptr<RowDescriptor> create_build_desc(const std::shared_ptr<ObjectPool>& object_pool,
+    static std::shared_ptr<RowDescriptor> create_build_desc(RuntimeState* state,
+                                                            const std::shared_ptr<ObjectPool>& object_pool,
                                                             TDescriptorTableBuilder* build_desc_builder, bool nullable);
     static std::shared_ptr<RuntimeState> create_runtime_state();
 
@@ -83,6 +87,8 @@ protected:
     static ColumnPtr create_nullable_column(PrimitiveType PT);
     static ColumnPtr create_nullable_column(PrimitiveType PT, const Buffer<uint8_t>& nulls, uint32_t start,
                                             uint32_t count);
+    void check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
+                              int32_t expect_num_colums);
 
     std::shared_ptr<ObjectPool> _object_pool = nullptr;
     std::shared_ptr<MemPool> _mem_pool = nullptr;
@@ -113,7 +119,7 @@ Buffer<uint8_t> JoinHashMapTest::create_bools(uint32_t count, int32_t flag) {
     }
 
     if (flag == 1) {
-        // all 0
+        // all 1
         for (uint32_t i = 0; i < count; i++) {
             nulls[i] = 1;
         }
@@ -632,6 +638,90 @@ ChunkPtr JoinHashMapTest::create_binary_build_chunk(uint32_t count, bool nullabl
     return chunk;
 }
 
+// Check probe chunk's result for empty hash table with different join type.
+void JoinHashMapTest::check_empty_hash_map(TJoinOp::type join_type, int num_probe_rows, int32_t expect_num_rows,
+                                           int32_t expect_num_colums) {
+    auto runtime_profile = create_runtime_profile();
+    auto runtime_state = create_runtime_state();
+    std::shared_ptr<ObjectPool> object_pool = std::make_shared<ObjectPool>();
+    std::shared_ptr<MemPool> mem_pool = std::make_shared<MemPool>();
+    config::vector_chunk_size = 4096;
+
+    TDescriptorTableBuilder row_desc_builder;
+    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+    add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
+
+    std::shared_ptr<RowDescriptor> row_desc =
+            create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> probe_row_desc =
+            create_probe_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> build_row_desc =
+            create_build_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+
+    HashTableParam param;
+    param.with_other_conjunct = false;
+    param.join_type = join_type;
+    param.row_desc = row_desc.get();
+    param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    param.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    param.probe_row_desc = probe_row_desc.get();
+    param.build_row_desc = build_row_desc.get();
+    param.search_ht_timer = ADD_TIMER(runtime_profile, "SearchHashTableTime");
+    param.output_build_column_timer = ADD_TIMER(runtime_profile, "OutputBuildColumnTime");
+    param.output_probe_column_timer = ADD_TIMER(runtime_profile, "OutputProbeColumnTime");
+    param.output_tuple_column_timer = ADD_TIMER(runtime_profile, "OutputTupleColumnTime");
+
+    JoinHashTable hash_table;
+    hash_table.create(param);
+
+    Columns probe_key_columns;
+
+    // create empty hash table
+    auto build_chunk = create_int32_build_chunk(0, false);
+    // create probe table with num_rows staring with 1.
+    auto probe_chunk = create_int32_probe_chunk(num_probe_rows, 1, false);
+
+    probe_key_columns.emplace_back(probe_chunk->columns()[0]);
+    probe_key_columns.emplace_back(probe_chunk->columns()[1]);
+
+    Columns build_key_columns{build_chunk->columns()[0], build_chunk->columns()[1]};
+    hash_table.append_chunk(runtime_state.get(), build_chunk, build_key_columns);
+    hash_table.build(runtime_state.get());
+
+    ChunkPtr result_chunk = std::make_shared<Chunk>();
+    bool eos = false;
+    hash_table.probe(runtime_state.get(), probe_key_columns, &probe_chunk, &result_chunk, &eos);
+
+    ASSERT_EQ(result_chunk->num_rows(), expect_num_rows);
+    ASSERT_EQ(result_chunk->num_columns(), expect_num_colums);
+    if (expect_num_rows > 0 && expect_num_colums > 0) {
+        ASSERT_GE(expect_num_colums, 3);
+        // check probe's output column
+        for (int i = 0; i < 3; i++) {
+            Int32Column* column;
+            if (result_chunk->columns()[i]->is_nullable()) {
+                auto data_column =
+                        ColumnHelper::as_raw_column<NullableColumn>(result_chunk->columns()[i])->data_column();
+                column = ColumnHelper::as_raw_column<Int32Column>(data_column);
+            } else {
+                column = ColumnHelper::as_raw_column<Int32Column>(result_chunk->columns()[i]);
+            }
+            for (int j = 0; j < expect_num_rows; j++) {
+                ASSERT_EQ(column->get_data()[j], i * 10 + j + 1);
+            }
+        }
+        if (expect_num_colums > 3) {
+            // check build's output column
+            for (int i = 3; i < 6; i++) {
+                auto null_column = result_chunk->columns()[i];
+                for (int j = 0; j < expect_num_rows; j++) {
+                    ASSERT_TRUE(null_column->is_null(j));
+                }
+            }
+        }
+    }
+}
+
 TSlotDescriptor JoinHashMapTest::create_slot_descriptor(const std::string& column_name, PrimitiveType column_type,
                                                         int32_t column_pos, bool nullable) {
     TSlotDescriptorBuilder slot_desc_builder;
@@ -665,35 +755,38 @@ std::shared_ptr<RuntimeProfile> JoinHashMapTest::create_runtime_profile() {
     return profile;
 }
 
-std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(const std::shared_ptr<ObjectPool>& object_pool,
+std::shared_ptr<RowDescriptor> JoinHashMapTest::create_row_desc(RuntimeState* state,
+                                                                const std::shared_ptr<ObjectPool>& object_pool,
                                                                 TDescriptorTableBuilder* table_desc_builder,
                                                                 bool nullable) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0, 1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable, nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), table_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, object_pool.get(), table_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
 
-std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(const std::shared_ptr<ObjectPool>& object_pool,
+std::shared_ptr<RowDescriptor> JoinHashMapTest::create_probe_desc(RuntimeState* state,
+                                                                  const std::shared_ptr<ObjectPool>& object_pool,
                                                                   TDescriptorTableBuilder* probe_desc_builder,
                                                                   bool nullable) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), probe_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, object_pool.get(), probe_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
 
-std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(const std::shared_ptr<ObjectPool>& object_pool,
+std::shared_ptr<RowDescriptor> JoinHashMapTest::create_build_desc(RuntimeState* state,
+                                                                  const std::shared_ptr<ObjectPool>& object_pool,
                                                                   TDescriptorTableBuilder* build_desc_builder,
                                                                   bool nullable) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{1};
     std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(object_pool.get(), build_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, object_pool.get(), build_desc_builder->desc_tbl(), &tbl, config::vector_chunk_size);
 
     return std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
 }
@@ -772,6 +865,7 @@ TEST_F(JoinHashMapTest, CompileFixedSizeKeyColumn) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, ProbeNullOutput) {
+    auto runtime_state = create_runtime_state();
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     table_items.probe_column_count = 3;
@@ -780,7 +874,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
+    auto row_desc = create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
     for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
         HashTableSlotDescriptor hash_table_slot{};
@@ -807,6 +901,7 @@ TEST_F(JoinHashMapTest, ProbeNullOutput) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, BuildDefaultOutput) {
+    auto runtime_state = create_runtime_state();
     JoinHashTableItems table_items;
     HashTableProbeState probe_state;
     table_items.build_column_count = 3;
@@ -815,7 +910,7 @@ TEST_F(JoinHashMapTest, BuildDefaultOutput) {
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
-    auto row_desc = create_row_desc(object_pool, &row_desc_builder, false);
+    auto row_desc = create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
 
     vector<HashTableSlotDescriptor> hash_table_slot_vec;
     for (auto& slot : row_desc->tuple_descriptors()[0]->slots()) {
@@ -931,13 +1026,14 @@ TEST_F(JoinHashMapTest, JoinBuildProbeFuncNullable) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
+    auto runtime_state = create_runtime_state();
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, false, 1);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, false, 1);
 
-    auto row_desc = create_row_desc(_object_pool, &row_desc_builder, false);
-    auto probe_row_desc = create_probe_desc(_object_pool, &row_desc_builder, false);
-    auto build_row_desc = create_build_desc(_object_pool, &row_desc_builder, false);
+    auto row_desc = create_row_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
+    auto probe_row_desc = create_probe_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
+    auto build_row_desc = create_build_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
 
     HashTableParam param;
     param.need_create_tuple_columns = false;
@@ -989,13 +1085,14 @@ TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFunc) {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, DirectMappingJoinBuildProbeFuncNullable) {
+    auto runtime_state = create_runtime_state();
     TDescriptorTableBuilder row_desc_builder;
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, true, 1);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_TINYINT, true, 1);
 
-    auto row_desc = create_row_desc(_object_pool, &row_desc_builder, true);
-    auto probe_row_desc = create_probe_desc(_object_pool, &row_desc_builder, true);
-    auto build_row_desc = create_build_desc(_object_pool, &row_desc_builder, true);
+    auto row_desc = create_row_desc(runtime_state.get(), _object_pool, &row_desc_builder, true);
+    auto probe_row_desc = create_probe_desc(runtime_state.get(), _object_pool, &row_desc_builder, true);
+    auto build_row_desc = create_build_desc(runtime_state.get(), _object_pool, &row_desc_builder, true);
 
     HashTableParam param;
     param.need_create_tuple_columns = false;
@@ -1642,9 +1739,12 @@ TEST_F(JoinHashMapTest, OneKeyJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
 
-    std::shared_ptr<RowDescriptor> row_desc = create_row_desc(object_pool, &row_desc_builder, false);
-    std::shared_ptr<RowDescriptor> probe_row_desc = create_probe_desc(object_pool, &row_desc_builder, false);
-    std::shared_ptr<RowDescriptor> build_row_desc = create_build_desc(object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> row_desc =
+            create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> probe_row_desc =
+            create_probe_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> build_row_desc =
+            create_build_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
 
     HashTableParam param;
     param.with_other_conjunct = false;
@@ -1704,9 +1804,12 @@ TEST_F(JoinHashMapTest, OneNullableKeyJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, true);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, true);
 
-    std::shared_ptr<RowDescriptor> row_desc = create_row_desc(object_pool, &row_desc_builder, true);
-    std::shared_ptr<RowDescriptor> probe_row_desc = create_probe_desc(object_pool, &row_desc_builder, true);
-    std::shared_ptr<RowDescriptor> build_row_desc = create_build_desc(object_pool, &row_desc_builder, true);
+    std::shared_ptr<RowDescriptor> row_desc =
+            create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, true);
+    std::shared_ptr<RowDescriptor> probe_row_desc =
+            create_probe_desc(runtime_state.get(), object_pool, &row_desc_builder, true);
+    std::shared_ptr<RowDescriptor> build_row_desc =
+            create_build_desc(runtime_state.get(), object_pool, &row_desc_builder, true);
 
     HashTableParam param;
     param.with_other_conjunct = false;
@@ -1768,9 +1871,12 @@ TEST_F(JoinHashMapTest, FixedSizeJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_INT, false);
 
-    std::shared_ptr<RowDescriptor> row_desc = create_row_desc(object_pool, &row_desc_builder, false);
-    std::shared_ptr<RowDescriptor> probe_row_desc = create_probe_desc(object_pool, &row_desc_builder, false);
-    std::shared_ptr<RowDescriptor> build_row_desc = create_build_desc(object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> row_desc =
+            create_row_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> probe_row_desc =
+            create_probe_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> build_row_desc =
+            create_build_desc(runtime_state.get(), object_pool, &row_desc_builder, false);
 
     HashTableParam param;
     param.with_other_conjunct = false;
@@ -1830,9 +1936,12 @@ TEST_F(JoinHashMapTest, SerializeJoinHashTable) {
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_VARCHAR, false);
     add_tuple_descriptor(&row_desc_builder, PrimitiveType::TYPE_VARCHAR, false);
 
-    std::shared_ptr<RowDescriptor> row_desc = create_row_desc(_object_pool, &row_desc_builder, false);
-    std::shared_ptr<RowDescriptor> probe_row_desc = create_probe_desc(_object_pool, &row_desc_builder, false);
-    std::shared_ptr<RowDescriptor> build_row_desc = create_build_desc(_object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> row_desc =
+            create_row_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> probe_row_desc =
+            create_probe_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
+    std::shared_ptr<RowDescriptor> build_row_desc =
+            create_build_desc(runtime_state.get(), _object_pool, &row_desc_builder, false);
 
     HashTableParam param;
     param.with_other_conjunct = false;
@@ -2291,6 +2400,61 @@ TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist3) {
 
     // check
     ASSERT_EQ(probe_chunk->num_columns(), 0);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, EmptyHashMapTest) {
+    check_empty_hash_map(TJoinOp::LEFT_OUTER_JOIN, 5, 5, 6);
+    check_empty_hash_map(TJoinOp::FULL_OUTER_JOIN, 5, 5, 6);
+    check_empty_hash_map(TJoinOp::LEFT_ANTI_JOIN, 5, 5, 6);
+    check_empty_hash_map(TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN, 5, 5, 6);
+    check_empty_hash_map(TJoinOp::INNER_JOIN, 5, 0, 0);
+    check_empty_hash_map(TJoinOp::LEFT_SEMI_JOIN, 5, 0, 0);
+    check_empty_hash_map(TJoinOp::RIGHT_SEMI_JOIN, 5, 0, 0);
+    check_empty_hash_map(TJoinOp::RIGHT_OUTER_JOIN, 5, 0, 0);
+    check_empty_hash_map(TJoinOp::RIGHT_ANTI_JOIN, 5, 0, 0);
+    check_empty_hash_map(TJoinOp::CROSS_JOIN, 5, 0, 0);
+}
+
+// NOLINTNEXTLINE
+TEST_F(JoinHashMapTest, NullAwareAntiJoinTest) {
+    JoinHashTableItems table_items;
+    HashTableProbeState probe_state;
+
+    uint32_t build_row_count = 4;
+    uint32_t probe_row_count = 3;
+
+    table_items.first.resize(build_row_count + 1, 0);
+    table_items.next.resize(build_row_count + 1);
+    table_items.join_keys.emplace_back(JoinKeyDesc{&_int_type, false, nullptr});
+    auto build_col_nulls = create_bools(build_row_count + 1, 3);
+    auto column_1 = create_nullable_column(TYPE_INT);
+    column_1->append(*create_nullable_column(TYPE_INT, build_col_nulls, 0, build_row_count + 1));
+    table_items.key_columns.emplace_back(column_1);
+    table_items.join_type = TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN;
+    table_items.row_count = build_row_count;
+
+    auto probe_col_nulls = create_bools(build_row_count, 3);
+
+    probe_state.null_array = &probe_col_nulls;
+    prepare_probe_state(&probe_state, probe_row_count);
+    for (size_t i = 0; i < probe_row_count; i++) {
+        probe_state.next[i] = 0;
+    }
+
+    Buffer<int32_t> build_data;
+    Buffer<int32_t> probe_data;
+    this->prepare_probe_data(&build_data, build_row_count);
+    this->prepare_probe_data(&probe_data, probe_row_count);
+
+    auto join_hash_map = std::make_unique<JoinHashMapForOneKey(TYPE_INT)>(&table_items, &probe_state);
+    join_hash_map->_probe_from_ht_for_null_aware_anti_join_with_other_conjunct<true>(_runtime_state.get(), build_data,
+                                                                                     probe_data);
+
+    // null in probe table match all build table rows
+    ASSERT_EQ(probe_state.probe_match_index[0], build_row_count);
+    // value in probe table not hit hash table match all null value rows in build table
+    ASSERT_EQ(probe_state.probe_match_index[1], 1);
 }
 
 } // namespace starrocks::vectorized

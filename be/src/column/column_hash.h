@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -131,7 +131,7 @@ inline uint32_t crc_hash_32(const void* data, int32_t bytes, uint32_t hash) {
 #if defined(__x86_64__)
         hash = _mm_crc32_u8(hash, *p);
 #elif defined(__aarch64__)
-        hash = __crc32cb(hash, unaligned_load<uint32_t>(p));
+        hash = __crc32cb(hash, *p);
 #else
 #error "Not supported architecture"
 #endif
@@ -160,7 +160,7 @@ inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
 #if defined(__x86_64__) && defined(__SSE4_2__)
         hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__)
-        hash = __crc32cd(hash, unaligned_load<uint32_t>(p));
+        hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
 #else
 #error "Not supported architecture"
 #endif
@@ -171,7 +171,7 @@ inline uint64_t crc_hash_64(const void* data, int32_t length, uint64_t hash) {
 #if defined(__x86_64__)
     hash = _mm_crc32_u64(hash, unaligned_load<uint64_t>(p));
 #elif defined(__aarch64__)
-    hash = __crc32cd(hash, unaligned_load<uint32_t>(p));
+    hash = __crc32cd(hash, unaligned_load<uint64_t>(p));
 #else
 #error "Not supported architecture"
 #endif

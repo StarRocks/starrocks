@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -87,7 +87,7 @@ public class LakeTableTest {
                 ObjectStorageInfo.newBuilder().setObjectUri(serviceStorageUri).setEndpoint(endpoint).build();
         ShardStorageInfo shardStorageInfo =
                 ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
-        table.setStorageInfo(shardStorageInfo, false, 0);
+        table.setStorageInfo(shardStorageInfo, false, 0, false);
 
         // Test serialize and deserialize
         FastByteArrayOutputStream byteArrayOutputStream = new FastByteArrayOutputStream();
@@ -106,7 +106,7 @@ public class LakeTableTest {
         Assert.assertTrue(newTable.isLakeTable());
         LakeTable newLakeTable = (LakeTable) newTable;
         Assert.assertEquals(String.format("%s%d/", serviceStorageUri, tableId), newLakeTable.getStorageGroup());
-        ObjectStorageInfo newObjectStorageInfo = newLakeTable.getShardStorageInfo().getObjectStorageInfo();
+        ObjectStorageInfo newObjectStorageInfo = newLakeTable.getDefaultShardStorageInfo().getObjectStorageInfo();
         Assert.assertEquals(endpoint, newObjectStorageInfo.getEndpoint());
 
         Partition p1 = newLakeTable.getPartition(partitionId);
@@ -119,5 +119,8 @@ public class LakeTableTest {
             Assert.assertEquals(expectedTabletId, lakeTablet.getShardId());
             ++expectedTabletId;
         }
+
+        Assert.assertNull(table.delete(true));
+        Assert.assertNotNull(table.delete(false));
     }
 }

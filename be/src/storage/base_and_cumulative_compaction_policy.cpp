@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "storage/base_and_cumulative_compaction_policy.h"
 
 #include <sstream>
@@ -57,35 +57,21 @@ bool BaseAndCumulativeCompactionPolicy::_is_rowset_creation_time_ordered(
 void BaseAndCumulativeCompactionPolicy::_pick_cumulative_rowsets(bool* has_delete_version,
                                                                  size_t* rowsets_compaction_score,
                                                                  std::vector<RowsetSharedPtr>* rowsets) {
-    int64_t now = UnixSeconds();
     if (_compaction_context->rowset_levels[0].size() == 0) {
         return;
     }
-    bool is_creation_time_ordered = _is_rowset_creation_time_ordered(_compaction_context->rowset_levels[0]);
     int index = 0;
     for (auto rowset : _compaction_context->rowset_levels[0]) {
         if (_compaction_context->tablet->version_for_delete_predicate(rowset->version())) {
             *has_delete_version = true;
             break;
         }
-        // For level-0, should consider the rowset creation time.
-        // newly-created rowsets should be skipped.
-        if ((is_creation_time_ordered || (!is_creation_time_ordered && index != 0)) &&
-            rowset->creation_time() + config::cumulative_compaction_skip_window_seconds > now) {
-            // rowset in rowset_levels is ordered
-            LOG(INFO) << "rowset:" << rowset->rowset_id() << ", version:" << rowset->version()
-                      << " is newly created. creation time:" << rowset->creation_time()
-                      << ", threshold:" << config::cumulative_compaction_skip_window_seconds
-                      << ", rowset overlapping:" << rowset->rowset_meta()->segments_overlap() << ", index:" << index
-                      << ", is_creation_time_ordered:" << is_creation_time_ordered;
-            break;
-        }
-        rowsets->emplace_back(std::move(rowset->shared_from_this()));
+        rowsets->emplace_back(rowset->shared_from_this());
         *rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
         if (*rowsets_compaction_score >= config::max_cumulative_compaction_num_singleton_deltas) {
-            LOG(INFO) << "cumulative compaction rowsets_compaction_score:" << *rowsets_compaction_score
-                      << " is larger than config:" << config::max_cumulative_compaction_num_singleton_deltas
-                      << ", cumulative rowset size:" << _compaction_context->rowset_levels[0].size();
+            VLOG(2) << "cumulative compaction rowsets_compaction_score:" << *rowsets_compaction_score
+                    << " is larger than config:" << config::max_cumulative_compaction_num_singleton_deltas
+                    << ", cumulative rowset size:" << _compaction_context->rowset_levels[0].size();
             break;
         }
         ++index;
@@ -130,10 +116,9 @@ std::shared_ptr<CompactionTask> BaseAndCumulativeCompactionPolicy::_create_cumul
                   << " is smaller than threshold:" << config::min_cumulative_compaction_num_singleton_deltas;
         return nullptr;
     }
-    DCHECK(input_rowsets.size() > 0) << "input rowsets size can not be empty";
 
     if (input_rowsets.size() < 1) {
-        LOG(INFO) << "no suitable rowsets for cumulative compaction";
+        VLOG(2) << "no suitable rowsets for cumulative compaction";
         return nullptr;
     }
 
@@ -158,6 +143,9 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
     size_t rowsets_compaction_score = 0;
     // add the base rowset to input_rowsets
     Rowset* base_rowset = *_compaction_context->rowset_levels[2].begin();
+    if (base_rowset == nullptr) {
+        return;
+    }
     rowsets->push_back(base_rowset->shared_from_this());
     rowsets_compaction_score += base_rowset->rowset_meta()->get_compaction_score();
     input_rows_num += base_rowset->num_rows();
@@ -166,10 +154,10 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
     for (auto rowset : _compaction_context->rowset_levels[1]) {
         rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
         if (rowsets_compaction_score >= config::max_base_compaction_num_singleton_deltas) {
-            LOG(INFO) << "base compaction rowsets_compaction_score:" << rowsets_compaction_score
-                      << " is larger than config:" << config::max_base_compaction_num_singleton_deltas
-                      << ", base rowset size:"
-                      << _compaction_context->rowset_levels[1].size() + _compaction_context->rowset_levels[2].size();
+            VLOG(2) << "base compaction rowsets_compaction_score:" << rowsets_compaction_score
+                    << " is larger than config:" << config::max_base_compaction_num_singleton_deltas
+                    << ", base rowset size:"
+                    << _compaction_context->rowset_levels[1].size() + _compaction_context->rowset_levels[2].size();
             break;
         }
 
@@ -183,7 +171,7 @@ std::shared_ptr<CompactionTask> BaseAndCumulativeCompactionPolicy::_create_base_
     std::vector<RowsetSharedPtr> input_rowsets;
     _pick_base_rowsets(&input_rowsets);
     if (input_rowsets.size() <= 1) {
-        LOG(INFO) << "no suitable version for compaction. size:" << input_rowsets.size();
+        LOG(INFO) << "no suitable version for compaction. tablet_id: :" << _compaction_context->tablet->tablet_id();
         return nullptr;
     }
 

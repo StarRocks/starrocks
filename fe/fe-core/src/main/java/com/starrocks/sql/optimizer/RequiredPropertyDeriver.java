@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -14,6 +15,7 @@ import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.base.SortProperty;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -48,6 +50,9 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public List<List<PhysicalPropertySet>> getRequiredProps(GroupExpression groupExpression) {
         requiredProperties = Lists.newArrayList();
         groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
+
+        CTEPropertyDeriver ctePropertyDeriver = new CTEPropertyDeriver();
+        groupExpression.getOp().accept(ctePropertyDeriver, null);
         return requiredProperties;
     }
 
@@ -81,6 +86,10 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
         // 2 For shuffle join
         List<Integer> leftOnPredicateColumns = joinHelper.getLeftOnColumns();
         List<Integer> rightOnPredicateColumns = joinHelper.getRightOnColumns();
+        if (leftOnPredicateColumns.isEmpty() || rightOnPredicateColumns.isEmpty()) {
+            return null;
+        }
+
         Preconditions.checkState(leftOnPredicateColumns.size() == rightOnPredicateColumns.size());
         requiredProperties.add(computeShuffleJoinRequiredProperties(requirementsFromParent, leftOnPredicateColumns,
                 rightOnPredicateColumns));
@@ -136,9 +145,17 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
 
     @Override
     public Void visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        PhysicalPropertySet rightBroadcastProperty =
-                new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-        requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        if (node.getJoinType().isRightJoin() || node.getJoinType().isFullOuterJoin()) {
+            // Right join needs to maintain build_match_flag for right table, which could not be maintained on multiple nodes,
+            // instead it should be gathered to one node
+            PhysicalPropertySet gather =
+                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createGatherDistributionSpec()));
+            requiredProperties.add(Lists.newArrayList(gather, gather));
+        } else {
+            PhysicalPropertySet rightBroadcastProperty =
+                    new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
+            requiredProperties.add(Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty));
+        }
         return null;
     }
 
@@ -257,5 +274,53 @@ public class RequiredPropertyDeriver extends PropertyDeriverBase<Void, Expressio
     public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
         requiredProperties.add(Lists.newArrayList(requirementsFromParent));
         return null;
+    }
+
+    private class CTEPropertyDeriver extends OperatorVisitor<Void, Void> {
+        @Override
+        public Void visitOperator(Operator node, Void context) {
+            if (requirementsFromParent.getCteProperty().isEmpty()) {
+                return null;
+            }
+
+            // Pass CTE property to children
+            for (List<PhysicalPropertySet> requiredProperty : requiredProperties) {
+                for (int i = 0; i < requiredProperty.size(); i++) {
+                    PhysicalPropertySet property = requiredProperty.get(i).copy();
+                    property.setCteProperty(requirementsFromParent.getCteProperty());
+                    requiredProperty.set(i, property);
+                }
+            }
+
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, Void context) {
+            visitOperator(node, context);
+            PhysicalPropertySet requiredRight = requiredProperties.get(0).get(1);
+
+            CTEProperty thisCTE = new CTEProperty(node.getCteId());
+            thisCTE.merge(requiredRight.getCteProperty());
+
+            DistributionProperty requiredDistributionProp = requiredRight.getDistributionProperty();
+
+            PhysicalPropertySet copy = requiredRight.copy();
+            copy.setCteProperty(thisCTE);
+            copy.setDistributionProperty(new DistributionProperty(requiredDistributionProp.getSpec(), true));
+            requiredProperties.get(0).set(1, copy);
+            return null;
+        }
+
+        @Override
+        public Void visitPhysicalNoCTE(PhysicalNoCTEOperator node, Void context) {
+            visitOperator(node, context);
+            CTEProperty required = requiredProperties.get(0).get(0).getCteProperty();
+            Preconditions.checkState(!required.getCteIds().contains(node.getCteId()));
+            PhysicalPropertySet copy = requiredProperties.get(0).get(0).copy();
+            copy.setDistributionProperty(new DistributionProperty(copy.getDistributionProperty().getSpec(), true));
+            requiredProperties.get(0).set(0, copy);
+            return null;
+        }
     }
 }

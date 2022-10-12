@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
+#include <memory>
 #include <utility>
 
 #include "column/column.h"
@@ -9,6 +10,7 @@
 #include "common/object_pool.h"
 #include "common/status.h"
 #include "exec/data_sink.h"
+#include "exec/pipeline/exchange/shuffler.h"
 #include "exec/pipeline/exchange/sink_buffer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
@@ -167,8 +169,7 @@ private:
     const std::vector<ExprContext*>& _partition_expr_ctxs; // compute per-row partition values
     vectorized::Columns _partitions_columns;
     std::vector<uint32_t> _hash_values;
-    std::vector<uint32_t> _channel_ids;
-    std::vector<uint32_t> _shuffle_ids;
+    std::vector<uint32_t> _shuffle_channel_ids;
     std::vector<int> _driver_sequence_per_shuffle;
     // This array record the channel start point in _row_indexes
     // And the last item is the number of rows of the current shuffle chunk.
@@ -184,6 +185,8 @@ private:
     FragmentContext* const _fragment_ctx;
 
     const std::vector<int32_t>& _output_columns;
+
+    std::unique_ptr<Shuffler> _shuffler;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {

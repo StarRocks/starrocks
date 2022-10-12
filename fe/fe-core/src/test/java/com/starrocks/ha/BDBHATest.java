@@ -1,7 +1,6 @@
-package com.starrocks.ha;
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-import java.net.InetSocketAddress;
-import java.util.Set;
+package com.starrocks.ha;
 
 import com.google.common.collect.Sets;
 import com.starrocks.journal.bdbje.BDBEnvironment;
@@ -13,6 +12,11 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.net.InetSocketAddress;
+import java.util.Set;
+
+
 
 public class BDBHATest {
 

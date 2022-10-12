@@ -18,6 +18,8 @@
 package com.starrocks.task;
 
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
@@ -32,6 +34,7 @@ public class UploadTask extends AgentTask {
     private Map<String, String> srcToDestPath;
     private FsBroker broker;
     private Map<String, String> brokerProperties;
+    private THdfsProperties hdfsProperties;
 
     public UploadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, Long dbId,
                       Map<String, String> srcToDestPath, FsBroker broker, Map<String, String> brokerProperties) {
@@ -40,6 +43,17 @@ public class UploadTask extends AgentTask {
         this.srcToDestPath = srcToDestPath;
         this.broker = broker;
         this.brokerProperties = brokerProperties;
+    }
+
+    public UploadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, Long dbId,
+                      Map<String, String> srcToDestPath, FsBroker broker, Map<String, String> brokerProperties, 
+                      THdfsProperties hdfsProperties) {
+        super(resourceInfo, backendId, TTaskType.UPLOAD, dbId, -1, -1, -1, -1, signature);
+        this.jobId = jobId;
+        this.srcToDestPath = srcToDestPath;
+        this.broker = broker;
+        this.brokerProperties = brokerProperties;
+        this.hdfsProperties = hdfsProperties;
     }
 
     public long getJobId() {
@@ -59,9 +73,21 @@ public class UploadTask extends AgentTask {
     }
 
     public TUploadReq toThrift() {
-        TNetworkAddress address = new TNetworkAddress(broker.ip, broker.port);
+        TNetworkAddress address;
+        if (broker != null) {
+            address = new TNetworkAddress(broker.ip, broker.port);
+        } else {
+            address = new TNetworkAddress("", 0);
+        }
         TUploadReq request = new TUploadReq(jobId, srcToDestPath, address);
-        request.setBroker_prop(brokerProperties);
+        if (broker != null) {
+            request.setBroker_prop(brokerProperties);
+            request.setUse_broker(true);
+        } else {
+            request.setUse_broker(false);
+            request.setHdfs_write_buffer_size_kb(Config.hdfs_write_buffer_size_kb);
+            request.setHdfs_properties(hdfsProperties);
+        }
         return request;
     }
 }

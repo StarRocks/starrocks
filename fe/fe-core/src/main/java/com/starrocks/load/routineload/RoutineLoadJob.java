@@ -35,7 +35,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.ImportColumnsStmt;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.RoutineLoadDataSourceProperties;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
@@ -67,6 +66,8 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TUniqueId;
@@ -94,7 +95,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * This function is suitable for streaming load job which loading data continuously
  * The properties include stream load properties and job properties.
  * The desireTaskConcurrentNum means that user expect the number of concurrent stream load
- * The routine load job support different streaming medium such as KAFKA
+ * The routine load job support different streaming medium such as KAFKA and Pulsar
  */
 public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback implements Writable {
     private static final Logger LOG = LogManager.getLogger(RoutineLoadJob.class);
@@ -144,7 +145,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected long id;
     protected String name;
-    protected String clusterName;
     protected long dbId;
     protected long tableId;
     // this code is used to verify be task request
@@ -160,7 +160,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
     protected LoadDataSourceType dataSourceType;
     // max number of error data in max batch rows * 10
     // maxErrorNum / (maxBatchRows * 10) = max error rate of routine load job
-    // if current error rate is more then max error rate, the job will be paused
+    // if current error rate is more than max error rate, the job will be paused
     protected long maxErrorNum = DEFAULT_MAX_ERROR_NUM; // optional
     // include strict mode
     protected Map<String, String> jobProperties = Maps.newHashMap();
@@ -250,11 +250,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         this.dataSourceType = type;
     }
 
-    public RoutineLoadJob(Long id, String name, String clusterName,
+    public RoutineLoadJob(Long id, String name,
                           long dbId, long tableId, LoadDataSourceType dataSourceType) {
         this(id, dataSourceType);
         this.name = name;
-        this.clusterName = clusterName;
         this.dbId = dbId;
         this.tableId = tableId;
         this.authCode = 0;
@@ -263,6 +262,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.EXEC_MEM_LIMIT, Long.toString(var.getMaxExecMemByte()));
+            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+            sessionVariables.put(SessionVariable.ENABLE_REPLICATED_STORAGE, Boolean.toString(var.getEnableReplicatedStorage()));
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
             sessionVariables.put(SessionVariable.EXEC_MEM_LIMIT, Long.toString(SessionVariable.DEFAULT_EXEC_MEM_LIMIT));
@@ -876,8 +877,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             long timeToExecuteMs;
             RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment =
                     (RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment();
-            // isProgressKeepUp returns false means there is too much data in kafka stream,
-            // we set timeToExecuteMs to now, so that data not accumulated in kafka
+            // isProgressKeepUp returns false means there is too much data in kafka/pulsar stream,
+            // we set timeToExecuteMs to now, so that data not accumulated in kafka/pulsar
             if (!routineLoadTaskInfo.isProgressKeepUp(rlTaskTxnCommitAttachment.getProgress())) {
                 timeToExecuteMs = System.currentTimeMillis();
             } else {
@@ -1373,6 +1374,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         LoadDataSourceType type = LoadDataSourceType.valueOf(Text.readString(in));
         if (type == LoadDataSourceType.KAFKA) {
             job = new KafkaRoutineLoadJob();
+        } else if (type == LoadDataSourceType.PULSAR) {
+            job = new PulsarRoutineLoadJob();
         } else {
             throw new IOException("Unknown load data source type: " + type.name());
         }
@@ -1389,7 +1392,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         out.writeLong(id);
         Text.writeString(out, name);
-        Text.writeString(out, clusterName);
+        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
         out.writeLong(dbId);
         out.writeLong(tableId);
         out.writeInt(desireTaskConcurrentNum);
@@ -1436,7 +1439,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         id = in.readLong();
         name = Text.readString(in);
-        clusterName = Text.readString(in);
+
+        // ignore the clusterName param
+        Text.readString(in);
+
         dbId = in.readLong();
         tableId = in.readLong();
         desireTaskConcurrentNum = in.readInt();
@@ -1449,6 +1455,11 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
         switch (dataSourceType) {
             case KAFKA: {
                 progress = new KafkaProgress();
+                progress.readFields(in);
+                break;
+            }
+            case PULSAR: {
+                progress = new PulsarProgress();
                 progress.readFields(in);
                 break;
             }
@@ -1566,8 +1577,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
         // we use sql to persist the load properties, so we just put the load properties to sql.
         String sql = String.format("CREATE ROUTINE LOAD %s ON %s %s" +
-                " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
-                " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
+                        " PROPERTIES (\"desired_concurrent_number\"=\"1\")" +
+                        " FROM KAFKA (\"kafka_topic\" = \"my_topic\")",
                 name, tableName, originLoadDesc.toSql());
         LOG.debug("merge result: {}", sql);
         origStmt = new OriginStatement(sql, 0);

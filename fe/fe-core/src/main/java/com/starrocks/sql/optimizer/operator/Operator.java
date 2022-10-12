@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator;
 
 import com.starrocks.sql.optimizer.OptExpression;
@@ -110,6 +110,10 @@ public abstract class Operator {
     @Override
     public int hashCode() {
         return Objects.hash(opType.ordinal(), limit, predicate, projection);
+    }
+
+    public boolean canUsePipeLine() {
+        return true;
     }
 
     public abstract static class Builder<O extends Operator, B extends Builder> {

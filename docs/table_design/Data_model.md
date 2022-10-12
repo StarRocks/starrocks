@@ -122,7 +122,7 @@ The data querying and ingestion in the preceding scenarios have the following ch
 - Raw detailed data does not need to be retrieved.
 - Historical data is not frequently updated. Only new data is appended.
 
-### Principes
+### Principle
 
 Starting from data ingestion to data querying, data with the same sort key in a table that uses the Aggregate Key model is aggregated multiple times as follows:
 
@@ -133,8 +133,6 @@ Starting from data ingestion to data querying, data with the same sort key in a 
 The aggregate operations help reduce the amount of data that needs to be processed, thereby accelerating queries.
 
 Suppose that you have a table that uses the Aggregate Key model and want to load the following four raw records into the table.
-
-无法复制加载中的内容
 
 | Date       | Country | PV   |
 | ---------- | ------- | ---- |
@@ -204,7 +202,7 @@ When you create a table, you can define primary key columns and metric columns. 
 
 The Unique Key model is suitable for business scenarios in which data needs to be frequently updated in real time. For example, in e-commerce scenarios, hundreds of millions of orders can be placed per day, and the statuses of the orders frequently change.
 
-### Principes
+### Principle
 
 The Unique Key model can be considered a special Aggregate Key model in which the REPLACE aggregate function is specified for metric columns to return the most recent record among a group of records that have the same primary key.
 
@@ -301,7 +299,7 @@ StarRocks has started to support the Primary Key model since v1.19. When you cre
 
     ![Primary index -2](../assets/3.2.4-2.png)
 
-### Principes
+### Principle
 
 The Primary Key model is designed based on a new storage engine that is provided by StarRocks. The metadata structure and the read/write mechanism in the Primary Key model differ from those in the Duplicate Key model. As such, the Primary Key model does not require aggregate operations and supports the pushdown of predicates and indexes. These significantly increase query performance.
 

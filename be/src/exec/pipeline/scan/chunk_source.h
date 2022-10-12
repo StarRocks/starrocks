@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -24,7 +24,7 @@ using ChunkBufferTokenPtr = std::unique_ptr<ChunkBufferToken>;
 class ChunkSource {
 public:
     ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                BalancedChunkBuffer& chunk_buffer, workgroup::ScanExecutorType executor_type);
+                BalancedChunkBuffer& chunk_buffer);
 
     virtual ~ChunkSource() = default;
 
@@ -39,9 +39,8 @@ public:
     bool has_shared_output() const;
 
     StatusOr<vectorized::ChunkPtr> get_next_chunk_from_buffer();
-    std::pair<Status, size_t> buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
-                                                                const workgroup::WorkGroupPtr& running_wg,
-                                                                int worker_id);
+    Status buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
+                                             const workgroup::WorkGroup* running_wg);
 
     // Counters of scan
     int64_t get_cpu_time_spent() const { return _cpu_time_spent_ns; }
@@ -58,12 +57,14 @@ public:
 protected:
     // MUST be implemented by different ChunkSource
     virtual Status _read_chunk(RuntimeState* state, vectorized::ChunkPtr* chunk) = 0;
+    // The schedule entity of this workgroup for resource group.
+    virtual const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const = 0;
 
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round.
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield scan io task when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
 
     const int32_t _scan_operator_seq;
     RuntimeProfile* _runtime_profile;
@@ -78,8 +79,6 @@ protected:
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();
     ChunkBufferTokenPtr _chunk_token;
-
-    const workgroup::ScanExecutorType _executor_type;
 
 private:
     // _scan_timer = _io_task_wait_timer + _io_task_exec_timer

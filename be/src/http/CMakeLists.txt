@@ -49,6 +49,7 @@ add_library(Webserver STATIC
   action/stream_load.cpp
   action/transaction_stream_load.cpp
   action/meta_action.cpp
+  action/compact_rocksdb_meta_action.cpp
   action/compaction_action.cpp
   action/update_config_action.cpp
   action/runtime_filter_cache_action.cpp

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -6,9 +6,7 @@
 
 namespace starrocks {
 
-// `int8_t` should be enough, using `int16_t` because `config::storage_format_version`
-// is `int16_t`.
-using DataFormatVersion = int16_t;
+using DataFormatVersion = int8_t;
 
 const DataFormatVersion kDataFormatUnknown = 0;
 const DataFormatVersion kDataFormatV1 = 1;

@@ -99,6 +99,7 @@ public class FileSystemManager {
     // which is not thread-safe and may cause 'Filesystem closed' exception when it is closed by other thread.
     private static final String FS_HDFS_IMPL_DISABLE_CACHE = "fs.hdfs.impl.disable.cache";
 
+    // https://hadoop.apache.org/docs/stable/hadoop-aws/tools/hadoop-aws/index.html
     // arguments for s3a
     private static final String FS_S3A_ACCESS_KEY = "fs.s3a.access.key";
     private static final String FS_S3A_SECRET_KEY = "fs.s3a.secret.key";
@@ -106,6 +107,7 @@ public class FileSystemManager {
     // This property is used like 'fs.hdfs.impl.disable.cache'
     private static final String FS_S3A_IMPL_DISABLE_CACHE = "fs.s3a.impl.disable.cache";
     private static final String FS_S3A_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
+    private static final String FS_S3A_AWS_CRED_PROVIDER = "fs.s3a.aws.credentials.provider";
 
     // arguments for ks3
     private static final String FS_KS3_ACCESS_KEY = "fs.ks3.AccessKey";
@@ -145,6 +147,8 @@ public class FileSystemManager {
 
     private ConcurrentHashMap<FileSystemIdentity, BrokerFileSystem> cachedFileSystem;
     private ClientContextManager clientContextManager;
+
+    private boolean hasSetGlobalUGI = false;
 
     public FileSystemManager() {
         cachedFileSystem = new ConcurrentHashMap<>();
@@ -242,11 +246,18 @@ public class FileSystemManager {
         String dfsNameServices = properties.getOrDefault(DFS_NAMESERVICES_KEY, "");
         String authentication = properties.getOrDefault(CommonConfigurationKeysPublic.HADOOP_SECURITY_AUTHENTICATION,
                 AUTHENTICATION_SIMPLE);
+        String disableCache = properties.getOrDefault(FS_HDFS_IMPL_DISABLE_CACHE, "true");
         if (Strings.isNullOrEmpty(authentication) || (!authentication.equals(AUTHENTICATION_SIMPLE)
                 && !authentication.equals(AUTHENTICATION_KERBEROS))) {
-            logger.warn("invalid authentication:" + authentication);
+            logger.warn("invalid authentication: " + authentication);
             throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
-                    "invalid authentication:" + authentication);
+                    "invalid authentication: " + authentication);
+        }
+        String disableCacheLowerCase = disableCache.toLowerCase();
+        if (!(disableCacheLowerCase.equals("true") || disableCacheLowerCase.equals("false"))) {
+            logger.warn("invalid disable cache: " + disableCache);
+            throw new BrokerException(TBrokerOperationStatusCode.INVALID_ARGUMENT,
+                    "invalid disable cache: " + disableCache);
         }
         String hdfsUgi = username + "," + password;
         FileSystemIdentity fileSystemIdentity = null;
@@ -328,8 +339,13 @@ public class FileSystemManager {
                                 "keytab is required for kerberos authentication");
                     }
                     UserGroupInformation.setConfiguration(conf);
- 
+
                     ugi = UserGroupInformation.loginUserFromKeytabAndReturnUGI(principal, keytab);
+                    if (!hasSetGlobalUGI) {
+                        // set a global ugi so that other components(kms for example) can get the kerberos token.
+                        UserGroupInformation.setLoginUser(ugi);
+                        hasSetGlobalUGI = true;
+                    }
                     if (properties.containsKey(KERBEROS_KEYTAB_CONTENT)) {
                         try {
                             File file = new File(tmpFilePath);
@@ -388,7 +404,7 @@ public class FileSystemManager {
                     }
                 }
 
-                conf.set(FS_HDFS_IMPL_DISABLE_CACHE, "true");
+                conf.set(FS_HDFS_IMPL_DISABLE_CACHE, disableCache);
                 FileSystem dfsFileSystem = null;
                 if (authentication.equals(AUTHENTICATION_SIMPLE) &&
                         properties.containsKey(USER_NAME_KEY) && !Strings.isNullOrEmpty(username)) {
@@ -434,6 +450,7 @@ public class FileSystemManager {
         String endpoint = properties.getOrDefault(FS_S3A_ENDPOINT, "");
         String disableCache = properties.getOrDefault(FS_S3A_IMPL_DISABLE_CACHE, "true");
         String connectionSSLEnabled = properties.getOrDefault(FS_S3A_CONNECTION_SSL_ENABLED, "true");
+        String awsCredProvider = properties.getOrDefault(FS_S3A_AWS_CRED_PROVIDER, null);
         // endpoint is the server host, pathUri.getUri().getHost() is the bucket
         // we should use these two params as the host identity, because FileSystem will cache both.
         String host = S3A_SCHEME + "://" + endpoint + "/" + pathUri.getUri().getHost();
@@ -462,6 +479,9 @@ public class FileSystemManager {
                 conf.set(FS_S3A_ENDPOINT, endpoint);
                 conf.set(FS_S3A_IMPL_DISABLE_CACHE, disableCache);
                 conf.set(FS_S3A_CONNECTION_SSL_ENABLED, connectionSSLEnabled);
+                if (awsCredProvider != null) {
+                    conf.set(FS_S3A_AWS_CRED_PROVIDER, awsCredProvider);
+                }
                 FileSystem s3AFileSystem = FileSystem.get(pathUri.getUri(), conf);
                 fileSystem.setFileSystem(s3AFileSystem);
             }
@@ -846,7 +866,8 @@ public class FileSystemManager {
                             "end of file reached");
                 }
                 if (logger.isDebugEnabled()) {
-                    logger.debug("read buffer from input stream, buffer size:" + buf.length + ", read length:" + readLength);
+                    logger.debug(
+                            "read buffer from input stream, buffer size:" + buf.length + ", read length:" + readLength);
                 }
                 return ByteBuffer.wrap(buf, 0, readLength);
             } catch (IOException e) {
@@ -907,7 +928,7 @@ public class FileSystemManager {
             try {
                 fsDataOutputStream.write(data);
             } catch (IOException e) {
-                logger.error("errors while write data to output stream", e);
+                logger.error("errors while write file " + fd + " to output stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                         e, "errors while write data to output stream");
             }
@@ -918,10 +939,10 @@ public class FileSystemManager {
         FSDataOutputStream fsDataOutputStream = clientContextManager.getFsDataOutputStream(fd);
         synchronized (fsDataOutputStream) {
             try {
-                fsDataOutputStream.flush();
+                fsDataOutputStream.hsync();
                 fsDataOutputStream.close();
             } catch (IOException e) {
-                logger.error("errors while close file output stream", e);
+                logger.error("errors while close file " + fd + " output stream", e);
                 throw new BrokerException(TBrokerOperationStatusCode.TARGET_STORAGE_SERVICE_ERROR,
                         e, "errors while close file output stream");
             } finally {

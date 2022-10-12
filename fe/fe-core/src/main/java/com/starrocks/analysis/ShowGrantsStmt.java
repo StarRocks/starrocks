@@ -21,16 +21,10 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AstVisitor;
 
 /*
  *  SHOW ALL GRANTS;
@@ -68,37 +62,27 @@ public class ShowGrantsStmt extends ShowStmt {
         return userIdent;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (userIdent != null) {
-            if (isAll) {
-                throw new AnalysisException("Can not specified keyword ALL when specified user");
-            }
-            userIdent.analyze();
-            if (!GlobalStateMgr.getCurrentState().getAuth().getUserPrivTable().doesUserExist(userIdent)) {
-                throw new AnalysisException("user " + userIdent + " not exist!");
-            }
-        } else {
-            if (!isAll) {
-                // self
-                userIdent = ConnectContext.get().getCurrentUserIdentity();
-            }
-        }
-        Preconditions.checkState(isAll || userIdent != null);
-        UserIdentity self = ConnectContext.get().getCurrentUserIdentity();
+    public boolean isAll() {
+        return isAll;
+    }
 
-        // if show all grants, or show other user's grants, need global GRANT priv.
-        if (isAll || !self.equals(userIdent)) {
-            if (!GlobalStateMgr.getCurrentState().getAuth()
-                    .checkGlobalPriv(ConnectContext.get(), PrivPredicate.GRANT)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-        }
+    public void setUserIdent(UserIdentity userIdent) {
+        this.userIdent = userIdent;
     }
 
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowGrantsStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 
 }

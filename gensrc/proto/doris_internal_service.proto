@@ -41,9 +41,12 @@ service PBackendService {
     rpc tablet_writer_cancel(starrocks.PTabletWriterCancelRequest) returns (starrocks.PTabletWriterCancelResult);
     rpc trigger_profile_report(starrocks.PTriggerProfileReportRequest) returns (starrocks.PTriggerProfileReportResult);
     rpc get_info(starrocks.PProxyRequest) returns (starrocks.PProxyResult);
+    rpc get_pulsar_info(starrocks.PPulsarProxyRequest) returns (starrocks.PPulsarProxyResult);
 
     // Transmit vectorized data between backends
     rpc transmit_chunk(starrocks.PTransmitChunkParams) returns (starrocks.PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(starrocks.PTransmitRuntimeFilterParams) returns (starrocks.PTransmitRuntimeFilterResult);
 };

@@ -47,6 +47,8 @@ using apache::thrift::transport::TProcessor;
 namespace starrocks {
 extern std::atomic<bool> k_starrocks_exit;
 
+static int64_t reboot_time = 0;
+
 HeartbeatServer::HeartbeatServer() : _olap_engine(StorageEngine::instance()) {}
 
 void HeartbeatServer::init_cluster_id_or_die() {
@@ -104,6 +106,11 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
 #endif
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
+        if (reboot_time == 0) {
+            std::time_t currTime = std::time(0);
+            reboot_time = static_cast<int64_t>(currTime);
+        }
+        heartbeat_result.backend_info.__set_reboot_time(reboot_time);
     }
 }
 
@@ -140,13 +147,22 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
             LOG(INFO) << master_info.backend_ip << " not equal to to backend localhost "
                       << BackendOptions::get_localhost();
-            if (is_valid_ip(master_info.backend_ip)) {
-                return Status::InternalError("Invalid backend ip");
+            bool fe_saved_is_valid_ip = is_valid_ip(master_info.backend_ip);
+            if (fe_saved_is_valid_ip && is_valid_ip(BackendOptions::get_localhost())) {
+                return Status::InternalError("FE saved address not match backend address");
             }
 
-            std::string ip = hostname_to_ip(master_info.backend_ip);
-            if (ip.empty()) {
-                return Status::InternalError("can not get ip from fqdn");
+            std::string ip;
+            if (fe_saved_is_valid_ip) {
+                ip = master_info.backend_ip;
+            } else {
+                ip = hostname_to_ip(master_info.backend_ip);
+                if (ip.empty()) {
+                    std::stringstream err_msg;
+                    err_msg << "Can not get ip from fqdn, fqdn is: " << master_info.backend_ip;
+                    LOG(WARNING) << err_msg.str();
+                    return Status::InternalError(err_msg.str());
+                }
             }
 
             std::vector<InetAddress> hosts;

@@ -22,7 +22,6 @@
 
 #include "Timezone.hh"
 
-#include <cerrno>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>

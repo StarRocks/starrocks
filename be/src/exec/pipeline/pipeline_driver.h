@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -20,6 +20,11 @@
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
+namespace query_cache {
+class MultilaneOperator;
+using MultilaneOperatorRawPtr = MultilaneOperator*;
+using MultilaneOperators = std::vector<MultilaneOperatorRawPtr>;
+} // namespace query_cache
 
 namespace pipeline {
 
@@ -346,6 +351,7 @@ public:
     std::string to_readable_string() const;
 
     workgroup::WorkGroup* workgroup();
+    const workgroup::WorkGroup* workgroup() const;
     void set_workgroup(workgroup::WorkGroupPtr wg);
 
     size_t get_driver_queue_level() const { return _driver_queue_level; }
@@ -361,7 +367,7 @@ private:
     static constexpr int64_t YIELD_MAX_TIME_SPENT = 100'000'000L;
     // Yield PipelineDriver when maximum time in nano-seconds has spent in current execution round,
     // if it runs in the worker thread owned by other workgroup, which has running drivers.
-    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 20'000'000L;
+    static constexpr int64_t YIELD_PREEMPT_MAX_TIME_SPENT = 5'000'000L;
 
     // check whether fragment is cancelled. It is used before pull_chunk and push_chunk.
     bool _check_fragment_is_canceled(RuntimeState* runtime_state);
@@ -404,7 +410,7 @@ private:
     phmap::flat_hash_map<int32_t, OperatorStage> _operator_stages;
 
     workgroup::WorkGroupPtr _workgroup = nullptr;
-    // The index of QuerySharedDriverQueue{WithoutLock}._queues which this driver belongs to.
+    // The index of QuerySharedDriverQueue._queues which this driver belongs to.
     size_t _driver_queue_level = 0;
     std::atomic<bool> _in_ready_queue{false};
 

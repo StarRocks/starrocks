@@ -19,6 +19,7 @@ package com.starrocks.backup;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -26,21 +27,31 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 
 public class SnapshotInfo implements Writable {
+    @SerializedName(value = "dbId")
     private long dbId;
+    @SerializedName(value = "tblId")
     private long tblId;
+    @SerializedName(value = "partitionId")
     private long partitionId;
+    @SerializedName(value = "indexId")
     private long indexId;
+    @SerializedName(value = "tabletId")
     private long tabletId;
+    @SerializedName(value = "beId")
     private long beId;
+    @SerializedName(value = "schemaHash")
     private int schemaHash;
     // eg: /path/to/your/be/data/snapshot/20180410102311.0.86400/
+    @SerializedName(value = "path")
     private String path;
     // eg:
     // 10006_0_1_0_0.dat
     // 10006_2_2_0_0.idx
     // 10006.hdr
+    @SerializedName(value = "files")
     private List<String> files = Lists.newArrayList();
 
     public SnapshotInfo() {
@@ -152,5 +163,31 @@ public class SnapshotInfo implements Writable {
         sb.append(", path: ").append(path);
         sb.append(", files:").append(files);
         return sb.toString();
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+
+        SnapshotInfo that = (SnapshotInfo) o;
+        return dbId == that.dbId &&
+                tblId == that.tblId &&
+                partitionId == that.partitionId &&
+                indexId == that.indexId &&
+                tabletId == that.tabletId &&
+                beId == that.beId &&
+                schemaHash == that.schemaHash &&
+                path.equals(that.path);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(tabletId, beId);
     }
 }

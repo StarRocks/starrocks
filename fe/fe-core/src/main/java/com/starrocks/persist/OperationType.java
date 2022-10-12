@@ -94,7 +94,9 @@ public class OperationType {
     public static final short OP_ADD_BACKEND = 50;
     public static final short OP_DROP_BACKEND = 51;
     public static final short OP_BACKEND_STATE_CHANGE = 52;
+    @Deprecated
     public static final short OP_START_DECOMMISSION_BACKEND = 53;
+    @Deprecated
     public static final short OP_FINISH_DECOMMISSION_BACKEND = 54;
     public static final short OP_ADD_FRONTEND = 55;
     public static final short OP_ADD_FIRST_FRONTEND = 56;
@@ -224,6 +226,8 @@ public class OperationType {
     // grant & revoke impersonate
     public static final short OP_GRANT_IMPERSONATE = 10062;
     public static final short OP_REVOKE_IMPERSONATE = 10063;
+    public static final short OP_GRANT_ROLE = 10064;
+    public static final short OP_REVOKE_ROLE = 10065;
 
     // task 10071 ~ 10090
     public static final short OP_CREATE_TASK = 10071;
@@ -238,8 +242,6 @@ public class OperationType {
     public static final short OP_CREATE_MATERIALIZED_VIEW = 10094;
     public static final short OP_CREATE_INSERT_OVERWRITE = 10095;
     public static final short OP_INSERT_OVERWRITE_STATE_CHANGE = 10096;
-    public static final short OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10097;
-    public static final short OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO = 10098;
 
     // manage system node info 10101 ~ 10120
     public static final short OP_UPDATE_FRONTEND = 10101;
@@ -256,6 +258,21 @@ public class OperationType {
     // only used in list partition currently
     public static final short OP_ADD_PARTITION_V2 = 10241;
 
+    // only used in lake table currently
+    public static final short OP_ADD_PARTITIONS_V2 = 10242;
+
+    // new privilege, all endswith V2
+    public static final short OP_CREATE_USER_V2 = 10261;
+    public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
+    public static final short OP_ALTER_USER_V2 = 10263;
+    public static final short OP_DROP_USER_V2 = 10264;
+    public static final short OP_UPDATE_ROLE_PRIVILEGE_V2 = 10265;
+    public static final short OP_DROP_ROLE_V2 = 10266;
+
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
+
+    // alter load
+    public static final short OP_ALTER_LOAD_JOB = 11100;
+
 }

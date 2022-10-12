@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -183,6 +183,19 @@ public:
      */
     DEFINE_VECTORIZED_FN(json_array_empty);
 
+    /**
+     * Return number of elements in a JSON object/array
+     * @param JSON, JSONPath
+     * @return number of elements if it's object or array, otherwise return 1
+     */
+    DEFINE_VECTORIZED_FN(json_length);
+
+    /**
+     * Returns the keys from the top-level value of a JSON object as a JSON array
+     * 
+     */
+    DEFINE_VECTORIZED_FN(json_keys);
+
     static Status native_json_path_prepare(starrocks_udf::FunctionContext* context,
                                            starrocks_udf::FunctionContext::FunctionStateScope scope);
     static Status native_json_path_close(starrocks_udf::FunctionContext* context,
@@ -205,6 +218,9 @@ public:
     }
 
 private:
+    template <PrimitiveType ResultType>
+    static ColumnPtr _json_query_impl(starrocks_udf::FunctionContext* context, const Columns& columns);
+
     /**
      * Parse string column as json column
      * @param: 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <arrow/builder.h>
 #include <arrow/memory_pool.h>
@@ -623,7 +623,7 @@ VALUE_GUARD(ArrowTypeId, DateTimeATGuard, at_is_datetime, ArrowTypeId::DATE32, A
 
 template <ArrowTypeId AT, typename ArrowType, typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 ArrowCppType string_to_arrow_datetime(std::shared_ptr<ArrowType> type, const std::string& value) {
-    ArrowCppType datetime_value;
+    ArrowCppType datetime_value = {};
     TimestampValue tv;
     tv.from_string(value.c_str(), value.size());
     auto unix_seconds = tv.to_unix_second();

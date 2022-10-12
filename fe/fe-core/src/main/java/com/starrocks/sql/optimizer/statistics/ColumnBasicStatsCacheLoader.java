@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.statistics;
 
 import avro.shaded.com.google.common.collect.ImmutableList;
@@ -11,6 +11,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.thrift.TStatisticData;
@@ -18,9 +19,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.checkerframework.checker.nullness.qual.NonNull;
 
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -60,7 +58,7 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
     public CompletableFuture<Map<@NonNull ColumnStatsCacheKey, @NonNull Optional<ColumnStatistic>>> asyncLoadAll(
             @NonNull Iterable<? extends @NonNull ColumnStatsCacheKey> keys, @NonNull Executor executor) {
         return CompletableFuture.supplyAsync(() -> {
-            Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+
             try {
                 long tableId = -1;
                 List<String> columns = new ArrayList<>();
@@ -69,18 +67,17 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
                     columns.add(key.column);
                 }
                 List<TStatisticData> statisticData = queryStatisticsData(tableId, columns);
-                // check TStatisticData is not empty, There may be no such column Statistics in BE
-                if (!statisticData.isEmpty()) {
-                    for (TStatisticData data : statisticData) {
-                        ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
-                        result.put(new ColumnStatsCacheKey(data.tableId, data.columnName),
-                                Optional.of(columnStatistic));
-                    }
-                } else {
-                    // put null for cache key which can't get TStatisticData from BE
-                    for (ColumnStatsCacheKey cacheKey : keys) {
-                        result.put(cacheKey, Optional.empty());
-                    }
+                Map<ColumnStatsCacheKey, Optional<ColumnStatistic>> result = new HashMap<>();
+                // There may be no statistics for the column in BE
+                // Complete the list of statistics information, otherwise the columns without statistics may be called repeatedly
+                for (ColumnStatsCacheKey cacheKey : keys) {
+                    result.put(cacheKey, Optional.empty());
+                }
+
+                for (TStatisticData data : statisticData) {
+                    ColumnStatistic columnStatistic = convert2ColumnStatistics(data);
+                    result.put(new ColumnStatsCacheKey(data.tableId, data.columnName),
+                            Optional.of(columnStatistic));
                 }
                 return result;
             } catch (RuntimeException e) {
@@ -127,20 +124,22 @@ public class ColumnBasicStatsCacheLoader implements AsyncCacheLoader<ColumnStats
             if (column.getPrimitiveType().isCharFamily()) {
                 // do nothing
             } else if (column.getPrimitiveType().equals(PrimitiveType.DATE)) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd");
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
-                    minValue = getLongFromDateTime(LocalDate.parse(statisticData.min, dtf).atStartOfDay());
+                    minValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.min, DateUtils.DATE_FORMATTER_UNIX));
                 }
                 if (statisticData.isSetMax() && !statisticData.getMax().isEmpty()) {
-                    maxValue = getLongFromDateTime(LocalDate.parse(statisticData.max, dtf).atStartOfDay());
+                    maxValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.max, DateUtils.DATE_FORMATTER_UNIX));
                 }
             } else if (column.getPrimitiveType().equals(PrimitiveType.DATETIME)) {
-                DateTimeFormatter dtf = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {
-                    minValue = getLongFromDateTime(LocalDateTime.parse(statisticData.min, dtf));
+                    minValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.min, DateUtils.DATE_TIME_FORMATTER_UNIX));
                 }
                 if (statisticData.isSetMax() && !statisticData.getMax().isEmpty()) {
-                    maxValue = getLongFromDateTime(LocalDateTime.parse(statisticData.max, dtf));
+                    maxValue = (double) getLongFromDateTime(DateUtils.parseStringWithDefaultHSM(
+                            statisticData.max, DateUtils.DATE_TIME_FORMATTER_UNIX));
                 }
             } else {
                 if (statisticData.isSetMin() && !statisticData.getMin().isEmpty()) {

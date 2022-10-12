@@ -1,15 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.text.DateFormat;
@@ -21,11 +23,18 @@ import java.util.Map;
 
 public class MultiListPartitionDescTest {
 
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+    }
+
     @Test
     public void testToSQL() {
         String partitionName = "p1";
-        List<List<String>> multiValues = Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                , Lists.newArrayList("2022-04-15", "tianjin"));
+        List<List<String>> multiValues = Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                Lists.newArrayList("2022-04-15", "tianjin"));
         boolean ifNotExists = false;
         Map<String, String> partitionProperties = new HashMap<>();
         partitionProperties.put("storage_medium", "SSD");
@@ -39,7 +48,7 @@ public class MultiListPartitionDescTest {
         String sql = "PARTITION p1 VALUES IN (('2022-04-15','guangdong'),('2022-04-15','tianjin'))" +
                 " (\"storage_cooldown_time\" = \"2122-07-09 12:12:12\", \"storage_medium\" = \"SSD\", " +
                 "\"replication_num\" = \"1\", \"tablet_type\" = \"memory\", \"in_memory\" = \"true\")";
-        Assert.assertEquals(sql, partitionDesc.toSql());
+        Assert.assertEquals(sql, partitionDesc.toString());
     }
 
     @Test
@@ -51,8 +60,8 @@ public class MultiListPartitionDescTest {
         List<ColumnDef> columnDefLists = Lists.newArrayList(dt, province);
 
         String partitionName = "p1";
-        List<List<String>> multiValues = Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                , Lists.newArrayList("2022-04-15", "tianjin"));
+        List<List<String>> multiValues = Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                Lists.newArrayList("2022-04-15", "tianjin"));
         boolean ifNotExists = false;
         Map<String, String> partitionProperties = new HashMap<>();
         partitionProperties.put("storage_medium", "SSD");

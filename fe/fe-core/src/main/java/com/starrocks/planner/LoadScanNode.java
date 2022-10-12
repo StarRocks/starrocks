@@ -73,7 +73,7 @@ public abstract class LoadScanNode extends ScanNode {
         if (!whereExpr.getType().isBoolean()) {
             throw new UserException("where statement is not a valid statement return bool");
         }
-        addConjuncts(whereExpr.getConjuncts());
+        addConjuncts(Expr.extractConjuncts(whereExpr));
     }
 
     protected void checkBitmapCompatibility(Analyzer analyzer, SlotDescriptor slotDesc, Expr expr)

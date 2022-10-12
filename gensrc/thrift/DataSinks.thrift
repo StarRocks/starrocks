@@ -42,7 +42,8 @@ enum TDataSinkType {
 enum TResultSinkType {
     MYSQL_PROTOCAL,
     FILE,
-    STATISTIC
+    STATISTIC,
+    VARIABLE
 }
 
 struct TResultFileSinkOptions {
@@ -164,6 +165,7 @@ struct TOlapTableSink {
     14: optional i64 load_channel_timeout_s // the timeout of load channels in second
     15: optional bool is_lake_table
     16: optional string txn_trace_parent
+    17: optional Types.TKeysType keys_type
 }
 
 struct TDataSink {

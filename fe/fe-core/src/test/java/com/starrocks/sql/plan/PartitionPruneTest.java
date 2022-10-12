@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -93,6 +93,28 @@ public class PartitionPruneTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: 2: d2 = '2020-07-01'\n" +
                 "     partitions=1/4\n" +
+                "     rollup: ptest"));
+    }
+
+    @Test
+    public void testInClauseCombineOr_1() throws Exception {
+        String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, '2020-01-01'));");
+        assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: ptest\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (2: d2 > '1000-01-01') OR (2: d2 IN (NULL, '2020-01-01')), 2: d2 > '1000-01-01'\n" +
+                "     partitions=4/4\n" +
+                "     rollup: ptest"));
+    }
+
+    @Test
+    public void testInClauseCombineOr_2() throws Exception {
+        String plan = getFragmentPlan("select * from ptest where (d2 > '1000-01-01') or (d2 in (null, null));");
+        assertTrue(plan.contains("  0:OlapScanNode\n" +
+                "     TABLE: ptest\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: (2: d2 > '1000-01-01') OR (2: d2 IN (NULL, NULL)), 2: d2 > '1000-01-01'\n" +
+                "     partitions=4/4\n" +
                 "     rollup: ptest"));
     }
 }

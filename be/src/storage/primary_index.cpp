@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/primary_index.h"
 
@@ -526,14 +526,14 @@ public:
     std::size_t memory_usage() const final { return _map.capacity() * (1 + S * 4 + sizeof(RowIdPack4)); }
 };
 
-struct StringHash {
+struct StringHasher1 {
     size_t operator()(const string& v) const { return vectorized::crc_hash_64(v.data(), v.length(), 0x811C9DC5); }
 };
 
 class SliceHashIndex : public HashIndex {
 private:
     using StringMap =
-            phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHash, phmap::priv::hash_default_eq<string>,
+            phmap::parallel_flat_hash_map<string, tablet_rowid_t, StringHasher1, phmap::priv::hash_default_eq<string>,
                                           TraceAlloc<phmap::priv::Pair<const string, tablet_rowid_t>>, 4,
                                           phmap::NullMutex, false>;
     StringMap _map;
@@ -1019,8 +1019,7 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     // load persistent index if enable persistent index meta
     size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
 
-    // persistent_index does't support variable length columns(varchar/char) as key column for now
-    if (tablet->get_enable_persistent_index() && (fix_size <= 64 && fix_size > 0)) {
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data

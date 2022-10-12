@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.transaction;
 
@@ -38,9 +38,9 @@ public class LakeTableTxnLogApplier implements TransactionLogApplier {
             PartitionIdentifier partitionIdentifier =
                     new PartitionIdentifier(txnState.getDbId(), table.getId(), partition.getId());
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.LAKE_COMPACTION) {
-                compactionManager.handleCompactionFinished(partitionIdentifier, version);
+                compactionManager.handleCompactionFinished(partitionIdentifier, version, versionTime);
             } else {
-                compactionManager.handleLoadingFinished(partitionIdentifier, version);
+                compactionManager.handleLoadingFinished(partitionIdentifier, version, versionTime);
             }
         }
     }

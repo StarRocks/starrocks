@@ -37,7 +37,6 @@
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/column_ref.h"
 #include "exprs/vectorized/in_const_predicate.hpp"
-#include "gen_cpp/PlanNodes_types.h"
 #include "runtime/large_int_value.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
@@ -100,8 +99,8 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
                 [&](auto&& arg) {
                     using T = std::decay_t<decltype(arg)>;
                     if constexpr (is_type_in<T, std::monostate, int96_t, decimal12_t, DecimalV2Value,
-                                             vectorized::DatumArray, HyperLogLog*, BitmapValue*, PercentileValue*,
-                                             JsonValue*>()) {
+                                             vectorized::DatumArray, vectorized::DatumMap, HyperLogLog*, BitmapValue*,
+                                             PercentileValue*, JsonValue*>()) {
                         // ignore these types
                     } else if constexpr (std::is_same_v<T, Slice>) {
                         res = std::string(arg.data, arg.size);

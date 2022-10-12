@@ -192,7 +192,10 @@ public class HttpServer {
     protected class StarrocksHttpServerInitializer extends ChannelInitializer<SocketChannel> {
         @Override
         protected void initChannel(SocketChannel ch) throws Exception {
-            ch.pipeline().addLast(new HttpServerCodec())
+            ch.pipeline().addLast(new HttpServerCodec(
+                            Config.http_max_initial_line_length,
+                            Config.http_max_header_size,
+                            Config.http_max_chunk_size))
                     .addLast(new StarRocksHttpPostObjectAggregator(100 * 65536))
                     .addLast(new ChunkedWriteHandler())
                     // add content compressor

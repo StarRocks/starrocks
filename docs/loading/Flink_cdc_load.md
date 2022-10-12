@@ -1,4 +1,4 @@
-# Synchronize data from MySQL
+# Realtime synchronization from MySQL
 
 This topic describes how to synchronize data from MySQL to StarRocks in seconds by using Flink CDC Connector, flink-starrocks-connector, and StarRocks Migration Tools (SMT).
 
@@ -60,7 +60,7 @@ The preceding figure shows the workflow of data synchronization:
 
     - `[table-rule.1]`: the rule based on which you want to match data. You can match the databases and tables by using regular expressions, thus generate the SQL statements that are used to create tables. You can configure multiple rules.
 
-    - `flink.starrocks.*`: the configuration information of your StarRocks cluster. For more information, see [Load data by using flink-connector-starrocks](Flink-connector-starrocks.md).
+    - `flink.starrocks.*`: the configurations for the StarRocks cluster and loading jobs. For more information, see [Load data by using flink-connector-starrocks](Flink-connector-starrocks.md). Since 2.4, StarRocks support partial updates for primary key model. You can specify the columns to be updated by configuring properties `flink.starrocks.sink.properties.partial_update=true`, `flink.starrocks.sink.properties.columns=k1,k2,k3`.
 
         ```Plain%20Text
         [db]

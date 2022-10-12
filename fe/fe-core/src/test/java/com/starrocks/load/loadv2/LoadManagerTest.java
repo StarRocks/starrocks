@@ -217,18 +217,18 @@ public class LoadManagerTest {
 
         // broker load job
         // loading
-        LoadJob job1 = new BrokerLoadJob(1L, "job1", null, null);
+        LoadJob job1 = new BrokerLoadJob(1L, "job1", null, null, null);
         job1.state = JobState.LOADING;
         job1.id = 11;
         Deencapsulation.invoke(loadManager, "addLoadJob", job1);
         // cancelled
-        LoadJob job2 = new BrokerLoadJob(1L, "job2", null, null);
+        LoadJob job2 = new BrokerLoadJob(1L, "job2", null, null, null);
         job2.finishTimestamp = currentTimeMs - 3000;
         job2.state = JobState.CANCELLED;
         job2.id = 16;
         Deencapsulation.invoke(loadManager, "addLoadJob", job2);
         // finished
-        LoadJob job22 = new BrokerLoadJob(1L, "job2", null, null);
+        LoadJob job22 = new BrokerLoadJob(1L, "job2", null, null, null);
         job22.finishTimestamp = currentTimeMs - 1000;
         job22.state = JobState.FINISHED;
         job22.id = 12;

@@ -23,7 +23,6 @@ package com.starrocks.analysis;
 
 import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
-import com.google.common.base.Objects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.ImmutableSortedSet;
@@ -41,6 +40,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 public class FunctionCallExpr extends Expr {
@@ -85,6 +85,10 @@ public class FunctionCallExpr extends Expr {
 
     public FunctionName getFnName() {
         return fnName;
+    }
+
+    public void resetFnName(String db, String name) {
+        this.fnName = new FunctionName(db, name);
     }
 
     // only used restore from readFields.
@@ -215,22 +219,6 @@ public class FunctionCallExpr extends Expr {
     }
 
     @Override
-    public String toDigestImpl() {
-        StringBuilder sb = new StringBuilder();
-        sb.append(fnName);
-
-        sb.append("(");
-        if (fnParams.isStar()) {
-            sb.append("*");
-        }
-        if (fnParams.isDistinct()) {
-            sb.append("distinct ");
-        }
-        sb.append(Joiner.on(", ").join(childrenToDigest())).append(")");
-        return sb.toString();
-    }
-
-    @Override
     public String explainImpl() {
         StringBuilder sb = new StringBuilder();
         sb.append(fnName);
@@ -283,11 +271,6 @@ public class FunctionCallExpr extends Expr {
     public boolean isAggregateFunction() {
         Preconditions.checkState(fn != null);
         return fn instanceof AggregateFunction && !isAnalyticFnCall;
-    }
-
-    public boolean isBuiltin() {
-        Preconditions.checkState(fn != null);
-        return fn instanceof BuiltinAggregateFunction && !isAnalyticFnCall;
     }
 
     public boolean isDistinct() {
@@ -452,12 +435,8 @@ public class FunctionCallExpr extends Expr {
 
     @Override
     public int hashCode() {
-        int result = super.hashCode();
-        result = 31 * result + Objects.hashCode(opcode);
-        result = 31 * result + Objects.hashCode(fnName);
-        result = 31 * result + Objects.hashCode(fnParams);
-        result = 31 * result + Objects.hashCode(nondeterministicId);
-        return result;
+        // fnParams contains all information of children Expr. No need to calculate super's hashcode again.
+        return Objects.hash(type, opcode, fnName, fnParams, nondeterministicId);
     }
 
     /**

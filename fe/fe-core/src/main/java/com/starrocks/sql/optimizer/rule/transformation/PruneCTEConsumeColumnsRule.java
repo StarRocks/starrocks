@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -19,8 +19,7 @@ import java.util.Map;
 
 public class PruneCTEConsumeColumnsRule extends TransformationRule {
     public PruneCTEConsumeColumnsRule() {
-        super(RuleType.TF_PRUNE_CTE_CONSUME_COLUMNS,
-                Pattern.create(OperatorType.LOGICAL_CTE_CONSUME, OperatorType.PATTERN_LEAF));
+        super(RuleType.TF_PRUNE_CTE_CONSUME_COLUMNS, Pattern.create(OperatorType.LOGICAL_CTE_CONSUME));
     }
 
     @Override
@@ -39,6 +38,7 @@ public class PruneCTEConsumeColumnsRule extends TransformationRule {
         consume.getCteOutputColumnRefMap().forEach((k, v) -> {
             if (requiredConsumeOutput.contains(k)) {
                 mapping.put(k, v);
+                requiredConsumeOutput.union(v);
             }
         });
 
@@ -47,6 +47,7 @@ public class PruneCTEConsumeColumnsRule extends TransformationRule {
                     Utils.findSmallestColumnRef(Lists.newArrayList(consume.getCteOutputColumnRefMap().keySet()));
             mapping.put(key, consume.getCteOutputColumnRefMap().get(key));
             requiredConsumeOutput.union(key);
+            requiredConsumeOutput.union(consume.getCteOutputColumnRefMap().get(key));
         }
 
         LogicalCTEConsumeOperator c =

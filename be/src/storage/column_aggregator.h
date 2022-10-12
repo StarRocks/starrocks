@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -45,15 +45,17 @@ class KeyColumnAggregator final : public ColumnAggregatorBase {
 
 class ValueColumnAggregatorBase : public ColumnAggregatorBase {
 public:
-    virtual void reset() {}
+    virtual void reset() = 0;
 
-    virtual void append_data(Column* agg) {}
-
-    // |data| is readonly.
-    virtual void aggregate_impl(int row, const ColumnPtr& data) {}
+    virtual void append_data(Column* agg) = 0;
 
     // |data| is readonly.
-    virtual void aggregate_batch_impl(int start, int end, const ColumnPtr& data) {}
+    virtual void aggregate_impl(int row, const ColumnPtr& data) = 0;
+
+    // |data| is readonly.
+    virtual void aggregate_batch_impl(int start, int end, const ColumnPtr& data) = 0;
+
+    virtual bool need_deep_copy() const { return false; };
 };
 
 using ColumnAggregatorPtr = std::unique_ptr<ColumnAggregatorBase>;
@@ -87,8 +89,16 @@ public:
             reset();
         }
 
-        if (nums > 0) {
-            // last row just aggregate, not finalize
+        CHECK(nums > 0);
+        // last row just aggregate, not finalize
+        int end = start + aggregate_loops[nums - 1];
+        int size = end - start;
+        if (need_deep_copy() && end == _source_column->size()) {
+            // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
+            ColumnPtr column = _source_column->clone_empty();
+            column->append(*_source_column, start, size);
+            aggregate_batch_impl(0, size, column);
+        } else {
             aggregate_batch_impl(start, start + aggregate_loops[nums - 1], _source_column);
         }
     }
@@ -101,12 +111,6 @@ public:
     StateType& data() { return _data; }
 
     void reset() override { this->data() = StateType{}; }
-
-    void append_data(Column* agg) override = 0;
-
-    void aggregate_impl(int row, const ColumnPtr& src) override = 0;
-
-    void aggregate_batch_impl(int start, int end, const ColumnPtr& src) override = 0;
 
 private:
     StateType _data{};
@@ -129,7 +133,7 @@ public:
     void update_aggregate(Column* agg) override {
         _aggregate_column = agg;
 
-        NullableColumn* n = down_cast<NullableColumn*>(agg);
+        auto* n = down_cast<NullableColumn*>(agg);
         _child->update_aggregate(n->data_column().get());
 
         _aggregate_nulls = down_cast<NullColumn*>(n->null_column().get());
@@ -146,12 +150,12 @@ public:
             reset();
         }
 
-        int row_nums = 0;
+        size_t row_nums = 0;
         for (int i = 0; i < nums; ++i) {
             row_nums += aggregate_loops[i];
         }
 
-        int zeros = SIMD::count_zero(_source_nulls_data + start, row_nums);
+        size_t zeros = SIMD::count_zero(_source_nulls_data + start, row_nums);
 
         if (zeros == 0) {
             // all null
@@ -162,9 +166,8 @@ public:
                 reset();
             }
 
-            if (nums - 1 >= 0) {
-                _row_is_null &= 1u;
-            }
+            CHECK(nums >= 1);
+            _row_is_null &= 1u;
         } else if (zeros == row_nums) {
             // all not null
             for (int i = 0; i < nums - 1; ++i) {
@@ -176,10 +179,18 @@ public:
                 reset();
             }
 
-            if (nums - 1 >= 0) {
-                _row_is_null &= 0u;
-                _child->aggregate_batch_impl(start, start + implicit_cast<int>(aggregate_loops[nums - 1]),
-                                             _child->_source_column);
+            CHECK(nums >= 1);
+
+            _row_is_null &= 0u;
+            int end = start + implicit_cast<int>(aggregate_loops[nums - 1]);
+            int size = end - start;
+            if (_child->need_deep_copy() && end == _child->_source_column->size()) {
+                // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
+                ColumnPtr column = _child->_source_column->clone_empty();
+                column->append(*_child->_source_column, start, size);
+                _child->aggregate_batch_impl(0, size, column);
+            } else {
+                _child->aggregate_batch_impl(start, end, _child->_source_column);
             }
         } else {
             for (int i = 0; i < nums - 1; ++i) {
@@ -195,8 +206,22 @@ public:
                 reset();
             }
 
-            if (nums - 1 >= 0) {
-                for (int j = start; j < start + aggregate_loops[nums - 1]; ++j) {
+            CHECK(nums >= 1);
+            int end = start + aggregate_loops[nums - 1];
+            int size = end - start;
+
+            if (_child->need_deep_copy() && end == _child->_source_column->size()) {
+                // copy the last rows of same key to prevent to be overwritten or reset by get_next in aggregate iterator.
+                ColumnPtr column = _child->_source_column->clone_empty();
+                column->append(*_child->_source_column, start, size);
+                for (int j = 0; j < size; ++j) {
+                    if (_source_nulls_data[start + j] != 1) {
+                        _row_is_null &= 0u;
+                        _child->aggregate_impl(j, column);
+                    }
+                }
+            } else {
+                for (int j = start; j < end; ++j) {
                     if (_source_nulls_data[j] != 1) {
                         _row_is_null &= 0u;
                         _child->aggregate_impl(j, _child->_source_column);
@@ -218,6 +243,18 @@ public:
     void reset() override {
         _row_is_null = 1;
         _child->reset();
+    }
+
+    void append_data(Column* agg) override {
+        LOG(FATAL) << "append_data is not implemented in ValueNullableColumnAggregator";
+    }
+
+    void aggregate_impl(int row, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_impl is not implemented in ValueNullableColumnAggregator";
+    }
+
+    void aggregate_batch_impl(int start, int end, const ColumnPtr& data) override {
+        LOG(FATAL) << "aggregate_batch_impl is not implemented in ValueNullableColumnAggregator";
     }
 
 private:

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -56,8 +56,8 @@ private:
 
     // make min/max chunk from stats of row group meta
     // exist=true: group meta contain statistics info
-    Status _read_min_max_chunk(const tparquet::RowGroup& row_group, vectorized::ChunkPtr* min_chunk,
-                               vectorized::ChunkPtr* max_chunk, bool* exist) const;
+    Status _read_min_max_chunk(const tparquet::RowGroup& row_group, const std::vector<SlotDescriptor*>& slots,
+                               vectorized::ChunkPtr* min_chunk, vectorized::ChunkPtr* max_chunk, bool* exist) const;
 
     Status _get_next_internal(vectorized::ChunkPtr* chunk);
 
@@ -65,7 +65,7 @@ private:
     Status _exec_only_partition_scan(vectorized::ChunkPtr* chunk);
 
     // get partition column idx in param.partition_columns
-    int _get_partition_column_idx(const std::string& col_name) const;
+    int32_t _get_partition_column_idx(const std::string& col_name) const;
 
     // check magic number of parquet file
     // current olny support "PAR1"

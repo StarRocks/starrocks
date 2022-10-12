@@ -27,6 +27,7 @@
 #include "fs/fs.h"
 #include "gen_cpp/segment.pb.h"
 #include "runtime/mem_pool.h"
+#include "runtime/mem_tracker.h"
 #include "storage/column_block.h"
 #include "storage/rowset/common.h"
 #include "storage/rowset/indexed_column_reader.h"
@@ -47,7 +48,8 @@ class IndexedColumnIterator;
 
 class BitmapIndexReader {
 public:
-    BitmapIndexReader() : _load_once(), _has_null(false) {}
+    BitmapIndexReader();
+    ~BitmapIndexReader();
 
     // Load index data into memory.
     //
@@ -69,7 +71,12 @@ public:
 
     const TypeInfoPtr& type_info() { return _typeinfo; }
 
-    size_t mem_usage() const {
+    bool loaded() const { return invoked(_load_once); }
+
+private:
+    friend class BitmapIndexIterator;
+
+    size_t _mem_usage() const {
         size_t size = sizeof(BitmapIndexReader);
         if (_dict_column_reader != nullptr) {
             size += _dict_column_reader->mem_usage();
@@ -80,19 +87,16 @@ public:
         return size;
     }
 
-    bool loaded() const { return invoked(_load_once); }
+    void _reset();
 
-private:
-    friend class BitmapIndexIterator;
-
-    Status do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
-                   bool kept_in_memory);
+    Status _do_load(FileSystem* fs, const std::string& filename, const BitmapIndexPB& meta, bool use_page_cache,
+                    bool kept_in_memory);
 
     OnceFlag _load_once;
     TypeInfoPtr _typeinfo;
     std::unique_ptr<IndexedColumnReader> _dict_column_reader;
     std::unique_ptr<IndexedColumnReader> _bitmap_column_reader;
-    bool _has_null;
+    bool _has_null = false;
 };
 
 class BitmapIndexIterator {

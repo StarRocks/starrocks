@@ -39,6 +39,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
         <iceberg.version>0.12.1</iceberg.version>
+        <python>python</python>
     </properties>
 
     <profiles>
@@ -79,7 +80,17 @@ under the License.
                 <starrocks.thrift>thrift.exe</starrocks.thrift>
             </properties>
         </profile>
-
+        <profile>
+            <id>python</id>
+            <activation>
+                <property>
+                    <name>env.PYTHON</name>
+                </property>
+            </activation>
+            <properties>
+                <python>${env.PYTHON}</python>
+            </properties>
+        </profile>
     </profiles>
 
     <dependencies>
@@ -118,17 +129,10 @@ under the License.
             <artifactId>commons-lang3</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
-        <dependency>
-            <groupId>org.apache.zookeeper</groupId>
-            <artifactId>zookeeper</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-pool2 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-pool2</artifactId>
-            <version>2.4.2</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -167,34 +171,9 @@ under the License.
             <artifactId>java-cup</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.javassist/javassist -->
-        <dependency>
-            <groupId>org.javassist</groupId>
-            <artifactId>javassist</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/javax.servlet/javax.servlet-api -->
-        <dependency>
-            <groupId>javax.servlet</groupId>
-            <artifactId>javax.servlet-api</artifactId>
-            <scope>provided</scope>
-        </dependency>
-
         <dependency>
             <groupId>com.sleepycat</groupId>
             <artifactId>je</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
-        <dependency>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>jetty</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty-util -->
-        <dependency>
-            <groupId>org.mortbay.jetty</groupId>
-            <artifactId>jetty-util</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -234,13 +213,6 @@ under the License.
             <artifactId>jprotobuf-rpc-core</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/com.baidu/brpc-java -->
-        <dependency>
-            <groupId>com.baidu</groupId>
-            <artifactId>brpc-java</artifactId>
-            <version>3.0.4</version>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.json/json -->
         <dependency>
             <groupId>org.json</groupId>
@@ -251,6 +223,22 @@ under the License.
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.junit.jupiter/junit-jupiter -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <version>5.8.2</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.junit.vintage/junit-vintage-engine -->
+        <dependency>
+            <groupId>org.junit.vintage</groupId>
+            <artifactId>junit-vintage-engine</artifactId>
+            <version>5.8.2</version>
             <scope>test</scope>
         </dependency>
 
@@ -276,18 +264,6 @@ under the License.
             </exclusions>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.apache.tomcat.embed/tomcat-embed-core -->
-        <dependency>
-            <groupId>org.apache.tomcat.embed</groupId>
-            <artifactId>tomcat-embed-core</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-annotations-api -->
-        <dependency>
-            <groupId>org.apache.tomcat</groupId>
-            <artifactId>tomcat-annotations-api</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.apache.logging.log4j/log4j-api -->
         <dependency>
             <groupId>org.apache.logging.log4j</groupId>
@@ -306,53 +282,16 @@ under the License.
             <artifactId>log4j-slf4j-impl</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/io.dropwizard.metrics/metrics-core -->
-        <dependency>
-            <groupId>io.dropwizard.metrics</groupId>
-            <artifactId>metrics-core</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.objenesis/objenesis -->
-        <dependency>
-            <groupId>org.objenesis</groupId>
-            <artifactId>objenesis</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
         <dependency>
             <groupId>com.google.protobuf</groupId>
             <artifactId>protobuf-java</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.squareup/protoparser -->
-        <dependency>
-            <groupId>com.squareup</groupId>
-            <artifactId>protoparser</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.xerial.snappy/snappy-java -->
-        <dependency>
-            <groupId>org.xerial.snappy</groupId>
-            <artifactId>snappy-java</artifactId>
-        </dependency>
-
-        <!-- for k8s client-->
-        <!-- https://mvnrepository.com/artifact/dk.brics.automaton/automaton -->
-        <dependency>
-            <groupId>dk.brics.automaton</groupId>
-            <artifactId>automaton</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/com.github.mifmif/generex -->
-        <dependency>
-            <groupId>com.github.mifmif</groupId>
-            <artifactId>generex</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.fasterxml.jackson.core/jackson-annotations -->
@@ -389,12 +328,6 @@ under the License.
         <dependency>
             <groupId>com.squareup.okio</groupId>
             <artifactId>okio</artifactId>
-        </dependency>
-
-        <!-- https://mvnrepository.com/artifact/org.yaml/snakeyaml -->
-        <dependency>
-            <groupId>org.yaml</groupId>
-            <artifactId>snakeyaml</artifactId>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->
@@ -539,7 +472,7 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-common</artifactId>
-            <version>3.3.2</version>
+            <version>3.3.3</version>
             <exclusions>
                 <exclusion>
                     <artifactId>zookeeper</artifactId>
@@ -600,12 +533,12 @@ under the License.
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
-            <version>0.1.4</version>
+            <version>0.1.7</version>
         </dependency>
         <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starmanager</artifactId>
-            <version>0.1.4</version>
+            <version>0.1.7</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/io.opentelemetry/opentelemetry-api -->
@@ -630,6 +563,25 @@ under the License.
         <dependency>
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
+        <dependency>
+            <groupId>com.mockrunner</groupId>
+            <artifactId>mockrunner-jdbc</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>xerces</groupId>
+                    <artifactId>xercesImpl</artifactId>
+                </exclusion>
+            </exclusions>
             <scope>test</scope>
         </dependency>
 
@@ -809,6 +761,7 @@ under the License.
                         <phase>generate-sources</phase>
                         <configuration>
                             <tasks>
+                                <property name="ant.python" value="${python}"/>
                                 <mkdir dir="${basedir}/target/generated-sources/proto"/>
                                 <exec executable="${java.home}/bin/java">
                                     <arg value="-jar"/>
@@ -828,15 +781,15 @@ under the License.
                                     <arg value="--java_out=${basedir}/target/generated-sources/proto"/>
                                     <arg value="${starrocks.home}/gensrc/proto/lake_service.proto"/>
                                 </exec>
-                                <exec executable="python">
+                                <exec executable="${ant.python}">
                                     <arg value="${starrocks.home}/build-support/gen_build_version.py"/>
                                     <arg value="--cpp"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                     <arg value="--java"/>
                                     <arg value="${starrocks.home}/fe/fe-core/target/generated-sources/build"/>
                                 </exec>
-                                <mkdir dir="${starrocks.home}gensrc/build/python/vectorized"/>
-                                <exec executable="python" dir="${starrocks.home}gensrc/build/python/vectorized">
+                                <mkdir dir="${starrocks.home}/gensrc/build/python/vectorized"/>
+                                <exec executable="${ant.python}" dir="${starrocks.home}/gensrc/build/python/vectorized">
                                     <arg value="${starrocks.home}/gensrc/script/vectorized/gen_vectorized_functions.py"/>
                                 </exec>
                             </tasks>
@@ -925,6 +878,7 @@ under the License.
                     <consoleOutput>true</consoleOutput>
                     <failsOnError>true</failsOnError>
                     <linkXRef>false</linkXRef>
+                    <includeTestSourceDirectory>true</includeTestSourceDirectory>
                     <excludes>**/sql/parser/gen/**</excludes>
                 </configuration>
                 <executions>

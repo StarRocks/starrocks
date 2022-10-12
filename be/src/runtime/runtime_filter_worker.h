@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -39,6 +39,7 @@ public:
     void receive_runtime_filter(int32_t filter_id, const vectorized::JoinRuntimeFilter* rf);
     void receive_shared_runtime_filter(int32_t filter_id,
                                        const std::shared_ptr<const vectorized::JoinRuntimeFilter>& rf);
+    std::string listeners(int32_t filter_id);
 
 private:
     std::map<int32_t, std::list<vectorized::RuntimeFilterProbeDescriptor*>> _listeners;

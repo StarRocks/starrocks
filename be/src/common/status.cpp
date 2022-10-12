@@ -6,6 +6,7 @@
 
 #include <fmt/format.h>
 
+#include "common/config.h"
 #include "gen_cpp/Status_types.h"  // for TStatus
 #include "gen_cpp/status.pb.h"     // for StatusPB
 #include "gutil/strings/fastmem.h" // for memcpy_inlined
@@ -82,6 +83,49 @@ Status::Status(const StatusPB& s) : _state(nullptr) {
 }
 
 Status::Status(TStatusCode::type code, Slice msg, Slice ctx) : _state(assemble_state(code, msg, ctx)) {}
+
+#if defined(ENABLE_STATUS_FAILED)
+int32_t Status::get_cardinality_of_inject() {
+    const auto& cardinality_of_inject = starrocks::config::cardinality_of_inject;
+    if (cardinality_of_inject < 1) {
+        return 1;
+    } else {
+        return cardinality_of_inject;
+    }
+}
+
+void Status::access_directory_of_inject() {
+    std::string directs = starrocks::config::directory_of_inject;
+    vector<string> fields = strings::Split(directs, ",");
+    for (const auto& direct : fields) {
+        dircetory_enable[direct] = true;
+    }
+}
+
+// direct_name is like "../src/exec/pipeline" and so on.
+bool Status::in_directory_of_inject(const std::string& direct_name) {
+    if (dircetory_enable.empty()) {
+        return false;
+    }
+
+    vector<string> fields = strings::Split(direct_name, "/");
+    if (fields.size() > 1) {
+        std::stringstream ss;
+        for (int i = 1; i < fields.size(); ++i) {
+            ss << "/" << fields[i];
+            const auto& iter = dircetory_enable.find(ss.str());
+            if (iter != dircetory_enable.end() && iter->second) {
+                return true;
+            }
+        }
+        return false;
+    } else {
+        DCHECK_GE(fields.size(), 1);
+        DCHECK_EQ(fields[0], "..");
+        return false;
+    }
+}
+#endif
 
 void Status::to_thrift(TStatus* s) const {
     s->error_msgs.clear();

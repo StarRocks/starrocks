@@ -25,7 +25,7 @@ import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.catalog.DiskInfo;
 import com.starrocks.catalog.DiskInfo.DiskState;
 import com.starrocks.common.FeMetaVersion;
@@ -51,7 +51,7 @@ import java.util.Set;
 public class Backend extends ComputeNode {
 
     public enum BackendState {
-        using, /* backend is belong to a cluster*/
+        using, /* backend belongs to a cluster*/
         offline,
         free /* backend is not belong to any clusters */
     }
@@ -300,7 +300,7 @@ public class Backend extends ComputeNode {
             entry.getValue().write(out);
         }
 
-        Text.writeString(out, getOwnerClusterName());
+        Text.writeString(out, SystemInfoService.DEFAULT_CLUSTER);
         out.writeInt(getBackendState().ordinal());
         out.writeInt(getDecommissionType().ordinal());
 
@@ -338,11 +338,11 @@ public class Backend extends ComputeNode {
             disksRef = ImmutableMap.copyOf(disks);
         }
         if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_30) {
-            setOwnerClusterName(Text.readString(in));
+            // ignore clusterName
+            Text.readString(in);
             setBackendState(in.readInt());
             setDecommissionType(in.readInt());
         } else {
-            setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
             setBackendState(BackendState.using.ordinal());
             setDecommissionType(DecommissionType.SystemDecommission.ordinal());
         }

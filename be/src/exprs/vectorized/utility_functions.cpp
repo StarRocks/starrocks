@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/utility_functions.h"
 
@@ -28,6 +28,7 @@
 #include "udf/udf_internal.h"
 #include "util/cidr.h"
 #include "util/monotime.h"
+#include "util/network_util.h"
 #include "util/thread.h"
 #include "util/time.h"
 #include "util/uid_util.h"
@@ -233,6 +234,17 @@ ColumnPtr UtilityFunctions::assert_true(FunctionContext* context, const Columns&
         }
     }
     return ColumnHelper::create_const_column<TYPE_BOOLEAN>(true, size);
+}
+
+ColumnPtr UtilityFunctions::host_name(starrocks_udf::FunctionContext* context, const Columns& columns) {
+    std::string host_name;
+    auto status = get_hostname(&host_name);
+    if (status.ok()) {
+        return ColumnHelper::create_const_column<TYPE_VARCHAR>(host_name, 1);
+    } else {
+        host_name = "error";
+        return ColumnHelper::create_const_column<TYPE_VARCHAR>(host_name, 1);
+    }
 }
 
 } // namespace starrocks::vectorized

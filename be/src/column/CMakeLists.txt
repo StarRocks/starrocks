@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/column")
@@ -10,6 +10,7 @@ add_library(Column STATIC
         column_helper.cpp
         column_viewer.cpp
         const_column.cpp
+        datum.cpp
         datum_convert.cpp
         datum_tuple.cpp
         field.cpp
@@ -23,4 +24,5 @@ add_library(Column STATIC
         column_visitor.cpp
         column_visitor_mutable.cpp
         json_column.cpp
+        map_column.cpp
         )

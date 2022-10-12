@@ -26,7 +26,7 @@ import com.codahale.metrics.MetricRegistry;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Sets;
 import com.starrocks.alter.Alter;
-import com.starrocks.alter.AlterJob.JobType;
+import com.starrocks.alter.AlterJobV2;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -118,14 +118,18 @@ public final class MetricRepo {
     public static GaugeMetricImpl<Long> GAUGE_MAX_TABLET_COMPACTION_SCORE;
     public static GaugeMetricImpl<Long> GAUGE_STACKED_JOURNAL_NUM;
 
-    private static ScheduledThreadPoolExecutor metricTimer =
+    public static List<GaugeMetricImpl<Long>> GAUGE_ROUTINE_LOAD_LAGS;
+
+    private static final ScheduledThreadPoolExecutor METRIC_TIMER =
             ThreadPoolManager.newDaemonScheduledThreadPool(1, "Metric-Timer-Pool", true);
-    private static MetricCalculator metricCalculator = new MetricCalculator();
+    private static final MetricCalculator METRIC_CALCULATOR = new MetricCalculator();
 
     public static synchronized void init() {
         if (isInit) {
             return;
         }
+
+        GAUGE_ROUTINE_LOAD_LAGS = new ArrayList<>();
 
         // 1. gauge
         // load jobs
@@ -136,7 +140,7 @@ public final class MetricRepo {
             }
 
             for (JobState state : JobState.values()) {
-                GaugeMetric<Long> gauge = (GaugeMetric<Long>) new GaugeMetric<Long>("job",
+                GaugeMetric<Long> gauge = new GaugeMetric<Long>("job",
                         MetricUnit.NOUNIT, "job statistics") {
                     @Override
                     public Long getValue() {
@@ -155,24 +159,24 @@ public final class MetricRepo {
 
         // running alter job
         Alter alter = GlobalStateMgr.getCurrentState().getAlterInstance();
-        for (JobType jobType : JobType.values()) {
-            if (jobType != JobType.SCHEMA_CHANGE && jobType != JobType.ROLLUP) {
+        for (AlterJobV2.JobType jobType : AlterJobV2.JobType.values()) {
+            if (jobType != AlterJobV2.JobType.SCHEMA_CHANGE && jobType != AlterJobV2.JobType.ROLLUP) {
                 continue;
             }
 
-            GaugeMetric<Long> gauge = (GaugeMetric<Long>) new GaugeMetric<Long>("job",
+            GaugeMetric<Long> gauge = new GaugeMetric<Long>("job",
                     MetricUnit.NOUNIT, "job statistics") {
                 @Override
                 public Long getValue() {
                     if (!GlobalStateMgr.getCurrentState().isLeader()) {
                         return 0L;
                     }
-                    if (jobType == JobType.SCHEMA_CHANGE) {
+                    if (jobType == AlterJobV2.JobType.SCHEMA_CHANGE) {
                         return alter.getSchemaChangeHandler()
-                                .getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.RUNNING);
+                                .getAlterJobV2Num(AlterJobV2.JobState.RUNNING);
                     } else {
                         return alter.getMaterializedViewHandler()
-                                .getAlterJobV2Num(com.starrocks.alter.AlterJobV2.JobState.RUNNING);
+                                .getAlterJobV2Num(AlterJobV2.JobState.RUNNING);
                     }
                 }
             };
@@ -186,7 +190,7 @@ public final class MetricRepo {
         generateBackendsTabletMetrics();
 
         // connections
-        GaugeMetric<Integer> conections = (GaugeMetric<Integer>) new GaugeMetric<Integer>(
+        GaugeMetric<Integer> conections = new GaugeMetric<Integer>(
                 "connection_total", MetricUnit.CONNECTIONS, "total connections") {
             @Override
             public Integer getValue() {
@@ -232,7 +236,7 @@ public final class MetricRepo {
         // routine load jobs
         RoutineLoadManager routineLoadManger = GlobalStateMgr.getCurrentState().getRoutineLoadManager();
         for (RoutineLoadJob.JobState state : RoutineLoadJob.JobState.values()) {
-            GaugeMetric<Long> gauge = (GaugeMetric<Long>) new GaugeMetric<Long>("routine_load_jobs",
+            GaugeMetric<Long> gauge = new GaugeMetric<Long>("routine_load_jobs",
                     MetricUnit.NOUNIT, "routine load jobs") {
                 @Override
                 public Long getValue() {
@@ -386,7 +390,7 @@ public final class MetricRepo {
         isInit = true;
 
         if (Config.enable_metric_calculator) {
-            metricTimer.scheduleAtFixedRate(metricCalculator, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
+            METRIC_TIMER.scheduleAtFixedRate(METRIC_CALCULATOR, 0, 15 * 1000L, TimeUnit.MILLISECONDS);
         }
     }
 
@@ -485,84 +489,7 @@ public final class MetricRepo {
         } // end for backends
     }
 
-    public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
-                                                boolean minifyTableMetrics) {
-        if (!isInit) {
-            return "";
-        }
-
-        // update the metrics first
-        updateMetrics();
-
-        // jvm
-        JvmService jvmService = new JvmService();
-        JvmStats jvmStats = jvmService.stats();
-        visitor.visitJvm(jvmStats);
-
-        // starrocks metrics
-        for (Metric metric : STARROCKS_METRIC_REGISTER.getMetrics()) {
-            visitor.visit(metric);
-        }
-
-        // table metrics
-        if (collectTableMetrics) {
-            collectTableMetrics(visitor, minifyTableMetrics);
-        }
-
-        // histogram
-        SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
-        for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
-            visitor.visitHistogram(entry.getKey(), entry.getValue());
-        }
-        ResourceGroupMetricMgr.visitQueryLatency();
-
-        // collect routine load process metrics
-        if (Config.enable_routine_load_lag_metrics) {
-            collectRoutineLoadProcessMetrics(visitor);
-        }
-
-        // node info
-        visitor.getNodeInfo();
-        return visitor.build();
-    }
-
-    // update some metrics to make a ready to be visited
-    private static void updateMetrics() {
-        SYSTEM_METRICS.update();
-    }
-
-    // collect table-level metrics
-    private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        List<String> dbNames = globalStateMgr.getDbNames();
-        for (String dbName : dbNames) {
-            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-            if (null == db) {
-                continue;
-            }
-            String dbShortName = dbName.replace("default_cluster:", "");
-            db.readLock();
-            try {
-                for (Table table : db.getTables()) {
-                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(table.getId());
-                    for (Metric m : entity.getMetrics()) {
-                        if (minifyTableMetrics && (null == m.getValue() ||
-                                (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
-                            continue;
-                        }
-                        m.addLabel(new MetricLabel("db_name", dbShortName))
-                                .addLabel(new MetricLabel("tbl_name", table.getName()))
-                                .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
-                        visitor.visit(m);
-                    }
-                }
-            } finally {
-                db.readUnlock();
-            }
-        }
-    }
-
-    private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
+    public static void updateRoutineLoadProcessMetrics() {
         List<RoutineLoadJob> jobs = GlobalStateMgr.getCurrentState().getRoutineLoadManager().getRoutineLoadJobByState(
                 Sets.newHashSet(RoutineLoadJob.JobState.NEED_SCHEDULE, RoutineLoadJob.JobState.RUNNING));
 
@@ -600,6 +527,7 @@ public final class MetricRepo {
             return;
         }
 
+        List<GaugeMetricImpl<Long>> routineLoadLags = new ArrayList<>();
         for (int i = 0; i < kafkaJobs.size(); i++) {
             KafkaRoutineLoadJob kJob = (KafkaRoutineLoadJob) kafkaJobs.get(i);
             ImmutableMap<Integer, Long> partitionIdToProgress =
@@ -629,8 +557,123 @@ public final class MetricRepo {
                                 "routine load kafka lag");
                 metric.addLabel(new MetricLabel("job_name", kJob.getName()));
                 metric.setValue(maxLag);
-                visitor.visit(metric);
+                routineLoadLags.add(metric);
             }
+        }
+
+        GAUGE_ROUTINE_LOAD_LAGS = routineLoadLags;
+    }
+
+    public static synchronized String getMetric(MetricVisitor visitor, boolean collectTableMetrics,
+                                                boolean minifyTableMetrics) {
+        if (!isInit) {
+            return "";
+        }
+
+        // update the metrics first
+        updateMetrics();
+
+        // jvm
+        JvmService jvmService = new JvmService();
+        JvmStats jvmStats = jvmService.stats();
+        visitor.visitJvm(jvmStats);
+
+        // starrocks metrics
+        for (Metric metric : STARROCKS_METRIC_REGISTER.getMetrics()) {
+            visitor.visit(metric);
+        }
+
+        // database metrics
+        collectDatabaseMetrics(visitor);
+
+        // table metrics
+        if (collectTableMetrics) {
+            collectTableMetrics(visitor, minifyTableMetrics);
+        }
+
+        // histogram
+        SortedMap<String, Histogram> histograms = METRIC_REGISTER.getHistograms();
+        for (Map.Entry<String, Histogram> entry : histograms.entrySet()) {
+            visitor.visitHistogram(entry.getKey(), entry.getValue());
+        }
+        ResourceGroupMetricMgr.visitQueryLatency();
+
+        // collect routine load process metrics
+        if (Config.enable_routine_load_lag_metrics) {
+            collectRoutineLoadProcessMetrics(visitor);
+        }
+
+        // node info
+        visitor.getNodeInfo();
+        return visitor.build();
+    }
+
+    // update some metrics to make a ready to be visited
+    private static void updateMetrics() {
+        SYSTEM_METRICS.update();
+    }
+
+    // collect table-level metrics
+    private static void collectTableMetrics(MetricVisitor visitor, boolean minifyTableMetrics) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
+        for (String dbName : dbNames) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (null == db) {
+                continue;
+            }
+            db.readLock();
+            try {
+                for (Table table : db.getTables()) {
+                    TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(table.getId());
+                    for (Metric m : entity.getMetrics()) {
+                        if (minifyTableMetrics && (null == m.getValue() ||
+                                (MetricType.COUNTER == m.type && ((Long) m.getValue()).longValue() == 0L))) {
+                            continue;
+                        }
+                        m.addLabel(new MetricLabel("db_name", dbName))
+                                .addLabel(new MetricLabel("tbl_name", table.getName()))
+                                .addLabel(new MetricLabel("tbl_id", String.valueOf(table.getId())));
+                        visitor.visit(m);
+                    }
+                }
+            } finally {
+                db.readUnlock();
+            }
+        }
+    }
+
+    private static void collectDatabaseMetrics(MetricVisitor visitor) {
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        List<String> dbNames = globalStateMgr.getDbNames();
+        GaugeMetricImpl databaseNum = new GaugeMetricImpl<>(
+                "database_num", MetricUnit.OPERATIONS, "count of database");
+        long dbNum = 0;
+        for (String dbName : dbNames) {
+            Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+            if (null == db) {
+                continue;
+            }
+            dbNum++;
+            db.readLock();
+            try {
+                GaugeMetricImpl tableNum = new GaugeMetricImpl<>(
+                        "table_num", MetricUnit.OPERATIONS, "count of table");
+                tableNum.setValue(0L);
+                tableNum.setValue(db.getTables().size());
+                tableNum.addLabel(new MetricLabel("db_name", dbName));
+                visitor.visit(tableNum);
+            } finally {
+                db.readUnlock();
+            }
+        }
+        databaseNum.setValue(dbNum);
+        visitor.visit(databaseNum);
+    }
+
+    private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {
+        for (GaugeMetricImpl<Long> metric : GAUGE_ROUTINE_LOAD_LAGS) {
+            visitor.visit(metric);
         }
     }
 

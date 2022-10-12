@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.connector.iceberg;
 
@@ -10,6 +10,7 @@ import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.external.iceberg.StarRocksIcebergException;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.logging.log4j.LogManager;
@@ -88,5 +89,21 @@ public class IcebergMetadata implements ConnectorMetadata {
             LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
             return null;
         }
+    }
+
+    @Override
+    public List<String> listPartitionNames(String dbName, String tblName) {
+        org.apache.iceberg.Table icebergTable
+                = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
+        if (!IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.HIVE_CATALOG)) {
+            throw new StarRocksIcebergException(
+                    "Do not support get partitions from catalog type: " + catalogType);
+        }
+        if (icebergTable.spec().fields().stream().anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
+            throw new StarRocksIcebergException(
+                    "Do not support get partitions from No-Identity partition transform now");
+        }
+
+        return IcebergUtil.getIdentityPartitionNames(icebergTable);
     }
 }

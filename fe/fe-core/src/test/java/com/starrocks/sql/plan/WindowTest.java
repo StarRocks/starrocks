@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -204,13 +204,13 @@ public class WindowTest extends PlanTestBase {
         starRocksAssert.query(sql)
                 .analysisError("The num_buckets parameter of NTILE must be a constant positive integer");
 
-        sql =
-                "select v1, v2, NTILE() over (partition by v1 order by v2 rows between 1 preceding and 1 following) as j1 from t0";
+        sql = "select v1, v2, NTILE() " +
+                "over (partition by v1 order by v2 rows between 1 preceding and 1 following) as j1 from t0";
         starRocksAssert.query(sql).analysisError("No matching function with signature: ntile()");
 
         // Windowing clause not allowed with NTILE.
-        sql =
-                "select v1, v2, NTILE(2) over (partition by v1 order by v2 rows between 1 preceding and 1 following) as j1 from t0";
+        sql = "select v1, v2, NTILE(2) " +
+                "over (partition by v1 order by v2 rows between 1 preceding and 1 following) as j1 from t0";
         starRocksAssert.query(sql).analysisError("Windowing clause not allowed");
 
         // Normal case.
@@ -239,6 +239,28 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk < 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk = 4;";
+            plan = getFragmentPlan(sql);
             assertContains(plan, "  1:TOP-N\n" +
                     "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
@@ -364,6 +386,18 @@ public class WindowTest extends PlanTestBase {
                     "  |  partition limit: 4\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk < 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
         }
         {
             String sql = "select * from (\n" +
@@ -373,6 +407,19 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk = 4;";
+            plan = getFragmentPlan(sql);
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +
@@ -534,7 +581,8 @@ public class WindowTest extends PlanTestBase {
 
         String plan = getVerboseExplain(sql);
         assertContains(plan, "3:ANALYTIC\n" +
-                "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
+                "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+                "args nullable: true; result nullable: true], ]\n" +
                 "  |  order by: [2: v2, BIGINT, true] DESC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
                 "  |  cardinality: 1\n" +
@@ -566,7 +614,8 @@ public class WindowTest extends PlanTestBase {
 
         String plan = getVerboseExplain(sql);
         assertContains(plan, "3:ANALYTIC\n" +
-                "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; result: BIGINT; args nullable: true; result nullable: true], ]\n" +
+                "  |  functions: [, sum[([2: v2, BIGINT, true]); args: BIGINT; " +
+                "result: BIGINT; args nullable: true; result nullable: true], ]\n" +
                 "  |  partition by: [3: v3, BIGINT, true]\n" +
                 "  |  order by: [2: v2, BIGINT, true] DESC\n" +
                 "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +

@@ -26,14 +26,11 @@
 #include <string>
 
 #include "runtime/decimalv2_value.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(TabletMetaTest, test_create) {
-    config::storage_format_version = 2;
-
     TCreateTabletReq request;
     request.__set_tablet_id(1000001);
     request.__set_partition_id(1);
@@ -105,10 +102,9 @@ TEST(TabletMetaTest, test_create) {
     col_ordinal_to_unique_id[2] = 10002;
     col_ordinal_to_unique_id[3] = 10003;
 
-    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(-1);
     TabletMetaSharedPtr tablet_meta;
-    Status st = TabletMeta::create(mem_tracker.get(), request, TabletUid(321, 456), 987 /*shared_id*/,
-                                   20000 /*next_unique_id*/, col_ordinal_to_unique_id, &tablet_meta);
+    Status st = TabletMeta::create(request, TabletUid(321, 456), 987 /*shared_id*/, 20000 /*next_unique_id*/,
+                                   col_ordinal_to_unique_id, &tablet_meta);
     ASSERT_TRUE(st.ok());
     ASSERT_TRUE(tablet_meta != nullptr);
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -17,7 +17,7 @@ public:
                                     int32_t num_sender, const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
                                     const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
                                     int64_t offset, int64_t limit)
-            : SourceOperator(factory, id, "exchange_merge_sort_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "global_merge_source", plan_node_id, driver_sequence),
               _num_sender(num_sender),
               _row_desc(row_desc),
               _sort_exec_exprs(sort_exec_exprs),
@@ -65,7 +65,7 @@ public:
                                            const RowDescriptor& row_desc, SortExecExprs* sort_exec_exprs,
                                            const std::vector<bool>& is_asc_order, const std::vector<bool>& nulls_first,
                                            int64_t offset, int64_t limit)
-            : SourceOperatorFactory(id, "exchange_merge_sort_source", plan_node_id),
+            : SourceOperatorFactory(id, "global_merge_source", plan_node_id),
               _num_sender(num_sender),
               _row_desc(row_desc),
               _sort_exec_exprs(sort_exec_exprs),

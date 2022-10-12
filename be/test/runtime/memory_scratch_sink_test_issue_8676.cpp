@@ -147,8 +147,8 @@ public:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
-        Status st =
-                DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        Status st = DescriptorTbl::create(_state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                          config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
@@ -289,7 +289,7 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
-    DescriptorTbl::create(&_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);

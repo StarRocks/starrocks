@@ -23,9 +23,12 @@ package com.starrocks.backup;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.lake.backup.LakeBackupJob;
+import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.io.DataInput;
@@ -43,15 +46,17 @@ import java.util.Map;
 public abstract class AbstractJob implements Writable {
 
     public enum JobType {
-        BACKUP, RESTORE
+        BACKUP, RESTORE, LAKE_BACKUP, LAKE_RESTORE
     }
 
+    @SerializedName(value = "type")
     protected JobType type;
 
     // must be set right before job's running
     protected GlobalStateMgr globalStateMgr;
     // repo will be set at first run()
     protected Repository repo;
+    @SerializedName(value = "repoId")
     protected long repoId;
 
     /*
@@ -60,16 +65,23 @@ public abstract class AbstractJob implements Writable {
      * And each time this method is called, the snapshot tasks will be sent with (maybe) different
      * version. So we have to use different job id to identify the tasks in different batches.
      */
+    @SerializedName(value = "jobId")
     protected long jobId = -1;
 
+    @SerializedName(value = "label")
     protected String label;
+    @SerializedName(value = "dbId")
     protected long dbId;
+    @SerializedName(value = "dbName")
     protected String dbName;
 
     protected Status status = Status.OK;
 
+    @SerializedName(value = "createTime")
     protected long createTime = -1;
+    @SerializedName(value = "finishedTime")
     protected long finishedTime = -1;
+    @SerializedName(value = "timeoutMs")
     protected long timeoutMs;
 
     // task signature -> <finished num / total num>
@@ -78,6 +90,7 @@ public abstract class AbstractJob implements Writable {
     protected boolean isTypeRead = false;
 
     // save err msg of tasks
+    @SerializedName(value = "taskErrMsg")
     protected Map<Long, String> taskErrMsg = Maps.newHashMap();
 
     protected AbstractJob(JobType type) {
@@ -165,6 +178,14 @@ public abstract class AbstractJob implements Writable {
             job = new BackupJob();
         } else if (type == JobType.RESTORE) {
             job = new RestoreJob();
+        } else if (type == JobType.LAKE_BACKUP) {
+            job = LakeBackupJob.read(in);
+            job.setTypeRead(true);
+            return job;
+        } else if (type == JobType.LAKE_RESTORE) {
+            job = LakeRestoreJob.read(in);
+            job.setTypeRead(true);
+            return job;
         } else {
             throw new IOException("Unknown job type: " + type.name());
         }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.google.common.collect.ImmutableMap;
@@ -35,7 +35,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
      */
     protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
     protected final ImmutableMap<Column, ColumnRefOperator> columnMetaToColRefMap;
-    protected final ImmutableMap<String, PartitionColumnFilter> columnFilters;
+    protected ImmutableMap<String, PartitionColumnFilter> columnFilters;
     protected Set<String> partitionColumns = Sets.newHashSet();
 
     public LogicalScanOperator(
@@ -50,9 +50,7 @@ public abstract class LogicalScanOperator extends LogicalOperator {
         this.table = Objects.requireNonNull(table, "table is null");
         this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
         this.columnMetaToColRefMap = ImmutableMap.copyOf(columnMetaToColRefMap);
-
-        this.columnFilters = ImmutableMap.copyOf(
-                ColumnFilterConverter.convertColumnFilter(Utils.extractConjuncts(predicate), table));
+        buildColumnFilters(predicate);
     }
 
     public Table getTable() {
@@ -69,6 +67,11 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Map<Column, ColumnRefOperator> getColumnMetaToColRefMap() {
         return columnMetaToColRefMap;
+    }
+
+    public void buildColumnFilters(ScalarOperator predicate) {
+        this.columnFilters = ImmutableMap.copyOf(
+                ColumnFilterConverter.convertColumnFilter(Utils.extractConjuncts(predicate), table));
     }
 
     public Map<String, PartitionColumnFilter> getColumnFilters() {

@@ -70,7 +70,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         {
             MysqlSerializer serializer = MysqlSerializer.newInstance();
             serializer.writeInt1(2);
-            serializer.writeEofString("default_cluster:testDb1");
+            serializer.writeEofString("testDb1");
             initDbPacket = serializer.toByteBuffer();
         }
 
@@ -253,6 +253,10 @@ public class ConnectProcessorTest extends DDLTestBase {
                 minTimes = 0;
                 result = "testCluster:user";
 
+                context.getCurrentUserIdentity();
+                minTimes = 0;
+                result = UserIdentity.ROOT;
+
                 context.getStartTime();
                 minTimes = 0;
                 result = 0L;
@@ -426,7 +430,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     public void testFieldList() throws Exception {
         ConnectContext ctx = initMockContext(mockChannel(fieldListPacket), GlobalStateMgr.getCurrentState());
 
-        myContext.setDatabase("default_cluster:testDb1");
+        myContext.setDatabase("testDb1");
         ConnectProcessor processor = new ConnectProcessor(ctx);
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_FIELD_LIST, myContext.getCommand());
@@ -475,7 +479,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         serializer.writeNulTerminateString("emptyTable");
         serializer.writeEofString("");
 
-        myContext.setDatabase("default_cluster:testDb1");
+        myContext.setDatabase("testDb1");
         ConnectContext ctx = initMockContext(mockChannel(serializer.toByteBuffer()),
                 GlobalStateMgr.getCurrentState());
 

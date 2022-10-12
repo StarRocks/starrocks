@@ -29,10 +29,8 @@ import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Table;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
@@ -42,6 +40,7 @@ import com.starrocks.common.util.KafkaUtil;
 import com.starrocks.load.RoutineLoadDesc;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.transaction.GlobalTransactionMgr;
@@ -102,9 +101,6 @@ public class KafkaRoutineLoadJobTest {
         List<Long> beIds1 = Lists.newArrayList(1L);
         List<Long> beIds2 = Lists.newArrayList(1L, 2L, 3L, 4L);
 
-        String clusterName1 = "default1";
-        String clusterName2 = "default2";
-
         new Expectations() {
             {
                 GlobalStateMgr.getCurrentSystemInfo();
@@ -123,19 +119,19 @@ public class KafkaRoutineLoadJobTest {
         };
 
         // 3 partitions, 4 be
-        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", clusterName2, 1L,
+        RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList2);
         Assert.assertEquals(3, routineLoadJob.calculateCurrentConcurrentTaskNum());
 
         // 4 partitions, 4 be
-        routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", clusterName2, 1L,
+        routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList3);
         Assert.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
 
         // 7 partitions, 4 be
-        routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", clusterName2, 1L,
+        routineLoadJob = new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                 1L, "127.0.0.1:9020", "topic1");
         Deencapsulation.setField(routineLoadJob, "currentKafkaPartitions", partitionList4);
         Assert.assertEquals(4, routineLoadJob.calculateCurrentConcurrentTaskNum());
@@ -149,7 +145,7 @@ public class KafkaRoutineLoadJobTest {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         RoutineLoadJob routineLoadJob =
-                new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", "default", 1L,
+                new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                         1L, "127.0.0.1:9020", "topic1");
 
         new Expectations(globalStateMgr) {
@@ -191,7 +187,7 @@ public class KafkaRoutineLoadJobTest {
         GlobalStateMgr globalStateMgr = Deencapsulation.newInstance(GlobalStateMgr.class);
 
         RoutineLoadJob routineLoadJob =
-                new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", "default", 1L,
+                new KafkaRoutineLoadJob(1L, "kafka_routine_load_job", 1L,
                         1L, "127.0.0.1:9020", "topic1");
         long maxBatchIntervalS = 10;
         new Expectations() {
@@ -260,7 +256,7 @@ public class KafkaRoutineLoadJobTest {
         Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
         Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
         Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
-        long dbId = 1l;
+        long dbId = 1L;
         long tableId = 2L;
 
         new Expectations() {

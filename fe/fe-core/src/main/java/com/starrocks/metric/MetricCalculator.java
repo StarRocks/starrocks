@@ -21,6 +21,7 @@
 
 package com.starrocks.metric;
 
+import com.starrocks.common.Config;
 import com.starrocks.qe.QueryDetail;
 import com.starrocks.qe.QueryDetailQueue;
 
@@ -126,6 +127,10 @@ public class MetricCalculator extends TimerTask {
             MetricRepo.GAUGE_QUERY_LATENCY_P95.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_P99.setValue(0.0);
             MetricRepo.GAUGE_QUERY_LATENCY_P999.setValue(0.0);
+        }
+
+        if (Config.enable_routine_load_lag_metrics)  {
+            MetricRepo.updateRoutineLoadProcessMetrics();
         }
     }
 }

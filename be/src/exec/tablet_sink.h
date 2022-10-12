@@ -44,6 +44,7 @@
 #include "util/compression/block_compression.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
+#include "util/reusable_closure.h"
 
 namespace starrocks {
 
@@ -80,61 +81,15 @@ struct AddBatchCounter {
     }
 };
 
-template <typename T>
-class ReusableClosure : public google::protobuf::Closure {
-public:
-    ReusableClosure() : cid(INVALID_BTHREAD_ID), _refs(0) {}
-    ~ReusableClosure() override = default;
-
-    int count() { return _refs.load(); }
-
-    void ref() { _refs.fetch_add(1); }
-
-    // If unref() returns true, this object should be delete
-    bool unref() { return _refs.fetch_sub(1) == 1; }
-
-    void Run() override {
-        if (unref()) {
-            delete this;
-        }
-    }
-
-    bool join() {
-        if (cid != INVALID_BTHREAD_ID) {
-            brpc::Join(cid);
-            cid = INVALID_BTHREAD_ID;
-            return true;
-        } else {
-            return false;
-        }
-    }
-
-    void cancel() {
-        if (cid != INVALID_BTHREAD_ID) {
-            brpc::StartCancel(cid);
-        }
-    }
-
-    void reset() {
-        cntl.Reset();
-        cid = cntl.call_id();
-    }
-
-    brpc::Controller cntl;
-    T result;
-
-private:
-    brpc::CallId cid;
-    std::atomic<int> _refs;
-};
-
 class NodeChannel {
 public:
-    NodeChannel(OlapTableSink* parent, int64_t index_id, int64_t node_id);
+    NodeChannel(OlapTableSink* parent, int64_t node_id);
     ~NodeChannel() noexcept;
 
     // called before open, used to add tablet loacted in this backend
-    void add_tablet(const TTabletWithPartition& tablet) { _all_tablets.emplace_back(tablet); }
+    void add_tablet(const int64_t index_id, const PTabletWithPartition& tablet) {
+        _index_tablets_map[index_id].emplace_back(tablet);
+    }
 
     Status init(RuntimeState* state);
 
@@ -147,9 +102,13 @@ public:
 
     // async add chunk interface
     // if is_full() return false, add_chunk() will not block
-    Status add_chunk(vectorized::Chunk* chunk, const int64_t* tablet_ids, const uint32_t* indexes, uint32_t from,
-                     uint32_t size, bool eos);
     bool is_full();
+
+    Status add_chunk(vectorized::Chunk* input, const std::vector<int64_t>& tablet_ids,
+                     const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos);
+
+    Status add_chunks(vectorized::Chunk* input, const std::vector<std::vector<int64_t>>& tablet_ids,
+                      const std::vector<uint32_t>& indexes, uint32_t from, uint32_t size, bool eos);
 
     // async close interface: try_close() -> [is_close_done()] -> close_wait()
     // if is_close_done() return true, close_wait() will not block
@@ -171,6 +130,7 @@ public:
     const NodeInfo* node_info() const { return _node_info; }
     std::string print_load_info() const { return _load_info; }
     std::string name() const { return _name; }
+    bool enable_colocate_mv_index() const { return _enable_colocate_mv_index; }
 
 private:
     Status _wait_request(ReusableClosure<PTabletWriterAddBatchResult>* closure);
@@ -179,11 +139,14 @@ private:
     bool _check_prev_request_done();
     bool _check_all_prev_request_done();
     Status _serialize_chunk(const vectorized::Chunk* src, ChunkPB* dst);
+    void _open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure);
+    Status _open_wait(RefCountClosure<PTabletWriterOpenResult>* open_closure);
+    Status _send_request(bool eos);
+    void _cancel(int64_t index_id, const Status& err_st);
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
-    int64_t _index_id = -1;
     int64_t _node_id = -1;
     std::string _load_info;
     std::string _name;
@@ -208,9 +171,10 @@ private:
     std::unique_ptr<RowDescriptor> _row_desc;
 
     doris::PBackendService_Stub* _stub = nullptr;
-    RefCountClosure<PTabletWriterOpenResult>* _open_closure = nullptr;
+    std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
-    std::vector<TTabletWithPartition> _all_tablets;
+    std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
+
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
 
     AddBatchCounter _add_batch_counter;
@@ -218,17 +182,21 @@ private:
 
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
-    PTabletWriterAddChunkRequest _cur_request;
     std::unique_ptr<vectorized::Chunk> _cur_chunk;
-    using AddChunkReq = std::pair<std::unique_ptr<vectorized::Chunk>, PTabletWriterAddChunkRequest>;
-    std::deque<AddChunkReq> _chunk_queue;
+
+    PTabletWriterAddChunksRequest _rpc_request;
+    using AddMultiChunkReq = std::pair<std::unique_ptr<vectorized::Chunk>, PTabletWriterAddChunksRequest>;
+    std::deque<AddMultiChunkReq> _request_queue;
+
     size_t _current_request_index = 0;
-    size_t _max_chunk_queue_size = 8;
+    size_t _max_request_queue_size = 8;
 
     int64_t _actual_consume_ns = 0;
     Status _err_st = Status::OK();
 
     RuntimeState* _runtime_state = nullptr;
+
+    bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
 };
 
 class IndexChannel {
@@ -236,7 +204,7 @@ public:
     IndexChannel(OlapTableSink* parent, int64_t index_id) : _parent(parent), _index_id(index_id) {}
     ~IndexChannel();
 
-    Status init(RuntimeState* state, const std::vector<TTabletWithPartition>& tablets);
+    Status init(RuntimeState* state, const std::vector<PTabletWithPartition>& tablets);
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
@@ -245,6 +213,9 @@ public:
     }
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+
+    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
+
     bool has_intolerable_failure();
 
 private:
@@ -254,10 +225,10 @@ private:
 
     // BeId -> channel
     std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
-    // map tablet_id to backend channel
-    std::unordered_map<int64_t, std::vector<NodeChannel*>> _channels_by_tablet;
     // map tablet_id to backend id
     std::unordered_map<int64_t, std::vector<int64_t>> _tablet_to_be;
+    // map be_id to tablet num
+    std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
     // BeId
     std::set<int64_t> _failed_channels;
 };
@@ -316,6 +287,8 @@ private:
     // This method will change _validate_selection
     void _validate_data(RuntimeState* state, vectorized::Chunk* chunk);
 
+    Status _init_node_channels(RuntimeState* state);
+
     // When compute buckect hash, we should use real string for char column.
     // So we need to pad char column after compute buckect hash.
     void _padding_char_column(vectorized::Chunk* chunk);
@@ -324,8 +297,27 @@ private:
 
     static void _print_decimal_error_msg(RuntimeState* state, const DecimalV2Value& decimal, SlotDescriptor* desc);
 
-    // send chunk data to specific BE channel
-    Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& _selection_idx);
+    Status _send_chunk(vectorized::Chunk* chunk);
+
+    Status _send_chunk_with_colocate_index(vectorized::Chunk* chunk);
+
+    Status _send_chunk_by_node(vectorized::Chunk* chunk, IndexChannel* channel, std::vector<uint16_t>& selection_idx);
+
+    void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
+    bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
+    bool has_intolerable_failure() { return _failed_channels.size() >= ((_num_repicas + 1) / 2); }
+
+    void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
+        for (auto& it : _node_channels) {
+            func(it.second.get());
+        }
+    }
+
+    void for_each_index_channel(const std::function<void(NodeChannel*)>& func) {
+        for (auto& index_channel : _channels) {
+            index_channel->for_each_node_channel(func);
+        }
+    }
 
     friend class NodeChannel;
     friend class IndexChannel;
@@ -352,6 +344,8 @@ private:
     int _num_senders = -1;
     bool _is_lake_table = false;
 
+    TKeysType::type _keys_type;
+
     // TODO(zc): think about cache this data
     std::shared_ptr<OlapTableSchemaParam> _schema;
     OlapTableLocationParam* _location = nullptr;
@@ -363,8 +357,6 @@ private:
 
     // index_channel
     std::vector<std::unique_ptr<IndexChannel>> _channels;
-
-    std::thread _sender_thread;
 
     std::vector<DecimalValue> _max_decimal_val;
     std::vector<DecimalValue> _min_decimal_val;
@@ -382,6 +374,7 @@ private:
     std::vector<uint32_t> _node_select_idx;
     std::vector<int64_t> _tablet_ids;
     vectorized::OlapTablePartitionParam* _vectorized_partition = nullptr;
+    std::vector<std::vector<int64_t>> _index_tablet_ids;
     // Store the output expr comput result column
     std::unique_ptr<vectorized::Chunk> _output_chunk;
 
@@ -414,6 +407,15 @@ private:
 
     bool _open_done = false;
     bool _close_done = false;
+
+    // BeId -> channel
+    std::unordered_map<int64_t, std::unique_ptr<NodeChannel>> _node_channels;
+    // BeId
+    std::set<int64_t> _failed_channels;
+    // enable colocate index
+    bool _colocate_mv_index = config::enable_load_colocate_mv;
+
+    bool _enable_replicated_storage = false;
 };
 
 } // namespace stream_load

@@ -19,7 +19,6 @@ package com.starrocks.fs;
 
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.WildcardURI;
-
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -28,7 +27,7 @@ public class WildcardURITest {
     @Test
     public void test() {
         String path = "hdfs://host/testdata/20180[8-9]*";
-            try {
+        try {
             WildcardURI wildcardURI = new WildcardURI(path);
             Assert.assertEquals("/testdata/20180[8-9]*", wildcardURI.getPath());
 

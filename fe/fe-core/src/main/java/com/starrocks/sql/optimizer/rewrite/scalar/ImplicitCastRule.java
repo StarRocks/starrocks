@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
@@ -53,6 +53,9 @@ public class ImplicitCastRule extends TopDownScalarOperatorRewriteRule {
                 }
             }
         } else {
+            if (fn.functionName().equals(FunctionSet.ARRAY_MAP)) { // array_map does not need to implicit cast.
+                return call;
+            }
             if (!call.isAggregate() || FunctionSet.AVG.equalsIgnoreCase(fn.functionName())) {
                 Preconditions.checkArgument(Arrays.stream(fn.getArgs()).noneMatch(Type::isWildcardDecimal),
                         String.format("Resolved function %s has wildcard decimal as argument type", fn.functionName()));

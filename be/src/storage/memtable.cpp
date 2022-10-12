@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/memtable.h"
 
@@ -24,7 +24,8 @@ static const size_t kPrimaryKeyLimitSize = 128;
 
 Schema MemTable::convert_schema(const TabletSchema* tablet_schema, const std::vector<SlotDescriptor*>* slot_descs) {
     Schema schema = std::move(ChunkHelper::convert_schema_to_format_v2(*tablet_schema));
-    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+    if (tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && slot_descs != nullptr &&
+        slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         // load slots have __op field, so add to _vectorized_schema
         auto op_column = std::make_shared<starrocks::vectorized::Field>((ColumnId)-1, LOAD_OP_COLUMN,
                                                                         FieldType::OLAP_FIELD_TYPE_TINYINT, false);
@@ -52,7 +53,8 @@ MemTable::MemTable(int64_t tablet_id, const Schema* schema, const std::vector<Sl
           _sink(sink),
           _aggregator(nullptr),
           _mem_tracker(mem_tracker) {
-    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
+    if (_keys_type == KeysType::PRIMARY_KEYS && _slot_descs != nullptr &&
+        _slot_descs->back()->col_name() == LOAD_OP_COLUMN) {
         _has_op_slot = true;
     }
     _init_aggregator_if_needed();
@@ -216,7 +218,7 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-Status MemTable::flush() {
+Status MemTable::flush(SegmentPB* seg_info) {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
@@ -231,7 +233,7 @@ Status MemTable::flush() {
         if (_deletes) {
             RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info));
         }
     }
     StarRocksMetrics::instance()->memtable_flush_total.increment(1);
@@ -356,16 +358,12 @@ Status MemTable::_split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::u
 
 void MemTable::_sort_column_inc() {
     Columns columns;
-    std::vector<int> sort_orders;
-    std::vector<int> null_firsts;
+    int sort_columns = _vectorized_schema->num_key_fields();
     for (int i = 0; i < _vectorized_schema->num_key_fields(); i++) {
         columns.push_back(_chunk->get_column_by_index(i));
-        // Ascending, null first
-        sort_orders.push_back(1);
-        null_firsts.push_back(-1);
     }
 
-    Status st = stable_sort_and_tie_columns(false, columns, sort_orders, null_firsts, &_permutations);
+    Status st = stable_sort_and_tie_columns(false, columns, SortDescs::asc_null_first(sort_columns), &_permutations);
     CHECK(st.ok());
 }
 

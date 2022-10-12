@@ -1,18 +1,27 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.udf;
 
-import sun.misc.Unsafe;
+import com.starrocks.utils.Platform;
 
 import java.lang.reflect.Array;
-import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.IntBuffer;
 import java.nio.charset.StandardCharsets;
+import java.sql.Date;
+import java.sql.Timestamp;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Arrays;
+
+import static com.starrocks.utils.NativeMethodHelper.getAddrs;
+import static com.starrocks.utils.NativeMethodHelper.resizeStringData;
 
 public class UDFHelper {
     public static final int TYPE_BOOLEAN = 2;
@@ -26,36 +35,11 @@ public class UDFHelper {
     public static final int TYPE_DATETIME = 12;
     public static final int TYPE_ARRAY = 15;
 
-    // return byteAddr
-    public static native long resizeStringData(long columnAddr, int byteSize);
-
-    // [nullAddr, dataAddr]
-    public static native long[] getAddrs(long columnAddr);
-
-    private static Unsafe unsafe;
-    private static long byteArrayBaseOffset;
-    private static long intArrayBaseOffset;
-    private static long shortArrayBaseOffset;
-    private static long longArrayBaseOffset;
-    private static long floatArrayBaseOffset;
-    private static long doubleArrayBaseOffset;
     private static final byte[] emptyBytes = new byte[0];
 
-    static {
-        Field f = null;
-        try {
-            f = Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            unsafe = (Unsafe) f.get(null);
-            byteArrayBaseOffset = (long) unsafe.arrayBaseOffset(byte[].class);
-            intArrayBaseOffset = (long) unsafe.arrayBaseOffset(int[].class);
-            shortArrayBaseOffset = (long) unsafe.arrayBaseOffset(short[].class);
-            longArrayBaseOffset = (long) unsafe.arrayBaseOffset(long[].class);
-            floatArrayBaseOffset = (long) unsafe.arrayBaseOffset(float[].class);
-            doubleArrayBaseOffset = (long) unsafe.arrayBaseOffset(double[].class);
-        } catch (NoSuchFieldException | IllegalAccessException ignored) {
-        }
-    }
+    private static final ThreadLocal<DateFormat> formatter =
+            ThreadLocal.withInitial(() -> new SimpleDateFormat("yyyy-MM-dd HH:mm:ss"));
+    private static final DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
     private static void getBooleanBoxedResult(int numRows, Boolean[] boxedArr, long columnAddr) {
         byte[] nulls = new byte[numRows];
@@ -70,9 +54,9 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, byteArrayBaseOffset, null, addrs[1], numRows);
+        Platform.copyMemory(dataArr, Platform.BYTE_ARRAY_OFFSET, null, addrs[1], numRows);
     }
 
     private static void getByteBoxedResult(int numRows, Byte[] boxedArr, long columnAddr) {
@@ -88,9 +72,9 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, byteArrayBaseOffset, null, addrs[1], numRows);
+        Platform.copyMemory(dataArr, Platform.BYTE_ARRAY_OFFSET, null, addrs[1], numRows);
     }
 
     private static void getShortBoxedResult(int numRows, Short[] boxedArr, long columnAddr) {
@@ -106,9 +90,9 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, shortArrayBaseOffset, null, addrs[1], numRows * 2L);
+        Platform.copyMemory(dataArr, Platform.SHORT_ARRAY_OFFSET, null, addrs[1], numRows * 2L);
     }
 
     // getIntBoxedResult
@@ -125,9 +109,9 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, intArrayBaseOffset, null, addrs[1], numRows * 4L);
+        Platform.copyMemory(dataArr, Platform.INT_ARRAY_OFFSET, null, addrs[1], numRows * 4L);
     }
 
     // getIntBoxedResult
@@ -144,9 +128,9 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, longArrayBaseOffset, null, addrs[1], numRows * 8L);
+        Platform.copyMemory(dataArr, Platform.LONG_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
     }
 
     private static void getFloatBoxedResult(int numRows, Float[] boxedArr, long columnAddr) {
@@ -162,9 +146,9 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, floatArrayBaseOffset, null, addrs[1], numRows * 4L);
+        Platform.copyMemory(dataArr, Platform.FLOAT_ARRAY_OFFSET, null, addrs[1], numRows * 4L);
     }
 
     private static void getDoubleBoxedResult(int numRows, Double[] boxedArr, long columnAddr) {
@@ -180,9 +164,52 @@ public class UDFHelper {
 
         final long[] addrs = getAddrs(columnAddr);
         // memcpy to uint8_t array
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
         // memcpy to int array
-        unsafe.copyMemory(dataArr, doubleArrayBaseOffset, null, addrs[1], numRows * 8L);
+        Platform.copyMemory(dataArr, Platform.DOUBLE_ARRAY_OFFSET, null, addrs[1], numRows * 8L);
+    }
+
+    private static void getStringDateResult(int numRows, Date[] column, long columnAddr) {
+        // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = formatter.get().format(column[i]);
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    private static void getStringTimeStampResult(int numRows, Timestamp[] column, long columnAddr) {
+        // TODO: return timestamp
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    public static void getStringDateTimeResult(int numRows, LocalDateTime[] column, long columnAddr) {
+        // TODO:
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
+    }
+
+    public static void getStringDecimalResult(int numRows, BigDecimal[] column, long columnAddr) {
+        String[] results = new String[numRows];
+        for (int i = 0; i < numRows; i++) {
+            if (column[i] != null) {
+                results[i] = column[i].toString();
+            }
+        }
+        getStringBoxedResult(numRows, results, columnAddr);
     }
 
     private static void getStringBoxedResult(int numRows, String[] column, long columnAddr) {
@@ -190,7 +217,7 @@ public class UDFHelper {
         int[] offsets = new int[numRows];
         byte[][] byteRes = new byte[numRows][];
         int offset = 0;
-        for (int i = 0; i < column.length; i++) {
+        for (int i = 0; i < numRows; i++) {
             if (column[i] == null) {
                 byteRes[i] = emptyBytes;
                 nulls[i] = 1;
@@ -209,11 +236,11 @@ public class UDFHelper {
         }
         final long bytesAddr = resizeStringData(columnAddr, offsets[numRows - 1]);
         final long[] addrs = getAddrs(columnAddr);
-        unsafe.copyMemory(nulls, byteArrayBaseOffset, null, addrs[0], numRows);
+        Platform.copyMemory(nulls, Platform.BYTE_ARRAY_OFFSET, null, addrs[0], numRows);
 
-        unsafe.copyMemory(offsets, intArrayBaseOffset, null, addrs[1] + 4, numRows * 4L);
+        Platform.copyMemory(offsets, Platform.INT_ARRAY_OFFSET, null, addrs[1] + 4, numRows * 4L);
 
-        unsafe.copyMemory(bytes, byteArrayBaseOffset, null, bytesAddr, offsets[numRows - 1]);
+        Platform.copyMemory(bytes, Platform.BYTE_ARRAY_OFFSET, null, bytesAddr, offsets[numRows - 1]);
     }
 
     public static void getResultFromBoxedArray(int type, int numRows, Object boxedResult, long columnAddr) {
@@ -247,7 +274,19 @@ public class UDFHelper {
                 break;
             }
             case TYPE_VARCHAR: {
-                getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                if (boxedResult instanceof Date[]) {
+                    getStringDateResult(numRows, (Date[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof LocalDateTime[]) {
+                    getStringDateTimeResult(numRows, (LocalDateTime[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof Timestamp[]) {
+                    getStringTimeStampResult(numRows, (Timestamp[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof BigDecimal[]) {
+                    getStringDecimalResult(numRows, (BigDecimal[]) boxedResult, columnAddr);
+                } else if (boxedResult instanceof String[]) {
+                    getStringBoxedResult(numRows, (String[]) boxedResult, columnAddr);
+                } else {
+                    throw new UnsupportedOperationException("unsupported type:" + boxedResult);
+                }
                 break;
             }
             default:
@@ -578,7 +617,7 @@ public class UDFHelper {
     public static Object[] batchCall(Object o, Method method, int batchSize)
             throws Throwable {
         try {
-            Object[] res = new Object[batchSize];
+            Object[] res = (Object[]) Array.newInstance(method.getReturnType(), batchSize);
             for (int i = 0; i < batchSize; ++i) {
                 res[i] = method.invoke(o);
             }

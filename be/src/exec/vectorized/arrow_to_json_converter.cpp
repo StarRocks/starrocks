@@ -63,6 +63,31 @@ static enable_if_number<TypeClass, Status> convert_arrow_to_json_array(const Num
     M(Type::FLOAT)               \
     M(Type::DOUBLE)
 
+#define APPLY_FOR_ALL_TEMPORAL(M) \
+    M(Type::DATE32)               \
+    M(Type::DATE64)               \
+    M(Type::TIME32)               \
+    M(Type::TIME64)               \
+    M(Type::TIMESTAMP)
+
+static bool inline is_physical_temporal(Type::type type) {
+    switch (type) {
+#define M(tt) \
+    case tt:  \
+        return true;
+        APPLY_FOR_ALL_TEMPORAL(M)
+#undef M
+    default:
+        return false;
+    }
+}
+static bool inline is_physical_signed(Type::type type) {
+    if (arrow::is_signed_integer(type) || is_physical_temporal(type)) {
+        return true;
+    }
+    return false;
+}
+
 static Status convert_multi_arrow_list(const ListArray* array, JsonColumn* output) {
     for (int i = 0; i < array->length(); i++) {
         vpack::Builder builder;
@@ -103,7 +128,7 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
         auto real_array = down_cast<const ArrayType*>(array);                  \
         for (int i = 0; i < array->length(); i++) {                            \
             vpack::Builder builder;                                            \
-            if (arrow::is_signed_integer(type)) {                              \
+            if (is_physical_signed(type)) {                                    \
                 JsonValue json = JsonValue::from_int(real_array->Value(i));    \
                 output->append(std::move(json));                               \
             } else if (arrow::is_unsigned_integer(type)) {                     \
@@ -119,6 +144,7 @@ static Status convert_multi_arrow_primitive(const Array* array, JsonColumn* outp
 
     switch (type_id) {
         APPLY_FOR_ALL_NUMERIC(M)
+        APPLY_FOR_ALL_TEMPORAL(M)
 #undef M
 
     case Type::BOOL: {
@@ -166,18 +192,38 @@ static Status convert_single_arrow_struct(const StructArray* array, int offset, 
     return Status::OK();
 }
 
-static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder) {
-    if (array->keys()->type_id() != Type::STRING) {
-        return Status::NotSupported(
-                strings::Substitute("key of map type must be string: $0", array->keys()->ToString()));
+// Support numeric types and string type
+static StatusOr<std::string> convert_array_element_to_string(const Array* array, int offset) {
+    switch (array->type_id()) {
+    case Type::STRING: {
+        auto key_array = down_cast<const StringArray*>(array);
+        return key_array->GetString(offset);
     }
-    auto key_array = down_cast<const StringArray*>(array->keys().get());
+#define M(type)                                                          \
+    case type: {                                                         \
+        using TypeClass = TypeIdTraits<type>::Type;                      \
+        using ArrayType = TypeTraits<TypeClass>::ArrayType;              \
+        using CType = TypeTraits<TypeClass>::CType;                      \
+        CType value = down_cast<const ArrayType*>(array)->Value(offset); \
+        return std::to_string(value);                                    \
+    }
+
+        APPLY_FOR_ALL_NUMERIC(M)
+        APPLY_FOR_ALL_TEMPORAL(M)
+#undef M
+
+    default:
+        return Status::NotSupported(strings::Substitute("key type of map not supported: $0", array->type()->name()));
+    }
+}
+
+static Status convert_single_arrow_map(const MapArray* array, int offset, vpack::Builder* builder) {
     auto item_array = array->items();
 
     builder->openObject();
     Type::type item_type = item_array->type_id();
     for (int i = array->value_offset(offset); i < array->value_offset(offset + 1); i++) {
-        std::string field_name = key_array->GetString(i);
+        ASSIGN_OR_RETURN(std::string field_name, convert_array_element_to_string(array->keys().get(), i));
         RETURN_IF_ERROR(convert_arrow_to_json_element(item_array.get(), item_type, i, field_name, builder));
     }
     builder->close();
@@ -326,6 +372,7 @@ Status convert_arrow_to_json(const Array* array, JsonColumn* output) {
         return convert_multi_arrow_primitive(array, output);
 
         APPLY_FOR_ALL_NUMERIC(M)
+        APPLY_FOR_ALL_TEMPORAL(M)
 #undef M
 
     default:

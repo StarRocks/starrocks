@@ -27,15 +27,10 @@
 #include "common/status.h"
 #include "common/utils.h"
 #include "gen_cpp/FrontendService.h"
-#include "gen_cpp/FrontendService_types.h"
-#include "gen_cpp/HeartbeatService_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/client_cache.h"
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/plan_fragment_executor.h"
-#include "runtime/runtime_state.h"
 #include "runtime/stream_load/stream_load_context.h"
 #include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
@@ -70,11 +65,11 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                 ctx->commit_infos = std::move(executor->runtime_state()->tablet_commit_infos());
                 Status status = executor->status();
                 if (status.ok()) {
-                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_total();
-                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_success();
+                    ctx->number_total_rows = executor->runtime_state()->num_rows_load_from_sink();
+                    ctx->number_loaded_rows = executor->runtime_state()->num_rows_load_sink_success();
                     ctx->number_filtered_rows = executor->runtime_state()->num_rows_load_filtered();
                     ctx->number_unselected_rows = executor->runtime_state()->num_rows_load_unselected();
-                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_total();
+                    ctx->loaded_bytes = executor->runtime_state()->num_bytes_load_from_sink();
 
                     int64_t num_selected_rows = ctx->number_total_rows - ctx->number_unselected_rows;
                     if ((double)ctx->number_filtered_rows / num_selected_rows > ctx->max_filter_ratio) {
@@ -101,6 +96,9 @@ Status StreamLoadExecutor::execute_plan_fragment(StreamLoadContext* ctx) {
                     // reset the stream load ctx's kafka commit offset
                     case TLoadSourceType::KAFKA:
                         ctx->kafka_info->reset_offset();
+                        break;
+                    case TLoadSourceType::PULSAR:
+                        ctx->pulsar_info->clear_backlog();
                         break;
                     default:
                         break;
@@ -360,6 +358,20 @@ bool StreamLoadExecutor::collect_load_stat(StreamLoadContext* ctx, TTxnCommitAtt
 
         rl_attach.kafkaRLTaskProgress = kafka_progress;
         rl_attach.__isset.kafkaRLTaskProgress = true;
+        if (!ctx->error_url.empty()) {
+            rl_attach.__set_errorLogUrl(ctx->error_url);
+        }
+        return true;
+    }
+    case TLoadSourceType::PULSAR: {
+        TRLTaskTxnCommitAttachment& rl_attach = attach->rlTaskTxnCommitAttachment;
+        rl_attach.loadSourceType = TLoadSourceType::PULSAR;
+
+        TPulsarRLTaskProgress pulsar_progress;
+        pulsar_progress.partitionBacklogNum = ctx->pulsar_info->partition_backlog;
+
+        rl_attach.pulsarRLTaskProgress = pulsar_progress;
+        rl_attach.__isset.pulsarRLTaskProgress = true;
         if (!ctx->error_url.empty()) {
             rl_attach.__set_errorLogUrl(ctx->error_url);
         }

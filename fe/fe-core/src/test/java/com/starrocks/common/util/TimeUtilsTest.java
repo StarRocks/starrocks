@@ -179,13 +179,13 @@ public class TimeUtilsTest {
 
     @Test
     public void testConvertTimeUnitValuetoSecond() {
-        long dayRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.DAYS);
-        long hourRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.HOURS);
-        long minuteRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.MINUTES);
-        long secondRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.SECONDS);
-        long milRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.MILLISECONDS);
-        long micRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.MICROSECONDS);
-        long nanoRes = TimeUtils.convertTimeUnitValuetoSecond(2, TimeUnit.NANOSECONDS);
+        long dayRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.DAYS);
+        long hourRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.HOURS);
+        long minuteRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.MINUTES);
+        long secondRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.SECONDS);
+        long milRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.MILLISECONDS);
+        long micRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.MICROSECONDS);
+        long nanoRes = TimeUtils.convertTimeUnitValueToSecond(2, TimeUnit.NANOSECONDS);
         Assert.assertEquals(dayRes, 2 * 24 * 60 * 60);
         Assert.assertEquals(hourRes, 2 * 60 * 60);
         Assert.assertEquals(minuteRes, 2 * 60);

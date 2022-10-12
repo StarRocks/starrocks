@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
@@ -6,9 +6,7 @@ import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
@@ -18,6 +16,7 @@ import com.starrocks.external.PredicateUtils;
 import com.starrocks.external.iceberg.ExpressionConverter;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -47,14 +46,12 @@ public class IcebergScanNode extends ScanNode {
 
     private IcebergTable srIcebergTable; // table definition in starRocks
 
+    private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
+
     private List<TScanRangeLocations> result = new ArrayList<>();
 
     // Exprs in icebergConjuncts converted to Iceberg Expression.
     private List<Expression> icebergPredicates = null;
-
-    // List of conjuncts for min/max values that are used to skip data when scanning Parquet files.
-    private final List<Expr> minMaxConjuncts = new ArrayList<>();
-    private TupleDescriptor minMaxTuple;
 
     private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
     private long totalBytes = 0;
@@ -74,7 +71,8 @@ public class IcebergScanNode extends ScanNode {
     }
 
     private void getAliveBackends() throws UserException {
-        ImmutableCollection<ComputeNode> computeNodes = ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
+        ImmutableCollection<ComputeNode> computeNodes =
+                ImmutableList.copyOf(GlobalStateMgr.getCurrentSystemInfo().getComputeNodes());
 
         for (ComputeNode computeNode : computeNodes) {
             if (computeNode.isAlive()) {
@@ -134,9 +132,8 @@ public class IcebergScanNode extends ScanNode {
         }
 
         // Min max tuple must be computed after analyzer.materializeSlots()
-        DescriptorTable descTbl = analyzer.getDescTbl();
-        minMaxTuple = descTbl.createTupleDescriptor();
-        PredicateUtils.computeMinMaxTupleAndConjuncts(analyzer, minMaxTuple, minMaxConjuncts, conjuncts);
+        PredicateUtils.computeMinMaxTupleAndConjuncts(analyzer, scanNodePredicates.getMinMaxTuple(),
+                scanNodePredicates.getMinMaxConjuncts(), conjuncts);
 
         computeStats(analyzer);
         isFinalized = true;
@@ -188,6 +185,10 @@ public class IcebergScanNode extends ScanNode {
         }
     }
 
+    public HDFSScanNodePredicates getScanNodePredicates() {
+        return scanNodePredicates;
+    }
+
     @Override
     protected String debugString() {
         MoreObjects.ToStringHelper helper = MoreObjects.toStringHelper(this);
@@ -200,7 +201,7 @@ public class IcebergScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getName()).append("\n");
+        output.append(prefix).append("TABLE: ").append(srIcebergTable.getTable()).append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
@@ -208,33 +209,14 @@ public class IcebergScanNode extends ScanNode {
         if (!conjuncts.isEmpty()) {
             output.append(prefix).append("PREDICATES: ").append(
                     getExplainString(conjuncts)).append("\n");
+        }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
         }
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
         output.append("\n");
-
-        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-
-        output.append(prefix).append("TABLE: ").append(srIcebergTable.getName()).append("\n");
-
-        if (null != sortColumn) {
-            output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
-        }
-        if (!conjuncts.isEmpty()) {
-            output.append(prefix).append("PREDICATES: ").append(
-                    getExplainString(conjuncts)).append("\n");
-        }
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
         output.append("\n");
@@ -273,20 +255,22 @@ public class IcebergScanNode extends ScanNode {
         tHdfsScanNode.setTuple_id(desc.getId().asInt());
         msg.hdfs_scan_node = tHdfsScanNode;
 
+        String sqlPredicates = getExplainString(conjuncts);
+        msg.hdfs_scan_node.setSql_predicates(sqlPredicates);
+
+        List<Expr> minMaxConjuncts = scanNodePredicates.getMinMaxConjuncts();
         if (!minMaxConjuncts.isEmpty()) {
+            String minMaxSqlPredicate = getExplainString(minMaxConjuncts);
             for (Expr expr : minMaxConjuncts) {
                 msg.hdfs_scan_node.addToMin_max_conjuncts(expr.treeToThrift());
             }
-            msg.hdfs_scan_node.setMin_max_tuple_id(minMaxTuple.getId().asInt());
+            msg.hdfs_scan_node.setMin_max_tuple_id(scanNodePredicates.getMinMaxTuple().getId().asInt());
+            msg.hdfs_scan_node.setMin_max_sql_predicates(minMaxSqlPredicate);
         }
-    }
 
-    public List<Expr> getMinMaxConjuncts() {
-        return minMaxConjuncts;
-    }
-
-    public void setMinMaxTuple(TupleDescriptor tuple) {
-        minMaxTuple = tuple;
+        if (srIcebergTable != null) {
+            msg.hdfs_scan_node.setTable_name(srIcebergTable.getTable());
+        }
     }
 
     @Override

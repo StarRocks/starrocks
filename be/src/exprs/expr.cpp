@@ -33,6 +33,7 @@
 #include "exprs/vectorized/arithmetic_expr.h"
 #include "exprs/vectorized/array_element_expr.h"
 #include "exprs/vectorized/array_expr.h"
+#include "exprs/vectorized/array_map_expr.h"
 #include "exprs/vectorized/binary_predicate.h"
 #include "exprs/vectorized/case_expr.h"
 #include "exprs/vectorized/cast_expr.h"
@@ -46,6 +47,7 @@
 #include "exprs/vectorized/info_func.h"
 #include "exprs/vectorized/is_null_predicate.h"
 #include "exprs/vectorized/java_function_call_expr.h"
+#include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/placeholder_ref.h"
 #include "gen_cpp/Exprs_types.h"
@@ -270,7 +272,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     }
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
-            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(texpr_node));
+            *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
             break;
         } else {
             // @TODO: will call FunctionExpr, implement later
@@ -292,6 +294,8 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         } else if (texpr_node.fn.name.function_name == "is_null_pred" ||
                    texpr_node.fn.name.function_name == "is_not_null_pred") {
             *expr = pool->add(vectorized::VectorizedIsNullPredicateFactory::from_thrift(texpr_node));
+        } else if (texpr_node.fn.name.function_name == "array_map") {
+            *expr = pool->add(new vectorized::ArrayMapExpr(texpr_node));
         } else {
             *expr = pool->add(new vectorized::VectorizedFunctionCallExpr(texpr_node));
         }
@@ -330,6 +334,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::DICT_EXPR:
         *expr = pool->add(new vectorized::DictMappingExpr(texpr_node));
+        break;
+    case TExprNodeType::LAMBDA_FUNCTION_EXPR:
+        *expr = pool->add(new vectorized::LambdaFunction(texpr_node));
         break;
     case TExprNodeType::CLONE_EXPR:
         *expr = pool->add(new vectorized::CloneExpr(texpr_node));
@@ -427,7 +434,7 @@ void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::Fun
 #endif
 }
 
-Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
+Status Expr::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                  std::vector<ExprContext*>* new_ctxs) {
     DCHECK(new_ctxs != nullptr);
     if (!new_ctxs->empty()) {
@@ -441,7 +448,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
 
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));
+        RETURN_IF_ERROR(ctxs[i]->clone(state, pool, &(*new_ctxs)[i]));
     }
     return Status::OK();
 }

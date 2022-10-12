@@ -1,13 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
-import com.baidu.brpc.client.RpcCallback;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.lake.proto.DeleteTabletRequest;
 import com.starrocks.lake.proto.DeleteTabletResponse;
-import com.starrocks.rpc.LakeServiceAsync;
 import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -23,6 +22,7 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 
 public class ShardDeleterTest {
 
@@ -38,7 +38,7 @@ public class ShardDeleterTest {
     private StarOSAgent starOSAgent;
 
     @Mocked
-    private LakeServiceAsync lakeService;
+    private LakeService lakeService;
 
     @Mocked
     private Backend be;
@@ -65,7 +65,11 @@ public class ShardDeleterTest {
 
         new MockUp<BrpcProxy>() {
             @Mock
-            public LakeServiceAsync getLakeService(TNetworkAddress address) {
+            public LakeService getLakeService(TNetworkAddress address) {
+                return lakeService;
+            }
+            @Mock
+            public LakeService getLakeService(String host, int port) {
                 return lakeService;
             }
         };
@@ -90,17 +94,15 @@ public class ShardDeleterTest {
         DeleteTabletResponse response = new DeleteTabletResponse();
         response.failedTablets = new ArrayList<>();
 
-        new Expectations() {
-            {
-                lakeService.deleteTablet((DeleteTabletRequest) any, (RpcCallback<DeleteTabletResponse>) any).get();
-                minTimes = 0;
-                result = response;
+        new Expectations() {{
+                lakeService.deleteTablet((DeleteTabletRequest) any);
+                minTimes = 1;
+                result = CompletableFuture.completedFuture(response);
 
                 starOSAgent.deleteShards(ids);
-                minTimes = 0;
+                minTimes = 1;
                 result = null;
-            }
-        };
+            }};
 
         shardDeleter.addUnusedShardId(ids);
         shardDeleter.runAfterCatalogReady();

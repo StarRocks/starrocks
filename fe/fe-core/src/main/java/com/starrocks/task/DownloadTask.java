@@ -18,7 +18,9 @@
 package com.starrocks.task;
 
 import com.starrocks.catalog.FsBroker;
+import com.starrocks.common.Config;
 import com.starrocks.thrift.TDownloadReq;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.thrift.TTaskType;
@@ -31,6 +33,7 @@ public class DownloadTask extends AgentTask {
     private Map<String, String> srcToDestPath;
     private FsBroker brokerAddr;
     private Map<String, String> brokerProperties;
+    private THdfsProperties hdfsProperties;
 
     public DownloadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, long dbId,
                         Map<String, String> srcToDestPath, FsBroker brokerAddr, Map<String, String> brokerProperties) {
@@ -39,6 +42,17 @@ public class DownloadTask extends AgentTask {
         this.srcToDestPath = srcToDestPath;
         this.brokerAddr = brokerAddr;
         this.brokerProperties = brokerProperties;
+    }
+
+    public DownloadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, long dbId,
+                        Map<String, String> srcToDestPath, FsBroker brokerAddr, Map<String, String> brokerProperties,
+                        THdfsProperties hdfsProperties) {
+        super(resourceInfo, backendId, TTaskType.DOWNLOAD, dbId, -1, -1, -1, -1, signature);
+        this.jobId = jobId;
+        this.srcToDestPath = srcToDestPath;
+        this.brokerAddr = brokerAddr;
+        this.brokerProperties = brokerProperties;
+        this.hdfsProperties = hdfsProperties;
     }
 
     public long getJobId() {
@@ -58,9 +72,21 @@ public class DownloadTask extends AgentTask {
     }
 
     public TDownloadReq toThrift() {
-        TNetworkAddress address = new TNetworkAddress(brokerAddr.ip, brokerAddr.port);
+        TNetworkAddress address;
+        if (brokerAddr != null) {
+            address = new TNetworkAddress(brokerAddr.ip, brokerAddr.port);
+        } else {
+            address = new TNetworkAddress("", 0);
+        }
         TDownloadReq req = new TDownloadReq(jobId, srcToDestPath, address);
-        req.setBroker_prop(brokerProperties);
+        if (brokerAddr != null) {
+            req.setUse_broker(true);
+            req.setBroker_prop(brokerProperties);
+        } else {
+            req.setUse_broker(false);
+            req.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
+            req.setHdfs_properties(hdfsProperties);
+        }
         return req;
     }
 }

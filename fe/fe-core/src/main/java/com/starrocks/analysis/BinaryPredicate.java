@@ -235,11 +235,6 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public String toDigestImpl() {
-        return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
-    }
-
-    @Override
     public String explainImpl() {
         return getChild(0).explain() + " " + op.toString() + " " + getChild(1).explain();
     }
@@ -274,6 +269,10 @@ public class BinaryPredicate extends Predicate implements Writable {
         //    Cast to DOUBLE by default, because DOUBLE has the largest range of values.
         if (type1.isJsonType() || type2.isJsonType()) {
             return Type.JSON;
+        }
+        if (type1.isArrayType() || type2.isArrayType()) {
+            // We don't support array type for binary predicate.
+            return Type.INVALID;
         }
         if (t1 == PrimitiveType.VARCHAR && t2 == PrimitiveType.VARCHAR) {
             return Type.VARCHAR;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.journal.bdbje;
 
@@ -15,11 +15,13 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
@@ -48,7 +50,7 @@ public class BDBJEJournalTest {
     private int restoredCheckpointIntervalSecond;
 
     @Before
-    public void init() throws Exception{
+    public void init() throws Exception {
         BDBJEJournal.RETRY_TIME = 3;
         BDBJEJournal.SLEEP_INTERVAL_SEC = 0;
         // avoid checkpoint
@@ -147,7 +149,7 @@ public class BDBJEJournalTest {
         Assert.assertNull(journal.currentTrasaction);
 
         // 5. check by read
-        for (int i = 1; i != 4; i ++) {
+        for (int i = 1; i != 4; i++) {
             String value = readDBStringValue(i, journal.currentJournalDB.getDb());
             Assert.assertEquals(data, value);
         }
@@ -298,7 +300,7 @@ public class BDBJEJournalTest {
 
         new Expectations(rawEnvironment) {
             {
-                rawEnvironment.beginTransaction(null, (TransactionConfig)any);
+                rawEnvironment.beginTransaction(null, (TransactionConfig) any);
                 times = 2;  // append & rebuild txn
             }
         };
@@ -371,7 +373,7 @@ public class BDBJEJournalTest {
 
         new Expectations(rawEnvironment) {
             {
-                rawEnvironment.beginTransaction(null, (TransactionConfig)any);
+                rawEnvironment.beginTransaction(null, (TransactionConfig) any);
                 times = 3;  // append & rebuild txn
                 result = txn;
                 result = new DatabaseNotFoundException("mock mock: begin txn");
@@ -552,7 +554,7 @@ public class BDBJEJournalTest {
 
     @Test(expected = JournalException.class)
     public void testOpenFailManyTimes(@Mocked BDBEnvironment environment) throws Exception {
-        new Expectations(){
+        new Expectations() {
             {
                 Thread.sleep(anyLong);
                 times = BDBJEJournal.RETRY_TIME - 1;
@@ -575,7 +577,7 @@ public class BDBJEJournalTest {
     @Test
     public void testOpenDbFailRetrySucceed(@Mocked CloseSafeDatabase database,
                                            @Mocked BDBEnvironment environment)  throws Exception {
-        new Expectations(){
+        new Expectations() {
             {
                 Thread.sleep(anyLong);
                 times = 1;
@@ -755,7 +757,7 @@ public class BDBJEJournalTest {
         };
         journal.rollJournal(18);
         Assert.fail();
-     }
+    }
 
     @Test
     public void testVerifyId() throws Exception {
@@ -788,7 +790,7 @@ public class BDBJEJournalTest {
         Assert.assertEquals(2, journal.getFinalizedJournalId());
         Assert.assertEquals(4, journal.getMaxJournalId());
         journal.close();
-     }
+    }
 
     @Test
     public void testJournalWithPrefix() throws Exception {
@@ -803,6 +805,13 @@ public class BDBJEJournalTest {
         writable.write(buffer);
 
         BDBEnvironment environment = initBDBEnv("testJournalWithPrefix");
+
+        new MockUp<StarMgrServer>() {
+            @Mock
+            public long getReplayId() {
+                return 0;
+            }
+        };
 
         // test journal with prefix works fine
         {

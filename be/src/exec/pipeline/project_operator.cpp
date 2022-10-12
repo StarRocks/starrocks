@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/project_operator.h"
 
@@ -64,6 +64,13 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
         _cur_chunk->append_column(result_columns[i], _column_ids[i]);
     }
     TRY_CATCH_ALLOC_SCOPE_END()
+    return Status::OK();
+}
+
+Status ProjectOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    _cur_chunk = nullptr;
+
     return Status::OK();
 }
 

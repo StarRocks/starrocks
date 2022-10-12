@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "nullable_column.h"
 
@@ -6,6 +6,7 @@
 #include "column/nullable_column.h"
 #include "formats/json/binary_column.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
@@ -101,6 +102,7 @@ static Status add_nullable_native_json_column(Column* column, const TypeDescript
 static Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
                                   simdjson::ondemand::value* value) {
     // The type mappint should be in accord with JsonScanner::_construct_json_types();
+    // the json lib don't support get_int128_t(), so we load with BinaryColumn and then convert to LargeIntColumn
     switch (type_desc.type) {
     case TYPE_BIGINT:
         return add_nullable_numeric_column<int64_t>(column, type_desc, name, value);
@@ -128,7 +130,7 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
 
                 simdjson::ondemand::array arr = value->get_array();
 
-                size_t n = 0;
+                uint32_t n = 0;
                 for (auto a : arr) {
                     simdjson::ondemand::value value = a.value();
                     RETURN_IF_ERROR(add_nullable_column(elems_column.get(), type_desc.children[0], name, &value));
@@ -157,15 +159,26 @@ static Status add_nullable_column(Column* column, const TypeDescriptor& type_des
     }
 }
 
-Status add_nullable_column(Column* column, const TypeDescriptor& type_desc, const std::string& name,
-                           simdjson::ondemand::object* value, bool invalid_as_null) {
-    DCHECK_EQ(TYPE_JSON, type_desc.type);
+Status add_nullable_column_by_json_object(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                          simdjson::ondemand::object* value, bool invalid_as_null) {
     try {
         auto nullable_column = down_cast<NullableColumn*>(column);
         auto& null_column = nullable_column->null_column();
         auto& data_column = nullable_column->data_column();
 
-        RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+        switch (type_desc.type) {
+        case TYPE_JSON: {
+            RETURN_IF_ERROR(add_native_json_column(data_column.get(), type_desc, name, value));
+            break;
+        }
+        case TYPE_VARCHAR:
+        case TYPE_CHAR: {
+            RETURN_IF_ERROR(add_binary_column_from_json_object(data_column.get(), type_desc, name, value));
+            break;
+        }
+        default:
+            return Status::NotSupported("json object could only load into JSON/VARCHAR column");
+        }
         null_column->append(0);
 
         return Status::OK();

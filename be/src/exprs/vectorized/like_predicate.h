@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -72,6 +72,8 @@ private:
      */
     DEFINE_VECTORIZED_FN(regex_fn);
 
+    DEFINE_VECTORIZED_FN(regex_fn_with_long_constant_pattern);
+    DEFINE_VECTORIZED_FN(like_fn_with_long_constant_pattern);
     /**
      * use for:
      *  a like "xxxx%"
@@ -134,6 +136,9 @@ private:
 
     static ColumnPtr regex_match_partial(FunctionContext* context, const Columns& columns);
 
+    template <bool full_match>
+    static ColumnPtr match_fn_with_long_constant_pattern(FunctionContext* context, const Columns& columns);
+
     /// Convert a LIKE pattern (with embedded % and _) into the corresponding
     /// regular expression pattern. Escaped chars are copied verbatim.
     template <bool fullMatch>
@@ -150,13 +155,16 @@ private:
     // to avoid crash with hs_scan.
     static inline char _DUMMY_STRING_FOR_EMPTY_PATTERN = 'A';
 
-    class LikePredicateState;
-    static Status hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
-                                               const Slice& slice);
-
+    struct LikePredicateState;
+    static bool hs_compile_and_alloc_scratch(const std::string&, LikePredicateState*, starrocks_udf::FunctionContext*,
+                                             const Slice& slice);
+    template <bool full_match>
+    static Status compile_with_hyperscan_or_re2(const std::string& pattern, LikePredicateState* state,
+                                                starrocks_udf::FunctionContext* context, const Slice& slice);
     struct LikePredicateState {
         char escape_char{'\\'};
 
+        std::shared_ptr<re2::RE2> re2 = nullptr;
         /// This is the function, set in the prepare function, that will be used to determine
         /// the value of the predicate. It will be set depending on whether the expression is
         /// a LIKE, RLIKE or REGEXP predicate, whether the pattern is a constant argument

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/nullable_column.h"
 
@@ -322,7 +322,7 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
     };
     auto execute = [&](Datum rhs_value, int sort_order, int null_first) {
         CompareVector cmp_result(c0->size(), 0);
-        compare_column(c0, cmp_result, rhs_value, sort_order, null_first);
+        compare_column(c0, cmp_result, rhs_value, SortDesc(sort_order, null_first));
         return cmp_result;
     };
 
@@ -337,6 +337,28 @@ PARALLEL_TEST(NullableColumnTest, test_compare_row) {
             }
         }
     }
+}
+
+PARALLEL_TEST(NullableColumnTest, test_replicate) {
+    auto column = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    column->append_datum((int32_t)1);
+    column->append_datum({});
+    column->append_datum((int32_t)4);
+
+    Offsets offsets;
+    offsets.push_back(0);
+    offsets.push_back(2);
+    offsets.push_back(4);
+    offsets.push_back(7);
+    auto c2 = column->replicate(offsets);
+
+    ASSERT_EQ(1, c2->get(0).get_int32());
+    ASSERT_EQ(1, c2->get(1).get_int32());
+    ASSERT_TRUE(c2->get(2).is_null());
+    ASSERT_TRUE(c2->get(3).is_null());
+    ASSERT_EQ(4, c2->get(4).get_int32());
+    ASSERT_EQ(4, c2->get(5).get_int32());
+    ASSERT_EQ(4, c2->get(6).get_int32());
 }
 
 } // namespace starrocks::vectorized

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/compaction_manager.h"
 
@@ -17,34 +17,41 @@ CompactionManager::CompactionManager() : _next_task_id(0) {
     DCHECK(st.ok());
 }
 
-void CompactionManager::init_max_task_num() {
-    if (config::base_compaction_num_threads_per_disk >= 0 && config::cumulative_compaction_num_threads_per_disk >= 0) {
-        _max_task_num = static_cast<int32_t>(
-                StorageEngine::instance()->get_store_num() *
-                (config::cumulative_compaction_num_threads_per_disk + config::base_compaction_num_threads_per_disk));
-    } else {
-        // When cumulative_compaction_num_threads_per_disk or config::base_compaction_num_threads_per_disk is less than 0,
-        // there is no limit to _max_task_num if max_compaction_concurrency is also less than 0, and here we set maximum value to be 20.
-        _max_task_num = std::min(20, static_cast<int32_t>(StorageEngine::instance()->get_store_num() * 5));
-    }
-    if (config::max_compaction_concurrency > 0 && config::max_compaction_concurrency < _max_task_num) {
-        _max_task_num = config::max_compaction_concurrency;
-    }
+CompactionManager::~CompactionManager() {
+    _update_candidate_pool->wait();
+}
+
+void CompactionManager::init_max_task_num(int32_t num) {
+    _max_task_num = num;
 }
 
 void CompactionManager::update_candidates(std::vector<CompactionCandidate> candidates) {
-    bool should_notify = false;
+    size_t erase_num = 0;
     {
         std::lock_guard lg(_candidates_mutex);
+        // TODO(meegoo): This is very inefficient to implement, just to fix bug, it will refactor later
+        for (auto iter = _compaction_candidates.begin(); iter != _compaction_candidates.end();) {
+            bool has_erase = false;
+            for (auto& candidate : candidates) {
+                if (candidate.tablet->tablet_id() == iter->tablet->tablet_id() && candidate.type == iter->type) {
+                    iter = _compaction_candidates.erase(iter);
+                    erase_num++;
+                    has_erase = true;
+                    break;
+                }
+            }
+            if (!has_erase) {
+                iter++;
+            }
+        }
         for (auto& candidate : candidates) {
-            size_t num = _compaction_candidates.erase(candidate);
-            should_notify |= num == 0;
+            candidate.score = candidate.tablet->compaction_score(candidate.type) * 100;
             _compaction_candidates.emplace(std::move(candidate));
         }
+        VLOG(2) << "_compaction_candidates size:" << _compaction_candidates.size()
+                << ", to add candidates:" << candidates.size() << " erase candidates: " << erase_num;
     }
-    VLOG(2) << "_compaction_candidates size:" << _compaction_candidates.size()
-            << ", to add candidates:" << candidates.size();
-    if (should_notify) {
+    if (candidates.size() != erase_num) {
         VLOG(2) << "new compaction candidate added. notify scheduler";
         _notify_schedulers();
     }
@@ -53,6 +60,7 @@ void CompactionManager::update_candidates(std::vector<CompactionCandidate> candi
 void CompactionManager::insert_candidates(std::vector<CompactionCandidate> candidates) {
     std::lock_guard lg(_candidates_mutex);
     for (auto& candidate : candidates) {
+        candidate.score = candidate.tablet->compaction_score(candidate.type) * 100;
         _compaction_candidates.emplace(std::move(candidate));
     }
 }

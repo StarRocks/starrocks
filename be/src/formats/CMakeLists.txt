@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/formats")
@@ -15,6 +15,7 @@ add_library(Formats STATIC
         csv/decimalv2_converter.cpp
         csv/decimalv3_converter.cpp
         csv/float_converter.cpp
+        csv/json_converter.cpp
         csv/numeric_converter.cpp
         csv/nullable_converter.cpp
         json/nullable_column.cpp

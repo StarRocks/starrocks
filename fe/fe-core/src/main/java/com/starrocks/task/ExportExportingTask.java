@@ -49,7 +49,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
-public class ExportExportingTask extends LeaderTask {
+public class ExportExportingTask extends PriorityLeaderTask {
     private static final Logger LOG = LogManager.getLogger(ExportExportingTask.class);
     private static final int RETRY_NUM = 2;
 
@@ -136,7 +136,7 @@ public class ExportExportingTask extends LeaderTask {
         // move tmp file to final destination
         Status mvStatus = moveTmpFiles();
         if (!mvStatus.ok()) {
-            String failMsg = "move tmp file to final destination fail";
+            String failMsg = "move tmp file to final destination fail, ";
             failMsg += mvStatus.getErrorMsg();
             job.cancelInternal(ExportFailMsg.CancelType.RUN_FAIL, failMsg);
             LOG.warn("move tmp file to final destination fail. job:{}", job);
@@ -230,9 +230,21 @@ public class ExportExportingTask extends LeaderTask {
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
                             break;
                         }
+                        if (!HdfsUtil.checkPathExist(exportedTempFile, job.getBrokerDesc())) {
+                            failMsg = exportedFile + " temp file not exist";
+                            LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
+                                    exportedTempFile, exportedFile, job.getId(), i, failMsg);
+                            break;
+                        }
                     } else {
                         if (BrokerUtil.checkPathExist(exportedFile, job.getBrokerDesc())) {
                             failMsg = exportedFile + " already exist";
+                            LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
+                                    exportedTempFile, exportedFile, job.getId(), i, failMsg);
+                            break;
+                        }
+                        if (!BrokerUtil.checkPathExist(exportedTempFile, job.getBrokerDesc())) {
+                            failMsg = exportedFile + " temp file not exist";
                             LOG.warn("move {} to {} fail. job id: {}, retry: {}, msg: {}",
                                     exportedTempFile, exportedFile, job.getId(), i, failMsg);
                             break;
@@ -266,7 +278,7 @@ public class ExportExportingTask extends LeaderTask {
         return Status.OK;
     }
 
-    private class ExportExportingSubTask extends LeaderTask {
+    private class ExportExportingSubTask extends PriorityLeaderTask {
         private final Coordinator coord;
         private final int taskIdx;
         private final int coordSize;

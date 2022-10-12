@@ -143,7 +143,7 @@ public class GenericPoolTest {
         }
 
         @Override
-        public TAgentResult release_snapshot(String snapshot_path) throws TException {
+        public TAgentResult release_snapshot(String snapshotPath) throws TException {
             return null;
         }
 
@@ -168,7 +168,7 @@ public class GenericPoolTest {
         }
 
         @Override
-        public TAgentResult make_snapshot(TSnapshotRequest snapshot_request) throws TException {
+        public TAgentResult make_snapshot(TSnapshotRequest snapshotRequest) throws TException {
             // TODO Auto-generated method stub
             return null;
         }
@@ -180,13 +180,13 @@ public class GenericPoolTest {
         }
 
         @Override
-        public TExportStatusResult get_export_status(TUniqueId task_id) throws TException {
+        public TExportStatusResult get_export_status(TUniqueId taskId) throws TException {
             // TODO Auto-generated method stub
             return null;
         }
 
         @Override
-        public TStatus erase_export_task(TUniqueId task_id) throws TException {
+        public TStatus erase_export_task(TUniqueId taskId) throws TException {
             // TODO Auto-generated method stub
             return null;
         }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -27,8 +27,14 @@ public:
 
     Status close() override;
 
+    StatusOr<TFetchDataResultPtrs> process_chunk(vectorized::Chunk* chunk) override;
+
+    StatusOr<bool> try_add_batch(TFetchDataResultPtrs& results) override;
+
 private:
     void _init_profile();
+
+    StatusOr<TFetchDataResultPtr> _process_chunk(vectorized::Chunk* chunk);
 
     Status _fill_statistic_data_v1(int version, const vectorized::Columns& columns, const vectorized::Chunk* chunk,
                                    TFetchDataResult* result);

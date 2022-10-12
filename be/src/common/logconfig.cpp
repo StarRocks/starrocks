@@ -19,13 +19,16 @@
 #include <glog/vlog_is_on.h>
 
 #include <cerrno>
+#include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <mutex>
 
 #include "common/config.h"
+#include "gutil/endian.h"
 #include "gutil/stringprintf.h"
+#include "runtime/current_thread.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -47,6 +50,57 @@ static bool iequals(const std::string& a, const std::string& b) {
     return true;
 }
 
+// avoid to allocate extra memory
+static int print_unique_id(char* buffer, const TUniqueId& uid) {
+    char buff[32];
+    struct {
+        int64_t hi;
+        int64_t lo;
+    } data;
+    data.hi = gbswap_64(uid.hi);
+    data.lo = gbswap_64(uid.lo);
+    to_hex(data.hi, buff + 16);
+    to_hex(data.lo, buff);
+
+    auto* raw = reinterpret_cast<int16_t*>(buff);
+    std::reverse(raw, raw + 16);
+
+    memset(buffer, '-', 36);
+    memcpy(buffer, buff, 8);
+    memcpy(buffer + 8 + 1, buff + 8, 4);
+    memcpy(buffer + 8 + 4 + 2, buff + 8 + 4, 4);
+    memcpy(buffer + 8 + 4 + 4 + 3, buff + 8 + 4 + 4, 4);
+    memcpy(buffer + 8 + 4 + 4 + 4 + 4, buff + 8 + 4 + 4 + 4, 12);
+    return 36;
+}
+
+static void dump_trace_info() {
+    static bool start_dump = false;
+    if (!start_dump) {
+        auto query_id = CurrentThread::current().query_id();
+        auto fragment_instance_id = CurrentThread::current().fragment_instance_id();
+        char buffer[256] = {};
+        int res = sprintf(buffer, "query_id:");
+        res = print_unique_id(buffer + res, query_id) + res;
+        res = sprintf(buffer + res, ", ") + res;
+        res = sprintf(buffer + res, "fragment_instance:") + res;
+        res = print_unique_id(buffer + res, fragment_instance_id) + res;
+        res = sprintf(buffer + res, "\n") + res;
+        [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
+    }
+    start_dump = true;
+}
+
+static void failure_writer(const char* data, int size) {
+    dump_trace_info();
+    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+}
+
+static void failure_function() {
+    dump_trace_info();
+    std::abort();
+}
+
 bool init_glog(const char* basename, bool install_signal_handler) {
     std::lock_guard<std::mutex> logging_lock(logging_mutex);
 
@@ -56,6 +110,8 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (install_signal_handler) {
         google::InstallFailureSignalHandler();
+        google::InstallFailureWriter(failure_writer);
+        google::InstallFailureFunction(failure_function);
     }
 
     // Don't log to stderr.

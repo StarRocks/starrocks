@@ -22,13 +22,13 @@
 package com.starrocks.catalog;
 
 import avro.shaded.com.google.common.collect.Lists;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableLikeStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableLikeStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -79,8 +79,8 @@ public class CreateTableLikeTest {
                                                  String newTblName, String existedTblName) throws Exception {
         createTable(createTableSql);
         createTableLike(createTableLikeSql);
-        Database newDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + newDbName);
-        Database existedDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + existedDbName);
+        Database newDb = GlobalStateMgr.getCurrentState().getDb(newDbName);
+        Database existedDb = GlobalStateMgr.getCurrentState().getDb(existedDbName);
         OlapTable newTbl = (OlapTable) newDb.getTable(newTblName);
         OlapTable existedTbl = (OlapTable) existedDb.getTable(existedTblName);
         checkTableEqual(newTbl, existedTbl);
@@ -92,8 +92,8 @@ public class CreateTableLikeTest {
 
         createTable(createTableSql);
         createTableLike(createTableLikeSql);
-        Database newDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + newDbName);
-        Database existedDb = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + existedDbName);
+        Database newDb = GlobalStateMgr.getCurrentState().getDb(newDbName);
+        Database existedDb = GlobalStateMgr.getCurrentState().getDb(existedDbName);
         MysqlTable newTbl = (MysqlTable) newDb.getTable(newTblName);
         MysqlTable existedTbl = (MysqlTable) existedDb.getTable(existedTblName);
         checkTableEqual(newTbl, existedTbl);
@@ -241,7 +241,7 @@ public class CreateTableLikeTest {
         String existedDbName2 = "test";
         String newTblName2 = "testAbTbl2_like";
         String existedTblName2 = "testAbTbl1";
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown database 'default_cluster:fake_test'",
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class, "Unknown database 'fake_test'",
                 () -> checkCreateOlapTableLike(createTableSql2, createTableLikeSql2, newDbName2, existedDbName2,
                         newTblName2, existedTblName2));
     }

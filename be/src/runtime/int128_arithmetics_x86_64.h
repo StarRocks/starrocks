@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -93,13 +93,38 @@ static int asm_mul(T x, U y, Int128Wrapper& res) {
     } else {
         __asm__ __volatile__(
                 "mov %[x], %%rax\n\t"
-                "imul %[y], %%rax\n\t"
+                "imul %[y]\n\t"
+                "mov %%rdx, %[high]\n\t"
                 "mov %%rax, %[low]"
-                : [ low ] "=r"(res.s.low), "=@cco"(overflow)
+                : [ high ] "=r"(res.s.high), [ low ] "=r"(res.s.low), "=@cco"(overflow)
                 : [ x ] "r"(x), [ y ] "r"(y)
                 : "cc", "rdx", "rax");
     }
     return overflow;
+}
+
+static int64_t asm_mul32(int32_t x, int32_t y) {
+    union {
+        int64_t i64;
+        struct {
+#if __BYTE_ORDER == LITTLE_ENDIAN
+            int32_t low;
+            int32_t high;
+#else
+            int32_t high;
+            int32_t low;
+#endif
+        } s;
+    } z;
+    __asm__ __volatile__(
+            "mov %[x], %%eax\n\t"
+            "imul %[y]\n\t"
+            "mov %%edx, %[high]\n\t"
+            "mov %%eax, %[low]"
+            : [ high ] "=r"(z.s.high), [ low ] "=r"(z.s.low)
+            : [ x ] "r"(x), [ y ] "r"(y)
+            : "cc", "rax", "rdx");
+    return z.i64;
 }
 
 static inline bool asm_add_overflow(int128_t x, int128_t y, int128_t* z) {
@@ -150,6 +175,16 @@ static inline int multi3(const Int128Wrapper& x, const Int128Wrapper& y, Int128W
     overflow |= asm_add(res.u.high, t0.u.low, res.u.high);
     overflow |= asm_add(res.u.high, t1.u.low, res.u.high);
     return overflow;
+}
+
+static inline int128_t i64_x_i64_produce_i128(int64_t a, int64_t b) {
+    Int128Wrapper t;
+    asm_mul(a, b, t);
+    return t.s128;
+}
+
+static inline int64_t i32_x_i32_produce_i64(int32_t a, int32_t b) {
+    return asm_mul32(a, b);
 }
 
 static inline int multi3(const int128_t& x, const int128_t& y, int128_t& res) {

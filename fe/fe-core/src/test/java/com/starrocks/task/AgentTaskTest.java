@@ -22,7 +22,6 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.PartitionValue;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
@@ -32,9 +31,10 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.Pair;
+import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TAgentTaskRequest;
 import com.starrocks.thrift.TBackend;
-import com.starrocks.thrift.TKeysType;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletMetaType;
@@ -86,8 +86,6 @@ public class AgentTaskTest {
     private AgentTask createReplicaTask;
     private AgentTask dropTask;
     private AgentTask cloneTask;
-    private AgentTask rollupTask;
-    private AgentTask schemaChangeTask;
     private AgentTask modifyEnablePersistentIndexTask1;
     private AgentTask modifyEnablePersistentIndexTask2;
     private AgentTask modifyInMemoryTask;
@@ -114,7 +112,7 @@ public class AgentTaskTest {
                 version, KeysType.AGG_KEYS,
                 storageType, TStorageMedium.SSD,
                 columns, null, 0, latch, null,
-                false, false, TTabletType.TABLET_TYPE_DISK);
+                false, false, TTabletType.TABLET_TYPE_DISK, TCompressionType.LZ4_FRAME);
 
         // drop
         dropTask = new DropReplicaTask(backendId1, tabletId1, schemaHash1, false);
@@ -123,18 +121,6 @@ public class AgentTaskTest {
         cloneTask =
                 new CloneTask(backendId1, dbId, tableId, partitionId, indexId1, tabletId1, schemaHash1,
                         Arrays.asList(new TBackend("host1", 8290, 8390)), TStorageMedium.HDD, -1, 3600);
-
-        // rollup
-        rollupTask =
-                new CreateRollupTask(null, backendId1, dbId, tableId, partitionId, indexId2, indexId1,
-                        tabletId2, tabletId1, replicaId2, shortKeyNum, schemaHash2, schemaHash1,
-                        storageType, columns, null, 0, TKeysType.AGG_KEYS);
-
-        // schemaChange
-        schemaChangeTask =
-                new SchemaChangeTask(null, backendId1, dbId, tableId, partitionId, indexId1,
-                        tabletId1, replicaId1, columns, schemaHash2, schemaHash1,
-                        shortKeyNum, storageType, null, 0, TKeysType.AGG_KEYS);
 
         // modify tablet meta
         // <tablet id, tablet schema hash, tablet in memory/ tablet enable persistent index>
@@ -167,17 +153,12 @@ public class AgentTaskTest {
         agentBatchTask.addTask(createReplicaTask);
         Assert.assertEquals(1, agentBatchTask.getTaskNum());
 
-        agentBatchTask.addTask(rollupTask);
-        Assert.assertEquals(2, agentBatchTask.getTaskNum());
-
         List<AgentTask> allTasks = agentBatchTask.getAllTasks();
-        Assert.assertEquals(2, allTasks.size());
+        Assert.assertEquals(1, allTasks.size());
 
         for (AgentTask agentTask : allTasks) {
             if (agentTask instanceof CreateReplicaTask) {
                 Assert.assertEquals(createReplicaTask, agentTask);
-            } else if (agentTask instanceof CreateRollupTask) {
-                Assert.assertEquals(rollupTask, agentTask);
             } else {
                 Assert.fail();
             }
@@ -208,18 +189,6 @@ public class AgentTaskTest {
         Assert.assertEquals(TTaskType.CLONE, request4.getTask_type());
         Assert.assertEquals(cloneTask.getSignature(), request4.getSignature());
         Assert.assertNotNull(request4.getClone_req());
-
-        // rollup
-        TAgentTaskRequest request5 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, rollupTask);
-        Assert.assertEquals(TTaskType.ROLLUP, request5.getTask_type());
-        Assert.assertEquals(rollupTask.getSignature(), request5.getSignature());
-        Assert.assertNotNull(request5.getAlter_tablet_req());
-
-        // schemaChange
-        TAgentTaskRequest request6 = (TAgentTaskRequest) toAgentTaskRequest.invoke(agentBatchTask, schemaChangeTask);
-        Assert.assertEquals(TTaskType.SCHEMA_CHANGE, request6.getTask_type());
-        Assert.assertEquals(schemaChangeTask.getSignature(), request6.getSignature());
-        Assert.assertNotNull(request6.getAlter_tablet_req());
 
         // modify enable_persistent_index
         TAgentTaskRequest request7 =
@@ -255,24 +224,12 @@ public class AgentTaskTest {
         AgentTask task = AgentTaskQueue.getTask(backendId1, TTaskType.CREATE, createReplicaTask.getSignature());
         Assert.assertEquals(createReplicaTask, task);
 
-        // diff
-        AgentTaskQueue.addTask(rollupTask);
-
         Map<TTaskType, Set<Long>> runningTasks = new HashMap<TTaskType, Set<Long>>();
         List<AgentTask> diffTasks = AgentTaskQueue.getDiffTasks(backendId1, runningTasks);
-        Assert.assertEquals(2, diffTasks.size());
-
-        Set<Long> set = new HashSet<Long>();
-        set.add(createReplicaTask.getSignature());
-        runningTasks.put(TTaskType.CREATE, set);
-        diffTasks = AgentTaskQueue.getDiffTasks(backendId1, runningTasks);
         Assert.assertEquals(1, diffTasks.size());
-        Assert.assertEquals(rollupTask, diffTasks.get(0));
 
         // remove
         AgentTaskQueue.removeTask(backendId1, TTaskType.CREATE, createReplicaTask.getSignature());
-        Assert.assertEquals(1, AgentTaskQueue.getTaskNum());
-        AgentTaskQueue.removeTask(backendId1, TTaskType.ROLLUP, rollupTask.getSignature());
         Assert.assertEquals(0, AgentTaskQueue.getTaskNum());
     }
 

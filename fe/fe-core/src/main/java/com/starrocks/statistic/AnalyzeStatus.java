@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.statistic;
 
@@ -56,6 +56,9 @@ public class AnalyzeStatus implements Writable {
 
     @SerializedName("reason")
     private String reason;
+
+    @SerializedName("progress")
+    private long progress;
 
     public AnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
                          StatsConstants.AnalyzeType type,
@@ -128,6 +131,14 @@ public class AnalyzeStatus implements Writable {
         this.reason = reason;
     }
 
+    public long getProgress() {
+        return progress;
+    }
+
+    public void setProgress(long progress) {
+        this.progress = progress;
+    }
+
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
             .addColumn(new Column("Table", ScalarType.createVarchar(20)))
             .addColumn(new Column("Op", ScalarType.createVarchar(20)))
@@ -163,12 +174,12 @@ public class AnalyzeStatus implements Writable {
 
         String msgType;
         String msgText;
-        if (status.equals(StatsConstants.ScheduleStatus.FINISH)) {
-            msgType = "status";
-            msgText = "OK";
-        } else {
+        if (status.equals(StatsConstants.ScheduleStatus.FAILED)) {
             msgType = "error";
             msgText = reason;
+        } else {
+            msgType = "status";
+            msgText = "OK";
         }
 
         List<List<String>> rows = new ArrayList<>();

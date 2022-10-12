@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -34,5 +34,6 @@ private:
     std::shared_ptr<CSVReader> _reader = nullptr;
     size_t _current_range_index = 0;
     std::unordered_map<std::string, int> _columns_index;
+    bool _no_data = false;
 };
 } // namespace starrocks::vectorized

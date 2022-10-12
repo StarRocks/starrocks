@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -47,6 +47,7 @@ public:
      * @return: Int32Column
      */
     DEFINE_VECTORIZED_FN(md5sum);
+    DEFINE_VECTORIZED_FN(md5sum_numeric);
 
     /**
      * @param: [json_string, tagged_value]

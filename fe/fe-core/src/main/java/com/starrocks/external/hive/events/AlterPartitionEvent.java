@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -6,7 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.messaging.AlterPartitionMessage;
@@ -40,7 +40,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             hmsTbl = alterPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
             hivePartitionKeys.add(
-                    new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partitionAfter.getValues()));
+                    new HivePartitionName(dbName, tblName, Table.TableType.HIVE, partitionAfter.getValues()));
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter partition message"), e);
@@ -82,6 +82,9 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
+            LOG.warn("Partition [Resource: [{}], Table: [{}.{}]. Partition values: [{}] ] " +
+                            "doesn't exist in cache on event id [{}]", cache.getResourceName(),
+                    getDbName(), getTblName(), getHivePartitionKey().getPartitionValues(), getEventId());
             return;
         }
 

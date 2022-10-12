@@ -1,14 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.*;
+import com.starrocks.analysis.ColumnDef;
+import com.starrocks.analysis.TypeDef;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.ListPartitionDesc;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletType;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.text.DateFormat;
@@ -19,6 +26,14 @@ import java.util.List;
 import java.util.Map;
 
 public class ListPartitionDescTest {
+
+
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+    }
 
     private List<ColumnDef> findColumnDefList() {
         ColumnDef id = new ColumnDef("id", TypeDef.create(PrimitiveType.BIGINT));
@@ -49,19 +64,21 @@ public class ListPartitionDescTest {
     }
 
 
-    private ListPartitionDesc findListMultiPartitionDesc(String colNames, String pName1, String pName2, Map<String, String> partitionProperties) {
+    private ListPartitionDesc findListMultiPartitionDesc(String colNames, String pName1, String pName2,
+                                                         Map<String, String> partitionProperties) {
         List<String> partitionColNames = Lists.newArrayList(colNames.split(","));
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, pName1,
-                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                        , Lists.newArrayList("2022-04-15", "tianjin")), partitionProperties);
+                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                        Lists.newArrayList("2022-04-15", "tianjin")), partitionProperties);
         MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, pName2,
-                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai")
-                        , Lists.newArrayList("2022-04-16", "beijing")), partitionProperties);
+                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
+                        Lists.newArrayList("2022-04-16", "beijing")), partitionProperties);
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
         return new ListPartitionDesc(partitionColNames, partitionDescs);
     }
 
-    private ListPartitionDesc findListSinglePartitionDesc(String colNames, String pName1, String pName2, Map<String, String> partitionProperties) {
+    private ListPartitionDesc findListSinglePartitionDesc(String colNames, String pName1, String pName2,
+                                                          Map<String, String> partitionProperties) {
         List<String> partitionColNames = Lists.newArrayList(colNames.split(","));
         SingleItemListPartitionDesc p1 = new SingleItemListPartitionDesc(false, pName1,
                 Lists.newArrayList("guangdong", "tianjin"), partitionProperties);
@@ -111,8 +128,8 @@ public class ListPartitionDescTest {
         List<String> partitionColNames = Lists.newArrayList("dt", "province");
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
                 //aaaa is invalid value for a date type column dt, it will throw a DdlException
-                Lists.newArrayList(Lists.newArrayList("aaaa", "guangdong")
-                        , Lists.newArrayList("2022-04-15", "tianjin")), null);
+                Lists.newArrayList(Lists.newArrayList("aaaa", "guangdong"),
+                        Lists.newArrayList("2022-04-15", "tianjin")), null);
 
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
@@ -136,7 +153,7 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = this.findListSinglePartitionDesc("province",
                 "p1", "p2", null);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
-        String sql = listPartitionDesc.toSql();
+        String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`province`)(\n" +
                 "  PARTITION p1 VALUES IN (\'guangdong\',\'tianjin\'),\n" +
                 "  PARTITION p2 VALUES IN (\'shanghai\',\'beijing\')\n" +
@@ -149,7 +166,7 @@ public class ListPartitionDescTest {
         ListPartitionDesc listPartitionDesc = this.findListMultiPartitionDesc("dt,province",
                 "p1", "p2", null);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
-        String sql = listPartitionDesc.toSql();
+        String sql = listPartitionDesc.toString();
         String target = "PARTITION BY LIST(`dt`,`province`)(\n" +
                 "  PARTITION p1 VALUES IN ((\'2022-04-15\',\'guangdong\'),(\'2022-04-15\',\'tianjin\')),\n" +
                 "  PARTITION p2 VALUES IN ((\'2022-04-16\',\'shanghai\'),(\'2022-04-16\',\'beijing\'))\n" +
@@ -280,11 +297,11 @@ public class ListPartitionDescTest {
     public void testMultiPartitionDuplicatedValue1() throws AnalysisException {
         List<String> partitionColNames = Lists.newArrayList("dt", "province");
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
-                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                        , Lists.newArrayList("2022-04-15", "guangdong")), null);
+                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                        Lists.newArrayList("2022-04-15", "guangdong")), null);
         MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
-                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai")
-                        , Lists.newArrayList("2022-04-15", "beijing")), null);
+                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
+                        Lists.newArrayList("2022-04-15", "beijing")), null);
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);
@@ -299,11 +316,11 @@ public class ListPartitionDescTest {
     public void testMultiPartitionDuplicatedValue2() throws AnalysisException {
         List<String> partitionColNames = Lists.newArrayList("dt", "province");
         MultiItemListPartitionDesc p1 = new MultiItemListPartitionDesc(false, "p1",
-                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong")
-                        , Lists.newArrayList("2022-04-15", "tianjin")), null);
+                Lists.newArrayList(Lists.newArrayList("2022-04-15", "guangdong"),
+                        Lists.newArrayList("2022-04-15", "tianjin")), null);
         MultiItemListPartitionDesc p2 = new MultiItemListPartitionDesc(false, "p2",
-                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai")
-                        , Lists.newArrayList("2022-04-15", "guangdong")), null);
+                Lists.newArrayList(Lists.newArrayList("2022-04-16", "shanghai"),
+                        Lists.newArrayList("2022-04-15", "guangdong")), null);
         List<PartitionDesc> partitionDescs = Lists.newArrayList(p1, p2);
         ListPartitionDesc listPartitionDesc = new ListPartitionDesc(partitionColNames, partitionDescs);
         listPartitionDesc.analyze(this.findColumnDefList(), null);

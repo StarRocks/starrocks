@@ -132,24 +132,6 @@ public class CaseExpr extends Expr {
     }
 
     @Override
-    public String toDigestImpl() {
-        StringBuilder output = new StringBuilder("case");
-        int childIdx = 0;
-        if (hasCaseExpr) {
-            output.append(" ").append(children.get(childIdx++).toDigest());
-        }
-        while (childIdx + 2 <= children.size()) {
-            output.append(" when ").append(children.get(childIdx++).toDigest());
-            output.append(" then ").append(children.get(childIdx++).toDigest());
-        }
-        if (hasElseExpr) {
-            output.append(" else ").append(children.get(children.size() - 1).toDigest());
-        }
-        output.append(" end");
-        return output.toString();
-    }
-
-    @Override
     protected void toThrift(TExprNode msg) {
         msg.node_type = TExprNodeType.CASE_EXPR;
         msg.case_expr = new TCaseExpr(hasCaseExpr, hasElseExpr);

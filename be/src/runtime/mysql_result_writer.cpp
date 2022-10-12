@@ -26,7 +26,6 @@
 #include "column/chunk.h"
 #include "column/const_column.h"
 #include "exprs/expr.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/buffer_control_block.h"
 #include "runtime/current_thread.h"
 #include "runtime/primitive_type.h"
@@ -69,7 +68,7 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
         return Status::OK();
     }
     auto num_rows = chunk->num_rows();
-    auto status = process_chunk(chunk);
+    auto status = _process_chunk(chunk);
     if (!status.ok()) {
         return status.status();
     }
@@ -80,8 +79,8 @@ Status MysqlResultWriter::append_chunk(vectorized::Chunk* chunk) {
     // Note: this method will delete result pointer if status is OK
     // TODO(kks): use std::unique_ptr instead of raw pointer
     auto add_status = _sinker->add_batch(fetch_data);
-    if (status.ok()) {
-        _written_rows += num_rows;
+    if (add_status.ok()) {
+        _written_rows += static_cast<int64_t>(num_rows);
         return add_status;
     } else {
         LOG(WARNING) << "append result batch to sink failed.";
@@ -96,7 +95,7 @@ Status MysqlResultWriter::close() {
     return Status::OK();
 }
 
-StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
     auto result = std::make_unique<TFetchDataResult>();
@@ -133,7 +132,7 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::process_chunk(vectorized::Chunk
     return result;
 }
 
-StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk_for_pipeline(vectorized::Chunk* chunk) {
+StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(vectorized::Chunk* chunk) {
     SCOPED_TIMER(_append_chunk_timer);
     int num_rows = chunk->num_rows();
     std::vector<TFetchDataResultPtr> results;

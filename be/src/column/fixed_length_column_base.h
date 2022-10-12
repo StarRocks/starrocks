@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -131,6 +131,8 @@ public:
         _data.resize(_data.size() + count, DefaultValueGenerator<ValueType>::next_value());
     }
 
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+
     void fill_default(const Filter& filter) override;
 
     Status update_rows(const Column& src, const uint32_t* indexes) override;
@@ -220,6 +222,9 @@ public:
 
 protected:
     Container _data;
+
+private:
+    using Column::append;
 };
 
 } // namespace starrocks::vectorized

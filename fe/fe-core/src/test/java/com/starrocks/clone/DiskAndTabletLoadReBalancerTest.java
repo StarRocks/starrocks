@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.clone;
 
@@ -512,7 +512,6 @@ public class DiskAndTabletLoadReBalancerTest {
                                long pathHash) {
         Backend backend = new Backend(beId, host, 0);
         backend.updateOnce(0, 0, 0);
-        backend.setOwnerClusterName("cluster1");
         DiskInfo diskInfo = new DiskInfo("/data");
         diskInfo.setAvailableCapacityB(availableCapB);
         diskInfo.setDataUsedCapacityB(dataUsedCapB);

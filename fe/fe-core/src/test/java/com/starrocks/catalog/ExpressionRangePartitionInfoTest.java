@@ -1,18 +1,18 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.PartitionKeyDesc;
-import com.starrocks.analysis.PartitionKeyDesc.PartitionRangeType;
-import com.starrocks.analysis.PartitionValue;
-import com.starrocks.analysis.SingleRangePartitionDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.PartitionKeyDesc;
+import com.starrocks.sql.ast.PartitionKeyDesc.PartitionRangeType;
+import com.starrocks.sql.ast.PartitionValue;
+import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -36,7 +36,7 @@ public class ExpressionRangePartitionInfoTest {
     public void setUp() {
         partitionExprs = Lists.newArrayList();
         singleRangePartitionDescs = Lists.newArrayList();
-        tableName = new TableName("default_cluster:test", "tbl1");
+        tableName = new TableName("test", "tbl1");
         k2 = new Column("k2", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
         SlotRef slotRef2 = new SlotRef(tableName, "k2");
         List<Expr> fnChildren = Lists.newArrayList();
@@ -335,7 +335,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs,Arrays.asList(k1,k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -366,7 +366,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs,Arrays.asList(k1,k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);
@@ -398,7 +398,7 @@ public class ExpressionRangePartitionInfoTest {
 
         singleRangePartitionDescs.add(new SingleRangePartitionDesc(false, "p1", p1, null));
 
-        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs,Arrays.asList(k1,k2));
+        partitionInfo = new ExpressionRangePartitionInfo(partitionExprs, Arrays.asList(k1, k2));
 
         for (SingleRangePartitionDesc singleRangePartitionDesc : singleRangePartitionDescs) {
             singleRangePartitionDesc.analyze(columns, null);

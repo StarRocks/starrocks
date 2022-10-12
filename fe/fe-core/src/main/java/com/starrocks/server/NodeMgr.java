@@ -24,8 +24,6 @@ package com.starrocks.server;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AdminSetConfigStmt;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -49,6 +47,8 @@ import com.starrocks.persist.StorageInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
@@ -696,7 +696,7 @@ public class NodeMgr {
                 // So we should remove those nodes before joining the group,
                 // or it will throws NodeConflictException (New or moved node:xxxx, is configured with the socket address:
                 // xxx. It conflicts with the socket already used by the member: xxxx)
-                bdbha.removeNodeIfExist(host, editLogPort);
+                bdbha.removeNodeIfExist(host, editLogPort, nodeName);
             }
 
             stateMgr.getEditLog().logAddFrontend(fe);
@@ -704,8 +704,8 @@ public class NodeMgr {
             unlock();
         }
     }
-    
-    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException { 
+
+    public void modifyFrontendHost(ModifyFrontendAddressClause modifyFrontendAddressClause) throws DdlException {
         String toBeModifyHost = modifyFrontendAddressClause.getSrcHost();
         String fqdn = modifyFrontendAddressClause.getDestHost();
         if (toBeModifyHost.equals(selfNode.first) && role == FrontendNodeType.LEADER) {
@@ -725,7 +725,7 @@ public class NodeMgr {
             // step 2 update the fe information stored in memory
             preUpdateFe.updateHostAndEditLogPort(fqdn, preUpdateFe.getEditLogPort());
             frontends.put(preUpdateFe.getNodeName(), preUpdateFe);
-            
+
             // editLog
             stateMgr.getEditLog().logUpdateFrontend(preUpdateFe);
             LOG.info("send update fe editlog success, fe info is [{}]", preUpdateFe.toString());
@@ -742,7 +742,7 @@ public class NodeMgr {
             throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
         }
         try {
-            Frontend fe = checkFeExist(host, port);
+            Frontend fe = unprotectCheckFeExist(host, port);
             if (fe == null) {
                 throw new DdlException("frontend does not exist[" + host + ":" + port + "]");
             }
@@ -769,7 +769,7 @@ public class NodeMgr {
     public void replayAddFrontend(Frontend fe) {
         tryLock(true);
         try {
-            Frontend existFe = checkFeExist(fe.getHost(), fe.getEditLogPort());
+            Frontend existFe = unprotectCheckFeExist(fe.getHost(), fe.getEditLogPort());
             if (existFe != null) {
                 LOG.warn("fe {} already exist.", existFe);
                 if (existFe.getRole() != fe.getRole()) {
@@ -834,6 +834,15 @@ public class NodeMgr {
     }
 
     public Frontend checkFeExist(String host, int port) {
+        tryLock(true);
+        try {
+            return unprotectCheckFeExist(host, port);
+        } finally {
+            unlock();
+        }
+    }
+
+    public Frontend unprotectCheckFeExist(String host, int port) {
         for (Frontend fe : frontends.values()) {
             if (fe.getHost().equals(host) && fe.getEditLogPort() == port) {
                 return fe;

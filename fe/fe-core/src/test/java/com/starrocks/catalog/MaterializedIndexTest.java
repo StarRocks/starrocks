@@ -89,4 +89,24 @@ public class MaterializedIndexTest {
         dis.close();
         file.delete();
     }
+
+    @Test
+    public void testVisibleForTransaction() throws Exception {
+        index = new MaterializedIndex(10);
+        Assert.assertEquals(IndexState.NORMAL, index.getState());
+        Assert.assertTrue(index.visibleForTransaction(0));
+        Assert.assertTrue(index.visibleForTransaction(10));
+
+        index = new MaterializedIndex(10, IndexState.NORMAL, 10);
+        Assert.assertTrue(index.visibleForTransaction(0));
+        Assert.assertTrue(index.visibleForTransaction(9));
+        Assert.assertTrue(index.visibleForTransaction(10));
+        Assert.assertTrue(index.visibleForTransaction(11));
+
+        index = new MaterializedIndex(10, IndexState.SHADOW, 10);
+        Assert.assertFalse(index.visibleForTransaction(0));
+        Assert.assertFalse(index.visibleForTransaction(9));
+        Assert.assertTrue(index.visibleForTransaction(10));
+        Assert.assertTrue(index.visibleForTransaction(11));
+    }
 }

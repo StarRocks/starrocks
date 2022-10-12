@@ -29,6 +29,7 @@
 #include <utility>
 #include <vector>
 
+#include "agent/agent_common.h"
 #include "agent/status.h"
 #include "agent/utils.h"
 #include "gen_cpp/AgentService_types.h"
@@ -41,38 +42,21 @@ namespace starrocks {
 
 class ExecEnv;
 
-class TaskWorkerPool {
+class TaskWorkerPoolBase {
 public:
-    enum TaskWorkerType {
-        CREATE_TABLE,
-        DROP_TABLE,
-        PUSH,
-        REALTIME_PUSH,
-        PUBLISH_VERSION,
-        CLEAR_ALTER_TASK, // Deprecated
-        CLEAR_TRANSACTION_TASK,
-        DELETE,
-        ALTER_TABLE,
-        QUERY_SPLIT_KEY, // Deprecated
-        CLONE,
-        STORAGE_MEDIUM_MIGRATE,
-        CHECK_CONSISTENCY,
-        REPORT_TASK,
-        REPORT_DISK_STATE,
-        REPORT_OLAP_TABLE,
-        REPORT_WORKGROUP,
-        UPLOAD,
-        DOWNLOAD,
-        MAKE_SNAPSHOT,
-        RELEASE_SNAPSHOT,
-        MOVE,
-        RECOVER_TABLET,
-        UPDATE_TABLET_META_INFO
-    };
+    static AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
+                                       TTabletInfo* tablet_info);
 
+protected:
+    static std::atomic<int64_t> _s_report_version;
+};
+
+template <class AgentTaskRequest>
+class TaskWorkerPool : public TaskWorkerPoolBase {
+public:
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
-    TaskWorkerPool(TaskWorkerType task_worker_type, ExecEnv* env, int worker_num);
+    TaskWorkerPool(ExecEnv* env, int worker_num);
     ~TaskWorkerPool();
 
     // start the task worker callback thread
@@ -86,53 +70,23 @@ public:
     // Input parameters:
     // * task: the task need callback thread to do
     void submit_task(const TAgentTaskRequest& task);
-    void submit_tasks(std::vector<TAgentTaskRequest>* task);
-
-    AgentStatus get_tablet_info(TTabletId tablet_id, TSchemaHash schema_hash, int64_t signature,
-                                TTabletInfo* tablet_info);
-    void remove_task_info(TTaskType::type task_type, int64_t signature);
+    void submit_tasks(const std::vector<const TAgentTaskRequest*>& task);
 
     size_t num_queued_tasks() const;
 
     TaskWorkerPool(const TaskWorkerPool&) = delete;
     const TaskWorkerPool& operator=(const TaskWorkerPool&) = delete;
 
-private:
-    static void* _create_tablet_worker_thread_callback(void* arg_this);
-    static void* _drop_tablet_worker_thread_callback(void* arg_this);
-    static void* _push_worker_thread_callback(void* arg_this);
-    static void* _delete_worker_thread_callback(void* arg_this);
-    static void* _publish_version_worker_thread_callback(void* arg_this);
-    static void* _clear_transaction_task_worker_thread_callback(void* arg_this);
-    static void* _alter_tablet_worker_thread_callback(void* arg_this);
-    static void* _clone_worker_thread_callback(void* arg_this);
-    static void* _storage_medium_migrate_worker_thread_callback(void* arg_this);
-    static void* _check_consistency_worker_thread_callback(void* arg_this);
-    static void* _report_task_worker_thread_callback(void* arg_this);
-    static void* _report_disk_state_worker_thread_callback(void* arg_this);
-    static void* _report_tablet_worker_thread_callback(void* arg_this);
-    static void* _report_workgroup_thread_callback(void* arg_this);
-    static void* _upload_worker_thread_callback(void* arg_this);
-    static void* _download_worker_thread_callback(void* arg_this);
-    static void* _make_snapshot_thread_callback(void* arg_this);
-    static void* _release_snapshot_thread_callback(void* arg_this);
-    static void* _move_dir_thread_callback(void* arg_this);
-    static void* _update_tablet_meta_worker_thread_callback(void* arg_this);
-
-    bool _register_task_info(TTaskType::type task_type, int64_t signature);
+protected:
     void _spawn_callback_worker_thread(CALLBACK_FUNCTION callback_func);
 
-    using TAgentTaskRequestPtr = std::shared_ptr<TAgentTaskRequest>;
+    using AgentTaskRequestPtr = std::shared_ptr<AgentTaskRequest>;
 
-    size_t _push_task(TAgentTaskRequestPtr task);
-    TAgentTaskRequestPtr _pop_task();
-    TAgentTaskRequestPtr _pop_task(TPriority::type pri);
+    virtual AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) = 0;
 
-    void _alter_tablet(TaskWorkerPool* worker_pool_this, const TAgentTaskRequest& alter_tablet_request,
-                       int64_t signature, TTaskType::type task_type, TFinishTaskRequest* finish_task_request);
-
-    AgentStatus _move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::string& src, int64_t job_id,
-                          bool overwrite, std::vector<std::string>* error_msgs);
+    size_t _push_task(AgentTaskRequestPtr task);
+    AgentTaskRequestPtr _pop_task();
+    AgentTaskRequestPtr _pop_task(TPriority::type pri);
 
     TBackend _backend;
     ExecEnv* _env;
@@ -140,18 +94,111 @@ private:
     // Protect task queue
     mutable std::mutex _worker_thread_lock;
     std::condition_variable* _worker_thread_condition_variable;
-    std::deque<TAgentTaskRequestPtr> _tasks;
+    std::deque<AgentTaskRequestPtr> _tasks;
 
     uint32_t _worker_count = 0;
-    TaskWorkerType _task_worker_type;
-    CALLBACK_FUNCTION _callback_function;
-
-    static std::atomic<int64_t> _s_report_version;
-
-    static std::mutex _s_task_signatures_locks[TTaskType::type::NUM_TASK_TYPE];
-    static std::set<int64_t> _s_task_signatures[TTaskType::type::NUM_TASK_TYPE];
+    CALLBACK_FUNCTION _callback_function = nullptr;
 
     std::atomic<bool> _stopped{false};
     std::vector<std::thread> _worker_threads;
 }; // class TaskWorkerPool
+
+class PushTaskWorkerPool : public TaskWorkerPool<PushReqAgentTaskRequest> {
+public:
+    PushTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<PushReqAgentTaskRequest>(task, task.push_req, recv_time);
+    }
+};
+
+class PublishVersionTaskWorkerPool : public TaskWorkerPool<PublishVersionAgentTaskRequest> {
+public:
+    PublishVersionTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<PublishVersionAgentTaskRequest>(task, task.publish_version_req, recv_time);
+    }
+};
+
+class DeleteTaskWorkerPool : public TaskWorkerPool<PushReqAgentTaskRequest> {
+public:
+    DeleteTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<PushReqAgentTaskRequest>(task, task.push_req, recv_time);
+    }
+};
+
+class ReportTaskWorkerPool : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
+};
+
+class ReportDiskStateTaskWorkerPool : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportDiskStateTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
+};
+
+class ReportOlapTableTaskWorkerPool : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportOlapTableTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
+};
+
+class ReportWorkgroupTaskWorkerPool : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportWorkgroupTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
+};
+
 } // namespace starrocks

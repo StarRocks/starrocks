@@ -25,7 +25,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.SysVariableDesc;
+import com.starrocks.analysis.VariableExpr;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
@@ -90,6 +90,7 @@ public class VariableMgrTest {
         Assert.assertEquals(300, var.getQueryTimeoutS());
         Assert.assertEquals(false, var.isReportSucc());
         Assert.assertEquals(32L, var.getSqlMode());
+        Assert.assertEquals(true, var.isInnodbReadOnly());
 
         List<List<String>> rows = VariableMgr.dump(SetType.SESSION, var, null);
         Assert.assertTrue(rows.size() > 5);
@@ -154,7 +155,7 @@ public class VariableMgrTest {
         Assert.assertEquals("Asia/Jakarta", var.getTimeZone());
 
         // Get from name
-        SysVariableDesc desc = new SysVariableDesc("exec_mem_limit");
+        VariableExpr desc = new VariableExpr("exec_mem_limit");
         Assert.assertEquals(var.getMaxExecMemByte() + "", VariableMgr.getValue(var, desc));
 
         SetVar setVar4 = new SetVar(SetType.SESSION, "sql_mode", new StringLiteral(
@@ -219,7 +220,7 @@ public class VariableMgrTest {
 
     @Test(expected = DdlException.class)
     public void testReadOnly() throws AnalysisException, DdlException {
-        SysVariableDesc desc = new SysVariableDesc("version_comment");
+        VariableExpr desc = new VariableExpr("version_comment");
         LOG.info(VariableMgr.getValue(null, desc));
 
         // Set global variable

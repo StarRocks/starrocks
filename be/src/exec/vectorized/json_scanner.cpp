@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/json_scanner.h"
 
@@ -6,6 +6,7 @@
 #include <ryu/ryu.h>
 
 #include <algorithm>
+#include <memory>
 #include <sstream>
 
 #include "column/chunk.h"
@@ -127,20 +128,19 @@ Status JsonScanner::_construct_json_types() {
                 child_type = &(child_type->children[0]);
             }
 
+            // the json lib don't support get_int128_t(), so we load with BinaryColumn and then convert to LargeIntColumn
             if (slot_type->type == TYPE_FLOAT || slot_type->type == TYPE_DOUBLE || slot_type->type == TYPE_BIGINT ||
-                slot_type->type == TYPE_BIGINT || slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT ||
-                slot_type->type == TYPE_TINYINT) {
+                slot_type->type == TYPE_INT || slot_type->type == TYPE_SMALLINT || slot_type->type == TYPE_TINYINT) {
                 // Treat these types as what they are.
                 child_type->children.emplace_back(slot_type->type);
-
             } else if (slot_type->type == TYPE_VARCHAR) {
                 auto varchar_type = TypeDescriptor::create_varchar_type(slot_type->len);
                 child_type->children.emplace_back(varchar_type);
-
             } else if (slot_type->type == TYPE_CHAR) {
                 auto char_type = TypeDescriptor::create_char_type(slot_type->len);
                 child_type->children.emplace_back(char_type);
-
+            } else if (slot_type->type == TYPE_JSON) {
+                child_type->children.emplace_back(TypeDescriptor::create_json_type());
             } else {
                 // Treat other types as VARCHAR.
                 auto varchar_type = TypeDescriptor::create_varchar_type(TypeDescriptor::MAX_VARCHAR_LENGTH);
@@ -319,16 +319,17 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::Sc
     raw::RawVector<char> buf(_buf_size);
     std::swap(buf, _buf);
 #endif
+    for (const auto& desc : _slot_descs) {
+        if (desc == nullptr) {
+            continue;
+        }
+        _slot_desc_dict.emplace(desc->col_name(), desc);
+    }
 }
 
 Status JsonReader::open() {
     RETURN_IF_ERROR(_read_and_parse_json());
     _empty_parser = false;
-
-    if (_scanner->_json_paths.empty() && _scanner->_root_paths.empty()) {
-        RETURN_IF_ERROR(_build_slot_descs());
-    }
-
     _closed = false;
     return Status::OK();
 }
@@ -476,19 +477,13 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
     return Status::OK();
 }
 
-Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* row, Chunk* chunk) {
-    // make a copy for _slot_desc_dict.
-    auto slot_desc_dict(_slot_desc_dict);
+Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
+    std::unordered_map<std::string_view, SlotDescriptor*> slot_desc_dict(_slot_desc_dict);
+
     try {
         std::ostringstream oss;
-
         for (auto field : *row) {
-            // TODO:This is ugly, but there's no good way to convert json field key to std::string.
-            // convert field key to std::string.
-            simdjson::ondemand::raw_json_string raw_key = field.key();
-            oss << raw_key;
-            auto key = oss.str();
-            oss.str("");
+            std::string_view key = field.unescaped_key();
 
             // look up key in the slot dict.
             auto itr = slot_desc_dict.find(key);
@@ -517,15 +512,15 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
 
     // append null to the column without data.
     for (auto& pair : slot_desc_dict) {
-        auto col_name = pair.first;
-        auto slot_desc = pair.second;
+        auto& col_name = pair.first;
+        auto& slot_desc = pair.second;
 
         auto column = chunk->get_column_by_slot_id(slot_desc->id());
 
         if (col_name == "__op") {
             // special treatment for __op column, fill default value '0' rather than null
             if (column->is_binary()) {
-                column->append_strings(std::vector{Slice{"0"}});
+                std::ignore = column->append_strings(std::vector{Slice{"0"}});
             } else {
                 column->append_datum(Datum((uint8_t)0));
             }
@@ -537,21 +532,19 @@ Status JsonReader::_construct_row_in_object_order(simdjson::ondemand::object* ro
     return Status::OK();
 }
 
-Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row, Chunk* chunk) {
-    for (SlotDescriptor* slot_desc : _slot_descs) {
-        if (slot_desc == nullptr) {
+Status JsonReader::_construct_row_with_jsonpath(simdjson::ondemand::object* row, Chunk* chunk) {
+    size_t slot_size = _slot_descs.size();
+    size_t jsonpath_size = _scanner->_json_paths.size();
+    for (size_t i = 0; i < slot_size; i++) {
+        if (_slot_descs[i] == nullptr) {
             continue;
         }
+        const char* column_name = _slot_descs[i]->col_name().c_str();
 
         // The columns in JsonReader's chunk are all in NullableColumn type;
-        auto column = chunk->get_column_by_slot_id(slot_desc->id());
-        const auto& col_name = slot_desc->col_name();
-
-        try {
-            simdjson::ondemand::value val = row->find_field_unordered(col_name);
-            RETURN_IF_ERROR(_construct_column(val, column.get(), slot_desc->type(), slot_desc->col_name()));
-        } catch (simdjson::simdjson_error& e) {
-            if (col_name == "__op") {
+        auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(_slot_descs[i]->id()).get());
+        if (i >= jsonpath_size) {
+            if (strcmp(column_name, "__op") == 0) {
                 // special treatment for __op column, fill default value '0' rather than null
                 if (column->is_binary()) {
                     column->append_strings(std::vector{Slice{"0"}});
@@ -559,67 +552,30 @@ Status JsonReader::_construct_row_in_slot_order(simdjson::ondemand::object* row,
                     column->append_datum(Datum((uint8_t)0));
                 }
             } else {
-                // Column name not found, fill column with null.
                 column->append_nulls(1);
             }
             continue;
         }
-    }
-    return Status::OK();
-}
 
-Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
-    if (_scanner->_json_paths.empty()) {
-        // No json path.
-        // if size of _slot_desc is much more than (2x) number of object fields,
-        // using object as driven table to look up field key in _slot_desc_dict may get better performance.
-        if (_slot_descs.size() > row->count_fields() * 2) {
-            return _construct_row_in_object_order(row, chunk);
+        // NOTE
+        // Why not process this syntax in extract_from_object?
+        // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
+        // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
+        // TODO(mofei) make it more elegant
+        if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
+            // add_nullable_column may invoke a for-range iterating to the row.
+            // If the for-range iterating is invoked after field access, or a second for-range iterating is invoked,
+            // it would get an error "Objects and arrays can only be iterated when they are first encountered",
+            // Hence, resetting the row object is necessary here.
+            row->reset();
+            RETURN_IF_ERROR(add_nullable_column_by_json_object(column, _slot_descs[i]->type(),
+                                                               _slot_descs[i]->col_name(), row, !_strict_mode));
         } else {
-            return _construct_row_in_slot_order(row, chunk);
-        }
-    } else {
-        // With json path.
-
-        size_t slot_size = _slot_descs.size();
-        size_t jsonpath_size = _scanner->_json_paths.size();
-        for (size_t i = 0; i < slot_size; i++) {
-            if (_slot_descs[i] == nullptr) {
-                continue;
-            }
-            const char* column_name = _slot_descs[i]->col_name().c_str();
-
-            // The columns in JsonReader's chunk are all in NullableColumn type;
-            auto column = down_cast<NullableColumn*>(chunk->get_column_by_slot_id(_slot_descs[i]->id()).get());
-            if (i >= jsonpath_size) {
-                if (strcmp(column_name, "__op") == 0) {
-                    // special treatment for __op column, fill default value '0' rather than null
-                    if (column->is_binary()) {
-                        column->append_strings(std::vector{Slice{"0"}});
-                    } else {
-                        column->append_datum(Datum((uint8_t)0));
-                    }
-                } else {
-                    column->append_nulls(1);
-                }
-                continue;
-            }
-
             simdjson::ondemand::value val;
-            // NOTE
-            // Why not process this syntax in extract_from_object?
-            // simdjson's api is limited, which coult not convert ondemand::object to ondemand::value.
-            // As a workaround, extract procedure is duplicated, for both ondemand::object and ondemand::value
-            // TODO(mofei) make it more elegant
-            if (_scanner->_json_paths[i].size() == 1 && _scanner->_json_paths[i][0].key == "$") {
-                // add_nullable_column may invoke a for-range iterating to the row.
-                // If the for-range iterating is invoked after field access, or a second for-range iterating is invoked,
-                // it would get an error "Objects and arrays can only be iterated when they are first encountered",
-                // Hence, resetting the row object is necessary here.
-                row->reset();
-                RETURN_IF_ERROR(add_nullable_column(column, _slot_descs[i]->type(), _slot_descs[i]->col_name(), row,
-                                                    !_strict_mode));
-            } else if (!JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val).ok()) {
+            auto st = JsonFunctions::extract_from_object(*row, _scanner->_json_paths[i], &val);
+            if (st.ok()) {
+                RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
+            } else if (st.is_not_found()) {
                 if (strcmp(column_name, "__op") == 0) {
                     // special treatment for __op column, fill default value '0' rather than null
                     if (column->is_binary()) {
@@ -631,67 +587,17 @@ Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk)
                     column->append_nulls(1);
                 }
             } else {
-                RETURN_IF_ERROR(_construct_column(val, column, _slot_descs[i]->type(), _slot_descs[i]->col_name()));
+                return st;
             }
         }
-        return Status::OK();
     }
+    return Status::OK();
 }
 
-Status JsonReader::_build_slot_descs() {
-    // build _slot_desc_dict.
-    for (const auto& desc : _slot_descs) {
-        if (desc == nullptr) {
-            continue;
-        }
-        _slot_desc_dict.emplace(desc->col_name(), desc);
-    }
+Status JsonReader::_construct_row(simdjson::ondemand::object* row, Chunk* chunk) {
+    if (_scanner->_json_paths.empty()) return _construct_row_without_jsonpath(row, chunk);
 
-    // copy for modifying.
-    auto slot_desc_dict(_slot_desc_dict);
-
-    std::vector<SlotDescriptor*> ordered_slot_descs;
-    ordered_slot_descs.reserve(_slot_descs.size());
-
-    // get the first row of json.
-    simdjson::ondemand::object obj;
-    RETURN_IF_ERROR(_parser->get_current(&obj));
-    std::ostringstream oss;
-    simdjson::ondemand::raw_json_string json_str;
-
-    // Sort the column in the slot_descs as the key order in json document.
-    for (auto field : obj) {
-        try {
-            json_str = field.key();
-        } catch (simdjson::simdjson_error& e) {
-            // Nothing would be done if got any error.
-            return Status::DataQualityError(Slice{simdjson::error_message(e.error())});
-        }
-
-        oss << json_str;
-        auto key = oss.str();
-        oss.str("");
-
-        // Find the SlotDescriptor with the json document key.
-        // Duplicated key in json would be skipped since the key has been erased before.
-        auto itr = slot_desc_dict.find(key);
-
-        // Swap the SlotDescriptor to the expected index.
-        if (itr != slot_desc_dict.end()) {
-            ordered_slot_descs.push_back(itr->second);
-            // Erase the key from the dict.
-            slot_desc_dict.erase(itr);
-        }
-    }
-
-    // Append left key(s) in the dict to the ordered_slot_descs;
-    for (const auto& kv : slot_desc_dict) {
-        ordered_slot_descs.push_back(kv.second);
-    }
-
-    std::swap(ordered_slot_descs, _slot_descs);
-
-    return Status::OK();
+    return _construct_row_with_jsonpath(row, chunk);
 }
 
 // read one json string from file read and parse it to json doc.
@@ -712,7 +618,7 @@ Status JsonReader::_read_and_parse_json() {
 
 #else
     // TODO: Remove the down_cast, should not rely on the specific implementation.
-    StreamLoadPipeInputStream* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
+    auto* stream_file = down_cast<StreamLoadPipeInputStream*>(_file->stream().get());
     {
         SCOPED_RAW_TIMER(&_counter->file_read_ns);
         ASSIGN_OR_RETURN(_parser_buf, stream_file->pipe()->read());
@@ -756,23 +662,24 @@ Status JsonReader::_read_and_parse_json() {
         if (_scanner->_strip_outer_array) {
             // Expand outer array automatically according to _is_ndjson.
             if (_is_ndjson) {
-                _parser.reset(new ExpandedJsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<ExpandedJsonDocumentStreamParserWithRoot>(&_simdjson_parser,
+                                                                                     _scanner->_root_paths);
             } else {
-                _parser.reset(new ExpandedJsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<ExpandedJsonArrayParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             }
         } else {
             if (_is_ndjson) {
-                _parser.reset(new JsonDocumentStreamParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<JsonDocumentStreamParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             } else {
-                _parser.reset(new JsonArrayParserWithRoot(&_simdjson_parser, _scanner->_root_paths));
+                _parser = std::make_unique<JsonArrayParserWithRoot>(&_simdjson_parser, _scanner->_root_paths);
             }
         }
     } else {
         // Without json root set, the strip_outer_array determines whether to expand outer array.
         if (_scanner->_strip_outer_array) {
-            _parser.reset(new JsonArrayParser(&_simdjson_parser));
+            _parser = std::make_unique<JsonArrayParser>(&_simdjson_parser);
         } else {
-            _parser.reset(new JsonDocumentStreamParser(&_simdjson_parser));
+            _parser = std::make_unique<JsonDocumentStreamParser>(&_simdjson_parser);
         }
     }
 

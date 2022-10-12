@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/json_scanner.h"
 
@@ -6,12 +6,12 @@
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
-#include "fs/fs_memory.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
+#include "testutil/parallel_test.h"
 
 namespace starrocks::vectorized {
 
@@ -31,7 +31,8 @@ protected:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
-        Status st = DescriptorTbl::create(&_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        Status st = DescriptorTbl::create(_state, &_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                          config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
@@ -62,6 +63,32 @@ protected:
         broker_scan_range->params = *params;
         broker_scan_range->ranges = ranges;
         return std::make_unique<JsonScanner>(_state, _profile, *broker_scan_range, _counter);
+    }
+
+    ChunkPtr test_whole_row_json(int columns, std::string input_data, std::string jsonpath,
+                                 std::vector<std::string> jsonpaths) {
+        std::vector<TypeDescriptor> types;
+        for (int i = 0; i < columns; i++) {
+            types.emplace_back(TypeDescriptor::create_varchar_type(1024));
+        }
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_JSON;
+        range.strip_outer_array = false;
+        range.__isset.strip_outer_array = false;
+        range.__isset.jsonpaths = true;
+        range.jsonpaths = jsonpath;
+        range.__isset.json_root = false;
+        range.__set_path(input_data);
+        ranges.emplace_back(range);
+
+        auto scanner = create_json_scanner(types, ranges, jsonpaths);
+
+        EXPECT_OK(scanner->open());
+
+        ChunkPtr chunk = scanner->get_next().value();
+        return chunk;
     }
 
     ChunkPtr test_with_jsonpath(int columns, std::string input_data, std::string jsonpath,
@@ -96,11 +123,6 @@ protected:
         _counter = _pool.add(new ScannerCounter());
         _state = _pool.add(new RuntimeState(TQueryGlobals()));
         std::string starrocks_home = getenv("STARROCKS_HOME");
-        _file_names = std::vector<std::string>{starrocks_home + "./be/test/exec/test_data/json_scanner/test1.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test2.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test3.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test4.json",
-                                               starrocks_home + "./be/test/exec/test_data/json_scanner/test8.json"};
     }
 
     void TearDown() override {}
@@ -110,8 +132,39 @@ private:
     ScannerCounter* _counter = nullptr;
     RuntimeState* _state = nullptr;
     ObjectPool _pool;
-    std::vector<std::string> _file_names;
 };
+
+// NOLINTNEXTLINE
+TEST_F(JsonScannerTest, test_array_json) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TYPE_INT);
+
+    TypeDescriptor array_type(TYPE_ARRAY);
+    array_type.children.emplace_back(TypeDescriptor::create_json_type());
+    types.emplace_back(array_type);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/test9.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges, {"c1", "c2"});
+
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    auto st2 = scanner->get_next();
+    ASSERT_TRUE(st2.ok());
+
+    ChunkPtr chunk = st2.value();
+    ASSERT_EQ(chunk->columns()[0]->debug_string(), "[1]");
+    ASSERT_EQ(chunk->columns()[1]->debug_string(), "[[{\"k2\": \"v2\"}]]");
+}
 
 TEST_F(JsonScannerTest, test_json_without_path) {
     std::vector<TypeDescriptor> types;
@@ -589,6 +642,27 @@ TEST_F(JsonScannerTest, test_native_json_ndjson_with_jsonpath) {
     EXPECT_EQ(R"(["v5", "server", "10.10.0.5", "50"])", chunk->debug_row(4));
 }
 
+TEST_F(JsonScannerTest, test_string_single_column) {
+    std::string datapath = "./be/test/exec/test_data/json_scanner/test_ndjson_chinese.json";
+    {
+        std::string jsonpath1 = R"(["$"])";
+        ChunkPtr result1 = test_whole_row_json(1, datapath, jsonpath1, {"$"});
+        EXPECT_EQ(1, result1->num_columns());
+        EXPECT_EQ(5, result1->num_rows());
+
+        EXPECT_EQ(R"(['{"k1":"v1",   "kind":"中文", "keyname":{"ip地址":"10.10.0.1", "value":"10"}}'])",
+                  result1->debug_row(0));
+        EXPECT_EQ(R"(['{"k1":"v2", "kind":"英文", "keyname":{"ip地址":"10.10.0.2", "value":"20"}}'])",
+                  result1->debug_row(1));
+        EXPECT_EQ(R"(['{"k1":"v3", "kind":"法文", "keyname":{"ip地址":"10.10.0.3", "value":"30"}}'])",
+                  result1->debug_row(2));
+        EXPECT_EQ(R"(['{"k1":"v4",   "kind":"德文", "keyname":{"ip地址":"10.10.0.4", "value":"40"}}'])",
+                  result1->debug_row(3));
+        EXPECT_EQ(R"(['{"k1":"v5",   "kind":"西班牙", "keyname":{"ip地址":"10.10.0.5", "value":"50"}}'])",
+                  result1->debug_row(4));
+    }
+}
+
 TEST_F(JsonScannerTest, test_native_json_single_column) {
     std::string datapath = "./be/test/exec/test_data/json_scanner/test_ndjson_chinese.json";
 
@@ -930,6 +1004,80 @@ TEST_F(JsonScannerTest, test_illegal_input) {
 
     ASSERT_OK(scanner->open());
     ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+}
+
+TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TYPE_DOUBLE);
+    types.emplace_back(TYPE_INT);
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = false;
+    range.__isset.strip_outer_array = false;
+    range.__isset.jsonpaths = true;
+    range.jsonpaths = "[\"$.f_float\", \"$.f_bool\", \"$.f_int\", \"$.f_float_in_string\", \"$.f_int_in_string\"]";
+    range.__isset.json_root = false;
+    range.__set_path("./be/test/exec/test_data/json_scanner/illegal.json");
+    ranges.emplace_back(range);
+
+    auto scanner =
+            create_json_scanner(types, ranges, {"f_float", "f_bool", "f_int", "f_float_in_string", "f_int_in_string"});
+
+    ASSERT_OK(scanner->open());
+    ASSERT_TRUE(scanner->get_next().status().is_data_quality_error());
+}
+
+// See more: https://github.com/StarRocks/starrocks/issues/11054
+TEST_F(JsonScannerTest, test_column_2x_than_columns_with_json_root) {
+    std::vector<TypeDescriptor> types;
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_json_type());
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+    types.emplace_back(TypeDescriptor::create_varchar_type(20));
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.format_type = TFileFormatType::FORMAT_JSON;
+    range.strip_outer_array = true;
+    range.jsonpaths = "";
+    range.json_root = "$.data";
+
+    range.__isset.strip_outer_array = true;
+    range.__isset.jsonpaths = false;
+    range.__isset.json_root = true;
+
+    range.__set_path("./be/test/exec/test_data/json_scanner/test_ndjson_expanded_array.json");
+    ranges.emplace_back(range);
+
+    auto scanner = create_json_scanner(types, ranges,
+                                       {"k1", "kind", "keyname", "null_col1", "null_col2", "null_col3", "null_col4"});
+
+    Status st;
+    st = scanner->open();
+    ASSERT_TRUE(st.ok());
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(7, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("['v1', 'server', {\"ip\": \"10.10.0.1\", \"value\": \"10\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(0));
+    EXPECT_EQ("['v2', 'server', {\"ip\": \"10.10.0.2\", \"value\": \"20\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(1));
+    EXPECT_EQ("['v3', 'server', {\"ip\": \"10.10.0.3\", \"value\": \"30\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(2));
+    EXPECT_EQ("['v4', 'server', {\"ip\": \"10.10.0.4\", \"value\": \"40\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(3));
+    EXPECT_EQ("['v5', 'server', {\"ip\": \"10.10.0.5\", \"value\": \"50\"}, NULL, NULL, NULL, NULL]",
+              chunk->debug_row(4));
 }
 
 } // namespace starrocks::vectorized

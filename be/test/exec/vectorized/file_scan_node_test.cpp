@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 // #include "exec/vectorized/file_scan_node.h"
 #include <gtest/gtest.h>
@@ -24,8 +24,6 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        auto* engine = StorageEngine::instance();
-        _exec_env->set_storage_engine(engine);
 
         _create_runtime_state();
         _pool = _runtime_state->obj_pool();
@@ -144,7 +142,7 @@ DescriptorTbl* FileScanNodeTest::_create_table_desc(const std::vector<TypeDescri
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state.get(), _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     _runtime_state->set_desc_tbl(tbl);
     return tbl;

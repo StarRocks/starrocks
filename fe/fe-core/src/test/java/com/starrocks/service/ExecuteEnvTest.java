@@ -24,7 +24,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 public class ExecuteEnvTest {
-    int THREAD_MAX_NUM = 10;
+    private static final int THREAD_MAX_NUM = 10;
     int[] oids = new int[THREAD_MAX_NUM];
 
     @Test

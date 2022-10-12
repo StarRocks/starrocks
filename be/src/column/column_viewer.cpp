@@ -1,11 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/column_viewer.h"
 
 #include "column/column_helper.h"
 #include "runtime/primitive_type_infra.h"
-#include "types/bitmap_value.h"
-#include "types/hll.h"
 #include "util/percentile_value.h"
 #include "util/phmap/phmap.h"
 

@@ -32,7 +32,6 @@ import mockit.Mocked;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 
 public class BackendsProcDirTest {
@@ -183,6 +182,6 @@ public class BackendsProcDirTest {
 
     @Test    
     public void testIPTitle() {
-        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(2).equals("IP"));
+        Assert.assertTrue(BackendsProcDir.TITLE_NAMES.get(1).equals("IP"));
     }
 }

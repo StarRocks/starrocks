@@ -25,7 +25,6 @@
 
 #include "common/logging.h"
 #include "fs/fs.h"
-#include "fs/fs_util.h"
 #include "storage/key_coder.h"
 #include "storage/rowset/page_handle.h"
 #include "storage/rowset/page_io.h"
@@ -63,14 +62,30 @@ Status OrdinalIndexWriter::finish(WritableFile* wfile, ColumnIndexMetaPB* meta) 
     return Status::OK();
 }
 
-StatusOr<bool> OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once,
-                        [&]() { return do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory); });
+OrdinalIndexReader::OrdinalIndexReader() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), sizeof(OrdinalIndexReader));
 }
 
-Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
-                                   ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
+OrdinalIndexReader::~OrdinalIndexReader() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->ordinal_index_mem_tracker(), _mem_usage());
+}
+
+StatusOr<bool> OrdinalIndexReader::load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                                        ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
+    return success_once(_load_once, [&]() {
+        Status st = _do_load(fs, filename, meta, num_values, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->ordinal_index_mem_tracker(),
+                                     _mem_usage() - sizeof(OrdinalIndexReader))
+        } else {
+            _reset();
+        }
+        return st;
+    });
+}
+
+Status OrdinalIndexReader::_do_load(FileSystem* fs, const std::string& filename, const OrdinalIndexPB& meta,
+                                    ordinal_t num_values, bool use_page_cache, bool kept_in_memory) {
     if (meta.root_page().is_root_data_page()) {
         // only one data page, no index page
         _num_pages = 1;
@@ -117,6 +132,12 @@ Status OrdinalIndexReader::do_load(FileSystem* fs, const std::string& filename, 
     return Status::OK();
 }
 
+void OrdinalIndexReader::_reset() {
+    _num_pages = 0;
+    std::vector<ordinal_t>{}.swap(_ordinals);
+    std::vector<PagePointer>{}.swap(_pages);
+}
+
 OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal) {
     int32_t left = 0;
     int32_t right = _num_pages - 1;
@@ -133,9 +154,9 @@ OrdinalPageIndexIterator OrdinalIndexReader::seek_at_or_before(ordinal_t ordinal
         }
     }
     if (_ordinals[left] > ordinal) {
-        return OrdinalPageIndexIterator(this, _num_pages);
+        return {this, _num_pages};
     }
-    return OrdinalPageIndexIterator(this, left);
+    return {this, left};
 }
 
 } // namespace starrocks

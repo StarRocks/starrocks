@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -9,6 +9,7 @@ import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.CreateShardInfo;
 import com.staros.proto.ObjectStorageType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
@@ -25,6 +26,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -42,13 +44,13 @@ public class StarOSAgent {
     public static final String SERVICE_NAME = "starrocks";
 
     private StarClient client;
-    private long serviceId;
+    private String serviceId;
     private Map<String, Long> workerToId;
     private Map<Long, Long> workerToBackend;
     private ReentrantReadWriteLock rwLock;
 
     public StarOSAgent() {
-        serviceId = -1;
+        serviceId = "";
         workerToId = Maps.newHashMap();
         workerToBackend = Maps.newHashMap();
         rwLock = new ReentrantReadWriteLock();
@@ -75,7 +77,7 @@ public class StarOSAgent {
 
     private void prepare() {
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId == -1) {
+            if (serviceId.equals("")) {
                 getServiceId();
             }
         }
@@ -83,7 +85,7 @@ public class StarOSAgent {
 
     public void getServiceId() {
         try {
-            ServiceInfo serviceInfo = client.getServiceInfo(SERVICE_NAME);
+            ServiceInfo serviceInfo = client.getServiceInfoByName(SERVICE_NAME);
             serviceId = serviceInfo.getServiceId();
         } catch (StarClientException e) {
             LOG.warn("Failed to get serviceId from starMgr. Error: {}", e);
@@ -168,8 +170,8 @@ public class StarOSAgent {
     public void addWorker(long backendId, String workerIpPort) {
         prepare();
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
-            if (serviceId == -1) {
-                LOG.warn("When addWorker serviceId is -1");
+            if (serviceId.equals("")) {
+                LOG.warn("When addWorker serviceId is empty");
                 return;
             }
 
@@ -257,7 +259,17 @@ public class StarOSAgent {
         prepare();
         List<ShardInfo> shardInfos = null;
         try {
-            shardInfos = client.createShard(serviceId, numShards, 1, shardStorageInfo, null);
+            List<CreateShardInfo> createShardInfos = new ArrayList<>(numShards);
+            for (int i = 0; i < numShards; ++i) {
+                CreateShardInfo.Builder builder = CreateShardInfo.newBuilder();
+                builder.setReplicaCount(1);
+                builder.setShardId(GlobalStateMgr.getCurrentState().getNextId());
+                if (shardStorageInfo != null) {
+                    builder.setShardStorageInfo(shardStorageInfo);
+                }
+                createShardInfos.add(builder.build());
+            }
+            shardInfos = client.createShard(serviceId, createShardInfos);
             LOG.debug("Create shards success. shard infos: {}", shardInfos);
         } catch (StarClientException e) {
             throw new DdlException("Failed to create shards. error: " + e.getMessage());

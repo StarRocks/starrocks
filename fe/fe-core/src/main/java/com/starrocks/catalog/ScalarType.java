@@ -31,8 +31,6 @@ import com.starrocks.thrift.TScalarType;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Objects;
 
@@ -47,7 +45,7 @@ import java.util.Objects;
  * indicating that any decimal type is a subtype of the decimal type.
  */
 public class ScalarType extends Type implements Cloneable {
-    private static final Logger LOG = LogManager.getLogger(ScalarType.class);
+
     // SQL allows the engine to pick the default precision. We pick the largest
     // precision that is supported by the smallest decimal type in the BE (4 bytes).
     public static final int DEFAULT_PRECISION = 9;
@@ -379,6 +377,9 @@ public class ScalarType extends Type implements Cloneable {
         if (!t1.isValid() || !t2.isValid()) {
             return INVALID;
         }
+        if (t1.isUnknown() || t2.isUnknown()) {
+            return UNKNOWN_TYPE;
+        }
         if (t1.equals(t2)) {
             return t1;
         }
@@ -416,6 +417,10 @@ public class ScalarType extends Type implements Cloneable {
 
         if (t1.isDecimalV2() || t2.isDecimalV2()) {
             return DECIMALV2;
+        }
+
+        if (t1.isFunctionType() || t2.isFunctionType()) {
+            return INVALID;
         }
 
         PrimitiveType smallerType =
@@ -505,6 +510,7 @@ public class ScalarType extends Type implements Cloneable {
             case BITMAP:
             case PERCENTILE:
             case JSON:
+            case FUNCTION:
                 stringBuilder.append(type.toString().toLowerCase());
                 break;
             default:

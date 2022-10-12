@@ -1,16 +1,22 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.common.Pair;
 import com.starrocks.thrift.TDecodeNode;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TNormalDecodeNode;
+import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
+import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class DecodeNode extends PlanNode {
     // The dict id int column ids to dict string column ids
@@ -67,5 +73,22 @@ public class DecodeNode extends PlanNode {
             }
         }
         return output.toString();
+    }
+
+    @Override
+    protected void toNormalForm(TNormalPlanNode planNode, FragmentNormalizer normalizer) {
+        TNormalDecodeNode decodeNode = new TNormalDecodeNode();
+        List<Integer> fromDictIds = dictIdToStringIds.keySet().stream().sorted(Integer::compareTo)
+                .collect(Collectors.toList());
+        List<Integer> toStringIds = fromDictIds.stream().map(dictIdToStringIds::get)
+                .collect(Collectors.toList());
+        decodeNode.setFrom_dict_ids(fromDictIds);
+        decodeNode.setTo_string_ids(toStringIds);
+        Pair<List<Integer>, List<ByteBuffer>> slotIdsAndExprs = normalizer.normalizeSlotIdsAndExprs(stringFunctions);
+        decodeNode.setSlot_ids(slotIdsAndExprs.first);
+        decodeNode.setString_functions(slotIdsAndExprs.second);
+        planNode.setNode_type(TPlanNodeType.DECODE_NODE);
+        planNode.setDecode_node(decodeNode);
+        normalizeConjuncts(normalizer, planNode, conjuncts);
     }
 }

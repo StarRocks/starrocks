@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/meta_reader.h"
 
@@ -10,7 +10,6 @@
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "runtime/global_dict/config.h"
-#include "storage/chunk_helper.h"
 #include "storage/rowset/column_iterator.h"
 #include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowset.h"

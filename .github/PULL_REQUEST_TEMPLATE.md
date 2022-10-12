@@ -1,9 +1,11 @@
 ## What type of PR is this：
-- [ ] bug
-- [ ] feature
-- [ ] enhancement
-- [ ] refactor
-- [ ] others
+- [ ] BugFix
+- [ ] Feature
+- [ ] Enhancement
+- [ ] Refactor
+- [ ] UT
+- [ ] Doc
+- [ ] Tool
 
 ## Which issues of this PR fixes ：
 <!--

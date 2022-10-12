@@ -1,17 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/agg/java_udaf_function.h"
 
 #include <memory>
 
-#include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "fmt/core.h"
-#include "fmt/format.h"
 #include "jni.h"
-#include "runtime/primitive_type.h"
 #include "runtime/user_function_cache.h"
 
 namespace starrocks::vectorized {
@@ -19,12 +16,13 @@ namespace starrocks::vectorized {
 const int DEFAULT_UDAF_BUFFER_SIZE = 1024;
 
 const AggregateFunction* getJavaUDAFFunction(bool input_nullable) {
-    static JavaUDAFAggregateFunction<false> no_nullable_udaf_func;
+    static JavaUDAFAggregateFunction no_nullable_udaf_func;
     return &no_nullable_udaf_func;
 }
 
 Status init_udaf_context(int64_t id, const std::string& url, const std::string& checksum, const std::string& symbol,
                          starrocks_udf::FunctionContext* context) {
+    RETURN_IF_ERROR(detect_java_runtime());
     std::string libpath;
     std::string state = symbol + "$State";
     RETURN_IF_ERROR(UserFunctionCache::instance()->get_libpath(id, url, checksum, &libpath));
@@ -76,8 +74,10 @@ Status init_udaf_context(int64_t id, const std::string& url, const std::string& 
     auto& state_clazz = JVMFunctionHelper::getInstance().function_state_clazz();
     ASSIGN_OR_RETURN(auto instance, state_clazz.newInstance());
     ASSIGN_OR_RETURN(auto get_func, analyzer->get_method_object(state_clazz.clazz(), "get"));
+    ASSIGN_OR_RETURN(auto batch_get_func, analyzer->get_method_object(state_clazz.clazz(), "batch_get"));
     ASSIGN_OR_RETURN(auto add_func, analyzer->get_method_object(state_clazz.clazz(), "add"));
-    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), std::move(get_func), std::move(add_func));
+    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), std::move(get_func),
+                                                       std::move(batch_get_func), std::move(add_func));
     udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
 
     return Status::OK();

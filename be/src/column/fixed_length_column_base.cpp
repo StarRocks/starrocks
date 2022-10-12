@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <gutil/strings/fastmem.h>
 
@@ -48,6 +48,21 @@ void FixedLengthColumnBase<T>::append_value_multiple_times(const Column& src, ui
     for (size_t i = 0; i < size; ++i) {
         _data[orig_size + i] = src_data[index];
     }
+}
+
+//TODO(fzh): optimize copy using SIMD
+template <typename T>
+ColumnPtr FixedLengthColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
+    auto dest = this->clone_empty();
+    auto& dest_data = down_cast<FixedLengthColumnBase<T>&>(*dest);
+    dest_data._data.resize(offsets.back());
+    size_t orig_size = offsets.size() - 1; // this->size() may be large than offsets->size() -1
+    for (auto i = 0; i < orig_size; ++i) {
+        for (auto j = offsets[i]; j < offsets[i + 1]; ++j) {
+            dest_data._data[j] = _data[i];
+        }
+    }
+    return dest;
 }
 
 template <typename T>
@@ -275,7 +290,7 @@ template <typename T>
 std::string FixedLengthColumnBase<T>::debug_string() const {
     std::stringstream ss;
     ss << "[";
-    size_t size = this->size();
+    int size = this->size();
     for (int i = 0; i < size - 1; ++i) {
         ss << debug_item(i) << ", ";
     }

@@ -1,17 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.MultiItemListPartitionDesc;
-import com.starrocks.analysis.PartitionDesc;
-import com.starrocks.analysis.SingleItemListPartitionDesc;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.MultiItemListPartitionDesc;
+import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -32,9 +32,9 @@ public class CatalogUtils {
     }
 
     // check table type is OLAP
-    public static void checkTableTypeOLAP(Database db, Table table) throws DdlException {
-        if (table.getType() != Table.TableType.OLAP && table.getType() != Table.TableType.MATERIALIZED_VIEW) {
-            throw new DdlException("Table[" + table.getName() + "] is not OLAP table");
+    public static void checkNativeTable(Database db, Table table) throws DdlException {
+        if (!table.isNativeTable()) {
+            throw new DdlException("Table[" + table.getName() + "] is not OLAP table or LAKE table");
         }
     }
 

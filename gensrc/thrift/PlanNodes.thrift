@@ -62,7 +62,8 @@ enum TPlanNodeType {
   TABLE_FUNCTION_NODE,
   DECODE_NODE,
   JDBC_SCAN_NODE,
-  LAKE_SCAN_NODE
+  LAKE_SCAN_NODE,
+  NESTLOOP_JOIN_NODE
 }
 
 // phases of an execution node
@@ -103,7 +104,8 @@ struct TInternalScanRange {
   6: required string db_name
   7: optional list<TKeyRange> partition_column_ranges
   8: optional string index_name
-  9: optional string table_name
+  9: optional string table_name 
+  10: optional i64 partition_id
 }
 
 enum TFileFormatType {
@@ -170,6 +172,7 @@ struct THdfsProperties {
   8: optional bool ssl_enable
   9: optional i32 max_connection
   10: optional string region
+  11: optional string hdfs_username
 }
 
 struct TBrokerScanRangeParams {
@@ -260,6 +263,12 @@ struct THdfsScanRange {
     
     // for iceberg table scanrange should contains the full path of file
     8: optional string full_path
+
+    // delta logs of hudi MOR table
+    9: optional list<string> hudi_logs
+
+    // whether to use JNI scanner to read data of hudi MOR table for snapshot queries
+    10: optional bool use_hudi_jni_reader;
 }
 
 // Specification of an individual data range which is held in its entirety
@@ -402,6 +411,8 @@ enum TJoinOp {
   RIGHT_OUTER_JOIN,
   FULL_OUTER_JOIN,
   CROSS_JOIN,
+  // only used for compatibility
+  MERGE_JOIN,
 
   RIGHT_SEMI_JOIN,
   LEFT_ANTI_JOIN,
@@ -489,6 +500,8 @@ struct TMergeJoinNode {
 struct TNestLoopJoinNode {
     1: optional TJoinOp join_op
     2: optional list<RuntimeFilter.TRuntimeFilterDescription> build_runtime_filters;
+    3: optional list<Exprs.TExpr> join_conjuncts
+    4: optional string sql_join_conjuncts
 }
 
 enum TAggregationOp {
@@ -556,6 +569,9 @@ struct TAggregationNode {
   23: optional string sql_aggregate_functions
 
   24: optional i32 agg_func_set_version = 1
+  
+  // used in query cache
+  25: optional list<Exprs.TExpr> intermediate_aggr_exprs
 }
 
 struct TRepeatNode {
@@ -842,6 +858,8 @@ struct THdfsScanNode {
     10: optional string min_max_sql_predicates;
     11: optional string partition_sql_predicates;
 
+    // Flag to indicate wheather the column names are case sensitive
+    12: optional bool case_sensitive;
 }
 
 struct TProjectNode {
@@ -943,7 +961,9 @@ struct TPlanNode {
 
   62: optional TCrossJoinNode cross_join_node;
 
-  63: optional TLakeScanNode lake_scan_node
+  63: optional TLakeScanNode lake_scan_node;
+  
+  64: optional TNestLoopJoinNode nestloop_join_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

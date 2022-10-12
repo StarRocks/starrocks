@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/cumulative_compaction.h"
 
@@ -45,7 +45,9 @@ Status CumulativeCompaction::compact() {
     _state = CompactionState::SUCCESS;
 
     // 5. set cumulative point
-    _tablet->set_cumulative_layer_point(_input_rowsets.back()->end_version() + 1);
+    if (_tablet->cumulative_layer_point() == _input_rowsets.front()->start_version()) {
+        _tablet->set_cumulative_layer_point(_input_rowsets.back()->end_version() + 1);
+    }
 
     // 6. add metric to cumulative compaction
     StarRocksMetrics::instance()->cumulative_compaction_deltas_total.increment(_input_rowsets.size());
@@ -55,10 +57,23 @@ Status CumulativeCompaction::compact() {
     return Status::OK();
 }
 
+bool CumulativeCompaction::fit_compaction_condition(const std::vector<RowsetSharedPtr>& rowsets,
+                                                    int64_t compaction_score) {
+    if (!rowsets.empty()) {
+        if (compaction_score >= config::min_cumulative_compaction_num_singleton_deltas) {
+            return true;
+        }
+        if (rowsets.front()->start_version() == _tablet->cumulative_layer_point()) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 Status CumulativeCompaction::pick_rowsets_to_compact() {
     std::vector<RowsetSharedPtr> candidate_rowsets;
-    _tablet->pick_candicate_rowsets_to_cumulative_compaction(config::cumulative_compaction_skip_window_seconds,
-                                                             &candidate_rowsets);
+    _tablet->pick_candicate_rowsets_to_cumulative_compaction(&candidate_rowsets);
 
     if (candidate_rowsets.empty()) {
         return Status::NotFound("cumulative compaction no suitable version error.");
@@ -66,62 +81,92 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
 
     std::sort(candidate_rowsets.begin(), candidate_rowsets.end(), Rowset::comparator);
 
-    RETURN_IF_ERROR(check_version_continuity_with_cumulative_point(candidate_rowsets));
-    RETURN_IF_ERROR(check_version_continuity(candidate_rowsets));
-
     std::vector<RowsetSharedPtr> transient_rowsets;
     size_t compaction_score = 0;
     // the last delete version we meet when traversing candidate_rowsets
     Version last_delete_version{-1, -1};
 
+    // | means cumulative point
+    // 6 means version 6 is singleton version
+    // 1-2 means version 1-2 is non singleton version
+    // (5) means version 5 is delete version
+    // <4,5> means version 4,5 selected for cumulative compaction
+    int64_t prev_end_version = _tablet->cumulative_layer_point() - 1;
     for (auto rowset : candidate_rowsets) {
+        // meet missed version
+        if (rowset->start_version() != prev_end_version + 1) {
+            if (!transient_rowsets.empty() &&
+                compaction_score >= config::min_cumulative_compaction_num_singleton_deltas) {
+                // min_cumulative_compaction_num_singleton_deltas = 2
+                // 7,6,<4,3>|2-1 -> <4,3>
+                _input_rowsets = transient_rowsets;
+                break;
+            } else {
+                // 7,6,<3>|2-1
+                compaction_score = 0;
+                transient_rowsets.clear();
+            }
+        }
+        // meet a delete version
         if (_tablet->version_for_delete_predicate(rowset->version())) {
             last_delete_version = rowset->version();
-            if (!transient_rowsets.empty()) {
+            if (fit_compaction_condition(transient_rowsets, compaction_score)) {
+                // 7,6,(5),<4,3>|2-1 -> <4,3>
                 // we meet a delete version, and there were other versions before.
                 // we should compact those version before handling them over to base compaction
                 _input_rowsets = transient_rowsets;
                 break;
+            } else {
+                // 7,6,5,4,(3)|2-1 -> 7,6,5,4|(3),2-1
+                // we meet a delete version, and there were no other versions before.
+                // we can increase the cumulative point when delete version next to cumulative_layer_point
+                // NOTICE: after that, the cumulative point may be larger than max version of this tablet, but it doen't matter.
+                if (_tablet->cumulative_layer_point() == last_delete_version.first) {
+                    _tablet->set_cumulative_layer_point(last_delete_version.first + 1);
+                }
+                compaction_score = 0;
+                transient_rowsets.clear();
+                prev_end_version = rowset->end_version();
+                continue;
             }
-
-            // we meet a delete version, and no other versions before, skip it and continue
-            transient_rowsets.clear();
-            compaction_score = 0;
-            continue;
+        }
+        // meet already compaction rowset
+        if (!rowset->rowset_meta()->is_singleton_delta()) {
+            // 6-5,<4,3>|2-1 -> <4,3>
+            if (fit_compaction_condition(transient_rowsets, compaction_score)) {
+                _input_rowsets = transient_rowsets;
+                break;
+            } else {
+                // 6,5,4-3|2-1 -> 6,5|4-3,2-1
+                if (_tablet->cumulative_layer_point() == rowset->start_version()) {
+                    _tablet->set_cumulative_layer_point(rowset->end_version() + 1);
+                }
+                // 9-8,<7>|2-1
+                compaction_score = 0;
+                transient_rowsets.clear();
+                prev_end_version = rowset->end_version();
+                continue;
+            }
         }
 
         if (compaction_score >= config::max_cumulative_compaction_num_singleton_deltas) {
             // got enough segments
+            _input_rowsets = transient_rowsets;
             break;
         }
 
         compaction_score += rowset->rowset_meta()->get_compaction_score();
         transient_rowsets.push_back(rowset);
+        prev_end_version = rowset->end_version();
     }
 
-    // if we have a sufficient number of segments,
-    // or have other versions before encountering the delete version, we should process the compaction.
-    if (compaction_score >= config::min_cumulative_compaction_num_singleton_deltas ||
-        (last_delete_version.first != -1 && !transient_rowsets.empty())) {
+    if (_input_rowsets.empty() && transient_rowsets.size() >= config::min_cumulative_compaction_num_singleton_deltas) {
         _input_rowsets = transient_rowsets;
     }
 
     // Cumulative compaction will process with at least 1 rowset.
     // So when there is no rowset being chosen, we should return Status::NotFound("cumulative compaction no suitable version error.");
     if (_input_rowsets.empty()) {
-        if (last_delete_version.first != -1) {
-            // we meet a delete version, should increase the cumulative point to let base compaction handle the delete version.
-            // plus 1 to skip the delete version.
-            // NOTICE: after that, the cumulative point may be larger than max version of this tablet, but it doen't matter.
-            _tablet->set_cumulative_layer_point(last_delete_version.first + 1);
-            return Status::NotFound("cumulative compaction no suitable version error.");
-        }
-
-        // we did not meet any delete version. which means compaction_score is not enough to do cumulative compaction.
-        // We should wait until there are more rowsets to come, and keep the cumulative point unchanged.
-        // But in order to avoid the stall of compaction because no new rowset arrives later, we should increase
-        // the cumulative point after waiting for a long time, to ensure that the base compaction can continue.
-
         // check both last success time of base and cumulative compaction
         int64_t now = UnixMillis();
         int64_t last_cumu = _tablet->last_cumu_compaction_success_time();
@@ -131,20 +176,20 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
             int64_t cumu_interval = now - last_cumu;
             int64_t base_interval = now - last_base;
             if (cumu_interval > interval_threshold && base_interval > interval_threshold) {
-                // before increasing cumulative point, we should make sure all rowsets are non-overlapping.
-                // if at least one rowset is overlapping, we should compact them first.
-                CHECK(candidate_rowsets.size() == transient_rowsets.size())
-                        << "tablet: " << _tablet->full_name() << ", " << candidate_rowsets.size() << " vs. "
-                        << transient_rowsets.size();
-                for (auto& rs : candidate_rowsets) {
-                    if (rs->rowset_meta()->is_segments_overlapping()) {
-                        _input_rowsets = candidate_rowsets;
-                        return Status::OK();
+                if (check_version_continuity_with_cumulative_point(candidate_rowsets).ok() &&
+                    check_version_continuity(candidate_rowsets).ok()) {
+                    // before increasing cumulative point, we should make sure all rowsets are non-overlapping.
+                    // if at least one rowset is overlapping, we should compact them first.
+                    for (auto& rs : candidate_rowsets) {
+                        if (rs->rowset_meta()->is_segments_overlapping()) {
+                            _input_rowsets = candidate_rowsets;
+                            return Status::OK();
+                        }
                     }
-                }
 
-                // all candicate rowsets are non-overlapping, increase the cumulative point
-                _tablet->set_cumulative_layer_point(candidate_rowsets.back()->start_version() + 1);
+                    // all candicate rowsets are non-overlapping, increase the cumulative point
+                    _tablet->set_cumulative_layer_point(candidate_rowsets.back()->start_version() + 1);
+                }
             }
         } else {
             // init the compaction success time for first time
@@ -159,6 +204,11 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
 
         return Status::NotFound("cumulative compaction no suitable version error.");
     }
+
+    RETURN_IF_ERROR(check_version_continuity(_input_rowsets));
+
+    LOG(INFO) << "pick cumulative compaction rowset version=" << _input_rowsets.front()->start_version() << "-"
+              << _input_rowsets.back()->end_version() << " score=" << compaction_score;
 
     return Status::OK();
 }

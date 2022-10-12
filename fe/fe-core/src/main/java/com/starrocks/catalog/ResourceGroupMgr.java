@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -48,6 +48,11 @@ public class ResourceGroupMgr implements Writable {
 
     private final GlobalStateMgr globalStateMgr;
     private final Map<String, ResourceGroup> resourceGroupMap = new HashMap<>();
+
+    // Record the current short_query resource group.
+    // There can be only one short_query resource group.
+    private ResourceGroup shortQueryResourceGroup = null;
+
     private final Map<Long, ResourceGroup> id2ResourceGroupMap = new HashMap<>();
     private final Map<Long, ResourceGroupClassifier> classifierMap = new HashMap<>();
     private final List<TWorkGroupOp> resourceGroupOps = new ArrayList<>();
@@ -89,15 +94,21 @@ public class ResourceGroupMgr implements Writable {
                     return;
                 }
             }
+
+            if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY && shortQueryResourceGroup != null) {
+                throw new DdlException(
+                        String.format("There can be only one short_query RESOURCE_GROUP (%s)",
+                                shortQueryResourceGroup.getName()));
+            }
+
             wg.setId(GlobalStateMgr.getCurrentState().getNextId());
+            wg.setVersion(wg.getId());
             for (ResourceGroupClassifier classifier : wg.getClassifiers()) {
                 classifier.setResourceGroupId(wg.getId());
                 classifier.setId(GlobalStateMgr.getCurrentState().getNextId());
-                classifierMap.put(classifier.getId(), classifier);
             }
-            resourceGroupMap.put(wg.getName(), wg);
-            id2ResourceGroupMap.put(wg.getId(), wg);
-            wg.setVersion(wg.getId());
+            addResourceGroupInternal(wg);
+
             ResourceGroupOpEntry workGroupOp = new ResourceGroupOpEntry(TWorkGroupOpType.WORKGROUP_OP_CREATE, wg);
             GlobalStateMgr.getCurrentState().getEditLog().logResourceGroupOp(workGroupOp);
             resourceGroupOps.add(workGroupOp.toThrift());
@@ -132,6 +143,10 @@ public class ResourceGroupMgr implements Writable {
     private String getUnqualifiedRole(ConnectContext ctx) {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // TODO will support RBAC later
+            return null;
+        }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()
                 .getRoleName(ctx.getCurrentUserIdentity());
         if (qualifiedRoleName != null) {
@@ -277,10 +292,10 @@ public class ResourceGroupMgr implements Writable {
                 if (concurrentLimit != null) {
                     wg.setConcurrencyLimit(concurrentLimit);
                 }
+
+                // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
-                if (workGroupType != null) {
-                    wg.setResourceGroupType(workGroupType);
-                }
+                Preconditions.checkState(workGroupType == null);
             } else if (cmd instanceof AlterResourceGroupStmt.DropClassifiers) {
                 Set<Long> classifierToDrop = stmt.getClassifiersToDrop().stream().collect(Collectors.toSet());
                 Iterator<ResourceGroupClassifier> classifierIterator = wg.getClassifiers().iterator();
@@ -363,6 +378,9 @@ public class ResourceGroupMgr implements Writable {
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.remove(classifier.getId());
         }
+        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+            shortQueryResourceGroup = null;
+        }
     }
 
     private void addResourceGroupInternal(ResourceGroup wg) {
@@ -370,6 +388,9 @@ public class ResourceGroupMgr implements Writable {
         id2ResourceGroupMap.put(wg.getId(), wg);
         for (ResourceGroupClassifier classifier : wg.classifiers) {
             classifierMap.put(classifier.getId(), classifier);
+        }
+        if (wg.getResourceGroupType() == TWorkGroupType.WG_SHORT_QUERY) {
+            shortQueryResourceGroup = wg;
         }
     }
 

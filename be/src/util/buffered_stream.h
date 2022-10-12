@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -14,7 +14,9 @@ class RandomAccessFile;
 
 class IBufferedInputStream {
 public:
-    virtual Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) = 0;
+    virtual Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) = 0;
+    virtual void seek_to(uint64_t offset) = 0;
+    virtual void skip(uint64_t nbytes) = 0;
     virtual ~IBufferedInputStream() {}
 };
 
@@ -24,7 +26,7 @@ public:
 
     ~DefaultBufferedInputStream() override = default;
 
-    void seek_to(uint64_t offset) {
+    void seek_to(uint64_t offset) override {
         uint64_t current_file_offset = tell();
         if (offset < current_file_offset) {
             // TODO(zc): To reuse already read data in some case, however it is not a common case
@@ -36,7 +38,7 @@ public:
         }
     }
 
-    void skip(uint64_t nbytes) {
+    void skip(uint64_t nbytes) override {
         if (_buf_position + nbytes < _buf_written) {
             _buf_position += nbytes;
         } else {
@@ -48,11 +50,11 @@ public:
 
     uint64_t tell() const { return _file_offset - num_remaining(); }
 
-    Status get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek = false);
+    Status get_bytes(const uint8_t** buffer, size_t* nbytes, bool peek);
 
     void reserve(size_t nbytes);
 
-    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) override;
+    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) override;
 
 private:
     Status _read_data();
@@ -92,7 +94,9 @@ public:
     Status set_io_ranges(const std::vector<IORange>& ranges);
     void release_to_offset(int64_t offset);
 
-    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes) override;
+    void seek_to(uint64_t offset) override {}
+    void skip(uint64_t nbytes) override {}
+    Status get_bytes(const uint8_t** buffer, size_t offset, size_t* nbytes, bool peek) override;
     void release();
     void set_coalesce_options(const CoalesceOptions& options) { _options = options; }
 

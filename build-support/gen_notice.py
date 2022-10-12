@@ -1,5 +1,5 @@
 #! /usr/bin/python3
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 from collections import defaultdict
 import glob
@@ -19,7 +19,7 @@ def gen_combined_notice(licenses_paths, outpath, gen_all):
                 name = re.search(r'LICENSE-(.+)\.txt', l).group(1)
                 all[name][0] = l
     with open(outpath, 'wt', encoding='utf-8') as fout:
-        fout.write('StarRocks\n\nCopyright 2021-present, StarRocks Limited\n')
+        fout.write('StarRocks\n\nCopyright 2021-present, StarRocks Inc.\n')
         for name in sorted(all.keys(), key=str.lower):
             e = all[name]
             if e[1]:

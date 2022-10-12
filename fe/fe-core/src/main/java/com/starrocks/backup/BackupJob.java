@@ -29,6 +29,8 @@ import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.Status.ErrCode;
 import com.starrocks.catalog.Database;
@@ -40,11 +42,12 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Table.TableType;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.fs.HdfsUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
@@ -54,6 +57,7 @@ import com.starrocks.task.ReleaseSnapshotTask;
 import com.starrocks.task.SnapshotTask;
 import com.starrocks.task.UploadTask;
 import com.starrocks.thrift.TFinishTaskRequest;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
@@ -92,18 +96,24 @@ public class BackupJob extends AbstractJob {
     }
 
     // all objects which need backup
-    private List<TableRef> tableRefs = Lists.newArrayList();
+    @SerializedName(value = "tableRefs")
+    protected List<TableRef> tableRefs = Lists.newArrayList();
 
+    @SerializedName(value = "state")
     protected BackupJobState state;
 
+    @SerializedName(value = "snapshotFinishedTime")
     private long snapshotFinishedTime = -1;
-    private long snapshopUploadFinishedTime = -1;
+    @SerializedName(value = "snapshotUploadFinishedTime")
+    private long snapshotUploadFinishedTime = -1;
 
-    // save task id map to the backend it be executed
-    private Map<Long, Long> unfinishedTaskIds = Maps.newConcurrentMap();
+    // save task id map to the backend be executed
+    protected Map<Long, Long> unfinishedTaskIds = Maps.newConcurrentMap();
     // tablet id -> snapshot info
-    private Map<Long, SnapshotInfo> snapshotInfos = Maps.newConcurrentMap();
+    @SerializedName(value = "snapshotInfos")
+    protected Map<Long, SnapshotInfo> snapshotInfos = Maps.newConcurrentMap();
     // save all related table[partition] info
+    @SerializedName(value = "backupMeta")
     private BackupMeta backupMeta;
     // job info file content
     private BackupJobInfo jobInfo;
@@ -112,8 +122,12 @@ public class BackupJob extends AbstractJob {
     // after job is done, this dir should be deleted
     private Path localJobDirPath = null;
     // save the local file path of meta info and job info file
+    @SerializedName(value = "localMetaInfoFilePath")
     private String localMetaInfoFilePath = null;
+    @SerializedName(value = "localJobInfoFilePath")
     private String localJobInfoFilePath = null;
+
+    private AgentBatchTask batchTask;
 
     public BackupJob() {
         super(JobType.BACKUP);
@@ -163,7 +177,7 @@ public class BackupJob extends AbstractJob {
 
         Preconditions.checkState(request.isSetSnapshot_path());
         Preconditions.checkState(request.isSetSnapshot_files());
-        // snapshot path does not contains last 'tablet_id' and 'schema_hash' dir
+        // snapshot path does not contain last 'tablet_id' and 'schema_hash' dir
         // eg:
         //      /path/to/your/be/data/snapshot/20180410102311.0.86400/
         // Full path will look like:
@@ -339,6 +353,63 @@ public class BackupJob extends AbstractJob {
         return false;
     }
 
+    protected void checkBackupTables(Database db) {
+        for (TableRef tableRef : tableRefs) {
+            String tblName = tableRef.getName().getTbl();
+            Table tbl = db.getTable(tblName);
+            if (tbl == null) {
+                status = new Status(ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
+                return;
+            }
+            if (!tbl.isOlapTable()) {
+                status = new Status(ErrCode.COMMON_ERROR, "table " + tblName
+                        + " is not OLAP table");
+                return;
+            }
+
+            OlapTable olapTbl = (OlapTable) tbl;
+            if (tableRef.getPartitionNames() != null) {
+                for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
+                    Partition partition = olapTbl.getPartition(partName);
+                    if (partition == null) {
+                        status = new Status(ErrCode.NOT_FOUND, "partition " + partName
+                                + " does not exist  in table" + tblName);
+                        return;
+                    }
+                }
+            }
+        }
+    }
+
+    protected void prepareSnapshotTask(Partition partition, Table tbl, Tablet tablet, MaterializedIndex index,
+                                       long visibleVersion, int schemaHash) {
+        Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
+        if (replica == null) {
+            status = new Status(ErrCode.COMMON_ERROR,
+                    "failed to choose replica to make snapshot for tablet " + tablet.getId()
+                            + ". visible version: " + visibleVersion);
+            return;
+        }
+        SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), tablet.getId(),
+                jobId, dbId, tbl.getId(), partition.getId(),
+                index.getId(), tablet.getId(),
+                visibleVersion,
+                schemaHash, timeoutMs, false /* not restore task */);
+        batchTask.addTask(task);
+        unfinishedTaskIds.put(tablet.getId(), replica.getBackendId());
+    }
+
+    private void sendTasks() {
+        for (AgentTask task : batchTask.getAllTasks()) {
+            AgentTaskQueue.addTask(task);
+        }
+        AgentTaskExecutor.submit(batchTask);
+    }
+
+    protected void sendSnapshotRequests() {
+        sendTasks();
+    }
+
     private void prepareAndSendSnapshotTask() {
         Database db = globalStateMgr.getDb(dbId);
         if (db == null) {
@@ -348,33 +419,13 @@ public class BackupJob extends AbstractJob {
 
         // generate job id
         jobId = globalStateMgr.getNextId();
-        AgentBatchTask batchTask = new AgentBatchTask();
+        batchTask = new AgentBatchTask();
         db.readLock();
         try {
             // check all backup tables again
-            for (TableRef tableRef : tableRefs) {
-                String tblName = tableRef.getName().getTbl();
-                Table tbl = db.getTable(tblName);
-                if (tbl == null) {
-                    status = new Status(ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
-                    return;
-                }
-                if (tbl.getType() != TableType.OLAP) {
-                    status = new Status(ErrCode.COMMON_ERROR, "table " + tblName + " is not OLAP table");
-                    return;
-                }
-
-                OlapTable olapTbl = (OlapTable) tbl;
-                if (tableRef.getPartitionNames() != null) {
-                    for (String partName : tableRef.getPartitionNames().getPartitionNames()) {
-                        Partition partition = olapTbl.getPartition(partName);
-                        if (partition == null) {
-                            status = new Status(ErrCode.NOT_FOUND, "partition " + partName
-                                    + " does not exist  in table" + tblName);
-                            return;
-                        }
-                    }
-                }
+            checkBackupTables(db);
+            if (status != Status.OK) {
+                return;
             }
 
             unfinishedTaskIds.clear();
@@ -401,20 +452,10 @@ public class BackupJob extends AbstractJob {
                     for (MaterializedIndex index : indexes) {
                         int schemaHash = tbl.getSchemaHashByIndexId(index.getId());
                         for (Tablet tablet : index.getTablets()) {
-                            Replica replica = chooseReplica((LocalTablet) tablet, visibleVersion);
-                            if (replica == null) {
-                                status = new Status(ErrCode.COMMON_ERROR,
-                                        "failed to choose replica to make snapshot for tablet " + tablet.getId()
-                                                + ". visible version: " + visibleVersion);
+                            prepareSnapshotTask(partition, tbl, tablet, index, visibleVersion, schemaHash);
+                            if (status != Status.OK) {
                                 return;
                             }
-                            SnapshotTask task = new SnapshotTask(null, replica.getBackendId(), tablet.getId(),
-                                    jobId, dbId, tbl.getId(), partition.getId(),
-                                    index.getId(), tablet.getId(),
-                                    visibleVersion,
-                                    schemaHash, timeoutMs, false /* not restore task */);
-                            batchTask.addTask(task);
-                            unfinishedTaskIds.put(tablet.getId(), replica.getBackendId());
                         }
                     }
 
@@ -444,10 +485,7 @@ public class BackupJob extends AbstractJob {
         }
 
         // send tasks
-        for (AgentTask task : batchTask.getAllTasks()) {
-            AgentTaskQueue.addTask(task);
-        }
-        AgentTaskExecutor.submit(batchTask);
+        sendSnapshotRequests();
 
         state = BackupJobState.SNAPSHOTING;
 
@@ -456,7 +494,7 @@ public class BackupJob extends AbstractJob {
         LOG.info("finished to send snapshot tasks to backend. {}", this);
     }
 
-    private void waitingAllSnapshotsFinished() {
+    protected void waitingAllSnapshotsFinished() {
         if (unfinishedTaskIds.isEmpty()) {
             snapshotFinishedTime = System.currentTimeMillis();
             state = BackupJobState.UPLOAD_SNAPSHOT;
@@ -468,6 +506,42 @@ public class BackupJob extends AbstractJob {
         }
 
         LOG.info("waiting {} tablets to make snapshot. {}", unfinishedTaskIds.size(), this);
+    }
+
+    protected void sendUploadTasks() {
+        sendTasks();
+    }
+
+    protected void prepareUploadTasks(List<SnapshotInfo> infos, List<FsBroker> brokers,
+                                      THdfsProperties hdfsProperties, Long beId) {
+        int index = 0;
+        int totalNum = infos.size();
+        // each backend allot at most 3 tasks
+        int batchNum = Math.min(totalNum, 3);
+        // each task contains several upload subtasks
+        int taskNumPerBatch = Math.max(totalNum / batchNum, 1);
+        LOG.info("backend {} has {} batch, total {} tasks, {}", beId, batchNum, totalNum, this);
+        for (int batch = 0; batch < batchNum; batch++) {
+            Map<String, String> srcToDest = Maps.newHashMap();
+            int currentBatchTaskNum = (batch == batchNum - 1) ? totalNum - index : taskNumPerBatch;
+            for (int j = 0; j < currentBatchTaskNum; j++) {
+                SnapshotInfo info = infos.get(index++);
+                String src = info.getTabletPath();
+                String dest = repo.getRepoTabletPathBySnapshotInfo(label, info);
+                srcToDest.put(src, dest);
+            }
+            long signature = globalStateMgr.getNextId();
+            UploadTask task;
+            if (repo.getStorage().hasBroker()) {
+                task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
+                        brokers.get(0), repo.getStorage().getProperties());
+            } else {
+                task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
+                        null, repo.getStorage().getProperties(), hdfsProperties);
+            }
+            batchTask.addTask(task);
+            unfinishedTaskIds.put(signature, beId);
+        }
     }
 
     private void uploadSnapshot() {
@@ -482,48 +556,34 @@ public class BackupJob extends AbstractJob {
             beToSnapshots.put(info.getBeId(), info);
         }
 
-        AgentBatchTask batchTask = new AgentBatchTask();
+        batchTask = new AgentBatchTask();
         for (Long beId : beToSnapshots.keySet()) {
             List<SnapshotInfo> infos = beToSnapshots.get(beId);
-            int totalNum = infos.size();
-            // each backend allot at most 3 tasks
-            int batchNum = Math.min(totalNum, 3);
-            // each task contains several upload sub tasks
-            int taskNumPerBatch = Math.max(totalNum / batchNum, 1);
-            LOG.info("backend {} has {} batch, total {} tasks, {}", beId, batchNum, totalNum, this);
 
             List<FsBroker> brokers = Lists.newArrayList();
-            Status st = repo.getBrokerAddress(beId, globalStateMgr, brokers);
-            if (!st.ok()) {
-                status = st;
-                return;
-            }
-            Preconditions.checkState(brokers.size() == 1);
-
-            // allot tasks
-            int index = 0;
-            for (int batch = 0; batch < batchNum; batch++) {
-                Map<String, String> srcToDest = Maps.newHashMap();
-                int currentBatchTaskNum = (batch == batchNum - 1) ? totalNum - index : taskNumPerBatch;
-                for (int j = 0; j < currentBatchTaskNum; j++) {
-                    SnapshotInfo info = infos.get(index++);
-                    String src = info.getTabletPath();
-                    String dest = repo.getRepoTabletPathBySnapshotInfo(label, info);
-                    srcToDest.put(src, dest);
+            THdfsProperties hdfsProperties = new THdfsProperties();
+            if (repo.getStorage().hasBroker()) {
+                Status st = repo.getBrokerAddress(beId, globalStateMgr, brokers);
+                if (!st.ok()) {
+                    status = st;
+                    return;
                 }
-                long signature = globalStateMgr.getNextId();
-                UploadTask task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
-                        brokers.get(0), repo.getStorage().getProperties());
-                batchTask.addTask(task);
-                unfinishedTaskIds.put(signature, beId);
+                Preconditions.checkState(brokers.size() == 1);
+            } else {
+                BrokerDesc brokerDesc = new BrokerDesc(repo.getStorage().getProperties());
+                try {
+                    HdfsUtil.getTProperties(repo.getLocation(), brokerDesc, hdfsProperties);
+                } catch (UserException e) {
+                    status = new Status(ErrCode.COMMON_ERROR, "Get properties from " + repo.getLocation() + " error.");
+                    return;    
+                }
             }
+
+            prepareUploadTasks(infos, brokers, hdfsProperties, beId);
         }
 
         // send tasks
-        for (AgentTask task : batchTask.getAllTasks()) {
-            AgentTaskQueue.addTask(task);
-        }
-        AgentTaskExecutor.submit(batchTask);
+        sendUploadTasks();
 
         state = BackupJobState.UPLOADING;
 
@@ -531,9 +591,9 @@ public class BackupJob extends AbstractJob {
         LOG.info("finished to send upload tasks. {}", this);
     }
 
-    private void waitingAllUploadingFinished() {
+    protected void waitingAllUploadingFinished() {
         if (unfinishedTaskIds.isEmpty()) {
-            snapshopUploadFinishedTime = System.currentTimeMillis();
+            snapshotUploadFinishedTime = System.currentTimeMillis();
             state = BackupJobState.SAVE_META;
 
             // log
@@ -611,13 +671,14 @@ public class BackupJob extends AbstractJob {
                 localMetaInfoFilePath, localJobInfoFilePath, this);
     }
 
-    private void releaseSnapshots() {
+    protected void releaseSnapshots() {
         if (snapshotInfos.isEmpty()) {
             return;
         }
+
         // we do not care about the release snapshot tasks' success or failure,
         // the GC thread on BE will sweep the snapshot, finally.
-        AgentBatchTask batchTask = new AgentBatchTask();
+        batchTask = new AgentBatchTask();
         for (SnapshotInfo info : snapshotInfos.values()) {
             ReleaseSnapshotTask releaseTask = new ReleaseSnapshotTask(null, info.getBeId(), info.getDbId(),
                     info.getTabletId(), info.getPath());
@@ -742,7 +803,7 @@ public class BackupJob extends AbstractJob {
         info.add(getBackupObjs());
         info.add(TimeUtils.longToTimeString(createTime));
         info.add(TimeUtils.longToTimeString(snapshotFinishedTime));
-        info.add(TimeUtils.longToTimeString(snapshopUploadFinishedTime));
+        info.add(TimeUtils.longToTimeString(snapshotUploadFinishedTime));
         info.add(TimeUtils.longToTimeString(finishedTime));
         info.add(Joiner.on(", ").join(unfinishedTaskIds.entrySet()));
         info.add(Joiner.on(", ").join(taskProgress.entrySet().stream().map(
@@ -781,7 +842,7 @@ public class BackupJob extends AbstractJob {
 
         // times
         out.writeLong(snapshotFinishedTime);
-        out.writeLong(snapshopUploadFinishedTime);
+        out.writeLong(snapshotUploadFinishedTime);
 
         // snapshot info
         out.writeInt(snapshotInfos.size());
@@ -831,7 +892,7 @@ public class BackupJob extends AbstractJob {
 
         // times
         snapshotFinishedTime = in.readLong();
-        snapshopUploadFinishedTime = in.readLong();
+        snapshotUploadFinishedTime = in.readLong();
 
         // snapshot info
         size = in.readInt();

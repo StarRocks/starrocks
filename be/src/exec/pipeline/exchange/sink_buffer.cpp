@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
@@ -124,7 +124,9 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
 
     auto* network_timer = ADD_TIMER(profile, "NetworkTime");
     auto* wait_timer = ADD_TIMER(profile, "WaitTime");
+    auto* overall_timer = ADD_TIMER(profile, "OverallTime");
     COUNTER_SET(network_timer, _network_time());
+    COUNTER_SET(overall_timer, _last_receive_time - _first_send_time);
 
     // WaitTime consists two parts
     // 1. buffer full time
@@ -145,9 +147,15 @@ void SinkBuffer::update_profile(RuntimeProfile* profile) {
     }
 
     profile->add_derived_counter(
-            "OverallThroughput", TUnit::BYTES_PER_SECOND,
+            "NetworkBandwidth", TUnit::BYTES_PER_SECOND,
             [bytes_sent_counter, network_timer] {
                 return RuntimeProfile::units_per_second(bytes_sent_counter, network_timer);
+            },
+            "");
+    profile->add_derived_counter(
+            "OverallThroughput", TUnit::BYTES_PER_SECOND,
+            [bytes_sent_counter, overall_timer] {
+                return RuntimeProfile::units_per_second(bytes_sent_counter, overall_timer);
             },
             "");
 }
@@ -174,6 +182,7 @@ void SinkBuffer::cancel_one_sinker() {
 
 void SinkBuffer::_update_network_time(const TUniqueId& instance_id, const int64_t send_timestamp,
                                       const int64_t receive_timestamp) {
+    _last_receive_time = MonotonicNanos();
     int32_t concurrency = _num_in_flight_rpcs[instance_id.lo];
     _network_times[instance_id.lo].update(receive_timestamp - send_timestamp, concurrency);
 }
@@ -284,6 +293,9 @@ void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<vo
 
         auto* closure = new DisposableClosure<PTransmitChunkResult, ClosureContext>(
                 {instance_id, request.params->sequence(), GetCurrentTimeNanos()});
+        if (_first_send_time == -1) {
+            _first_send_time = MonotonicNanos();
+        }
 
         closure->addFailedHandler([this](const ClosureContext& ctx) noexcept {
             _is_finishing = true;

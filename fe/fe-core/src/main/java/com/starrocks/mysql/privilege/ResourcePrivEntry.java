@@ -17,12 +17,13 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -57,10 +58,6 @@ public class ResourcePrivEntry extends PrivEntry {
     public static ResourcePrivEntry create(String host, String resourceName, String user, boolean isDomain,
                                            PrivBitSet privs)
             throws AnalysisException {
-        if (privs.containsNodePriv() || privs.containsDbTablePriv() || privs.containsImpersonatePriv()) {
-            throw new AnalysisException(
-                    "Resource privilege can not contains node or db or table or impersonate privileges: " + privs);
-        }
 
         ResourcePrivEntry resourcePrivEntry = new ResourcePrivEntry(host, user, isDomain, privs, resourceName);
         resourcePrivEntry.analyse();
@@ -92,7 +89,7 @@ public class ResourcePrivEntry extends PrivEntry {
             return -res;
         }
 
-        return -origUser.compareTo(otherEntry.origUser);
+        return -realOrigUser.compareTo(otherEntry.realOrigUser);
     }
 
     @Override
@@ -102,7 +99,7 @@ public class ResourcePrivEntry extends PrivEntry {
         }
 
         ResourcePrivEntry otherEntry = (ResourcePrivEntry) other;
-        if (origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        if (origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && origResource.equals(otherEntry.origResource) && isDomain == otherEntry.isDomain) {
             return true;
         }
@@ -113,7 +110,7 @@ public class ResourcePrivEntry extends PrivEntry {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("resource priv. host: ").append(origHost).append(", resource: ").append(origResource);
-        sb.append(", user: ").append(origUser);
+        sb.append(", user: ").append(realOrigUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         return sb.toString();
     }
@@ -137,6 +134,8 @@ public class ResourcePrivEntry extends PrivEntry {
 
     @Override
     public String toGrantSQL() {
-        return new GrantStmt(getUserIdent(), new ResourcePattern(origResource), privSet).toSql();
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "RESOURCE", getUserIdent());
+        stmt.setAnalysedResource(privSet, new ResourcePattern(origResource));
+        return AST2SQL.toString(stmt);
     }
 }

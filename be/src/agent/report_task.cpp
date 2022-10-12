@@ -1,10 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "agent/report_task.h"
 
 #include "agent/client_cache.h"
 #include "agent/utils.h"
-#include "gen_cpp/FrontendService_types.h"
 
 namespace starrocks {
 

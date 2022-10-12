@@ -9,46 +9,46 @@
     "tpcds_100g_performance.web_sales":"CREATE TABLE `web_sales` (\n  `ws_item_sk` int(11) NOT NULL COMMENT \"\",\n  `ws_order_number` int(11) NOT NULL COMMENT \"\",\n  `ws_sold_date_sk` int(11) NULL COMMENT \"\",\n  `ws_sold_time_sk` int(11) NULL COMMENT \"\",\n  `ws_ship_date_sk` int(11) NULL COMMENT \"\",\n  `ws_bill_customer_sk` int(11) NULL COMMENT \"\",\n  `ws_bill_cdemo_sk` int(11) NULL COMMENT \"\",\n  `ws_bill_hdemo_sk` int(11) NULL COMMENT \"\",\n  `ws_bill_addr_sk` int(11) NULL COMMENT \"\",\n  `ws_ship_customer_sk` int(11) NULL COMMENT \"\",\n  `ws_ship_cdemo_sk` int(11) NULL COMMENT \"\",\n  `ws_ship_hdemo_sk` int(11) NULL COMMENT \"\",\n  `ws_ship_addr_sk` int(11) NULL COMMENT \"\",\n  `ws_web_page_sk` int(11) NULL COMMENT \"\",\n  `ws_web_site_sk` int(11) NULL COMMENT \"\",\n  `ws_ship_mode_sk` int(11) NULL COMMENT \"\",\n  `ws_warehouse_sk` int(11) NULL COMMENT \"\",\n  `ws_promo_sk` int(11) NULL COMMENT \"\",\n  `ws_quantity` int(11) NULL COMMENT \"\",\n  `ws_wholesale_cost` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_list_price` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_sales_price` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_ext_discount_amt` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_ext_sales_price` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_ext_wholesale_cost` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_ext_list_price` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_ext_tax` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_coupon_amt` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_ext_ship_cost` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_net_paid` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_net_paid_inc_tax` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_net_paid_inc_ship` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_net_paid_inc_ship_tax` decimal64(7, 2) NULL COMMENT \"\",\n  `ws_net_profit` decimal64(7, 2) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`ws_item_sk`, `ws_order_number`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`ws_item_sk`, `ws_order_number`) BUCKETS 192 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);"
   },
   "table_row_count":{
-    "tpcds_100g_performance.catalog_sales":{
-      "catalog_sales":143997065
+    "tpcds_100g_performance.catalog_sales": {
+      "catalog_sales": 143997065
     },
-    "tpcds_100g_performance.item":{
-      "item":204000
+    "tpcds_100g_performance.item": {
+      "item": 204000
     },
-    "tpcds_100g_performance.customer":{
-      "customer":2000000
+    "tpcds_100g_performance.customer": {
+      "customer": 2000000
     },
-    "tpcds_100g_performance.store_sales":{
-      "store_sales":287997024
+    "tpcds_100g_performance.store_sales": {
+      "store_sales": 287997024
     },
-    "tpcds_100g_performance.web_sales":{
-      "web_sales":72001237
+    "tpcds_100g_performance.web_sales": {
+      "web_sales": 72001237
     },
-    "tpcds_100g_performance.date_dim":{
-      "date_dim":73049
+    "tpcds_100g_performance.date_dim": {
+      "date_dim": 73049
     }
   },
-  "session_variables":"{\"enable_resource_group\":false,\"codegen_level\":0,\"cbo_cte_reuse\":true,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"join_implementation_mode\":\"hash\",\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"cbo_cte_reuse_rate\":1.2,\"foreign_key_checks\":true,\"character_set_results\":\"utf8\",\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"cbo_enable_low_cardinality_optimize\":true,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"cbo_enable_greedy_join_reorder\":true,\"prefer_join_method\":\"broadcast\",\"load_mem_limit\":0,\"profiling\":false,\"sql_safe_updates\":0,\"global_runtime_filter_probe_min_size\":102400,\"enable_exchange_pass_through_expire\":true,\"enable_vectorized_engine\":true,\"query_delivery_timeout\":300,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"\",\"broadcast_row_limit\":15000000,\"exec_mem_limit\":32212254720,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"is_report_success\":false,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"query_timeout\":180,\"cbo_max_reorder_node\":50,\"max_execution_time\":3000000,\"runtime_filter_scan_wait_time\":20,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false,\"chunk_size\":4096,\"disable_bucket_join\":false,\"runtime_join_filter_push_down_limit\":20480000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_tablet_internal_parallel\":false,\"enable_filter_unused_columns_in_scan_stage\":false,\"div_precision_increment\":4,\"auto_increment_increment\":1,\"sql_mode_v2\":8589934626,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":true,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":16,\"max_scan_key_num\":-1,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"enable_optimizer_trace_log\":false,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"single_node_exec_plan\":false,\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"statistic_collect_parallel\":1,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"enable_predicate_reorder\":false,\"workgroup_id\":0,\"transmission_compression_type\":\"LZ4\",\"enable_vectorized_insert\":true,\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":0,\"cbo_enable_replicated_join\":true,\"max_allowed_packet\":1048576,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"character_set_server\":\"utf8\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"allow_default_partition\":false}",
-  "column_statistics":{
-    "tpcds_100g_performance.catalog_sales":{
-      "cs_sold_date_sk":"[2450815.0, 2452654.0, 0.004997192130270155, 4.0, 1844.0] ESTIMATE",
-      "cs_item_sk":"[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE",
-      "cs_quantity":"[1.0, 100.0, 0.0050011227659397086, 4.0, 100.0] ESTIMATE",
-      "cs_list_price":"[1.0, 300.0, 0.005002379736003647, 8.0, 30191.0] ESTIMATE",
-      "cs_bill_customer_sk":"[1.0, 2000000.0, 0.004996442114983385, 4.0, 1975584.0] ESTIMATE"
+  "session_variables": "{\"enable_resource_group\":false,\"codegen_level\":0,\"cbo_cte_reuse\":true,\"character_set_connection\":\"utf8\",\"cbo_use_correlated_join_estimate\":true,\"enable_insert_strict\":true,\"join_implementation_mode\":\"auto\",\"tx_isolation\":\"REPEATABLE-READ\",\"wait_timeout\":28800,\"cbo_cte_reuse_rate\":1.2,\"foreign_key_checks\":true,\"character_set_results\":\"utf8\",\"enable_global_runtime_filter\":true,\"forward_to_master\":false,\"cbo_enable_low_cardinality_optimize\":true,\"new_planner_optimize_timeout\":3000,\"force_schedule_local\":false,\"cbo_enable_greedy_join_reorder\":true,\"prefer_join_method\":\"broadcast\",\"load_mem_limit\":0,\"profiling\":false,\"sql_safe_updates\":0,\"global_runtime_filter_probe_min_size\":102400,\"enable_exchange_pass_through_expire\":true,\"enable_vectorized_engine\":true,\"query_delivery_timeout\":300,\"net_write_timeout\":60,\"collation_database\":\"utf8_general_ci\",\"hash_join_push_down_right_table\":true,\"new_planner_agg_stage\":0,\"collation_connection\":\"utf8_general_ci\",\"resource_group\":\"\",\"broadcast_row_limit\":15000000,\"exec_mem_limit\":32212254720,\"cbo_max_reorder_node_use_dp\":10,\"disable_join_reorder\":false,\"is_report_success\":false,\"enable_hive_column_stats\":true,\"enable_groupby_use_output_alias\":false,\"net_buffer_length\":16384,\"query_timeout\":180,\"cbo_max_reorder_node\":50,\"max_execution_time\":3000000,\"runtime_filter_scan_wait_time\":20,\"SQL_AUTO_IS_NULL\":false,\"event_scheduler\":\"OFF\",\"disable_streaming_preaggregations\":false,\"chunk_size\":4096,\"disable_bucket_join\":false,\"runtime_join_filter_push_down_limit\":20480000,\"global_runtime_filter_probe_min_selectivity\":0.5,\"query_mem_limit\":0,\"enable_tablet_internal_parallel\":false,\"enable_filter_unused_columns_in_scan_stage\":false,\"div_precision_increment\":4,\"auto_increment_increment\":1,\"sql_mode_v2\":8589934626,\"character_set_client\":\"utf8\",\"autocommit\":true,\"enable_column_expr_predicate\":true,\"pipeline_profile_level\":1,\"parallel_fragment_exec_instance_num\":16,\"max_scan_key_num\":-1,\"net_read_timeout\":60,\"streaming_preaggregation_mode\":\"auto\",\"storage_engine\":\"olap\",\"enable_optimizer_trace_log\":false,\"cbo_enable_dp_join_reorder\":true,\"tx_visible_wait_timeout\":10,\"cbo_max_reorder_node_use_exhaustive\":4,\"enable_sql_digest\":false,\"pipeline_dop\":0,\"enable_query_dump\":false,\"single_node_exec_plan\":false,\"global_runtime_filter_build_max_size\":67108864,\"sql_select_limit\":9223372036854775807,\"statistic_collect_parallel\":1,\"query_cache_type\":0,\"disable_colocate_join\":false,\"max_pushdown_conditions_per_column\":-1,\"enable_predicate_reorder\":false,\"workgroup_id\":0,\"transmission_compression_type\":\"LZ4\",\"enable_vectorized_insert\":true,\"interactive_timeout\":3600,\"enable_spilling\":false,\"batch_size\":0,\"cbo_enable_replicated_join\":true,\"max_allowed_packet\":1048576,\"enable_cbo\":true,\"collation_server\":\"utf8_general_ci\",\"time_zone\":\"Asia/Shanghai\",\"character_set_server\":\"utf8\",\"enable_pipeline\":true,\"cbo_use_nth_exec_plan\":0,\"rewrite_count_distinct_to_bitmap_hll\":true,\"parallel_exchange_instance_num\":-1,\"allow_default_partition\":false}",
+  "column_statistics": {
+    "tpcds_100g_performance.catalog_sales": {
+      "cs_sold_date_sk": "[2450815.0, 2452654.0, 0.004997192130270155, 4.0, 1844.0] ESTIMATE",
+      "cs_item_sk": "[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE",
+      "cs_quantity": "[1.0, 100.0, 0.0050011227659397086, 4.0, 100.0] ESTIMATE",
+      "cs_list_price": "[1.0, 300.0, 0.005002379736003647, 8.0, 30191.0] ESTIMATE",
+      "cs_bill_customer_sk": "[1.0, 2000000.0, 0.004996442114983385, 4.0, 1975584.0] ESTIMATE"
     },
-    "tpcds_100g_performance.item":{
-      "i_item_desc":"[-Infinity, Infinity, 0.0024901960784313726, 100.3520294117647, 148398.0] ESTIMATE",
-      "i_item_sk":"[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE"
+    "tpcds_100g_performance.item": {
+      "i_item_desc": "[-Infinity, Infinity, 0.0024901960784313726, 100.3520294117647, 148398.0] ESTIMATE",
+      "i_item_sk": "[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE"
     },
-    "tpcds_100g_performance.customer":{
-      "c_customer_sk":"[1.0, 2000000.0, 0.0, 4.0, 1975988.0] ESTIMATE"
+    "tpcds_100g_performance.customer": {
+      "c_customer_sk": "[1.0, 2000000.0, 0.0, 4.0, 1975988.0] ESTIMATE"
     },
-    "tpcds_100g_performance.store_sales":{
-      "ss_customer_sk":"[1.0, 2000000.0, 0.04497297166515165, 4.0, 1975988.0] ESTIMATE",
-      "ss_item_sk":"[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE",
-      "ss_sold_date_sk":"[2450816.0, 2452642.0, 0.044983190520746494, 4.0, 1829.0] ESTIMATE",
-      "ss_quantity":"[1.0, 100.0, 0.044978430054888344, 4.0, 100.0] ESTIMATE",
+    "tpcds_100g_performance.store_sales": {
+      "ss_customer_sk": "[1.0, 2000000.0, 0.04497297166515165, 4.0, 1975988.0] ESTIMATE",
+      "ss_item_sk": "[1.0, 204000.0, 0.0, 4.0, 200414.0] ESTIMATE",
+      "ss_sold_date_sk": "[2450816.0, 2452642.0, 0.044983190520746494, 4.0, 1829.0] ESTIMATE",
+      "ss_quantity": "[1.0, 100.0, 0.044978430054888344, 4.0, 100.0] ESTIMATE",
       "ss_sales_price":"[0.0, 200.0, 0.04499555870410661, 8.0, 20050.0] ESTIMATE"
     },
     "tpcds_100g_performance.web_sales":{

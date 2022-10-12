@@ -50,6 +50,14 @@ public:
                                  const PTabletWriterAddChunkRequest* request, PTabletWriterAddBatchResult* response,
                                  google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_chunks(google::protobuf::RpcController* controller,
+                                  const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
+                                  google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_segment(google::protobuf::RpcController* controller,
+                                   const PTabletWriterAddSegmentRequest* request,
+                                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
+
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 };

@@ -1,15 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/olap_chunk_source.h"
 
-#include "column/column_helper.h"
-#include "common/constexpr.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
-#include "exprs/vectorized/runtime_filter.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -17,6 +14,7 @@
 #include "runtime/primitive_type.h"
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
+#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
 #include "storage/storage_engine.h"
@@ -26,8 +24,7 @@ using namespace vectorized;
 
 OlapChunkSource::OlapChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
                                  vectorized::OlapScanNode* scan_node, OlapScanContext* scan_ctx)
-        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer(),
-                      workgroup::TypeOlapScanExecutor),
+        : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
           _scan_node(scan_node),
           _scan_ctx(scan_ctx),
           _limit(scan_node->limit()),
@@ -94,6 +91,8 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _bf_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_zm_filtered_counter =
             ADD_CHILD_COUNTER(_runtime_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
+    _seg_rt_filtered_counter =
+            ADD_CHILD_COUNTER(_runtime_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_runtime_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
@@ -140,20 +139,21 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
                                             std::vector<uint32_t>& reader_columns) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
     bool skip_aggregation = thrift_olap_scan_node.is_preaggregation;
+    auto parser = _obj_pool.add(new PredicateParser(_tablet->tablet_schema()));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
+    _params.runtime_range_pruner =
+            OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
     _decide_chunk_size();
-
-    PredicateParser parser(_tablet->tablet_schema());
     std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(&parser, &preds));
+    RETURN_IF_ERROR(_scan_ctx->conjuncts_manager().get_column_predicates(parser, &preds));
     for (auto& p : preds) {
-        if (parser.can_pushdown(p.get())) {
+        if (parser->can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
         } else {
             _not_push_down_predicates.add(p.get());
@@ -284,6 +284,11 @@ Status OlapChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     return _read_chunk_from_storage(_runtime_state, (*chunk).get());
 }
 
+const workgroup::WorkGroupScanSchedEntity* OlapChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    return wg->scan_sched_entity();
+}
+
 // mapping a slot-column-id to schema-columnid
 Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* params) {
     const TOlapScanNode& thrift_olap_scan_node = _scan_node->thrift_olap_scan_node();
@@ -350,10 +355,18 @@ Status OlapChunkSource::_read_chunk_from_storage(RuntimeState* state, vectorized
 
 void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
     auto& stats = _reader->stats();
-    _num_rows_read += chunk->num_rows();
+    size_t num_rows = chunk->num_rows();
+    _num_rows_read += num_rows;
     _scan_rows_num = stats.raw_rows_read;
     _scan_bytes = stats.bytes_read;
     _cpu_time_spent_ns = stats.decompress_ns + stats.vec_cond_ns + stats.del_filter_ns;
+
+    const TQueryOptions& query_options = _runtime_state->query_options();
+    if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
+        size_t bytes_usage = chunk->bytes_usage();
+        _runtime_state->update_num_rows_load_from_source(num_rows);
+        _runtime_state->update_num_bytes_load_from_source(bytes_usage);
+    }
 
     // Update local counters.
     _local_sum_row_bytes += chunk->memory_usage();
@@ -397,6 +410,7 @@ void OlapChunkSource::_update_counter() {
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
 
     COUNTER_UPDATE(_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
     COUNTER_UPDATE(_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_sk_filtered_counter, _reader->stats().rows_key_range_filtered);

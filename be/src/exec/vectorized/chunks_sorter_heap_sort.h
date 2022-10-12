@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -186,17 +186,18 @@ private:
 };
 
 struct ChunkCursorComparator {
-    ChunkCursorComparator(const int* reverse, const int* nan_direction_hint)
-            : reverse(reverse), nan_direction_hint(nan_direction_hint) {}
+    ChunkCursorComparator(const SortDescs& sort_desc) : _sort_desc(sort_desc) {}
 
     bool operator()(const ChunkRowCursor& lhs, const ChunkRowCursor& rhs) const {
         size_t l_row_id = lhs.row_id();
         size_t r_row_id = rhs.row_id();
         int order_by_columns_sz = lhs.data_segment()->order_by_columns.size();
         for (int i = 0; i < order_by_columns_sz; ++i) {
+            int null_first = _sort_desc.get_column_desc(i).null_first;
+            int sort_order = _sort_desc.get_column_desc(i).sort_order;
             int res = lhs.data_segment()->order_by_columns[i]->compare_at(
-                    l_row_id, r_row_id, *rhs.data_segment()->order_by_columns[i].get(), nan_direction_hint[i]);
-            if (res != 0) return res * reverse[i] < 0;
+                    l_row_id, r_row_id, *rhs.data_segment()->order_by_columns[i].get(), null_first);
+            if (res != 0) return res * sort_order < 0;
         }
 
         return false;
@@ -204,8 +205,7 @@ struct ChunkCursorComparator {
 
 private:
     // 1 or -1
-    const int* reverse;
-    const int* nan_direction_hint;
+    const SortDescs& _sort_desc;
 };
 } // namespace detail
 

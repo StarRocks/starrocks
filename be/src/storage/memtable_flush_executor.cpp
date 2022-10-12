@@ -23,6 +23,7 @@
 
 #include <memory>
 
+#include "gen_cpp/data.pb.h"
 #include "runtime/current_thread.h"
 #include "storage/memtable.h"
 
@@ -30,23 +31,44 @@ namespace starrocks {
 
 class MemtableFlushTask final : public Runnable {
 public:
-    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable)
-            : _flush_token(flush_token), _memtable(std::move(memtable)) {}
+    MemtableFlushTask(FlushToken* flush_token, std::unique_ptr<vectorized::MemTable> memtable, bool eos,
+                      std::function<void(std::unique_ptr<SegmentPB>, bool)> cb)
+            : _flush_token(flush_token), _memtable(std::move(memtable)), _eos(eos), _cb(std::move(cb)) {}
 
     ~MemtableFlushTask() override = default;
 
     void run() override {
-        SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
+        std::unique_ptr<SegmentPB> segment = nullptr;
+        if (_memtable) {
+            SCOPED_THREAD_LOCAL_MEM_SETTER(_memtable->mem_tracker(), false);
+            segment = std::make_unique<SegmentPB>();
 
-        _flush_token->_stats.cur_flush_count++;
-        _flush_token->_flush_memtable(_memtable.get());
-        _flush_token->_stats.cur_flush_count--;
-        _memtable.reset();
+            _flush_token->_stats.cur_flush_count++;
+            _flush_token->_flush_memtable(_memtable.get(), segment.get());
+            _flush_token->_stats.cur_flush_count--;
+            _memtable.reset();
+
+            // memtable flush fail, skip sync segment
+            if (!_flush_token->status().ok()) {
+                return;
+            }
+
+            // segment doesn't has path means no memtable had flushed, so that reset segment
+            if (!segment->has_path()) {
+                segment.reset();
+            }
+        }
+
+        if (_cb) {
+            _cb(std::move(segment), _eos);
+        }
     }
 
 private:
     FlushToken* _flush_token;
     std::unique_ptr<vectorized::MemTable> _memtable;
+    bool _eos;
+    std::function<void(std::unique_ptr<SegmentPB>, bool)> _cb;
 };
 
 std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
@@ -55,11 +77,15 @@ std::ostream& operator<<(std::ostream& os, const FlushStatistic& stat) {
     return os;
 }
 
-Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable) {
+Status FlushToken::submit(std::unique_ptr<vectorized::MemTable> memtable, bool eos,
+                          std::function<void(std::unique_ptr<SegmentPB>, bool)> cb) {
     RETURN_IF_ERROR(status());
+    if (memtable == nullptr && !eos) {
+        return Status::InternalError(fmt::format("memtable=null eos=false"));
+    }
     // Does not acount the size of MemtableFlushTask into any memory tracker
     SCOPED_THREAD_LOCAL_MEM_SETTER(nullptr, false);
-    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable));
+    auto task = std::make_shared<MemtableFlushTask>(this, std::move(memtable), eos, std::move(cb));
     return _flush_token->submit(std::move(task));
 }
 
@@ -73,13 +99,13 @@ Status FlushToken::wait() {
     return _status;
 }
 
-void FlushToken::_flush_memtable(vectorized::MemTable* memtable) {
+void FlushToken::_flush_memtable(vectorized::MemTable* memtable, SegmentPB* segment) {
     // If previous flush has failed, return directly
     if (!status().ok()) return;
 
     MonotonicStopWatch timer;
     timer.start();
-    set_status(memtable->flush());
+    set_status(memtable->flush(segment));
     _stats.flush_time_ns += timer.elapsed_time();
     _stats.flush_count++;
     _stats.flush_size_bytes += memtable->memory_usage();
@@ -89,7 +115,7 @@ Status MemTableFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
     int data_dir_num = static_cast<int>(data_dirs.size());
     int min_threads = std::max<int>(1, config::flush_thread_num_per_store);
     int max_threads = data_dir_num * min_threads;
-    return ThreadPoolBuilder("mem_tab_flush") // mem table flush
+    return ThreadPoolBuilder("memtable_flush") // mem table flush
             .set_min_threads(min_threads)
             .set_max_threads(max_threads)
             .build(&_flush_pool);

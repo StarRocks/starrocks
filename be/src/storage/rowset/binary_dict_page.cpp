@@ -22,7 +22,6 @@
 #include "storage/rowset/binary_dict_page.h"
 
 #include <memory>
-#include <type_traits>
 
 #include "common/logging.h"
 #include "gutil/casts.h"

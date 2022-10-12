@@ -1,7 +1,8 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -78,7 +79,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    p_partkey limit 100;\n" +
                 "\n";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(432, planCount);
+        Assert.assertEquals(45, planCount);
     }
 
     @Test
@@ -118,7 +119,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    revenue desc ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(76, planCount);
+        Assert.assertEquals(77, planCount);
     }
 
     @Test
@@ -129,44 +130,46 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
     @Test
     public void testTPCHQ7EnumPlan() throws Exception {
         String sql = "select\n" +
-                "    o_year,\n" +
-                "    sum(case\n" +
-                "            when nation = 'IRAN' then volume\n" +
-                "            else 0\n" +
-                "        end) / sum(volume) as mkt_share\n" +
+                "    supp_nation,\n" +
+                "    cust_nation,\n" +
+                "    l_year,\n" +
+                "    sum(volume) as revenue\n" +
                 "from\n" +
                 "    (\n" +
                 "        select\n" +
-                "            extract(year from o_orderdate) as o_year,\n" +
-                "            l_extendedprice * (1 - l_discount) as volume,\n" +
-                "            n2.n_name as nation\n" +
+                "            n1.n_name as supp_nation,\n" +
+                "            n2.n_name as cust_nation,\n" +
+                "            extract(year from l_shipdate) as l_year,\n" +
+                "            l_extendedprice * (1 - l_discount) as volume\n" +
                 "        from\n" +
-                "            part,\n" +
                 "            supplier,\n" +
                 "            lineitem,\n" +
                 "            orders,\n" +
                 "            customer,\n" +
                 "            nation n1,\n" +
-                "            nation n2,\n" +
-                "            region\n" +
+                "            nation n2\n" +
                 "        where\n" +
-                "                p_partkey = l_partkey\n" +
-                "          and s_suppkey = l_suppkey\n" +
-                "          and l_orderkey = o_orderkey\n" +
-                "          and o_custkey = c_custkey\n" +
-                "          and c_nationkey = n1.n_nationkey\n" +
-                "          and n1.n_regionkey = r_regionkey\n" +
-                "          and r_name = 'MIDDLE EAST'\n" +
-                "          and s_nationkey = n2.n_nationkey\n" +
-                "          and o_orderdate between date '1995-01-01' and date '1996-12-31'\n" +
-                "          and p_type = 'ECONOMY ANODIZED STEEL'\n" +
-                "    ) as all_nations\n" +
+                "                s_suppkey = l_suppkey\n" +
+                "          and o_orderkey = l_orderkey\n" +
+                "          and c_custkey = o_custkey\n" +
+                "          and s_nationkey = n1.n_nationkey\n" +
+                "          and c_nationkey = n2.n_nationkey\n" +
+                "          and (\n" +
+                "                (n1.n_name = 'CANADA' and n2.n_name = 'IRAN')\n" +
+                "                or (n1.n_name = 'IRAN' and n2.n_name = 'CANADA')\n" +
+                "            )\n" +
+                "          and l_shipdate between date '1995-01-01' and date '1996-12-31'\n" +
+                "    ) as shipping\n" +
                 "group by\n" +
-                "    o_year\n" +
+                "    supp_nation,\n" +
+                "    cust_nation,\n" +
+                "    l_year\n" +
                 "order by\n" +
-                "    o_year ;";
+                "    supp_nation,\n" +
+                "    cust_nation,\n" +
+                "    l_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(96, planCount);
+        Assert.assertEquals(5, planCount);
     }
 
     @Test
@@ -209,7 +212,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    o_year ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(96, planCount);
+        Assert.assertEquals(51, planCount);
     }
 
     @Test
@@ -292,7 +295,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    o_totalprice desc,\n" +
                 "    o_orderdate limit 100;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(22, planCount);
+        Assert.assertEquals(10, planCount);
     }
 
     @Test
@@ -340,7 +343,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    s_name ;";
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(28, planCount);
+        Assert.assertEquals(12, planCount);
     }
 
     @Test
@@ -384,8 +387,10 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "order by\n" +
                 "    numwait desc,\n" +
                 "    s_name limit 100;";
+        connectContext.getSessionVariable().setJoinImplementationMode("hash");
         int planCount = getPlanCount(sql);
-        Assert.assertEquals(86, planCount);
+        Assert.assertEquals("planCount is " + planCount, 21, planCount);
+        connectContext.getSessionVariable().setJoinImplementationMode("auto");
     }
 
     @Test

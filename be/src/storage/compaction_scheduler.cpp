@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/compaction_scheduler.h"
 
@@ -87,12 +87,12 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
     });
     // to compatible with old compaction framework
     // TODO: can be optimized to use just one lock
-    int64_t last_failure_ms;
+    int64_t last_failure_ts;
     DataDir* data_dir = tablet->data_dir();
     if (compaction_task->compaction_type() == CUMULATIVE_COMPACTION) {
         std::unique_lock lk(tablet->get_cumulative_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for cumulative lock";
             return false;
         }
         // control the concurrent running tasks's limit
@@ -101,32 +101,32 @@ bool CompactionScheduler::_can_do_compaction_task(Tablet* tablet, CompactionTask
         uint16_t num = StorageEngine::instance()->compaction_manager()->running_cumulative_tasks_num_for_dir(data_dir);
         if (config::cumulative_compaction_num_threads_per_disk >= 0 &&
             num >= config::cumulative_compaction_num_threads_per_disk) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                      << " for limit of cumulative compaction task per disk. disk path:" << data_dir->path()
-                      << ", running num:" << num;
+            VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                    << " for limit of cumulative compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
             return false;
         }
-        last_failure_ms = tablet->last_cumu_compaction_failure_time();
+        last_failure_ts = tablet->last_cumu_compaction_failure_time();
     } else {
         std::unique_lock lk(tablet->get_base_lock(), std::try_to_lock);
         if (!lk.owns_lock()) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " for base lock";
+            VLOG(2) << "skip tablet:" << tablet->tablet_id() << " for base lock";
             return false;
         }
         uint16_t num = StorageEngine::instance()->compaction_manager()->running_base_tasks_num_for_dir(data_dir);
         if (config::base_compaction_num_threads_per_disk >= 0 && num >= config::base_compaction_num_threads_per_disk) {
-            LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                      << " for limit of base compaction task per disk. disk path:" << data_dir->path()
-                      << ", running num:" << num;
+            VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                    << " for limit of base compaction task per disk. disk path:" << data_dir->path()
+                    << ", running num:" << num;
             return false;
         }
-        last_failure_ms = tablet->last_base_compaction_failure_time();
+        last_failure_ts = tablet->last_base_compaction_failure_time();
     }
-    int64_t now_ms = UnixMillis();
-    if (now_ms - last_failure_ms <= config::min_compaction_failure_interval_sec * 1000) {
-        LOG(INFO) << "Too often to schedule compaction, skip it."
-                  << "compaction_type=" << compaction_task->compaction_type()
-                  << ", last_failure_time_ms=" << last_failure_ms << ", tablet_id=" << tablet->tablet_id();
+    if (UnixMillis() - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+        VLOG(2) << "Too often to schedule failure compaction, skip it."
+                << "compaction_type=" << compaction_task->compaction_type()
+                << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                << ", last_failure_timestamp=" << last_failure_ts / 1000 << ", tablet_id=" << tablet->tablet_id();
         return false;
     }
 
@@ -145,59 +145,52 @@ bool CompactionScheduler::_check_precondition(const CompactionCandidate& candida
     if (!tablet->need_compaction(candidate.type)) {
         // check need compaction
         // if it is false, skip this tablet and remove it from candidate
-        LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " because need_compaction is false";
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because need_compaction is false";
         return false;
     }
 
     if (tablet->tablet_state() != TABLET_RUNNING) {
-        LOG(INFO) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
-                  << ", not RUNNING";
+        VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because tablet state is:" << tablet->tablet_state()
+                << ", not RUNNING";
         return false;
     }
 
     std::shared_ptr<CompactionTask> compaction_task = tablet->get_compaction(candidate.type, false);
     if (compaction_task) {
         // tablet already has a running compaction task, skip it
-        LOG(INFO) << "skip tablet:" << tablet->tablet_id()
-                  << " because there is another running compaction task:" << compaction_task->task_id();
+        VLOG(2) << "skip tablet:" << tablet->tablet_id()
+                << " because there is another running compaction task:" << compaction_task->task_id();
         return false;
     }
     return true;
 }
 
-bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidate, bool* need_reschedule,
+bool CompactionScheduler::_can_do_compaction(const CompactionCandidate& candidate,
                                              std::shared_ptr<CompactionTask>* compaction_task) {
     DCHECK(compaction_task);
-    // when the following conditions fail, should not reschedule the candidate tablet
-    *need_reschedule = false;
-    bool precondition_ok = _check_precondition(candidate);
-    if (!precondition_ok) {
-        return false;
-    }
 
     // when the following conditions fail, should reschedule the candidate tablet
-    *need_reschedule = true;
     // create a new compaction task
     const TabletSharedPtr& tablet = candidate.tablet;
     std::shared_ptr<CompactionTask> tmp_task = tablet->get_compaction(candidate.type, true);
-    if (tmp_task) {
-        DataDir* data_dir = tablet->data_dir();
-        if (data_dir->capacity_limit_reached(tmp_task->input_rowsets_size())) {
-            LOG(WARNING) << "skip tablet:" << tablet->tablet_id()
-                         << " because data dir reaches capacity limit. input rowsets size:"
-                         << tmp_task->input_rowsets_size();
-            return false;
-        }
-        bool can_do = _can_do_compaction_task(tablet.get(), tmp_task.get());
-        if (can_do) {
-            *compaction_task = std::move(tmp_task);
-        }
-        *need_reschedule = !can_do;
-        return can_do;
-    } else {
+    if (UNLIKELY(tmp_task == nullptr)) {
         VLOG(2) << "skip tablet:" << tablet->tablet_id() << " because creating compaction task failed.";
         return false;
     }
+
+    DataDir* data_dir = tablet->data_dir();
+    if (data_dir->capacity_limit_reached(tmp_task->input_rowsets_size())) {
+        LOG(WARNING) << "skip tablet:" << tablet->tablet_id()
+                     << " because data dir reaches capacity limit. input rowsets size:"
+                     << tmp_task->input_rowsets_size();
+        return false;
+    }
+
+    bool can_do = _can_do_compaction_task(tablet.get(), tmp_task.get());
+    if (can_do) {
+        *compaction_task = std::move(tmp_task);
+    }
+    return can_do;
 }
 
 std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_task() const {
@@ -206,8 +199,8 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
     // tmp_tablets save the tmp picked candidates tablets
     std::vector<CompactionCandidate> tmp_candidates;
     CompactionCandidate compaction_candidate;
-    bool found = false;
     std::shared_ptr<CompactionTask> compaction_task;
+
     while (true) {
         if (!_can_schedule_next()) {
             VLOG(2) << "_can_schedule_next is false. skip";
@@ -224,27 +217,24 @@ std::shared_ptr<CompactionTask> CompactionScheduler::_try_get_next_compaction_ta
         int64_t tablet_id = compaction_candidate.tablet->tablet_id();
         CompactionType compaction_type = compaction_candidate.type;
         VLOG(2) << "try tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type);
-        bool need_reschedule = true;
-        found = _can_do_compaction(compaction_candidate, &need_reschedule, &compaction_task);
-        if (need_reschedule) {
-            tmp_candidates.emplace_back(std::move(compaction_candidate));
-        } else {
-            DCHECK(found);
+
+        if (!_check_precondition(compaction_candidate)) {
+            VLOG(2) << "check compaction precondition failed, candidate info: " << compaction_candidate.to_string();
+            break;
         }
-        if (found) {
+
+        if (_can_do_compaction(compaction_candidate, &compaction_task)) {
             VLOG(2) << "get a qualified tablet:" << tablet_id << ", compaction type:" << to_string(compaction_type)
                     << ", compaction task:" << compaction_task->get_task_info();
             break;
         }
+
+        // reschedule task if the compaction cannot be done.
+        tmp_candidates.emplace_back(std::move(compaction_candidate));
     }
     VLOG(2) << "tmp tablets size:" << tmp_candidates.size();
     StorageEngine::instance()->compaction_manager()->insert_candidates(std::move(tmp_candidates));
-    if (found) {
-        return compaction_task;
-    } else {
-        VLOG(2) << "no qualified tablet.";
-        return nullptr;
-    }
+    return compaction_task;
 }
 
 } // namespace starrocks

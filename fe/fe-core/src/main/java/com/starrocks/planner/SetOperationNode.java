@@ -24,6 +24,8 @@ package com.starrocks.planner;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
@@ -39,9 +41,9 @@ import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -234,36 +236,63 @@ public abstract class SetOperationNode extends PlanNode {
         return false;
     }
 
+    public Optional<List<Expr>> candidatesOfSlotExprForChild(Expr expr, int childIdx) {
+        Map<Integer, Set<Integer>> slotExprOutputSlotIdsMap = Maps.newHashMap();
+        if (!(expr instanceof SlotRef)) {
+            return Optional.empty();
+        }
+        if (!expr.isBoundByTupleIds(getTupleIds())) {
+            return Optional.empty();
+        }
+        int slotExprSlotId = ((SlotRef) expr).getSlotId().asInt();
+        for (Map<Integer, Integer> map : outputSlotIdToChildSlotIdMaps) {
+            if (map.containsKey(slotExprSlotId)) {
+                slotExprOutputSlotIdsMap.putIfAbsent(slotExprSlotId, Sets.newHashSet());
+                slotExprOutputSlotIdsMap.get(slotExprSlotId).add(map.get(slotExprSlotId));
+            }
+        }
+        if (!slotExprOutputSlotIdsMap.containsKey(slotExprSlotId)) {
+            return Optional.empty();
+        }
+
+        List<Expr> newSlotExprs = Lists.newArrayList();
+        Set<Integer> mappedSlotIds = slotExprOutputSlotIdsMap.get(slotExprSlotId);
+        // try to push all children if any expr of a child can match `probeExpr`
+        for (Expr mexpr : materializedResultExprLists_.get(childIdx)) {
+            if ((mexpr instanceof SlotRef) &&
+                    mappedSlotIds.contains(((SlotRef) mexpr).getSlotId().asInt())) {
+                newSlotExprs.add(mexpr);
+            }
+        }
+        return newSlotExprs.size() > 0? Optional.of(newSlotExprs) : Optional.empty();
+    }
+
+    public Optional<List<List<Expr>>> candidatesOfSlotExprsForChild(List<Expr> exprs, int childIdx) {
+        if (!exprs.stream().allMatch(expr -> candidatesOfSlotExprForChild(expr, childIdx).isPresent())) {
+            return Optional.empty();
+        }
+        List<List<Expr>> candidatesOfSlotExprs =
+                exprs.stream().map(expr -> candidatesOfSlotExprForChild(expr, childIdx).get()).collect(Collectors.toList());
+        return Optional.of(candidateOfPartitionByExprs(candidatesOfSlotExprs));
+    }
+
     @Override
-    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr) {
+    public boolean pushDownRuntimeFilters(RuntimeFilterDescription description, Expr probeExpr, List<Expr> partitionByExprs) {
         if (!canPushDownRuntimeFilter()) {
             return false;
         }
+
         if (!probeExpr.isBoundByTupleIds(getTupleIds())) {
             return false;
         }
 
         if (probeExpr instanceof SlotRef) {
             boolean pushDown = false;
-            int probeSlotId = ((SlotRef) probeExpr).getSlotId().asInt();
-            Set<Integer> mappedProbeSlotIds = new HashSet<>();
-            for (Map<Integer, Integer> map : outputSlotIdToChildSlotIdMaps) {
-                if (map.containsKey(probeSlotId)) {
-                    mappedProbeSlotIds.add(map.get(probeSlotId));
-                }
-            }
-
+            // try to push all children if any expr of a child can match `probeExpr`
             for (int i = 0; i < materializedResultExprLists_.size(); i++) {
-                // try to push all children if any expr of a child can match `probeExpr`
-                for (Expr mexpr : materializedResultExprLists_.get(i)) {
-                    if ((mexpr instanceof SlotRef) &&
-                            mappedProbeSlotIds.contains(((SlotRef) mexpr).getSlotId().asInt())) {
-                        if (children.get(i).pushDownRuntimeFilters(description, mexpr)) {
-                            pushDown = true;
-                        }
-                        break;
-                    }
-                }
+                pushDown |= pushdownRuntimeFilterForChildOrAccept(description, probeExpr,
+                        candidatesOfSlotExprForChild(probeExpr, i), partitionByExprs,
+                        candidatesOfSlotExprsForChild(partitionByExprs, i), i, false);
             }
             if (pushDown) {
                 return true;
@@ -274,6 +303,7 @@ public abstract class SetOperationNode extends PlanNode {
             // can not push down to children.
             // use runtime filter at this level.
             description.addProbeExpr(id.asInt(), probeExpr);
+            description.addPartitionByExprsIfNeeded(id.asInt(), probeExpr, partitionByExprs);
             probeRuntimeFilters.add(description);
             return true;
         }

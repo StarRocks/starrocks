@@ -18,16 +18,11 @@
 package com.starrocks.analysis;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.BinaryPredicate.Operator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.UserException;
 import com.starrocks.common.proc.TransProcDir;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -45,6 +40,10 @@ public class ShowTransactionStmt extends ShowStmt {
         this.whereClause = whereClause;
     }
 
+    public Expr getWhereClause() {
+        return whereClause;
+    }
+
     public String getDbName() {
         return dbName;
     }
@@ -52,67 +51,13 @@ public class ShowTransactionStmt extends ShowStmt {
     public long getTxnId() {
         return txnId;
     }
-
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
-        super.analyze(analyzer);
-
-        if (Strings.isNullOrEmpty(dbName)) {
-            dbName = analyzer.getDefaultDb();
-            if (Strings.isNullOrEmpty(dbName)) {
-                ErrorReport.reportAnalysisException(ErrorCode.ERR_NO_DB_ERROR);
-            }
-        }
-
-        if (whereClause == null) {
-            throw new AnalysisException("Missing transaction id");
-        }
-
-        analyzeWhereClause();
+    
+    public void setDbName(String dbName) {
+        this.dbName = dbName;
     }
 
-    private void analyzeWhereClause() throws AnalysisException {
-        if (whereClause == null) {
-            return;
-        }
-
-        boolean valid = true;
-        CHECK:
-        {
-            if (whereClause instanceof BinaryPredicate) {
-                BinaryPredicate binaryPredicate = (BinaryPredicate) whereClause;
-                if (binaryPredicate.getOp() != Operator.EQ) {
-                    valid = false;
-                    break CHECK;
-                }
-            } else {
-                valid = false;
-                break CHECK;
-            }
-
-            // left child
-            if (!(whereClause.getChild(0) instanceof SlotRef)) {
-                valid = false;
-                break CHECK;
-            }
-            String leftKey = ((SlotRef) whereClause.getChild(0)).getColumnName();
-            if (!leftKey.equalsIgnoreCase("id")) {
-                valid = false;
-                break CHECK;
-            }
-
-            // right child
-            if (!(whereClause.getChild(1) instanceof IntLiteral)) {
-                valid = false;
-                break CHECK;
-            }
-
-            txnId = ((IntLiteral) whereClause.getChild(1)).getLongValue();
-        }
-
-        if (!valid) {
-            throw new AnalysisException("Where clause should looks like: id = 123");
-        }
+    public void setTxnId(long txnId) {
+        this.txnId = txnId;
     }
 
     @Override
@@ -120,10 +65,10 @@ public class ShowTransactionStmt extends ShowStmt {
         StringBuilder sb = new StringBuilder();
         sb.append("SHOW TRANSACTION ");
         if (!Strings.isNullOrEmpty(dbName)) {
-            sb.append("FROM `").append(dbName).append("`");
+            sb.append("FROM `").append(dbName).append("` ");
         }
 
-        sb.append(" WHERE ").append(whereClause.toSql());
+        sb.append("WHERE ").append(whereClause.toSql());
         return sb.toString();
     }
 
@@ -144,5 +89,15 @@ public class ShowTransactionStmt extends ShowStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.FORWARD_NO_SYNC;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowTransactionStmt(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

@@ -1,5 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present,
-// StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 // #include "exec/vectorized/file_scan_node.h"
 #include <gtest/gtest.h>
@@ -46,8 +45,6 @@ public:
         config::enable_metric_calculator = false;
 
         _exec_env = ExecEnv::GetInstance();
-        auto* engine = StorageEngine::instance();
-        _exec_env->set_storage_engine(engine);
 
         const auto& params = _request.params;
         const auto& query_id = params.query_id;
@@ -203,7 +200,7 @@ DescriptorTbl* PipeLineFileScanNodeTest::_create_table_desc(const std::vector<Ty
     tuple_desc_builder.build(&desc_tbl_builder);
 
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(_pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state, _pool, desc_tbl_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     _runtime_state->set_desc_tbl(tbl);
     return tbl;
@@ -278,7 +275,8 @@ void PipeLineFileScanNodeTest::generate_morse_queue(std::vector<starrocks::vecto
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
-                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true);
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
+                TTabletInternalParallelMode::type::AUTO);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());
     }

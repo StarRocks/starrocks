@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/update_manager.h"
 
@@ -10,7 +10,6 @@
 #include "storage/chunk_helper.h"
 #include "storage/del_vector.h"
 #include "storage/kv_store.h"
-#include "storage/rowset_update_state.h"
 #include "storage/tablet.h"
 #include "storage/tablet_meta_manager.h"
 #include "util/pretty_printer.h"

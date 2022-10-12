@@ -21,9 +21,6 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.UUIDUtil;
@@ -31,6 +28,9 @@ import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -80,19 +80,19 @@ public class QueryPlannerTest {
     @Test
     public void testMultiStmts() throws Exception {
         String sql = "SHOW VARIABLES LIKE 'lower_case_%'; SHOW VARIABLES LIKE 'sql_mode'";
-        List<StatementBase> stmts = UtFrameUtils.parseAndAnalyzeStmts(sql, connectContext);
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
         Assert.assertEquals(2, stmts.size());
 
         sql = "SHOW VARIABLES LIKE 'lower_case_%';;;";
-        stmts = UtFrameUtils.parseAndAnalyzeStmts(sql, connectContext);
-        Assert.assertEquals(1, stmts.size());
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
+        Assert.assertEquals(3, stmts.size());
 
         sql = "SHOW VARIABLES LIKE 'lower_case_%';;;SHOW VARIABLES LIKE 'lower_case_%';";
-        stmts = UtFrameUtils.parseAndAnalyzeStmts(sql, connectContext);
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
         Assert.assertEquals(4, stmts.size());
 
         sql = "SHOW VARIABLES LIKE 'lower_case_%'";
-        stmts = UtFrameUtils.parseAndAnalyzeStmts(sql, connectContext);
+        stmts = com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
         Assert.assertEquals(1, stmts.size());
     }
 

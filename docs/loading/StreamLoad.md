@@ -1,184 +1,232 @@
-# Stream load
+# Load data from a local file system or a streaming data source using HTTP push
 
-StarRocks supports importing data directly from local files in CSV file format. The imported data size is up to 10GB.
+StarRocks provides the loading method HTTP-based Stream Load to help you load data from a local file system or a streaming data source.
 
-Stream Load is a synchronous import method, where the user sends an HTTP request to import a local file or data stream into StarRocks. The return value of the request reflects whether the import was successful or not.
+Stream Load runs in synchronous loading mode. After you submit a load job, StarRocks synchronously runs the job, and returns the result of the job after the job finishes. You can determine whether the job is successful based on the job result.
 
-## Explanation of terms
+Stream Load is suitable for the following business scenarios:
 
-* **Coordinator**: a coordinating node. Responsible for receiving data, distributing it to other data nodes, and returning the result to the user after the import is complete.
+- Load a local data file.
+  
+  In most cases, we recommend that you use curl to submit a load job, which is run to load the data of a local data file into StarRocks.
 
-## Basic Principle
+- Load streaming data.
+  
+  In most cases, we recommend that you use programs such as Apache Flink® to submit a load job, within which a series of tasks can be generated to continuously load streaming data in real time into StarRocks.
 
-In Stream Load, a user submits the import command via the HTTP protocol. If the command is submitted to an FE node, the FE node will forward the request to a particular BE node via the HTTP redirect command. The user can also submit the import command directly to a specified BE node. This BE node acts as the coordinator node to divide the data by table schema and distribute the data to the relevant BE nodes. Once done, this coordinator node returns the final import results  to the user.
+Additionally, Stream Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
-The following diagram shows the main flow of stream load:
+> Note: After you load data into a StarRocks table by using Stream Load, the data of the materialized views that are created on that table is also updated.
 
-![stream load](../assets/4.4.2-1.png)
+## Supported data file formats
 
-## Import example
+Stream Load supports the following data file formats:
 
-### Creating an import job
+- CSV
 
-Stream Load submits and transfers data via the HTTP protocol. The curl command shows how to submit an import job. Users can also do this through other HTTP clients.
+- JSON
 
-**Syntax:**
+You can use the `streaming_load_max_mb` parameter to specify the maximum size of each data file you want to load. The default maximum size is 10 GB. We recommend that you retain the default value of this parameter. For more information, see the "[Parameter configurations](../loading/StreamLoad.md#parameter-configurations)" section of this topic.
 
-~~~bash
-curl --location-trusted -u user:passwd [-H ""...] -T data.file -XPUT \
-    http://fe_host:http_port/api/{db}/{table}/_stream_load
-~~~
+## Limits
 
-The attributes supported in the header are described in the import job parameters description below in the format      `-H "key1:value1"`. If there are multiple job parameters, they need to be indicated by multiple `-H, similar to \-H "key1:value1" -H "key2:value2" ......`
+Stream Load does not support loading the data of a CSV file that contains a JSON-formatted column.
 
-**Example:**
+## Principles
 
-~~~bash
-curl --location-trusted -u root -T data.file -H "label:123" \
-    http://abc.com:8030/api/test/date/_stream_load
-~~~
+If you choose the loading method Stream Load, you must submit a load request on your client to an FE according to HTTP. The FE uses an HTTP redirect to forward the load request to a specific BE.
 
-**Description:**
+> Note: You can also create a load job on your client to send a load request to a BE of your choice.
 
-* HTTP chunked and non-chunked imports are currently supported. For the non-chunked import, `content-length` is required to ensure data integrity.
-* It is better for users to set expect header to `100-continue` to avoid unnecessary data transmission.
+The BE that receives the load request runs as the Coordinator BE to split data based on the used schema into portions and assign each portion of the data to the other involved BEs. After the load finishes, the Coordinator BE returns the result of the load job to your client.
 
-**Signature parameters:**
+> Note: If you send load requests to an FE, the FE uses a polling mechanism to decide which BE will receive the load requests. The polling mechanism helps achieve load balancing within your StarRocks cluster. Therefore, we recommend that you send load requests to an FE and let the FE decide which BE will run as the Coordinator BE to process the load requests.
 
-* `user/passwd`: Stream load creates the import job via the HTTP protocol, which can be signed by basic access authentication. StarRocks will verify the user identity and import permission based on the signature.
+The following figure shows the workflow of a Stream Load job.
 
-**Import job parameters:**
+![Workflow of Stream Load](../assets/4.2-1.png)
 
-All parameters related to the import job in stream load are set in the header. The following describes these parameters:
+## Load a local data file
 
-* **label** :The label of the import job. Data with the same label cannot be imported more than once. StarRocks will keep the labels of jobs that are successfully completed within the last 30 minutes.
-* **column-separator** : Used to specify the column separator in the import file with a default value of `t`. If it is an invisible character, you need to add `x` as a prefix and use hexadecimal to represent the separator. For example, the delimiter `x01` for Hive files needs to be specified as `-H "column-separator:x01"`
-* **row-delimiter**: Used to specify the row separator in the import file with a default value of `n`.
-* **columns**: Used to specify the correspondence between the columns in the import file and the columns in the table. If the columns in the source file correspond exactly to the table schema, then there is no need to specify this parameter. If the source file does not correspond to the table schema, then specify this parameter to configure the data conversion rules. There are two forms of columns. One corresponds directly to the fields in the import file, which can be represented directly using the field names. The other needs to be derived by calculation. See the following examples:
+### Create a load job
 
-  * Example 1: There are 3 columns "c1, c2, c3" in the table, and the 3 columns in the source file correspond to "c3, c2, c1"; then you need to specify `-H "columns: c3, c2, c1"`.
-  * Example 2: There are 3 columns in the table "c1, c2, c3", and the first 3 columns in the source file correspond to each other, but there is an extra column. In this condition, you need to specify `-H "columns: c1, c2, c3, temp"`. and just specify any name to be used as a placeholder for the last column.
-  * Example 3: There are 3 columns in the table "year, month, day", and there is only one time column in the source file, which is in the format of "2018-06-01 01:02:03"; then you can specify `-H "columns: col, year = year (col), month=month(col), day=day(col)"` to complete the import.
+This section uses curl as an example to describe how to load the data of a CSV or JSON file from your local file system into StarRocks. For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
-* **where**: Used to import a portion of data. This parameter can be set to filter out unwanted data.
+#### Load CSV data
 
-  * Example 4: Import the data in k1 column that is equal to 20180601, then you can specify `-H "where: k1 = 20180601"` when importing.
+##### Data examples
 
-* **max-filter-ratio**: the maximum tolerable percentage of data that can be filtered (due to data irregularities, etc.).The d     efault value is zero. Data irregularities do not include rows that are filtered out by the `where` condition.
-* **partitions**: Used to specify the partitions involved in an      import, which is recommended if the user is able to determine the partitions of the data. Data that does not satisfy these partitions will be filtered out. For example, specify import to partition p1, p2:`-H "partitions: p1, p2"`.
-* **timeout**: Used to specify the timeout for importing, in seconds, with a default value of 600. The range is 1 second ~ 259200 seconds.
-* **strict-mode**: Used to specify whether to enable strict mode for this import with a default value of on. It can be disabled by: `-H "strict-mode: false"`.
-* **timezone**: Used to specify the time zone for an import, with a default value of GMT+8. This parameter affects the results of all time-zone-related functions involved in the import.
-* **exec-mem-limit**: Import memory limit, in bytes, with a default value of 2GB.
+1. In your StarRocks database `test_db`, create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
 
-**Results returned:**
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table1`
+   (
+      `id` int(11) NOT NULL COMMENT "user ID",
+       `name` varchar(65533) NULL COMMENT "user name",
+       `score` int(11) NOT NULL COMMENT "user score"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
 
-After the import is completed, Stream load will return the relevant details of this import in json format. See the following example:
+2. In your local file system, create a CSV file named `example1.csv`. The file consists of three columns, which represent the user ID, user name, and user score in sequence.
 
-~~~json
-{
+   ```Plain
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
+   ```
 
-"TxnId": 1003,
+##### Load data
 
-"Label": "b6f3bc78-0d2c-45d9-9e4c-faa0a0149bee",
+Run the following command to load the data of `example1.csv` into `table1`:
 
-"Status": "Success",
+```Bash
+curl --location-trusted -u root: -H "label:123" \
+    -H "column_separator:," \
+    -H "columns: id, name, score" \
+    -T example1.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
+```
 
-"ExistingJobStatus": "FINISHED", // optional
+`example1.csv` consists of three columns, which are separated by commas (,) and can be mapped in sequence onto the `id`, `name`, and `score` columns of `table1`. Therefore, you need to use the `column_separator` parameter to specify the comma (,) as the column separator. You also need to use the `columns` parameter to temporarily name the three columns of `example1.csv` as `id`, `name`, and `score`, which are mapped in sequence onto the three columns of `table1`.
 
-"Message": "OK",
+##### Query data
 
-"NumberTotalRows": 1000001,
+After the load is complete, query the data of `table1` to verify that the load is successful:
 
-"NumberLoadedRows": 1000000,
+```SQL
+MySQL [test_db]> SELECT * FROM table1;
++------+-------+-------+
+| id   | name  | score |
++------+-------+-------+
+|    1 | Lily  |    23 |
+|    2 | Rose  |    23 |
+|    3 | Alice |    24 |
+|    4 | Julia |    25 |
++------+-------+-------+
+4 rows in set (0.00 sec)
+```
 
-"NumberFilteredRows": 1,
+#### Load JSON data
 
-"NumberUnselectedRows": 0,
+##### Data examples
 
-"LoadBytes": 40888898,
+1. In your StarRocks database `test_db`, create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
 
-"LoadTimeMs": 2144,
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table2`
+   (
+       `id` int(11) NOT NULL COMMENT "city ID",
+       `city` varchar(65533) NULL COMMENT "city name"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
 
-"ErrorURL": "[http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005](http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005)"
+2. In your local file system, create a JSON file named `example2.json`. The file consists of two columns, which represent city ID and city name in sequence.
 
-}
-~~~
+   ```JSON
+   {"name": "Beijing", "code": 2}
+   ```
 
-* TxnId: The ID of the imported transaction.  
-* Status: The last status of an import.
-* Success: Indicates that the import was successful and the data is queryable.
-* Publish Timeout: Indicates that the import job has been successfully committed, but for some reason is not immediately queryable. The user can treat it as a successful import without having to retry the import.
-* Label Already Exists: Indicates that the Label has been occupied by another job, which may be a successful import, or may be an import in processing.
-* Other: Indicates the import failed, and the user can specify Label to retry the job.
-* Message: Detailed description of the import status. A specific reason for the failure is returned when the import fails.
-* NumberTotalRows: The total number of rows read from the data stream.
-* NumberLoadedRows: The number of rows of data imported, valid only on Success.
-* NumberFilteredRows: The number of rows that were filtered out of this import, i.e. rows that did not pass the data quality.
-* NumberUnselectedRows: The number of rows that were filtered out by the `where` condition of the import.
-* LoadBytes: The size of the data in the source file for this import.
-* LoadTimeMs: The time (ms) used for this import.
-* ErrorURL: The details of the filtered data, only the first 1000 rows are shown. If the import job fails, you can directly get the filtered data in the following way and analyze it for troubleshooting.
+##### Load data
 
-  * ~~~bash
-    wget http://192.168.1.1:8042/api/_load_error_log?file=__shard_0/error_log_insert_stmt_db18266d4d9b4ee5-abb00ddd64bdf005_db18266d4d9b4ee5_abb00ddd64bdf005
-    ~~~
+Run the following command to load the data of `example2.json` into `table2`:
 
-### Cancel Import
+```Bash
+curl -v --location-trusted -u root: -H "strict_mode: true" \
+    -H "format: json" -H "jsonpaths: [\"$.name\", \"$.code\"]" \
+    -H "columns: city,tmp_id, id = tmp_id * 100" \
+    -T example2.json -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
+```
 
-Users cannot cancel stream load manually. A stream load job are cancelled automatically by system timeout or import error.
+`example2.json` consists of two keys, `name` and `code`, which are mapped onto the `id` and `city` columns of `table2`, as shown in the following figure.
 
-### Best Practices
+![JSON - Column Mapping](../assets/4.2-2.png)
 
-### Application Scenarios
+The mappings shown in the preceding figure are described as follows:
 
-The best use case for stream load is when the original file is in memory or stored on a local disk. Since Stream Load is a synchronous import, users who want to get the import results in a synchronous way can consider this method.
+- StarRocks extracts the `name` and `code` keys of `example2.json` and maps them onto the `name` and `code` fields declared in the `jsonpaths` parameter.
 
-### Data volume
+- StarRocks extracts the `name` and `code` fields declared in the `jsonpaths` parameter and **maps them in sequence** onto the `city` and `tmp_id` fields declared in the `columns` parameter.
 
-Since Stream Load is initiated and distributed by BE, the recommended amount of imported data is between 1GB and 10GB. For example, if the imported file is 15G, then set      `streaming-load-max-mb` to 16000 in the BE configuration file.
+- StarRocks extracts the `city` and `tmp_id` fields declared in the `columns` parameter and **maps them by name** onto the `city` and `id` columns of `table2`.
 
-The default timeout for Stream Load is 300 seconds. According to StarRocks' current maximum import speed limit, imported files larger than 3GB will require users to modify the default timeout.
+> Note: In the preceding example, the value of `code` in `example2.json` is multiplied by 100 before it is loaded into the `id` column of `table2`.
 
-`Import job timeout = Imported data volume / 10M/s (the specific average import speed should be calculated by users according to their cluster)`
+For detailed mappings between `jsonpaths`, `columns`, and the columns of the StarRocks table, see the "Column mappings" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
-For example, to import a 10GB file, the timeout should be set to 1000s.
+##### Query data
 
-### Example
+After the load is complete, query the data of `table2` to verify that the load is successful:
 
-**Data situation**: Data is in the client's local disk path `/home/store-sales`, and the amount of imported data is about 15GB. We      want to import data to the table `store-sales` in the database `bj-sales`.
+```SQL
+MySQL [test_db]> SELECT * FROM table2;
++------+--------+
+| id   | city   |
++------+--------+
+| 200  | Beijing|
++------+--------+
+4 rows in set (0.01 sec)
+```
 
-**Cluster situation**: The number of any concurrent stream load is not affected by the cluster size.
+### View a load job
 
-* Step1: The import file size exceeds the default maximum import size (i.e. 10GB), so you need to modify BE's configuration file `BE.conf`as follow:
+After a load job is complete, StarRocks returns the result of the job in JSON format. For more information, see the "Return value" section in [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
-`streaming_load_max_mb = 16000`
+Stream Load does not allow you to query the result of a load job by using the SHOW LOAD statement.
 
-* Step2: Calculate if the approximate import time exceeds the default timeout value. The import time ≈ 15000 / 10 = 1500s, exceeds the default timeout time, you need to modify the FE configuration `FE.conf` as follows:
+### Cancel a load job
 
-`stream_load_default_timeout_second = 1500`
+Stream Load does not allow you to cancel a load job. If a load job times out or encounters errors, StarRocks automatically cancels the job.
 
-* Step3: Create an import job
+## Load streaming data
 
-~~~bash
-curl --location-trusted -u user:password -T /home/store_sales \
-    -H "label:abc" [http://abc.com:8000/api/bj_sales/store_sales/_stream_load](http://abc.com:8000/api/bj_sales/store_sales/_stream_load)
-~~~
+Stream Load allows you to load streaming data into StarRocks in real time by using programs. For more information, see the following topics:
 
-### Code integration examples
+- For information about how to run Stream Load jobs by using Flink, see [Load data by using flink-connector-starrocks](../loading/Flink-connector-starrocks.md).
 
-JAVA development stream load, reference: [https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load)
-Spark integration stream load, Reference: [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md)
+- For information about how to run Stream Load jobs by using Java programs, visit [https://github.com/StarRocks/demo/MiscDemo/stream_load](https://github.com/StarRocks/demo/tree/master/MiscDemo/stream_load).
 
-## FAQs
+- For information about how to run Stream Load jobs by using Apache Spark™, see [01_sparkStreaming2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/01_sparkStreaming2StarRocks.md).
 
-* Error reported for data quality issue: `ETL-QUALITY-UNSATISFIED; msg:quality not good enough to cancel`
+## Parameter configurations
 
-See the section [Loading_intro/FAQs](./Loading_intro.md#FAQs).
+This section describes some system parameters that you need to configure if you choose the loading method Stream Load. These parameter configurations take effect on all Stream Load jobs.
 
-* Label Already Exists
+- `streaming_load_max_mb`: the maximum size of each data file you want to load. The default maximum size is 10 GB. For more information, see [BE configuration items](../administration/Configuration.md#be-configuration-items).
+  
+  We recommend that you do not load more than 10 GB of data at a time. If the size of a data file exceeds 10 GB, we recommend that you split the data file into small files that each are less than 10 GB in size and then load these files one by one. If you cannot split a data file greater than 10 GB, you can increase the value of this parameter based on the file size.
 
-See the section [Loading_intro/FAQs](./Loading_intro.md#FAQs). Stream load jobs are submitted via the HTTP protocol, and generally the HTTP Client of each language has its own request retry logic. StarRocks will start to operate stream load after receiving the first request, but it is possible that the client will retry to create the request again because the result is not returned to them in time. At this time, StarRocks is already operating the first request, so the second request will encounter the error:`Label Already Exists`.
-One possible way to troubleshoot the above situation is to use `Label` to search leader FE's logs and see if the same label is present twice. If so, that indicates that the client has submitted the request repeatedly.
+  After you increase the value of this parameter, the new value can take effect only after you restart the BEs of your StarRocks cluster. Additionally, system performance may deteriorate, and the costs of retries in the event of load failures also increase.
 
-It is recommended to calculate the approximate import time based on the data volume of the current request. Meanwhile, increase the request timeout on the client side based on the import timeout to avoid the request being submitted multiple times by the Client.
+  > Note:
+  >
+  > When you load the data of a JSON file, take note of the following points:
+  >
+  > - The size of each JSON object in the file cannot exceed 4 GB. If any JSON object in the file exceeds 4 GB, StarRocks throws an error "This parser can't support a document that big."
+  >
+  > - By default, the JSON body in an HTTP request cannot exceed 100 MB. If the JSON body exceeds 100 MB, StarRocks throws an error "The size of this batch exceed the max size [104857600] of json type data data [8617627793]. Set ignore_json_size to skip check, although it may lead huge memory consuming." To prevent this error, you can add `"ignore_json_size:true"` in the HTTP request header to ignore the check on the JSON body size.
+
+- `stream_load_default_timeout_second`: the timeout period of each load job. The default timeout period is 600 seconds. For more information, see [FE configuration items](../administration/Configuration.md#fe-configuration-items).
+  
+  If many of the load jobs that you create time out, you can increase the value of this parameter based on the calculation result that you obtain from the following formula:
+
+  **Timeout period of each load job > Amount of data to be loaded/Average loading speed**
+
+  > Note: **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the server configurations and the number of allowed concurrent queries. You need to deduct the average loading speed based on the loading speeds of historical load jobs.
+
+  For example, if the size of the data file that you want to load is 10 GB and the average loading speed of your StarRocks cluster is 10 MB/s, set the timeout period to more than 1024 seconds.
+
+  Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
+
+## Usage notes
+
+If a field is missing for a record in the data file you want to load and the column onto which the field is mapped in your StarRocks table is defined as `NOT NULL`, StarRocks automatically fills a `NULL` value in the mapping column of your StarRocks table during the load of the record. You can also use the `ifnull()` function to specify the default value that you want to fill.
+
+For example, if the field that represents city ID in the preceding `example2.json` file is missing and you want to fill an `x` value in the mapping column of `table2`, you can specify `"columns: city, tmp_id, id = ifnull(tmp_id, 'x')"`.

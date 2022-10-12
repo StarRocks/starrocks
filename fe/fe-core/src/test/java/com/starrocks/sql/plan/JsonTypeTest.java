@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -181,10 +181,13 @@ public class JsonTypeTest extends PlanTestBase {
         assertPlanContains("select json_array(1, NULL)",
                 "json_array(CAST(1 AS JSON), NULL)");
         assertPlanContains("select json_array(1, '1', true, false, 1.1, null)",
-                "json_array(CAST(1 AS JSON), CAST('1' AS JSON), CAST(TRUE AS JSON), CAST(FALSE AS JSON), CAST(1.1 AS JSON), NULL)");
+                "json_array(CAST(1 AS JSON), CAST('1' AS JSON), CAST(TRUE AS JSON), " +
+                        "CAST(FALSE AS JSON), CAST(1.1 AS JSON), NULL)");
 
         assertPlanContains(
                 "select json_array(v_smallint, v_tinyint, v_int, v_boolean, v_double, v_varchar) from tjson_test",
-                "json_array(CAST(3: v_SMALLINT AS JSON), CAST(4: v_TINYINT AS JSON), CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
+                "json_array(CAST(3: v_SMALLINT AS JSON), CAST(4: v_TINYINT AS JSON), " +
+                        "CAST(5: v_INT AS JSON), CAST(8: v_BOOLEAN AS JSON), " +
+                        "CAST(9: v_DOUBLE AS JSON), CAST(11: v_VARCHAR AS JSON))");
     }
 }

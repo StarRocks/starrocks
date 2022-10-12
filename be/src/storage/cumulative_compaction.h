@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -23,6 +23,8 @@ protected:
 
     // check_version_continuity_with_cumulative_point checks whether the input rowsets is continuous with cumulative point.
     Status check_version_continuity_with_cumulative_point(const std::vector<RowsetSharedPtr>& rowsets);
+
+    bool fit_compaction_condition(const std::vector<RowsetSharedPtr>& rowsets, int64_t compaction_score);
 
     std::string compaction_name() const override { return "cumulative compaction"; }
 

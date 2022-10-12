@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Database;
@@ -46,7 +46,7 @@ public class MaterializedViewAnalyzerTest {
                         "as select k1, k2, sum(v1) as total from tbl1 group by k1, k2;");
 
         analyzeSuccess("refresh materialized view mv");
-        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("default_cluster:test");
+        Database testDb = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
         Table table = testDb.getTable("mv");
         Assert.assertNotNull(table);
         Assert.assertTrue(table instanceof MaterializedView);

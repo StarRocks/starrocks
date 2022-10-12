@@ -25,16 +25,13 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.OriginStatement;
-import com.starrocks.qe.SqlModeHelper;
-import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TStorageType;
 
 import java.io.DataInput;
@@ -44,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 
 public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
+
     @SerializedName(value = "indexId")
     private long indexId;
     @SerializedName(value = "schema")
@@ -186,16 +184,7 @@ public class MaterializedIndexMeta implements Writable, GsonPostProcessable {
         if (defineStmt == null) {
             return;
         }
-        CreateMaterializedViewStmt stmt;
-        try {
-            List<StatementBase> stmts = SqlParser.parse(defineStmt.originStmt, SqlModeHelper.MODE_DEFAULT);
-            stmt = (CreateMaterializedViewStmt) stmts.get(defineStmt.idx);
-            stmt.setIsReplay(true);
-            Map<String, Expr> columnNameToDefineExpr = stmt.parseDefineExprWithoutAnalyze(defineStmt.originStmt);
-            setColumnsDefineExpr(columnNameToDefineExpr);
-        } catch (Exception e) {
-            throw new IOException("error happens when parsing create materialized view stmt: " + defineStmt.originStmt, e);
-        }
+        Map<String, Expr> columnNameToDefineExpr = MetaUtils.parseColumnNameToDefineExpr(defineStmt);
+        setColumnsDefineExpr(columnNameToDefineExpr);
     }
-
 }

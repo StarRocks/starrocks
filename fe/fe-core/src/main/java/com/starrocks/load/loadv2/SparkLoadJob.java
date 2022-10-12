@@ -31,7 +31,6 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
@@ -64,6 +63,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
@@ -74,6 +74,7 @@ import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
@@ -85,9 +86,11 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPriority;
 import com.starrocks.thrift.TPushType;
+import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.BeginTransactionException;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -106,6 +109,8 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
 /**
  * There are 4 steps in SparkLoadJob:
@@ -183,7 +188,11 @@ public class SparkLoadJob extends BulkLoadJob {
 
         // broker desc
         Map<String, String> brokerProperties = sparkResource.getBrokerPropertiesWithoutPrefix();
-        brokerDesc = new BrokerDesc(sparkResource.getBroker(), brokerProperties);
+        if (sparkResource.hasBroker()) {
+            brokerDesc = new BrokerDesc(sparkResource.getBroker(), brokerProperties);
+        } else {
+            brokerDesc = new BrokerDesc(brokerProperties);
+        }
     }
 
     @Override
@@ -470,77 +479,53 @@ public class SparkLoadJob extends BulkLoadJob {
                                 totalTablets.add(tabletId);
                                 String tabletMetaStr = String.format("%d.%d.%d.%d.%d", tableId, partitionId,
                                         indexId, bucket++, schemaHash);
-                                Set<Long> tabletAllReplicas = Sets.newHashSet();
+
                                 Set<Long> tabletFinishedReplicas = Sets.newHashSet();
-                                for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
-                                    long replicaId = replica.getId();
-                                    tabletAllReplicas.add(replicaId);
-                                    if (!tabletToSentReplicaPushTask.containsKey(tabletId)
-                                            || !tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId)) {
+                                Set<Long> tabletAllReplicas = Sets.newHashSet();
+                                PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexId);
+
+                                if (tablet instanceof LocalTablet) {
+                                    for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
+                                        long replicaId = replica.getId();
+                                        tabletAllReplicas.add(replicaId);
                                         long backendId = replica.getBackendId();
-                                        long taskSignature = GlobalStateMgr.getCurrentGlobalTransactionMgr()
-                                                .getTransactionIDGenerator().getNextTransactionId();
-
-                                        PushBrokerReaderParams params = getPushBrokerReaderParams(table, indexId);
-                                        // deep copy TBrokerScanRange because filePath and fileSize will be updated
-                                        // in different tablet push task
-                                        TBrokerScanRange tBrokerScanRange =
-                                                new TBrokerScanRange(params.tBrokerScanRange);
-                                        // update filePath fileSize
-                                        TBrokerRangeDesc tBrokerRangeDesc = tBrokerScanRange.getRanges().get(0);
-                                        tBrokerRangeDesc.setPath("");
-                                        tBrokerRangeDesc.setStart_offset(0);
-                                        tBrokerRangeDesc.setSize(0);
-                                        tBrokerRangeDesc.setFile_size(-1);
-                                        if (tabletMetaToFileInfo.containsKey(tabletMetaStr)) {
-                                            Pair<String, Long> fileInfo = tabletMetaToFileInfo.get(tabletMetaStr);
-                                            tBrokerRangeDesc.setPath(fileInfo.first);
-                                            tBrokerRangeDesc.setStart_offset(0);
-                                            tBrokerRangeDesc.setSize(fileInfo.second);
-                                            tBrokerRangeDesc.setFile_size(fileInfo.second);
-                                        }
-
-                                        // update broker address
                                         Backend backend = GlobalStateMgr.getCurrentState().getCurrentSystemInfo()
                                                 .getBackend(backendId);
-                                        FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
-                                                brokerDesc.getName(), backend.getHost());
-                                        tBrokerScanRange.getBroker_addresses().add(
-                                                new TNetworkAddress(fsBroker.ip, fsBroker.port));
 
-                                        LOG.debug(
-                                                "push task for replica {}, broker {}:{}, backendId {}, filePath {}, fileSize {}",
-                                                replicaId, fsBroker.ip, fsBroker.port, backendId, tBrokerRangeDesc.path,
-                                                tBrokerRangeDesc.file_size);
+                                        pushTask(backendId, tableId, partitionId, indexId, tabletId,
+                                                replicaId, schemaHash, params, batchTask, tabletMetaStr,
+                                                backend, replica, tabletFinishedReplicas, TTabletType.TABLET_TYPE_DISK);
+                                    }
 
-                                        PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId,
-                                                indexId, tabletId, replicaId, schemaHash,
-                                                0, id, TPushType.LOAD_V2,
-                                                TPriority.NORMAL, transactionId, taskSignature,
-                                                tBrokerScanRange, params.tDescriptorTable,
-                                                params.useVectorized, timezone);
-                                        if (AgentTaskQueue.addTask(pushTask)) {
-                                            batchTask.addTask(pushTask);
-                                            if (!tabletToSentReplicaPushTask.containsKey(tabletId)) {
-                                                tabletToSentReplicaPushTask.put(tabletId, Maps.newHashMap());
-                                            }
-                                            tabletToSentReplicaPushTask.get(tabletId).put(replicaId, pushTask);
+                                    if (tabletAllReplicas.size() == 0) {
+                                        LOG.error("invalid situation. tablet is empty. id: {}", tabletId);
+                                    }
+
+                                    // check tablet push states
+                                    if (tabletFinishedReplicas.size() >= quorumReplicaNum) {
+                                        quorumTablets.add(tabletId);
+                                        if (tabletFinishedReplicas.size() == tabletAllReplicas.size()) {
+                                            fullTablets.add(tabletId);
                                         }
                                     }
 
-                                    if (finishedReplicas.contains(replicaId) && replica.getLastFailedVersion() < 0) {
-                                        tabletFinishedReplicas.add(replicaId);
+                                } else {
+                                    // lake tablet
+                                    long backendId = ((LakeTablet) tablet).getPrimaryBackendId();
+                                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().
+                                            getBackend(backendId);
+                                    if (backend == null) {
+                                        LOG.warn("replica {} not exists", backendId);
+                                        continue;
                                     }
-                                }
 
-                                if (tabletAllReplicas.size() == 0) {
-                                    LOG.error("invalid situation. tablet is empty. id: {}", tabletId);
-                                }
+                                    pushTask(backend.getId(), tableId, partitionId, indexId, tabletId,
+                                            tabletId, schemaHash, params, batchTask, tabletMetaStr,
+                                            backend, new Replica(tabletId, backendId, -1, NORMAL),
+                                            tabletFinishedReplicas, TTabletType.TABLET_TYPE_LAKE);
 
-                                // check tablet push states
-                                if (tabletFinishedReplicas.size() >= quorumReplicaNum) {
-                                    quorumTablets.add(tabletId);
-                                    if (tabletFinishedReplicas.size() == tabletAllReplicas.size()) {
+                                    if (tabletFinishedReplicas.contains(tabletId)) {
+                                        quorumTablets.add(tabletId);
                                         fullTablets.add(tabletId);
                                     }
                                 }
@@ -568,6 +553,72 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         } finally {
             db.readUnlock();
+        }
+    }
+
+    private void pushTask(long backendId, long tableId, long partitionId, long indexId,
+                          long tabletId, long replicaId, int schemaHash,
+                          PushBrokerReaderParams params,
+                          AgentBatchTask batchTask,
+                          String tabletMetaStr,
+                          Backend backend, Replica replica, Set<Long> tabletFinishedReplicas,
+                          TTabletType tabletType)
+            throws AnalysisException {
+
+        if (!tabletToSentReplicaPushTask.containsKey(tabletId)
+                || !tabletToSentReplicaPushTask.get(tabletId).containsKey(replicaId)) {
+            long taskSignature = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTransactionIDGenerator().getNextTransactionId();
+            // deep copy TBrokerScanRange because filePath and fileSize will be updated
+            // in different tablet push task
+            // update filePath fileSize
+            TBrokerScanRange tBrokerScanRange =
+                    new TBrokerScanRange(params.tBrokerScanRange);
+            TBrokerRangeDesc tBrokerRangeDesc = tBrokerScanRange.getRanges().get(0);
+            tBrokerRangeDesc.setPath("");
+            tBrokerRangeDesc.setStart_offset(0);
+            tBrokerRangeDesc.setSize(0);
+            tBrokerRangeDesc.setFile_size(-1);
+            if (tabletMetaToFileInfo.containsKey(tabletMetaStr)) {
+                Pair<String, Long> fileInfo = tabletMetaToFileInfo.get(tabletMetaStr);
+                tBrokerRangeDesc.setPath(fileInfo.first);
+                tBrokerRangeDesc.setStart_offset(0);
+                tBrokerRangeDesc.setSize(fileInfo.second);
+                tBrokerRangeDesc.setFile_size(fileInfo.second);
+            }
+
+            // update broker address
+            if (brokerDesc.hasBroker()) {
+                FsBroker fsBroker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
+                        brokerDesc.getName(), backend.getHost());
+                tBrokerScanRange.getBroker_addresses().add(
+                        new TNetworkAddress(fsBroker.ip, fsBroker.port));
+                LOG.debug("push task for replica {}, broker {}:{}, backendId {}," +
+                                "filePath {}, fileSize {}", replicaId, fsBroker.ip, fsBroker.port,
+                        backend.getId(), tBrokerRangeDesc.path, tBrokerRangeDesc.file_size);
+            } else {
+                LOG.debug("push task for replica {}, backendId {}, filePath {}, fileSize {}",
+                        replicaId, backend.getId(), tBrokerRangeDesc.path,
+                        tBrokerRangeDesc.file_size);
+            }
+
+            PushTask pushTask = new PushTask(backendId, dbId, tableId, partitionId,
+                    indexId, tabletId, replicaId, schemaHash,
+                    0, id, TPushType.LOAD_V2,
+                    TPriority.NORMAL, transactionId, taskSignature,
+                    tBrokerScanRange, params.tDescriptorTable,
+                    params.useVectorized, timezone, tabletType);
+            if (AgentTaskQueue.addTask(pushTask)) {
+                batchTask.addTask(pushTask);
+                if (!tabletToSentReplicaPushTask.containsKey(tabletId)) {
+                    tabletToSentReplicaPushTask.put(tabletId, Maps.newHashMap());
+                }
+                tabletToSentReplicaPushTask.get(tabletId).put(replicaId, pushTask);
+            }
+        }
+
+        if (finishedReplicas.contains(replicaId) && replica.getLastFailedVersion() < 0) {
+            tabletFinishedReplicas.add(replicaId);
         }
     }
 
@@ -933,7 +984,15 @@ public class SparkLoadJob extends BulkLoadJob {
             // scan range params
             TBrokerScanRangeParams params = new TBrokerScanRangeParams();
             params.setStrict_mode(false);
-            params.setProperties(brokerDesc.getProperties());
+            if (brokerDesc.hasBroker()) {
+                params.setProperties(brokerDesc.getProperties());
+                params.setUse_broker(true);
+            } else {
+                THdfsProperties hdfsProperties = new THdfsProperties();
+                params.setHdfs_properties(hdfsProperties);
+                params.setHdfs_read_buffer_size_kb(Config.hdfs_read_buffer_size_kb);
+                params.setUse_broker(false);
+            }
             TupleDescriptor srcTupleDesc = descTable.createTupleDescriptor();
             Map<String, SlotDescriptor> srcSlotDescByName = Maps.newHashMap();
             for (Column column : columns) {

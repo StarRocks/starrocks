@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -44,6 +44,10 @@ public:
      * report runtime error if input is false
      */
     DEFINE_VECTORIZED_FN(assert_true);
+    /**
+     * return the host name
+     */
+    DEFINE_VECTORIZED_FN(host_name);
 };
 
 } // namespace vectorized

@@ -30,7 +30,6 @@
 #include "formats/csv/output_stream.h"
 #include "fs/fs_broker.h"
 #include "fs/fs_posix.h"
-#include "gen_cpp/InternalService_types.h"
 #include "runtime/runtime_state.h"
 #include "util/date_func.h"
 #include "util/uid_util.h"
@@ -48,6 +47,7 @@ FileResultWriter::~FileResultWriter() {
 Status FileResultWriter::init(RuntimeState* state) {
     _state = state;
     _init_profile();
+    RETURN_IF_ERROR(_create_fs());
 
     return Status::OK();
 }
@@ -62,10 +62,7 @@ void FileResultWriter::_init_profile() {
     _written_data_bytes = ADD_COUNTER(profile, "WrittenDataBytes", TUnit::BYTES);
 }
 
-Status FileResultWriter::_create_file_writer() {
-    std::string file_name = _get_next_file_name();
-    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-
+Status FileResultWriter::_create_fs() {
     if (_fs == nullptr) {
         if (_file_opts->is_local_file) {
             _fs = new_fs_posix();
@@ -74,8 +71,7 @@ Status FileResultWriter::_create_file_writer() {
                 _fs.reset(new BrokerFileSystem(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
                                                config::broker_write_timeout_seconds * 1000));
             } else {
-                ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path,
-                                                                         FSOptions(nullptr, nullptr, _file_opts)));
+                ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
             }
         }
     }
@@ -83,6 +79,13 @@ Status FileResultWriter::_create_file_writer() {
         return Status::InternalError(
                 strings::Substitute("file system initialize failed for file $0", _file_opts->file_path));
     }
+    return Status::OK();
+}
+
+Status FileResultWriter::_create_file_writer() {
+    std::string file_name = _get_next_file_name();
+    WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+
     ASSIGN_OR_RETURN(auto writable_file, _fs->new_writable_file(opts, file_name));
 
     switch (_file_opts->file_format) {
@@ -130,8 +133,11 @@ std::string FileResultWriter::_file_format_to_name() {
 
 Status FileResultWriter::append_chunk(vectorized::Chunk* chunk) {
     assert(_file_builder != nullptr);
-    RETURN_IF_ERROR(_file_builder->add_chunk(chunk));
-
+    {
+        SCOPED_TIMER(_append_chunk_timer);
+        RETURN_IF_ERROR(_file_builder->add_chunk(chunk));
+    }
+    _written_rows += chunk->num_rows();
     // split file if exceed limit
     RETURN_IF_ERROR(_create_new_file_if_exceed_size());
 
@@ -154,6 +160,7 @@ Status FileResultWriter::_create_new_file_if_exceed_size() {
 Status FileResultWriter::_close_file_writer(bool done) {
     if (_file_builder != nullptr) {
         RETURN_IF_ERROR(_file_builder->finish());
+        COUNTER_UPDATE(_written_data_bytes, _file_builder->file_size());
         _file_builder.reset();
     }
 

@@ -1,8 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.TruncateTableStmt;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -21,12 +21,14 @@ public class AnalyzeTruncateTableTest {
 
     @Test
     public void normalTest() {
-       TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE example_db.tbl;");
-       Assert.assertEquals("TRUNCATE TABLE `example_db`.`tbl`", stmt.toSql());
-       stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
-       Assert.assertEquals("TRUNCATE TABLE `test`.`tbl`PARTITIONS (p1, p2)", stmt.toSql());
-       Assert.assertEquals("tbl", stmt.getTblName());
-       Assert.assertEquals("default_cluster:test", stmt.getDbName());
+        TruncateTableStmt stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE example_db.tbl;");
+        Assert.assertEquals("tbl", stmt.getTblName());
+        Assert.assertEquals("example_db", stmt.getDbName());
+
+        stmt = (TruncateTableStmt) analyzeSuccess("TRUNCATE TABLE tbl PARTITION(p1, p2);");
+        Assert.assertEquals("tbl", stmt.getTblName());
+        Assert.assertEquals("test", stmt.getDbName());
+        Assert.assertEquals(stmt.getTblRef().getPartitionNames().getPartitionNames().toString(), "[p1, p2]");
     }
 
     @Test

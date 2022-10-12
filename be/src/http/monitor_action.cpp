@@ -17,12 +17,9 @@
 
 #include "http/monitor_action.h"
 
-#include <sstream>
-
 #include "common/status.h"
 #include "http/http_channel.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "http/http_status.h"
 #include "http/rest_monitor_iface.h"
 

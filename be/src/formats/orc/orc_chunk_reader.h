@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
+#include <boost/algorithm/string.hpp>
 #include <orc/OrcFile.hh>
 
 #include "column/column_helper.h"
@@ -11,6 +12,8 @@
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
+#include "util/buffered_stream.h"
+
 namespace orc {
 namespace proto {
 class ColumnStatistics;
@@ -18,8 +21,9 @@ class ColumnStatistics;
 } // namespace orc
 
 namespace starrocks {
+class RandomAccessFile;
 class RuntimeState;
-}
+} // namespace starrocks
 namespace starrocks::vectorized {
 
 using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
@@ -61,7 +65,7 @@ public:
     void set_conjuncts_and_runtime_filters(const std::vector<Expr*>& conjuncts,
                                            const RuntimeFilterProbeCollector* rf_collector);
     Status set_timezone(const std::string& tz);
-    int num_columns() const { return _src_slot_descriptors.size(); }
+    size_t num_columns() const { return _src_slot_descriptors.size(); }
 
     // to decode min and max value from column stats.
     Status decode_min_max_value(SlotDescriptor* slot, const orc::proto::ColumnStatistics&, ColumnPtr min_col,
@@ -89,12 +93,17 @@ public:
             _hive_column_names = v;
         }
     }
+    void set_case_sensitive(bool case_sensitive) { _case_sensitive = case_sensitive; }
 
     static void build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
                                                 const std::vector<std::string>* hive_column_names,
-                                                const orc::Type& root_type);
+                                                const orc::Type& root_type, bool case_sensitive);
     static void build_column_name_set(std::unordered_set<std::string>* name_set,
-                                      const std::vector<std::string>* hive_column_names, const orc::Type& root_type);
+                                      const std::vector<std::string>* hive_column_names, const orc::Type& root_type,
+                                      bool case_sensitive);
+    static std::string format_column_name(const std::string& col_name, bool case_sensitive) {
+        return case_sensitive ? col_name : boost::algorithm::to_lower_copy(col_name);
+    }
 
     void set_runtime_state(RuntimeState* state) { _state = state; }
     RuntimeState* runtime_state() { return _state; }
@@ -158,12 +167,62 @@ private:
     std::shared_ptr<Column::Filter> _broker_load_filter;
     size_t _num_rows_filtered;
     const std::vector<std::string>* _hive_column_names = nullptr;
+    bool _case_sensitive = false;
     std::unordered_map<std::string, int> _name_to_column_id;
     RuntimeState* _state;
     SlotDescriptor* _current_slot;
     std::string _current_file_name;
     int _error_message_counter;
     LazyLoadContext* _lazy_load_ctx;
+};
+
+class ORCHdfsFileStream : public orc::InputStream {
+public:
+    // |file| must outlive ORCHdfsFileStream
+    ORCHdfsFileStream(RandomAccessFile* file, uint64_t length);
+
+    ~ORCHdfsFileStream() override = default;
+
+    uint64_t getLength() const override { return _length; }
+
+    // refers to paper `Delta Lake: High-Performance ACID Table Storage over Cloud Object Stores`
+    uint64_t getNaturalReadSize() const override { return config::orc_natural_read_size; }
+
+    // It's for read size after doing seek.
+    // When doing read after seek, we make assumption that we are doing random read because of seeking row group.
+    // And if we still use NaturalReadSize we probably read many row groups
+    // after the row group we want to read, and that will amplify read IO bytes.
+
+    // So the best way is to reduce read size, hopefully we just read that row group in one shot.
+    // We also have chance that we may not read enough at this shot, then we fallback to NaturalReadSize to read.
+    // The cost is, there is a extra IO, and we read 1/4 of NaturalReadSize more data.
+    // And the potential gain is, we save 3/4 of NaturalReadSize IO bytes.
+
+    // Normally 256K can cover a row group of a column(like integer or double, but maybe not string)
+    // And this value can not be too small because if we can not read a row group in a single shot,
+    // we will fallback to read in normal size, and we pay cost of a extra read.
+
+    uint64_t getNaturalReadSizeAfterSeek() const override { return config::orc_natural_read_size / 4; }
+
+    void prepareCache(orc::InputStream::PrepareCacheScope scope, uint64_t offset, uint64_t length) override;
+    void read(void* buf, uint64_t length, uint64_t offset) override;
+
+    const std::string& getName() const override;
+
+    bool isIORangesEnabled() const override { return config::orc_coalesce_read_enable; }
+    void clearIORanges() override;
+    void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override;
+
+private:
+    void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);
+    bool canUseCacheBuffer(uint64_t offset, uint64_t length);
+
+    RandomAccessFile* _file;
+    uint64_t _length;
+    std::vector<char> _cache_buffer;
+    uint64_t _cache_offset;
+    SharedBufferedInputStream _buffer_stream;
+    bool _buffer_stream_enabled = false;
 };
 
 } // namespace starrocks::vectorized

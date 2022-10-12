@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/exchange/local_exchange.h"
 
 #include "column/chunk.h"
+#include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks::pipeline {
@@ -11,6 +12,11 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
                                                         std::vector<uint32_t>& partition_row_indexes) {
     int32_t num_rows = chunk->num_rows();
     int32_t num_partitions = _source->get_sources().size();
+
+    if (_shuffler == nullptr) {
+        _shuffler = std::make_unique<Shuffler>(_source->runtime_state()->func_version() <= 3, false, _part_type,
+                                               _source->get_sources().size(), 1);
+    }
 
     for (size_t i = 0; i < _partitions_columns.size(); ++i) {
         ASSIGN_OR_RETURN(_partitions_columns[i], _partition_expr_ctxs[i]->evaluate(chunk.get()));
@@ -32,23 +38,13 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
         }
     }
 
-    // When the local exchange is the successor of ExchangeSourceOperator,
-    // the data flow is `exchange sink -> exchange source -> local exchange`.
-    // `exchange sink -> exchange source` (phase 1) determines which fragment instance to deliver each row,
-    // while `exchange source -> local exchange` (phase 2) determines which pipeline driver to deliver each row.
-    // To avoid hash two times and data skew due to hash one time, phase 1 hashes one time
-    // and phase 2 applies xorshift32 on the hash value.
-    // Note that xorshift32 rehash must be applied for both local shuffle here and exchange sink.
-    for (int32_t i = 0; i < num_rows; ++i) {
-        _hash_values[i] = HashUtil::xorshift32(_hash_values[i]);
-    }
+    _shuffle_channel_id.resize(num_rows);
 
-    // Compute row indexes for each channel.
+    _shuffler->local_exchange_shuffle(_shuffle_channel_id, _hash_values, num_rows);
+
     _partition_row_indexes_start_points.assign(num_partitions + 1, 0);
-    for (int32_t i = 0; i < num_rows; ++i) {
-        size_t partition_index = _hash_values[i] % num_partitions;
-        _partition_row_indexes_start_points[partition_index]++;
-        _hash_values[i] = partition_index;
+    for (size_t i = 0; i < num_rows; ++i) {
+        _partition_row_indexes_start_points[_shuffle_channel_id[i]]++;
     }
     // We make the last item equal with number of rows of this chunk.
     for (int32_t i = 1; i <= num_partitions; ++i) {
@@ -56,8 +52,8 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
     }
 
     for (int32_t i = num_rows - 1; i >= 0; --i) {
-        partition_row_indexes[_partition_row_indexes_start_points[_hash_values[i]] - 1] = i;
-        _partition_row_indexes_start_points[_hash_values[i]]--;
+        partition_row_indexes[_partition_row_indexes_start_points[_shuffle_channel_id[i]] - 1] = i;
+        _partition_row_indexes_start_points[_shuffle_channel_id[i]]--;
     }
 
     return Status::OK();

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -19,6 +19,7 @@ public:
     virtual Status visit(const vectorized::NullableColumn& column);
     virtual Status visit(const vectorized::ConstColumn& column);
     virtual Status visit(const vectorized::ArrayColumn& column);
+    virtual Status visit(const vectorized::MapColumn& column);
     virtual Status visit(const vectorized::BinaryColumn& column);
     virtual Status visit(const vectorized::LargeBinaryColumn& column);
     virtual Status visit(const vectorized::Int8Column& column);

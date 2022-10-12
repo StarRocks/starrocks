@@ -21,7 +21,6 @@
 
 package com.starrocks.transaction;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
@@ -34,33 +33,28 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.lake.proto.PublishVersionRequest;
-import com.starrocks.lake.proto.PublishVersionResponse;
-import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
-import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TTaskType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.Future;
+import javax.annotation.Nullable;
+import javax.validation.constraints.NotNull;
 
 public class PublishVersionDaemon extends LeaderDaemon {
 
@@ -118,7 +112,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
-        // traverse all ready transactions and dispatch the publish version task to all backends
+        // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
             for (PublishVersionTask task : tasks) {
@@ -147,8 +141,9 @@ public class PublishVersionDaemon extends LeaderDaemon {
             boolean allTaskFinished = true;
             for (PublishVersionTask publishVersionTask : transTasks.values()) {
                 if (publishVersionTask.isFinished()) {
-                    // sometimes backend finish publish version task, but it maybe failed to change transactionid to version for some tablets
-                    // and it will upload the failed tabletinfo to fe and fe will deal with them
+                    // sometimes backend finish publish version task, but it maybe failed to change
+                    // transaction id to version for some tablets,
+                    // and it will upload the failed tablet info to fe and fe will deal with them
                     Set<Long> errReplicas = publishVersionTask.getErrorReplicas();
                     if (!errReplicas.isEmpty()) {
                         publishErrorReplicaIds.addAll(errReplicas);
@@ -172,7 +167,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                         publishErrorReplicaIds);
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
                             transactionState, publishErrorReplicaIds.size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
@@ -200,7 +195,7 @@ public class PublishVersionDaemon extends LeaderDaemon {
                 }
                 if (transactionState.getTransactionStatus() != TransactionStatus.VISIBLE) {
                     transactionState.updateSendTaskTime();
-                    LOG.debug("publish version for transation {} failed, has {} error replicas during publish",
+                    LOG.debug("publish version for transaction {} failed, has {} error replicas during publish",
                             transactionState, transactionState.getErrorReplicas().size());
                 } else {
                     for (PublishVersionTask task : transactionState.getPublishVersionTasks().values()) {
@@ -217,18 +212,23 @@ public class PublishVersionDaemon extends LeaderDaemon {
 
     // TODO: support mix OlapTable with LakeTable
     boolean isLakeTableTransaction(TransactionState transactionState) {
+        if (transactionState.getTableIdList().isEmpty()) {
+            return false;
+        }
         Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
         if (db == null) {
             return false;
         }
-        if (transactionState.getTableIdList().isEmpty()) {
-            return false;
-        }
-        for (long tableId : transactionState.getTableIdList()) {
-            Table table = db.getTable(tableId);
-            if (table != null) {
-                return table.isLakeTable();
+        db.readLock();
+        try {
+            for (long tableId : transactionState.getTableIdList()) {
+                Table table = db.getTable(tableId);
+                if (table != null) {
+                    return table.isLakeTable();
+                }
             }
+        } finally {
+            db.readUnlock();
         }
         return false;
     }
@@ -257,34 +257,21 @@ public class PublishVersionDaemon extends LeaderDaemon {
         }
     }
 
-    boolean publishTable(Database db, TransactionState txnState, TableCommitInfo tableCommitInfo) {
-        long txnId = txnState.getTransactionId();
-        long tableId = tableCommitInfo.getTableId();
-        LakeTable table = (LakeTable) db.getTable(tableId);
-        if (table == null) {
-            txnState.removeTable(tableCommitInfo.getTableId());
-            LOG.info("Removed table {} from transaction {}", tableId, txnId);
-            return true;
-        }
+    private boolean publishTable(Database db, TransactionState txnState, TableCommitInfo tableCommitInfo) {
         boolean finished = true;
-        Preconditions.checkState(table.isLakeTable());
+        long txnId = txnState.getTransactionId();
         for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-            long partitionId = partitionCommitInfo.getPartitionId();
-            Partition partition = table.getPartition(partitionId);
-            if (partition == null) {
-                tableCommitInfo.removePartition(partitionId);
-                LOG.info("Removed partition {} from transaction {}", partitionId, txnId);
-                continue;
+            boolean ok = false;
+            try {
+                ok = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
+            } catch (Throwable e) {
+                LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+                        txnId, e.getMessage());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug(e);
+                }
             }
-            long currentTime = System.currentTimeMillis();
-            long versionTime = partitionCommitInfo.getVersionTime();
-            if (versionTime > 0) {
-                continue;
-            }
-            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
-                continue;
-            }
-            if (publishPartition(txnState, table, partition, partitionCommitInfo)) {
+            if (ok) {
                 partitionCommitInfo.setVersionTime(System.currentTimeMillis());
             } else {
                 partitionCommitInfo.setVersionTime(-System.currentTimeMillis());
@@ -294,76 +281,81 @@ public class PublishVersionDaemon extends LeaderDaemon {
         return finished;
     }
 
-    boolean publishPartition(TransactionState txnState, LakeTable table, Partition partition,
-                             PartitionCommitInfo partitionCommitInfo) {
-        if (partition.getVisibleVersion() + 1 != partitionCommitInfo.getVersion()) {
-            LOG.warn("partiton version is " + partition.getVisibleVersion() + " commit version is " +
-                    partitionCommitInfo.getVersion());
-            return false;
-        }
-        boolean finished = true;
+    private boolean publishPartition(@NotNull Database db, @NotNull TableCommitInfo tableCommitInfo,
+                                     @NotNull PartitionCommitInfo partitionCommitInfo,
+                                     @NotNull TransactionState txnState)
+            throws RpcException, NoAliveBackendException {
+        long tableId = tableCommitInfo.getTableId();
+        long txnVersion = partitionCommitInfo.getVersion();
         long txnId = txnState.getTransactionId();
-        Map<Long, List<Long>> beToTablets = new HashMap<>();
-        List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
-        for (MaterializedIndex index : indexes) {
-            for (Tablet tablet : index.getTablets()) {
-                Long beId = Utils.chooseBackend((LakeTablet) tablet);
-                if (beId == null) {
-                    LOG.warn("No available backend can execute publish version task");
-                    return false;
+        String txnLabel = txnState.getLabel();
+        List<Tablet> normalTablets = null;
+        List<Tablet> shadowTablets = null;
+
+        db.readLock();
+        try {
+            LakeTable table = (LakeTable) db.getTable(tableId);
+            if (table == null) {
+                txnState.removeTable(tableCommitInfo.getTableId());
+                LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
+                return true;
+            }
+            long partitionId = partitionCommitInfo.getPartitionId();
+            Partition partition = table.getPartition(partitionId);
+            if (partition == null) {
+                LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
+                return true;
+            }
+            long currentTime = System.currentTimeMillis();
+            long versionTime = partitionCommitInfo.getVersionTime();
+            if (versionTime > 0) {
+                return true;
+            }
+            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+                return false;
+            }
+            if (partition.getVisibleVersion() + 1 != txnVersion) {
+                LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
+                        txnId, partition.getVisibleVersion(), txnVersion);
+                return false;
+            }
+            List<MaterializedIndex> indexes = txnState.getPartitionLoadedTblIndexes(table.getId(), partition);
+            for (MaterializedIndex index : indexes) {
+                if (!index.visibleForTransaction(txnId)) {
+                    LOG.info("Ignored index {} for transaction {}", table.getIndexNameById(index.getId()), txnId);
+                    continue;
                 }
-                beToTablets.computeIfAbsent(beId, k -> Lists.newArrayList()).add(tablet.getId());
-            }
-        }
-        List<Future<PublishVersionResponse>> responseList = Lists.newArrayListWithCapacity(beToTablets.size());
-        List<Backend> backendList = Lists.newArrayListWithCapacity(beToTablets.size());
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
-        for (Map.Entry<Long, List<Long>> entry : beToTablets.entrySet()) {
-            Backend backend = systemInfoService.getBackend(entry.getKey());
-            if (backend == null) {
-                LOG.warn("Backend {} has been dropped", entry.getKey());
-                finished = false;
-                continue;
-            }
-            if (!backend.isAlive()) {
-                LOG.warn("Backend {} not alive", backend.getHost());
-                finished = false;
-                continue;
-            }
-            TNetworkAddress address = new TNetworkAddress();
-            address.setHostname(backend.getHost());
-            address.setPort(backend.getBrpcPort());
-
-            LakeServiceClient client = new LakeServiceClient(address);
-            PublishVersionRequest request = new PublishVersionRequest();
-            request.baseVersion = partitionCommitInfo.getVersion() - 1;
-            request.newVersion = partitionCommitInfo.getVersion();
-            request.tabletIds = entry.getValue();
-            request.txnIds = Lists.newArrayList(txnId);
-
-            try {
-                Future<PublishVersionResponse> responseFuture = client.publishVersion(request);
-                responseList.add(responseFuture);
-                backendList.add(backend);
-            } catch (Exception e) {
-                LOG.warn(e);
-                finished = false;
-            }
-        }
-
-        for (int i = 0; i < responseList.size(); i++) {
-            try {
-                PublishVersionResponse response = responseList.get(i).get();
-                if (response != null && response.failedTablets != null && !response.failedTablets.isEmpty()) {
-                    LOG.warn("Fail to publish tablet {} on BE {}", response.failedTablets, backendList.get(i).getHost());
-                    finished = false;
+                if (index.getState() == MaterializedIndex.IndexState.SHADOW) {
+                    shadowTablets = (shadowTablets == null) ? Lists.newArrayList() : shadowTablets;
+                    shadowTablets.addAll(index.getTablets());
+                } else {
+                    normalTablets = (normalTablets == null) ? Lists.newArrayList() : normalTablets;
+                    normalTablets.addAll(index.getTablets());
                 }
-            } catch (Exception e) {
-                finished = false;
-                LOG.warn(e);
             }
+        } finally {
+            db.readUnlock();
         }
-        return finished;
+
+        return publishNormalTablets(normalTablets, txnId, txnVersion) && publishShadowTablets(shadowTablets, txnId, txnVersion);
+    }
+
+    private boolean publishNormalTablets(@Nullable List<Tablet> tablets, long txnId, long version)
+            throws RpcException, NoAliveBackendException {
+        if (tablets == null || tablets.isEmpty()) {
+            return true;
+        }
+        Utils.publishVersion(tablets, txnId, version - 1, version);
+        return true;
+    }
+
+    private boolean publishShadowTablets(@Nullable List<Tablet> tablets, long txnId, long version)
+            throws RpcException, NoAliveBackendException {
+        if (tablets == null || tablets.isEmpty()) {
+            return true;
+        }
+        Utils.publishLogVersion(tablets, txnId, version);
+        return true;
     }
 
     /**

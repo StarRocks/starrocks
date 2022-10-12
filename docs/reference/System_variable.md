@@ -48,9 +48,11 @@ Variables that can be set both globally or partially effective include:
 * hash_join_push_down_right_table
 * parallel_fragment_exec_instance_num
 * parallel_exchange_instance_num
+* prefer_compute_node
 * query_timeout
 * sql_mode
 * time_zone
+* use_compute_nodes
 * vectorized_engine_enable
 * wait_timeout
 
@@ -254,6 +256,13 @@ The number of scan instances determines the number of other execution nodes in t
 
 Used for compatibility with MySQL JDBC versions 8.0.16 and above. No practical usage.
 
+* prefer_compute_node
+
+  Whether the FEs distribute query execution plans to CN nodes. Valid values:
+
+  * true: indicates that the FEs distribute query execution plans to CN nodes.
+  * false: indicates that the FEs do not distribute query execution plans to CN nodes.
+
 * query_cache_size
 
 Used for MySQL client compatibility. No practical use.
@@ -303,6 +312,13 @@ Used to set the time zone of the current session. The time zone can affect the r
 * tx_isolation
 
 Used for MySQL client compatibility. No practical usage.
+
+* use_compute_nodes
+
+  The maximum number of CN nodes that can be used. This parameter is valid when `prefer_compute_node=true`. Valid values:
+
+  * `-1`: indicates that all CN nodes are used.
+  * `0`: indicates that no CN nodes are used.
 
 * use_v2_rollup
 

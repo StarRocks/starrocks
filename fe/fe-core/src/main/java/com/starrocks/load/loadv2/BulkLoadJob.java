@@ -26,10 +26,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.SqlParser;
-import com.starrocks.analysis.SqlScanner;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
@@ -40,7 +37,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.SqlParserUtils;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.BrokerFileGroupAggInfo;
 import com.starrocks.load.FailMsg;
@@ -49,6 +45,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
@@ -57,7 +54,6 @@ import org.apache.logging.log4j.Logger;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
-import java.io.StringReader;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -82,7 +78,9 @@ public abstract class BulkLoadJob extends LoadJob {
 
     // sessionVariable's name -> sessionVariable's value
     // we persist these sessionVariables due to the session is not available when replaying the job.
-    private Map<String, String> sessionVariables = Maps.newHashMap();
+    protected Map<String, String> sessionVariables = Maps.newHashMap();
+
+    protected static final String PRIORITY_SESSION_VARIABLE_KEY = "priority.session.variable.key";
 
     // only for log replay
     public BulkLoadJob() {
@@ -97,12 +95,14 @@ public abstract class BulkLoadJob extends LoadJob {
         if (ConnectContext.get() != null) {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
+            sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
+            sessionVariables.put(SessionVariable.ENABLE_REPLICATED_STORAGE, Boolean.toString(var.getEnableReplicatedStorage()));
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }
     }
 
-    public static BulkLoadJob fromLoadStmt(LoadStmt stmt) throws DdlException {
+    public static BulkLoadJob fromLoadStmt(LoadStmt stmt, ConnectContext context) throws DdlException {
         // get db id
         String dbName = stmt.getLabel().getDbName();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
@@ -116,7 +116,7 @@ public abstract class BulkLoadJob extends LoadJob {
             switch (stmt.getEtlJobType()) {
                 case BROKER:
                     bulkLoadJob = new BrokerLoadJob(db.getId(), stmt.getLabel().getLabelName(),
-                            stmt.getBrokerDesc(), stmt.getOrigStmt());
+                            stmt.getBrokerDesc(), stmt.getOrigStmt(), context);
                     break;
                 case SPARK:
                     bulkLoadJob = new SparkLoadJob(db.getId(), stmt.getLabel().getLabelName(),
@@ -131,6 +131,10 @@ public abstract class BulkLoadJob extends LoadJob {
                     throw new DdlException("Unknown load job type.");
             }
             bulkLoadJob.setJobProperties(stmt.getProperties());
+            if (bulkLoadJob.priority != 0) {
+                bulkLoadJob.sessionVariables.put(BulkLoadJob.PRIORITY_SESSION_VARIABLE_KEY,
+                        Integer.toString(bulkLoadJob.priority));
+            }
             bulkLoadJob.checkAndSetDataSourceInfo(db, stmt.getDataDescriptions());
             return bulkLoadJob;
         } catch (MetaNotFoundException e) {
@@ -260,11 +264,10 @@ public abstract class BulkLoadJob extends LoadJob {
         }
         // Reset dataSourceInfo, it will be re-created in analyze
         fileGroupAggInfo = new BrokerFileGroupAggInfo();
-        SqlParser parser = new SqlParser(new SqlScanner(new StringReader(originStmt.originStmt),
-                Long.valueOf(sessionVariables.get(SessionVariable.SQL_MODE))));
         LoadStmt stmt = null;
         try {
-            stmt = (LoadStmt) SqlParserUtils.getStmt(parser, originStmt.idx);
+            stmt = (LoadStmt) com.starrocks.sql.parser.SqlParser.parseFirstStatement(originStmt.originStmt,
+                    Long.parseLong(sessionVariables.get(SessionVariable.SQL_MODE)));
             for (DataDescription dataDescription : stmt.getDataDescriptions()) {
                 dataDescription.analyzeWithoutCheckPriv();
             }
@@ -291,7 +294,7 @@ public abstract class BulkLoadJob extends LoadJob {
             // So the callback of txn is executed when log of txn aborted is replayed.
             return;
         }
-        unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment());
+        unprotectReadEndOperation((LoadJobFinalOperation) txnState.getTxnCommitAttachment(), true);
     }
 
     @Override
@@ -334,6 +337,9 @@ public abstract class BulkLoadJob extends LoadJob {
                 String key = Text.readString(in);
                 String value = Text.readString(in);
                 sessionVariables.put(key, value);
+            }
+            if (sessionVariables.containsKey(PRIORITY_SESSION_VARIABLE_KEY)) {
+                priority = Integer.parseInt(sessionVariables.get(PRIORITY_SESSION_VARIABLE_KEY));
             }
         } else {
             // old version of load does not have sqlmode, set it to default

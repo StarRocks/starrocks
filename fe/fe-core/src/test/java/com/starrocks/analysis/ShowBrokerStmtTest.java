@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -19,7 +20,6 @@ public class ShowBrokerStmtTest {
     @Test
     public void testNormal() throws Exception {
         ShowBrokerStmt stmt = (ShowBrokerStmt)UtFrameUtils.parseStmtWithNewParser("show broker", connectContext);
-        Assert.assertEquals("SHOW BROKER", stmt.toString());
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
         Assert.assertEquals(7, metaData.getColumnCount());

@@ -28,7 +28,6 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.BackendService;
 import com.starrocks.thrift.TAgentServiceVersion;
 import com.starrocks.thrift.TAgentTaskRequest;
-import com.starrocks.thrift.TAlterTabletReq;
 import com.starrocks.thrift.TAlterTabletReqV2;
 import com.starrocks.thrift.TCheckConsistencyReq;
 import com.starrocks.thrift.TClearAlterTaskRequest;
@@ -235,26 +234,9 @@ public class AgentBatchTask implements Runnable {
                 tAgentTaskRequest.setClone_req(request);
                 return tAgentTaskRequest;
             }
-            case ROLLUP: {
-                CreateRollupTask rollupTask = (CreateRollupTask) task;
-                TAlterTabletReq request = rollupTask.toThrift();
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(request.toString());
-                }
-                tAgentTaskRequest.setAlter_tablet_req(request);
-                tAgentTaskRequest.setResource_info(rollupTask.getResourceInfo());
-                return tAgentTaskRequest;
-            }
-            case SCHEMA_CHANGE: {
-                SchemaChangeTask schemaChangeTask = (SchemaChangeTask) task;
-                TAlterTabletReq request = schemaChangeTask.toThrift();
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug(request.toString());
-                }
-                tAgentTaskRequest.setAlter_tablet_req(request);
-                tAgentTaskRequest.setResource_info(schemaChangeTask.getResourceInfo());
-                return tAgentTaskRequest;
-            }
+            case ROLLUP:
+            case SCHEMA_CHANGE:
+                throw new RuntimeException("Old alter job is not supported.");
             case STORAGE_MEDIUM_MIGRATE: {
                 StorageMediaMigrationTask migrationTask = (StorageMediaMigrationTask) task;
                 TStorageMediumMigrateReq request = migrationTask.toThrift();

@@ -30,13 +30,30 @@
 
 namespace starrocks {
 
-StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                            bool use_page_cache, bool kept_in_memory) {
-    return success_once(_load_once, [&]() { return do_load(fs, filename, meta, use_page_cache, kept_in_memory); });
+BloomFilterIndexReader::BloomFilterIndexReader() {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), sizeof(BloomFilterIndexReader));
 }
 
-Status BloomFilterIndexReader::do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
-                                       bool use_page_cache, bool kept_in_memory) {
+BloomFilterIndexReader::~BloomFilterIndexReader() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(), _mem_usage());
+}
+
+StatusOr<bool> BloomFilterIndexReader::load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
+                                            bool use_page_cache, bool kept_in_memory) {
+    return success_once(_load_once, [&]() {
+        Status st = _do_load(fs, filename, meta, use_page_cache, kept_in_memory);
+        if (st.ok()) {
+            MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->bloom_filter_index_mem_tracker(),
+                                     _mem_usage() - sizeof(BloomFilterIndexReader));
+        } else {
+            _reset();
+        }
+        return st;
+    });
+}
+
+Status BloomFilterIndexReader::_do_load(FileSystem* fs, const std::string& filename, const BloomFilterIndexPB& meta,
+                                        bool use_page_cache, bool kept_in_memory) {
     _typeinfo = get_type_info(OLAP_FIELD_TYPE_VARCHAR);
     _algorithm = meta.algorithm();
     _hash_strategy = meta.hash_strategy();
@@ -44,6 +61,13 @@ Status BloomFilterIndexReader::do_load(FileSystem* fs, const std::string& filena
     _bloom_filter_reader = std::make_unique<IndexedColumnReader>(fs, filename, bf_index_meta);
     RETURN_IF_ERROR(_bloom_filter_reader->load(use_page_cache, kept_in_memory));
     return Status::OK();
+}
+
+void BloomFilterIndexReader::_reset() {
+    _typeinfo.reset();
+    _algorithm = BLOCK_BLOOM_FILTER;
+    _hash_strategy = HASH_MURMUR3_X64_64;
+    _bloom_filter_reader.reset();
 }
 
 Status BloomFilterIndexReader::new_iterator(std::unique_ptr<BloomFilterIndexIterator>* iterator) {
@@ -66,7 +90,7 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     DCHECK(num_to_read == num_read);
     // construct bloom filter
     BloomFilter::create(_reader->_algorithm, bf);
-    const Slice* value_ptr = reinterpret_cast<const Slice*>(block.data());
+    const auto* value_ptr = reinterpret_cast<const Slice*>(block.data());
     RETURN_IF_ERROR((*bf)->init(value_ptr->data, value_ptr->size, _reader->_hash_strategy));
     _pool->clear();
     return Status::OK();

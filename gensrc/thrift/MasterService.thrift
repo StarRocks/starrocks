@@ -44,6 +44,7 @@ struct TTabletInfo {
     13: optional Types.TPartitionId partition_id
     14: optional bool is_in_memory
     15: optional bool enable_persistent_index
+    16: optional Types.TVersion min_readable_version
 }
 
 struct TTabletVersionPair {

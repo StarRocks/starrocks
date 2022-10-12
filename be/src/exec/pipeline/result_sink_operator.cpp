@@ -1,15 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/result_sink_operator.h"
 
 #include "column/chunk.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
-#include "runtime/exec_env.h"
 #include "runtime/mysql_result_writer.h"
 #include "runtime/query_statistics.h"
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/runtime_state.h"
+#include "runtime/statistic_result_writer.h"
 
 namespace starrocks::pipeline {
 Status ResultSinkOperator::prepare(RuntimeState* state) {
@@ -22,6 +22,9 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     switch (_sink_type) {
     case TResultSinkType::MYSQL_PROTOCAL:
         _writer = std::make_shared<MysqlResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
+        break;
+    case TResultSinkType::STATISTIC:
+        _writer = std::make_shared<vectorized::StatisticResultWriter>(_sender.get(), _output_expr_ctxs, _profile.get());
         break;
     default:
         return Status::InternalError("Unknown result sink type");
@@ -91,8 +94,7 @@ bool ResultSinkOperator::need_input() const {
         return true;
     }
 
-    auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->try_add_batch(_fetch_data_result);
+    auto status = _writer->try_add_batch(_fetch_data_result);
     if (status.ok()) {
         return status.value();
     } else {
@@ -116,11 +118,10 @@ Status ResultSinkOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     }
     DCHECK(_fetch_data_result.empty());
 
-    auto* mysql_writer = down_cast<MysqlResultWriter*>(_writer.get());
-    auto status = mysql_writer->process_chunk_for_pipeline(chunk.get());
+    auto status = _writer->process_chunk(chunk.get());
     if (status.ok()) {
         _fetch_data_result = std::move(status.value());
-        return mysql_writer->try_add_batch(_fetch_data_result).status();
+        return _writer->try_add_batch(_fetch_data_result).status();
     } else {
         return status.status();
     }

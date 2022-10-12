@@ -75,6 +75,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
+import javax.annotation.Nullable;
+
+import static java.lang.Long.min;
 
 /**
  * Transaction Manager in database level, as a component in GlobalTransactionMgr
@@ -130,9 +133,7 @@ public class DatabaseTransactionMgr {
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
 
-    private long lastCommitTs = 0;
-
-    private long commitTsInc = 0;
+    private long maxCommitTs = 0;
 
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
 
@@ -189,6 +190,7 @@ public class DatabaseTransactionMgr {
     }
 
     @VisibleForTesting
+    @Nullable
     protected Set<Long> unprotectedGetTxnIdsByLabel(String label) {
         return labelToTxnIds.get(label);
     }
@@ -231,6 +233,14 @@ public class DatabaseTransactionMgr {
             readUnlock();
         }
         return infos;
+    }
+
+    public long getMinActiveTxnId() {
+        long result = Long.MAX_VALUE;
+        for (Long txnId : idToRunningTransactionState.keySet()) {
+            result = min(result, txnId);
+        }
+        return result;
     }
 
     private void getTxnStateInfo(TransactionState txnState, List<String> info) {
@@ -353,8 +363,8 @@ public class DatabaseTransactionMgr {
      * 5. persistent transactionState
      * 6. update nextVersion because of the failure of persistent transaction resulting in error version
      */
-    public void commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
-                                  TxnCommitAttachment txnCommitAttachment)
+    public VisibleStateWaiter commitTransaction(long transactionId, List<TabletCommitInfo> tabletCommitInfos,
+                                                TxnCommitAttachment txnCommitAttachment)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -376,13 +386,14 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
             throw new TransactionCommitFailedException(transactionState.getReason());
         }
+        VisibleStateWaiter waiter = new VisibleStateWaiter(transactionState);
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
-            return;
+            return waiter;
         }
         if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             LOG.debug("transaction is already committed: {}", transactionId);
-            return;
+            return waiter;
         }
         // For compatible reason, the default behavior of empty load is still returning "all partitions have no load data" and abort transaction.
         if (Config.empty_load_as_error && (tabletCommitInfos == null || tabletCommitInfos.isEmpty())) {
@@ -431,7 +442,6 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateListeners.add(listener);
         }
-        transactionState.buildFinishChecker(db);
         txnSpan.setAttribute("tables", tableListString.toString());
 
         // before state transform
@@ -456,6 +466,7 @@ public class DatabaseTransactionMgr {
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
+        transactionState.prepareFinishChecker(db);
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
         Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -465,6 +476,7 @@ public class DatabaseTransactionMgr {
             updateCatalogAfterCommittedSpan.end();
         }
         LOG.info("transaction:[{}] successfully committed", transactionState);
+        return waiter;
     }
 
     /**
@@ -577,7 +589,7 @@ public class DatabaseTransactionMgr {
         LOG.info("transaction:[{}] successfully prepare", transactionState);
     }
 
-    public void commitPreparedTransaction(long transactionId)
+    public VisibleStateWaiter commitPreparedTransaction(long transactionId)
             throws UserException {
         // 1. check status
         // the caller method already own db lock, we do not obtain db lock here
@@ -599,13 +611,14 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() == TransactionStatus.ABORTED) {
             throw new TransactionCommitFailedException(transactionState.getReason());
         }
+        VisibleStateWaiter waiter = new VisibleStateWaiter(transactionState);
         if (transactionState.getTransactionStatus() == TransactionStatus.VISIBLE) {
             LOG.debug("transaction is already visible: {}", transactionId);
-            return;
+            return waiter;
         }
         if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
             LOG.debug("transaction is already committed: {}", transactionId);
-            return;
+            return waiter;
         }
 
         Span txnSpan = transactionState.getTxnSpan();
@@ -660,38 +673,7 @@ public class DatabaseTransactionMgr {
             updateCatalogAfterCommittedSpan.end();
         }
         LOG.info("transaction:[{}] successfully committed", transactionState);
-    }
-
-    public boolean waitTransactionVisible(Database db, long transactionId, long timeoutMillis)
-            throws TransactionCommitFailedException {
-        TransactionState transactionState = null;
-        readLock();
-        try {
-            transactionState = unprotectedGetTransactionState(transactionId);
-        } finally {
-            readUnlock();
-        }
-
-        switch (transactionState.getTransactionStatus()) {
-            case COMMITTED:
-            case VISIBLE:
-                break;
-            default:
-                LOG.warn("transaction commit failed, db={}, txn_id: {}", db.getOriginName(), transactionId);
-                throw new TransactionCommitFailedException("transaction commit failed");
-        }
-
-        long currentTimeMillis = System.currentTimeMillis();
-        long timeoutTimeMillis = currentTimeMillis + timeoutMillis;
-        while (currentTimeMillis < timeoutTimeMillis && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
-            try {
-                transactionState.waitTransactionVisible(timeoutMillis);
-            } catch (InterruptedException e) {
-                LOG.info("thread interrupted while waiting for transaction {} to be visible", transactionId);
-            }
-            currentTimeMillis = System.currentTimeMillis();
-        }
-        return transactionState.getTransactionStatus() == TransactionStatus.VISIBLE;
+        return waiter;
     }
 
     public void deleteTransaction(TransactionState transactionState) {
@@ -846,7 +828,13 @@ public class DatabaseTransactionMgr {
                                     && !unfinishedBackends.isEmpty()
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
-                                return false;
+
+                                // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
+                                for (Long backendID : unfinishedBackends) {
+                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                        return false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -1046,18 +1034,8 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
         }
-        // since we send publish order by commit timestamp
-        // so that we need handle timetamp fallback
-        // & same timestamp cause by granularity
-        // The probability of timestamp fallback after FE failover is small
-        // and it is not considered at present
-        long commitTs = System.currentTimeMillis();
-        if (commitTs <= lastCommitTs) {
-            commitTs = lastCommitTs + ++commitTsInc;
-        } else {
-            commitTsInc = 0;
-        }
-        lastCommitTs = commitTs;
+        // commit timestamps needs to be strictly monotonically increasing
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1098,22 +1076,12 @@ public class DatabaseTransactionMgr {
     }
 
     protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
-        // transaction state is modified during check if the transaction could committed
+        // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
             return;
         }
-        // since we send publish order by commit timestamp
-        // so that we need handle timetamp fallback
-        // & same timestamp cause by granularity
-        // The probability of timestamp fallback after FE failover is small
-        // and it is not considered at present
-        long commitTs = System.currentTimeMillis();
-        if (commitTs <= lastCommitTs) {
-            commitTs = lastCommitTs + ++commitTsInc;
-        } else {
-            commitTsInc = 0;
-        }
-        lastCommitTs = commitTs;
+        // commit timestamps needs to be strictly monotonically increasing
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1165,9 +1133,15 @@ public class DatabaseTransactionMgr {
                 // no need to persist it. if prepare txn lost, the following commit will just be failed.
                 // user only need to retry this txn.
                 // The FRONTEND type txn is committed and running asynchronously, so we have to persist it.
+                long start = System.currentTimeMillis();
                 editLog.logInsertTransactionState(transactionState);
+                LOG.debug("insert txn state for txn {}, current state: {}, cost: {}ms",
+                        transactionState.getTransactionId(), transactionState.getTransactionStatus(),
+                        System.currentTimeMillis() - start);
             }
         }
+        // it's OK if getCommitTime() returns -1
+        maxCommitTs = Math.max(maxCommitTs, transactionState.getCommitTime());
         if (!transactionState.getTransactionStatus().isFinalStatus()) {
             if (idToRunningTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {
@@ -1176,7 +1150,7 @@ public class DatabaseTransactionMgr {
                     runningTxnNums++;
                 }
             }
-            if (transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
+            if (Config.enable_new_publish_mechanism && transactionState.getTransactionStatus() == TransactionStatus.COMMITTED) {
                 transactionGraph.add(transactionState.getTransactionId(), transactionState.getTableIdList());
             }
         } else {
@@ -1195,11 +1169,7 @@ public class DatabaseTransactionMgr {
     }
 
     private void updateTxnLabels(TransactionState transactionState) {
-        Set<Long> txnIds = labelToTxnIds.get(transactionState.getLabel());
-        if (txnIds == null) {
-            txnIds = Sets.newHashSet();
-            labelToTxnIds.put(transactionState.getLabel(), txnIds);
-        }
+        Set<Long> txnIds = labelToTxnIds.computeIfAbsent(transactionState.getLabel(), k -> Sets.newHashSet());
         txnIds.add(transactionState.getTransactionId());
     }
 
@@ -1289,7 +1259,10 @@ public class DatabaseTransactionMgr {
             for (Long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
                 if (table != null) {
-                    listeners.add(stateListenerFactory.create(this, table));
+                    TransactionStateListener listener = stateListenerFactory.create(this, table);
+                    if (listener != null) {
+                        listeners.add(listener);
+                    }
                 }
             }
         } finally {

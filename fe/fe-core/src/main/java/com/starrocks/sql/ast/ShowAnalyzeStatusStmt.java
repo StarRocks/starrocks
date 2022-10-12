@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
@@ -59,8 +59,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
 
         long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
 
-        if (null != columns && !columns.isEmpty()
-                && (columns.size() != totalCollectColumnsSize)) {
+        if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             String str = String.join(",", columns);
             row.set(3, str);
         }
@@ -70,7 +69,11 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.FINISH)) {
             row.set(6, "SUCCESS");
         } else {
-            row.set(6, analyzeStatus.getStatus().name());
+            String status = analyzeStatus.getStatus().name();
+            if (analyzeStatus.getStatus().equals(StatsConstants.ScheduleStatus.RUNNING)) {
+                status += " (" + analyzeStatus.getProgress() + "%" + ")";
+            }
+            row.set(6, status);
         }
 
         row.set(7, analyzeStatus.getStartTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));

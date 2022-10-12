@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -17,8 +17,9 @@ namespace starrocks::vectorized {
  * ARGS_TYPE: ALL TYPE
  * SERIALIZED_TYPE: TYPE_VARCHAR
  */
-template <PrimitiveType PT, typename T = RunTimeCppType<PT>>
-class HllNdvAggregateFunction final : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, T>> {
+template <PrimitiveType PT, bool IsOutputHLL, typename T = RunTimeCppType<PT>>
+class HllNdvAggregateFunction final
+        : public AggregateFunctionBatchHelper<HyperLogLog, HllNdvAggregateFunction<PT, IsOutputHLL, T>> {
 public:
     using ColumnType = RunTimeColumnType<PT>;
 
@@ -138,13 +139,26 @@ public:
 
     void finalize_to_column(FunctionContext* ctx __attribute__((unused)), ConstAggDataPtr __restrict state,
                             Column* to) const override {
-        DCHECK(to->is_numeric());
+        if constexpr (IsOutputHLL) {
+            DCHECK(to->is_object());
+            auto* column = down_cast<HyperLogLogColumn*>(to);
+            auto& hll_value = const_cast<HyperLogLog&>(this->data(state));
+            column->append(std::move(hll_value));
+        } else {
+            DCHECK(to->is_numeric());
 
-        auto* column = down_cast<Int64Column*>(to);
-        column->append(this->data(state).estimate_cardinality());
+            auto* column = down_cast<Int64Column*>(to);
+            column->append(this->data(state).estimate_cardinality());
+        }
     }
 
-    std::string get_name() const override { return "ndv"; }
+    std::string get_name() const override {
+        if constexpr (IsOutputHLL) {
+            return "hll_raw";
+        } else {
+            return "ndv";
+        }
+    }
 };
 
 } // namespace starrocks::vectorized

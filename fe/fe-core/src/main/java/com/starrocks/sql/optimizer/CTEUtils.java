@@ -1,168 +1,107 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
-import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.LinkedList;
 
 public class CTEUtils {
-    /*
-     * The score refers to the complexity of the operator and the probability of CTE reuse.
-     * The higher the score, the greater the probability of CTE reuse
-     */
-    private static final Map<OperatorType, Integer> OPERATOR_SCORES = ImmutableMap.<OperatorType, Integer>builder()
-            .put(OperatorType.LOGICAL_JOIN, 4)
-            .put(OperatorType.LOGICAL_AGGR, 6)
-            .put(OperatorType.LOGICAL_OLAP_SCAN, 4)
-            .put(OperatorType.LOGICAL_UNION, 4)
-            .put(OperatorType.LOGICAL_CTE_PRODUCE, 0)
-            .build();
 
-    /*
-     * Collect CTE operators info, why don't use TransformRule to search?
-     *
-     * like SQL:
-     *  with cte1 as (select * from A), cte2 as (select * from cte1) select * from cte2 union all select * from cte2;
-     * Now plan tree which contains CTE:
-     *                      Anchor1
-     *                    /         \
-     *              Produce1        Anchor2
-     *                /           /         \
-     *             ScanA     Produce2        UNION
-     *                         /            /      \
-     *                      Consume1  Consume2    Consume2
-     *                       /           |           |
-     *                     ScanA      Consume1    Consume1
-     *                                   |           |
-     *                                 ScanA        ScanA
-     *
-     * Based on the plan structure, there are such advantages:
-     * 1. Can push down consume predicate/limit for CTEs with forward dependencies, else need deduction
-     *    of predicate and limit in a loop
-     * 2. Inline CTE easy, don't need consider column-ref rewrite, call logical rule rewrite after inline
-     *
-     * But there are also questions:
-     * 1. Collect CTE operator is inaccurate, like the demo, the Consume1 only use once in `cte2`,
-     *    but it's appear there in the plan tree, it's not friendly to InlineRule check
-     * 2. CTE consume cost compute is inaccurate.
-     *
-     * So we need collect CTE operators info by plan tree, avoid collect repeat consume operator
-     *
-     * @Todo: move CTE inline into memo optimize phase
-     * */
-    public static void collectCteOperators(Memo memo, OptimizerContext context) {
+    public static void collectCteOperators(OptExpression anchor, OptimizerContext context) {
         context.getCteContext().reset();
-        collectCteProduce(memo.getRootGroup(), context, true);
-        collectCteConsume(memo.getRootGroup(), context, true);
-        collectCteProduceEstimate(context);
-    }
-
-    public static void collectCteOperatorsWithoutCosts(Memo memo, OptimizerContext context) {
-        context.getCteContext().reset();
-        collectCteProduce(memo.getRootGroup(), context, false);
-        collectCteConsume(memo.getRootGroup(), context, false);
-    }
-
-    private static void collectCteProduceEstimate(OptimizerContext context) {
-        CTEContext cteContext = context.getCteContext();
-        for (Map.Entry<Integer, OptExpression> entry : cteContext.getAllCTEProduce().entrySet()) {
-            AtomicInteger scores = new AtomicInteger(0);
-            cteProduceEstimate(entry.getValue().getGroupExpression().getGroup(), scores);
-
-            // score 15 meanings (1 join + 2 scan + 3 project), (1 agg + 1 scan + 2 project)
-            // A lower score will make a higher penalty factor
-            cteContext.addCTEProduceComplexityScores(entry.getKey(), 15.0 / scores.intValue());
-        }
+        collectCteProduce(anchor, context);
+        collectCteConsume(anchor, context);
     }
 
     /*
      * Estimate the complexity of the produce plan
      * */
-    private static void cteProduceEstimate(Group root, AtomicInteger scores) {
-        GroupExpression expression = root.getFirstLogicalExpression();
-        scores.addAndGet(OPERATOR_SCORES.getOrDefault(expression.getOp().getOpType(), 1));
-
-        if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType())) {
-            // don't ask consume children
-            return;
+    private static void collectCteProduce(OptExpression root, OptimizerContext context) {
+        for (OptExpression child : root.getInputs()) {
+            collectCteProduce(child, context);
         }
 
-        for (Group group : expression.getInputs()) {
-            cteProduceEstimate(group, scores);
-        }
-    }
-
-    private static void collectCteProduce(Group root, OptimizerContext context, boolean collectCosts) {
-        GroupExpression expression = root.getFirstLogicalExpression();
-
-        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(expression.getOp().getOpType())) {
+        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(root.getOp().getOpType())) {
             // produce
-            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
-            OptExpression opt = OptExpression.create(produce);
-            opt.attachGroupExpression(expression);
-            context.getCteContext().addCTEProduce(produce.getCteId(), opt);
-
-            // costs
-            if (collectCosts) {
-                Statistics statistics = calculateStatistics(root, context);
-                opt.setStatistics(statistics);
-                context.getCteContext().addCTEProduceCost(produce.getCteId(), statistics.getComputeSize());
-            }
-        }
-
-        for (Group group : expression.getInputs()) {
-            collectCteProduce(group, context, collectCosts);
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) root.getOp();
+            context.getCteContext().addCTEProduce(produce.getCteId());
         }
     }
 
-    private static void collectCteConsume(Group root, OptimizerContext context, boolean collectCosts) {
-        GroupExpression expression = root.getFirstLogicalExpression();
+    private static void collectCteConsume(OptExpression root, OptimizerContext context) {
+        for (Integer cteId : context.getCteContext().getAllCTEProduce()) {
+            OptExpression anchor = findCteAnchor(root, cteId);
+            Preconditions.checkNotNull(anchor);
+            collectCteConsumeImpl(anchor, cteId, context);
+        }
+    }
 
-        if (OperatorType.LOGICAL_CTE_CONSUME.equals(expression.getOp().getOpType())) {
-            // consumer
-            LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) expression.getOp();
-            context.getCteContext().addCTEConsume(consume.getCteId());
+    private static OptExpression findCteAnchor(OptExpression root, Integer cteId) {
+        LinkedList<OptExpression> queue = Lists.newLinkedList();
+        queue.addLast(root);
 
-            // required columns
-            ColumnRefSet requiredColumnRef =
-                    context.getCteContext().getRequiredColumns().getOrDefault(consume.getCteId(), new ColumnRefSet());
-            consume.getCteOutputColumnRefMap().values().forEach(requiredColumnRef::union);
-            context.getCteContext().getRequiredColumns().put(consume.getCteId(), requiredColumnRef);
-
-            // inline costs
-            if (collectCosts && !expression.getInputs().isEmpty()) {
-                context.getCteContext().addCTEConsumeInlineCost(consume.getCteId(),
-                        calculateStatistics(expression.getInputs().get(0), context).getComputeSize());
+        while (!queue.isEmpty()) {
+            OptExpression expression = queue.pollFirst();
+            if (OperatorType.LOGICAL_CTE_ANCHOR.equals(expression.getOp().getOpType()) &&
+                    ((LogicalCTEAnchorOperator) expression.getOp()).getCteId() == cteId) {
+                return expression.getInputs().get(1);
             }
 
+            expression.getInputs().forEach(queue::addLast);
+        }
+        return null;
+    }
+
+    private static void collectCteConsumeImpl(OptExpression root, Integer cteId, OptimizerContext context) {
+        if (OperatorType.LOGICAL_CTE_CONSUME.equals(root.getOp().getOpType())) {
+            if (((LogicalCTEConsumeOperator) root.getOp()).getCteId() != cteId) {
+                // not ask children
+                return;
+            }
+            // consumer
+            LogicalCTEConsumeOperator consume = (LogicalCTEConsumeOperator) root.getOp();
+            context.getCteContext().addCTEConsume(consume.getCteId());
             // not ask children
             return;
         }
 
-        for (Group group : expression.getInputs()) {
-            collectCteConsume(group, context, collectCosts);
+        for (OptExpression child : root.getInputs()) {
+            collectCteConsumeImpl(child, cteId, context);
         }
     }
 
-    private static Statistics calculateStatistics(Group root, OptimizerContext context) {
-        OptExpression opt = root.extractLogicalTree();
+    // Force CTEConsume has none children, but JoinReorder need CTEConsume statistics
+    public static void collectForceCteStatistics(Memo memo, OptimizerContext context) {
+        collectForceCteStatistics(memo.getRootGroup(), context);
+    }
 
-        /*
-         * Because logical operator can't compute costs in rewrite phase now, so
-         * there temporary use rows size
-         *
-         * */
-        calculateStatistics(opt, context);
-        return opt.getStatistics();
+    private static void collectForceCteStatistics(Group root, OptimizerContext context) {
+        GroupExpression expression = root.getFirstLogicalExpression();
+
+        for (Group group : expression.getInputs()) {
+            collectForceCteStatistics(group, context);
+        }
+
+        if (OperatorType.LOGICAL_CTE_PRODUCE.equals(expression.getOp().getOpType())) {
+            // produce
+            LogicalCTEProduceOperator produce = (LogicalCTEProduceOperator) expression.getOp();
+
+            // costs
+            if (context.getCteContext().isForceCTE(produce.getCteId())) {
+                OptExpression opt = root.extractLogicalTree();
+                calculateStatistics(opt, context);
+                context.getCteContext().addCTEStatistics(produce.getCteId(), opt.getStatistics());
+            }
+        }
     }
 
     private static void calculateStatistics(OptExpression expr, OptimizerContext context) {

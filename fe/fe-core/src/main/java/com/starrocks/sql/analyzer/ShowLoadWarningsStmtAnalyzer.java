@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
@@ -6,13 +6,13 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.ShowLoadWarningsStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -52,7 +52,7 @@ public class ShowLoadWarningsStmtAnalyzer {
             }
             return null;
         }
-        
+
         private void analyzeUrl(ShowLoadWarningsStmt statement, ConnectContext context) {
             // url should like:
             // http://be_ip:be_http_port/api/_load_error_log?file=__shard_xxx/error_log_xxx
@@ -175,7 +175,7 @@ public class ShowLoadWarningsStmtAnalyzer {
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Where clause should looks like: LABEL = \"your_load_label\","
-                        + " or LOAD_JOB_ID = $job_id");
+                                + " or LOAD_JOB_ID = $job_id");
             }
         }
     }

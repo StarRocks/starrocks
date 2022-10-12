@@ -23,38 +23,34 @@ package com.starrocks.alter;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.alter.AlterJob.JobState;
-import com.starrocks.analysis.AddBackendClause;
-import com.starrocks.analysis.AddComputeNodeClause;
-import com.starrocks.analysis.AddFollowerClause;
-import com.starrocks.analysis.AddObserverClause;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterLoadErrorUrlClause;
 import com.starrocks.analysis.CancelAlterSystemStmt;
 import com.starrocks.analysis.CancelStmt;
-import com.starrocks.analysis.DecommissionBackendClause;
-import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.DropComputeNodeClause;
-import com.starrocks.analysis.DropFollowerClause;
-import com.starrocks.analysis.DropObserverClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
-import com.starrocks.analysis.ModifyBrokerClause;
-import com.starrocks.analysis.ModifyFrontendAddressClause;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AddBackendClause;
+import com.starrocks.sql.ast.AddComputeNodeClause;
+import com.starrocks.sql.ast.AddFollowerClause;
+import com.starrocks.sql.ast.AddObserverClause;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterLoadErrorUrlClause;
+import com.starrocks.sql.ast.DecommissionBackendClause;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.DropComputeNodeClause;
+import com.starrocks.sql.ast.DropFollowerClause;
+import com.starrocks.sql.ast.DropObserverClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
+import com.starrocks.sql.ast.ModifyBrokerClause;
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.AgentTask;
-import com.starrocks.thrift.TTabletInfo;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -74,24 +70,11 @@ public class SystemHandler extends AlterHandler {
         super("cluster");
     }
 
-    @Override
-    public void handleFinishedReplica(AgentTask task, TTabletInfo finishTabletInfo, long reportVersion)
-            throws MetaNotFoundException {
-    }
 
     @Override
     protected void runAfterCatalogReady() {
         super.runAfterCatalogReady();
-        runOldAlterJob();
         runAlterJobV2();
-    }
-
-    @Deprecated
-    private void runOldAlterJob() {
-        // just remove all old decommission jobs. the decommission state is already marked in Backend,
-        // and we no long need decommission job.
-        alterJobs.clear();
-        finishedOrCancelledAlterJobs.clear();
     }
 
     // check all decommissioned backends, if there is no tablet on that backend, drop it.
@@ -130,7 +113,7 @@ public class SystemHandler extends AlterHandler {
     @Override
     // add synchronized to avoid process 2 or more stmts at same time
     public synchronized ShowResultSet process(List<AlterClause> alterClauses, Database dummyDb,
-                                     OlapTable dummyTbl) throws UserException {
+                                              OlapTable dummyTbl) throws UserException {
         Preconditions.checkArgument(alterClauses.size() == 1);
         AlterClause alterClause = alterClauses.get(0);
         if (alterClause instanceof AddBackendClause) {
@@ -264,24 +247,4 @@ public class SystemHandler extends AlterHandler {
         }
     }
 
-    @Override
-    public void replayInitJob(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
-        DecommissionBackendJob decommissionBackendJob = (DecommissionBackendJob) alterJob;
-        LOG.debug("replay init decommision backend job: {}", decommissionBackendJob.getBackendIdsString());
-        addAlterJob(alterJob);
-    }
-
-    @Override
-    public void replayFinish(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
-        LOG.debug("replay finish decommision backend job: {}",
-                ((DecommissionBackendJob) alterJob).getBackendIdsString());
-        removeAlterJob(alterJob.getTableId());
-        alterJob.setState(JobState.FINISHED);
-        addFinishedOrCancelledAlterJob(alterJob);
-    }
-
-    @Override
-    public void replayCancel(AlterJob alterJob, GlobalStateMgr globalStateMgr) {
-        throw new NotImplementedException();
-    }
 }

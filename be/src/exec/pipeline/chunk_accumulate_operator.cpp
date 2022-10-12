@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/chunk_accumulate_operator.h"
 
@@ -47,6 +47,14 @@ Status ChunkAccumulateOperator::set_finished(RuntimeState*) {
     _is_finished = true;
     _in_chunk.reset();
     _out_chunk.reset();
+
+    return Status::OK();
+}
+
+Status ChunkAccumulateOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    _in_chunk = nullptr;
+    _out_chunk = nullptr;
 
     return Status::OK();
 }

@@ -44,7 +44,7 @@ using google::protobuf::RepeatedPtrField;
 namespace starrocks {
 
 static StorageEngine* k_engine = nullptr;
-static MemTracker* k_tablet_meta_mem_tracker = nullptr;
+static MemTracker* k_metadata_mem_tracker = nullptr;
 static MemTracker* k_schema_change_mem_tracker = nullptr;
 
 void set_up() {
@@ -59,14 +59,11 @@ void set_up() {
     config::tablet_map_shard_size = 1;
     config::txn_map_shard_size = 1;
     config::txn_shard_size = 1;
-    config::storage_format_version = 2;
 
-    k_tablet_meta_mem_tracker = new MemTracker();
+    k_metadata_mem_tracker = new MemTracker();
     k_schema_change_mem_tracker = new MemTracker();
     starrocks::EngineOptions options;
     options.store_paths = paths;
-    options.tablet_meta_mem_tracker = k_tablet_meta_mem_tracker;
-    options.schema_change_mem_tracker = k_schema_change_mem_tracker;
     Status s = starrocks::StorageEngine::open(options, &k_engine);
     ASSERT_TRUE(s.ok()) << s.to_string();
 }
@@ -75,9 +72,9 @@ void tear_down() {
     config::storage_root_path = std::filesystem::current_path().string() + "/data_test";
     fs::remove_all(config::storage_root_path);
     fs::remove_all(string(getenv("STARROCKS_HOME")) + UNUSED_PREFIX);
-    k_tablet_meta_mem_tracker->release(k_tablet_meta_mem_tracker->consumption());
+    k_metadata_mem_tracker->release(k_metadata_mem_tracker->consumption());
     k_schema_change_mem_tracker->release(k_schema_change_mem_tracker->consumption());
-    delete k_tablet_meta_mem_tracker;
+    delete k_metadata_mem_tracker;
     delete k_schema_change_mem_tracker;
 }
 
@@ -165,7 +162,6 @@ void set_default_create_tablet_request(TCreateTabletReq* request) {
 void set_create_duplicate_tablet_request(TCreateTabletReq* request) {
     request->tablet_id = random();
     request->__set_version(1);
-    request->__set_version_hash(0);
     request->tablet_schema.schema_hash = 270068376;
     request->tablet_schema.short_key_column_count = 2;
     request->tablet_schema.keys_type = TKeysType::DUP_KEYS;

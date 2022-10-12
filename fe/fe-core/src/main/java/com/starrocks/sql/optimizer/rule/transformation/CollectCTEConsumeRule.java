@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -7,7 +7,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.CTEContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -54,12 +53,6 @@ public class CollectCTEConsumeRule extends TransformationRule {
                 cteContext.getConsumePredicates().put(consume.getCteId(), Lists.newArrayList(predicate));
             }
         }
-
-        // collect required columns
-        ColumnRefSet cteRequiredColumns =
-                cteContext.getRequiredColumns().getOrDefault(consume.getCteId(), new ColumnRefSet());
-        consume.getCteOutputColumnRefMap().values().forEach(cteRequiredColumns::union);
-        cteContext.getRequiredColumns().put(consume.getCteId(), cteRequiredColumns);
 
         return Collections.emptyList();
     }

@@ -1,8 +1,14 @@
-# ROUTINE LOAD
+# CREATE ROUTINE LOAD
 
 ## Description
 
-Routine Load allows you to submit a permanent import task to import data into StarRocks by constantly reading from a specified data source. Currently only support importing text format (CSV) data from Kafka without authentication or SSL authentication.
+Routine Load can stream Apache Kafka® events into StarRocks. It is an asynchronuous loading submitted by using MySQL protocol.
+
+Currently, Routine Load supports to load CSV and JSON data from Kafka. As for security measures, Routine Load can connect to Kafka without authentication，encryption and authentication using SSL, as well as authentication using SASL.
+
+This topic introduces CREATE ROUTINE LOAD‘s syntax, parameters and examples.
+
+> For scenarios, principle and basic steps, please see [Continuously load data from Apache Kafka®](/loading/RoutineLoad.md) .
 
 ## Syntax
 
@@ -234,7 +240,7 @@ The function is equivalent to the"--property" parameter in the kafka shell.
 
 When the value of a parameter is a file, the keyword "FILE:" needs to be added before the value.
 
-For information on how to create a file, see "HELP CREATE FILE;"
+For information on how to create a file, see CREATE FILE.
 
 For more supported custom parameters, see the client-side configuration item in librdkafka's official CONFIGURATION document.
 
@@ -651,7 +657,3 @@ JSON data format:
 
 }
 ```
-
-## Keywords
-
-CREATE, ROUTINE, LOAD

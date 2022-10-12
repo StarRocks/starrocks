@@ -213,7 +213,7 @@ public class UserProperty implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, qualifiedUser);
+        Text.writeString(out, ClusterNamespace.getFullName(qualifiedUser));
         out.writeLong(maxConn);
 
         UserResource.write(out);
@@ -236,7 +236,7 @@ public class UserProperty implements Writable {
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
             qualifiedUser = ClusterNamespace.getFullName(Text.readString(in));
         } else {
-            qualifiedUser = Text.readString(in);
+            qualifiedUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
 
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_43) {
@@ -258,9 +258,9 @@ public class UserProperty implements Writable {
             for (int i = 0; i < numPriv; ++i) {
                 String dbName = null;
                 if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-                    dbName = ClusterNamespace.getFullName(Text.readString(in));
-                } else {
                     dbName = Text.readString(in);
+                } else {
+                    dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
                 }
                 AccessPrivilege ap = AccessPrivilege.valueOf(Text.readString(in));
                 dbPrivMap.put(dbName, ap);

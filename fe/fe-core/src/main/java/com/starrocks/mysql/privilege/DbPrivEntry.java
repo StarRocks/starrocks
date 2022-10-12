@@ -21,7 +21,6 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.GrantStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.cluster.ClusterNamespace;
@@ -29,6 +28,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
+import com.starrocks.sql.analyzer.AST2SQL;
+import com.starrocks.sql.ast.GrantPrivilegeStmt;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -61,10 +62,6 @@ public class DbPrivEntry extends PrivEntry {
 
     public static DbPrivEntry create(String host, String db, String user, boolean isDomain, PrivBitSet privs)
             throws AnalysisException {
-        if (privs.containsNodePriv() || privs.containsResourcePriv() || privs.containsImpersonatePriv()) {
-            throw new AnalysisException(
-                    "Db privilege can not contains global or resource or impersonate privileges: " + privs);
-        }
         DbPrivEntry dbPrivEntry = new DbPrivEntry(host, user, isDomain, privs, db);
         dbPrivEntry.analyse();
         return dbPrivEntry;
@@ -110,7 +107,7 @@ public class DbPrivEntry extends PrivEntry {
             return -res;
         }
 
-        return -origUser.compareTo(otherEntry.origUser);
+        return -realOrigUser.compareTo(otherEntry.realOrigUser);
     }
 
     @Override
@@ -120,7 +117,7 @@ public class DbPrivEntry extends PrivEntry {
         }
 
         DbPrivEntry otherEntry = (DbPrivEntry) other;
-        if (origHost.equals(otherEntry.origHost) && origUser.equals(otherEntry.origUser)
+        if (origHost.equals(otherEntry.origHost) && realOrigUser.equals(otherEntry.realOrigUser)
                 && origDb.equals(otherEntry.origDb) && isDomain == otherEntry.isDomain) {
             return true;
         }
@@ -131,7 +128,7 @@ public class DbPrivEntry extends PrivEntry {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("db priv. host: ").append(origHost).append(", db: ").append(origDb);
-        sb.append(", user: ").append(origUser);
+        sb.append(", user: ").append(realOrigUser);
         sb.append(", priv: ").append(privSet).append(", set by resolver: ").append(isSetByDomainResolver);
         return sb.toString();
     }
@@ -144,19 +141,22 @@ public class DbPrivEntry extends PrivEntry {
             isClassNameWrote = true;
         }
         super.write(out);
-        Text.writeString(out, origDb);
+        // compatible with old version
+        Text.writeString(out, ClusterNamespace.getFullName(origDb));
         isClassNameWrote = false;
     }
 
     @Override
     public void readFields(DataInput in) throws IOException {
         super.readFields(in);
-        origDb = Text.readString(in);
+        origDb = ClusterNamespace.getNameFromFullName(Text.readString(in));
     }
 
     @Override
     public String toGrantSQL() {
-        return new GrantStmt(getUserIdent(), new TablePattern(origDb, "*"), privSet).toSql();
+        GrantPrivilegeStmt stmt = new GrantPrivilegeStmt(null, "TABLE", getUserIdent());
+        stmt.setAnalysedTable(privSet, new TablePattern(origDb, "*"));
+        return AST2SQL.toString(stmt);
     }
 
 }

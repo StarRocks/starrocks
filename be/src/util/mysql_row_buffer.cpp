@@ -119,23 +119,23 @@ void MysqlRowBuffer::push_number(T data) {
     _data.resize(pos - _data.data());
 }
 
-void MysqlRowBuffer::push_string(const char* str, size_t length) {
+void MysqlRowBuffer::push_string(const char* str, size_t length, char escape_char) {
     if (_array_level == 0) {
         _push_string_normal(str, length);
     } else {
-        const size_t escaped_len = 2 + _length_after_escape(str, length);
-        //                  ^^^ Surround the string with two double-quotas.
+        // Surround the string with two double-quotas.
+        const size_t escaped_len = 2 + _length_after_escape(str, length, escape_char);
         char* pos = _resize_extra(escaped_len);
-        *pos++ = '"';
+        *pos++ = escape_char;
         if (escaped_len == length + 2) {
             // No '\' or '"' exists in |str|, copy directly.
             strings::memcpy_inlined(pos, str, length);
             pos += length;
         } else {
             // Escape '\' and '"'.
-            pos = _escape(pos, str, length);
+            pos = _escape(pos, str, length, escape_char);
         }
-        *pos++ = '"';
+        *pos++ = escape_char;
         DCHECK_EQ(_data.data() + _data.size(), pos);
         _data.resize(pos - _data.data());
     }
@@ -193,30 +193,26 @@ void MysqlRowBuffer::separator(char c) {
     _data.push_back(c);
 }
 
-size_t MysqlRowBuffer::_length_after_escape(const char* str, size_t length) {
+size_t MysqlRowBuffer::_length_after_escape(const char* str, size_t length, char escape_char) {
     size_t new_len = length;
     for (size_t i = 0; i < length; i++) {
-        new_len += ((str[i] == '"') | (str[i] == '\\'));
+        new_len += ((str[i] == escape_char) | (str[i] == '\\'));
         //                         ^^ use '|' or instead of '||' intentionally.
     }
     return new_len;
 }
 
-char* MysqlRowBuffer::_escape(char* dst, const char* src, size_t length) {
+char* MysqlRowBuffer::_escape(char* dst, const char* src, size_t length, char escape_char) {
     for (size_t i = 0; i < length; i++) {
         char c = src[i];
-        switch (c) {
-        case '"':
+        if (c == escape_char) {
             *dst++ = '\\';
-            *dst++ = '"';
-            break;
-        case '\\':
+            *dst++ = escape_char;
+        } else if (c == '\\') {
             *dst++ = '\\';
             *dst++ = '\\';
-            break;
-        default:
+        } else {
             *dst++ = c;
-            break;
         }
     }
     return dst;

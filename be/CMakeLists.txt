@@ -73,6 +73,8 @@ option(WITH_GCOV "Build binary with gcov to get code coverage" OFF)
 
 option(WITH_COMPRESS "Build binary with compresss debug section" ON)
 
+option(WITH_BLOCK_CACHE "Build binary with block cache feature" OFF)
+
 option(USE_STAROS "Use StarOS to manager tablet info" OFF)
 
 # Check gcc
@@ -144,8 +146,14 @@ message(STATUS ${Boost_LIBRARIES})
 set(GPERFTOOLS_HOME "${THIRDPARTY_DIR}/gperftools")
 
 # Set all libraries
-add_library(gflags STATIC IMPORTED)
-set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CACHELIB_DIR "$ENV{CACHELIB_DIR}")
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${CACHELIB_DIR}/lib/libgflags_debug.a)
+else()
+    add_library(gflags STATIC IMPORTED)
+    set_target_properties(gflags PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libgflags.a)
+endif()
 
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
@@ -250,6 +258,9 @@ set_target_properties(librdkafka_cpp PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_D
 
 add_library(librdkafka STATIC IMPORTED)
 set_target_properties(librdkafka PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/librdkafka.a)
+
+add_library(libpulsar STATIC IMPORTED)
+set_target_properties(libpulsar PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libpulsar.a)
 
 add_library(libs2 STATIC IMPORTED)
 set_target_properties(libs2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libs2.a)
@@ -378,6 +389,9 @@ set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_SYSTEM_NO_DEPRECATED -DBOOST_U
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Werror=return-type -Werror=switch")
 if (${USE_STAROS} STREQUAL "ON")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DUSE_STAROS")
+endif()
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DWITH_BLOCK_CACHE")
 endif()
 
 # When LLVM is used, should give GCC_HOME to get c++11 header to use new string and list
@@ -532,6 +546,10 @@ set(STARROCKS_LINK_LIBS
     ${WL_END_GROUP}
 )
 
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} BlockCache)
+endif()
+
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     mysql
 )
@@ -600,6 +618,7 @@ set(STARROCKS_DEPENDENCIES
     simdjson
     librdkafka_cpp
     librdkafka
+    libpulsar
     velocypack
     opentelemetry_trace
     http_client_curl
@@ -684,31 +703,6 @@ else()
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${OUTPUT_DIR}/lib)
 endif ()
 
-add_subdirectory(${SRC_DIR}/agent)
-add_subdirectory(${SRC_DIR}/common)
-add_subdirectory(${SRC_DIR}/connector)
-add_subdirectory(${SRC_DIR}/column)
-add_subdirectory(${SRC_DIR}/formats)
-add_subdirectory(${SRC_DIR}/fs)
-add_subdirectory(${SRC_DIR}/exec)
-add_subdirectory(${SRC_DIR}/exprs)
-add_subdirectory(${SRC_DIR}/gen_cpp)
-add_subdirectory(${SRC_DIR}/geo)
-add_subdirectory(${SRC_DIR}/gutil)
-add_subdirectory(${SRC_DIR}/http)
-add_subdirectory(${SRC_DIR}/io)
-add_subdirectory(${SRC_DIR}/storage)
-add_subdirectory(${SRC_DIR}/runtime)
-add_subdirectory(${SRC_DIR}/serde)
-add_subdirectory(${SRC_DIR}/service)
-add_subdirectory(${SRC_DIR}/testutil)
-add_subdirectory(${SRC_DIR}/types)
-add_subdirectory(${SRC_DIR}/udf)
-
-add_subdirectory(${SRC_DIR}/tools)
-
-add_subdirectory(${SRC_DIR}/util)
-
 # Utility CMake function to make specifying tests and benchmarks less verbose
 FUNCTION(ADD_BE_TEST TEST_NAME)
     set(BUILD_OUTPUT_ROOT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/")
@@ -751,6 +745,34 @@ FUNCTION(ADD_BE_BENCH TEST_NAME)
     ADD_TEST(${TEST_FILE_NAME} "${BUILD_OUTPUT_ROOT_DIRECTORY}/${TEST_NAME}")
 ENDFUNCTION()
 
+add_subdirectory(${SRC_DIR}/agent)
+add_subdirectory(${SRC_DIR}/bench)
+add_subdirectory(${SRC_DIR}/common)
+add_subdirectory(${SRC_DIR}/connector)
+add_subdirectory(${SRC_DIR}/column)
+add_subdirectory(${SRC_DIR}/formats)
+add_subdirectory(${SRC_DIR}/fs)
+add_subdirectory(${SRC_DIR}/exec)
+add_subdirectory(${SRC_DIR}/exprs)
+add_subdirectory(${SRC_DIR}/gen_cpp)
+add_subdirectory(${SRC_DIR}/geo)
+add_subdirectory(${SRC_DIR}/gutil)
+add_subdirectory(${SRC_DIR}/http)
+add_subdirectory(${SRC_DIR}/io)
+add_subdirectory(${SRC_DIR}/storage)
+add_subdirectory(${SRC_DIR}/runtime)
+add_subdirectory(${SRC_DIR}/serde)
+add_subdirectory(${SRC_DIR}/service)
+add_subdirectory(${SRC_DIR}/testutil)
+add_subdirectory(${SRC_DIR}/types)
+add_subdirectory(${SRC_DIR}/udf)
+
+add_subdirectory(${SRC_DIR}/tools)
+add_subdirectory(${SRC_DIR}/util)
+
+if (${WITH_BLOCK_CACHE} STREQUAL "ON")
+    add_subdirectory(${SRC_DIR}/block_cache)
+endif()
 
 if (${MAKE_TEST} STREQUAL "ON")
     add_subdirectory(test)
@@ -785,5 +807,4 @@ install(FILES
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)
-
 

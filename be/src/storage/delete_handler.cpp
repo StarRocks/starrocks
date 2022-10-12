@@ -29,7 +29,6 @@
 #include <string>
 #include <vector>
 
-#include "gen_cpp/olap_file.pb.h"
 #include "storage/olap_common.h"
 #include "storage/utils.h"
 #include "util/scoped_cleanup.h"

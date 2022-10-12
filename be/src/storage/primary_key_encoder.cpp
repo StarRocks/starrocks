@@ -2,7 +2,7 @@
 // This file is based on code available under the Apache license here:
 //   https://github.com/apache/kudu/blob/master/src/kudu/common/key_encoder.h
 
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 // Some code copy from Kudu
 // Licensed to the Apache Software Foundation (ASF) under one

@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
+
+import com.google.common.base.Stopwatch;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -8,11 +10,13 @@ import java.util.UUID;
 
 // OptimizerTraceInfo is used to record some important info during query optimization
 public class OptimizerTraceInfo {
-    private UUID queryId;
-    private Map<String, Integer> rulesAppliedTimes = new HashMap<>();
+    private final UUID queryId;
+    private final Map<String, Integer> rulesAppliedTimes = new HashMap<>();
+    private final Stopwatch stopwatch;
 
     public OptimizerTraceInfo(UUID queryId) {
         this.queryId = queryId;
+        this.stopwatch = Stopwatch.createStarted();
     }
 
     public void recordAppliedRule(String rule) {
@@ -25,6 +29,10 @@ public class OptimizerTraceInfo {
 
     public UUID getQueryId() {
         return queryId;
+    }
+
+    public Stopwatch getStopwatch() {
+        return stopwatch;
     }
 
     @Override

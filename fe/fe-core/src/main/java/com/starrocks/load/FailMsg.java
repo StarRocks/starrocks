@@ -17,6 +17,7 @@
 
 package com.starrocks.load;
 
+import com.google.common.base.Strings;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 
@@ -75,7 +76,11 @@ public class FailMsg implements Writable {
 
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, cancelType.name());
-        Text.writeString(out, msg);
+        if (Strings.isNullOrEmpty(msg)) {
+            Text.writeString(out, "");
+        } else {
+            Text.writeString(out, msg);
+        }
     }
 
     public void readFields(DataInput in) throws IOException {

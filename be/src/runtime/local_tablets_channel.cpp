@@ -1,14 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "runtime/local_tablets_channel.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <brpc/controller.h>
-#include <bthread/condition_variable.h>
-#include <bthread/mutex.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 
 #include <chrono>
@@ -23,173 +16,25 @@ DIAGNOSTIC_POP
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/ref_counted.h"
+#include "gutil/strings/join.h"
 #include "runtime/descriptors.h"
 #include "runtime/global_dict/types.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
-#include "service/backend_options.h"
-#include "storage/async_delta_writer.h"
 #include "storage/delta_writer.h"
 #include "storage/memtable.h"
+#include "storage/segment_flush_executor.h"
+#include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/txn_manager.h"
 #include "util/compression/block_compression.h"
-#include "util/countdown_latch.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
-
-class LocalTabletsChannel : public TabletsChannel {
-    using AsyncDeltaWriter = vectorized::AsyncDeltaWriter;
-    using AsyncDeltaWriterCallback = vectorized::AsyncDeltaWriterCallback;
-    using AsyncDeltaWriterRequest = vectorized::AsyncDeltaWriterRequest;
-    using CommittedRowsetInfo = vectorized::CommittedRowsetInfo;
-
-public:
-    LocalTabletsChannel(LoadChannel* load_channel, const TabletsChannelKey& key, MemTracker* mem_tracker);
-    ~LocalTabletsChannel() override;
-
-    LocalTabletsChannel(const LocalTabletsChannel&) = delete;
-    LocalTabletsChannel(LocalTabletsChannel&&) = delete;
-    void operator=(const LocalTabletsChannel&) = delete;
-    void operator=(LocalTabletsChannel&&) = delete;
-
-    const TabletsChannelKey& key() const { return _key; }
-
-    Status open(const PTabletWriterOpenRequest& params) override;
-
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) override;
-
-    void cancel() override;
-
-    MemTracker* mem_tracker() { return _mem_tracker; }
-
-private:
-    using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
-
-    static std::atomic<uint64_t> _s_tablet_writer_count;
-
-    struct Sender {
-        bthread::Mutex lock;
-
-        std::set<int64_t> receive_sliding_window;
-        std::set<int64_t> success_sliding_window;
-
-        int64_t last_sliding_packet_seq = -1;
-    };
-
-    class WriteContext {
-    public:
-        explicit WriteContext(PTabletWriterAddBatchResult* response)
-                : _response_lock(),
-                  _response(response),
-                  _latch(nullptr),
-                  _chunk(),
-                  _row_indexes(),
-                  _channel_row_idx_start_points() {}
-
-        ~WriteContext() {
-            if (_latch) _latch->count_down();
-        }
-
-        DISALLOW_COPY_AND_MOVE(WriteContext);
-
-        void update_status(const Status& status) {
-            if (status.ok() || _response == nullptr) {
-                return;
-            }
-            std::string msg = fmt::format("{}: {}", BackendOptions::get_localhost(), status.message());
-            std::lock_guard l(_response_lock);
-            if (_response->status().status_code() == TStatusCode::OK) {
-                _response->mutable_status()->set_status_code(status.code());
-                _response->mutable_status()->add_error_msgs(msg);
-            }
-        }
-
-        void add_committed_tablet_info(PTabletInfo* tablet_info) {
-            DCHECK(_response != nullptr);
-            std::lock_guard l(_response_lock);
-            _response->add_tablet_vec()->Swap(tablet_info);
-        }
-
-        void set_count_down_latch(BThreadCountDownLatch* latch) { _latch = latch; }
-
-    private:
-        friend class LocalTabletsChannel;
-
-        mutable bthread::Mutex _response_lock;
-        PTabletWriterAddBatchResult* _response;
-        BThreadCountDownLatch* _latch;
-
-        vectorized::Chunk _chunk;
-        std::unique_ptr<uint32_t[]> _row_indexes;
-        std::unique_ptr<uint32_t[]> _channel_row_idx_start_points;
-    };
-
-    class WriteCallback : public AsyncDeltaWriterCallback {
-    public:
-        explicit WriteCallback(std::shared_ptr<WriteContext> context) : _context(std::move(context)) {}
-
-        ~WriteCallback() override = default;
-
-        void run(const Status& st, const CommittedRowsetInfo* info) override;
-
-        WriteCallback(const WriteCallback&) = delete;
-        void operator=(const WriteCallback&) = delete;
-        WriteCallback(WriteCallback&&) = delete;
-        void operator=(WriteCallback&&) = delete;
-
-    private:
-        std::shared_ptr<WriteContext> _context;
-    };
-
-    Status _open_all_writers(const PTabletWriterOpenRequest& params);
-
-    Status _build_chunk_meta(const ChunkPB& pb_chunk);
-
-    StatusOr<std::shared_ptr<WriteContext>> _create_write_context(const PTabletWriterAddChunkRequest& request,
-                                                                  PTabletWriterAddBatchResult* response);
-
-    int _close_sender(const int64_t* partitions, size_t partitions_size);
-
-    Status _deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk, faststring* uncompressed_buffer);
-
-    LoadChannel* _load_channel;
-
-    TabletsChannelKey _key;
-
-    MemTracker* _mem_tracker;
-
-    // initialized in open function
-    int64_t _txn_id = -1;
-    int64_t _index_id = -1;
-    OlapTableSchemaParam* _schema = nullptr;
-    RowDescriptor* _row_desc = nullptr;
-
-    // next sequence we expect
-    std::atomic<int> _num_remaining_senders;
-    std::vector<Sender> _senders;
-    size_t _max_sliding_window_size = config::max_load_dop * 3;
-
-    mutable bthread::Mutex _partitions_ids_lock;
-    std::unordered_set<int64_t> _partition_ids;
-
-    mutable bthread::Mutex _chunk_meta_lock;
-    serde::ProtobufChunkMeta _chunk_meta;
-    std::atomic<bool> _has_chunk_meta;
-
-    std::unordered_map<int64_t, uint32_t> _tablet_id_to_sorted_indexes;
-    // tablet_id -> TabletChannel
-    std::unordered_map<int64_t, std::unique_ptr<AsyncDeltaWriter>> _delta_writers;
-
-    vectorized::GlobalDictByNameMaps _global_dicts;
-    std::unique_ptr<MemPool> _mem_pool;
-};
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
@@ -199,7 +44,6 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
           _load_channel(load_channel),
           _key(key),
           _mem_tracker(mem_tracker),
-          _has_chunk_meta(false),
           _mem_pool(std::make_unique<MemPool>()) {
     static std::once_flag once_flag;
     std::call_once(once_flag, [] {
@@ -209,17 +53,15 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
 
 LocalTabletsChannel::~LocalTabletsChannel() {
     _s_tablet_writer_count -= _delta_writers.size();
-    delete _row_desc;
-    delete _schema;
     _mem_pool.reset();
 }
 
-Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
+Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, std::shared_ptr<OlapTableSchemaParam> schema) {
     _txn_id = params.txn_id();
     _index_id = params.index_id();
-    _schema = new OlapTableSchemaParam();
-    RETURN_IF_ERROR(_schema->init(params.schema()));
-    _row_desc = new RowDescriptor(_schema->tuple_desc(), false);
+    _schema = schema;
+    _tuple_desc = _schema->tuple_desc();
+    _node_id = params.node_id();
 
     _num_remaining_senders.store(params.num_senders(), std::memory_order_release);
     _senders = std::vector<Sender>(params.num_senders());
@@ -228,10 +70,30 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params) {
     return Status::OK();
 }
 
-void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                                    PTabletWriterAddBatchResult* response, google::protobuf::Closure* done) {
-    ClosureGuard done_guard(done);
+void LocalTabletsChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                                      PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    auto it = _delta_writers.find(request->tablet_id());
+    if (it == _delta_writers.end()) {
+        response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+        response->mutable_status()->add_error_msgs(
+                fmt::format("PTabletWriterAddSegmentRequest tablet_id {} not exists", request->tablet_id()));
+        return;
+    }
+    auto& delta_writer = it->second;
 
+    AsyncDeltaWriterSegmentRequest req;
+    req.cntl = cntl;
+    req.request = request;
+    req.response = response;
+    req.done = done;
+
+    delta_writer->write_segment(req);
+    closure_guard.release();
+}
+
+void LocalTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+                                    PTabletWriterAddBatchResult* response) {
     auto t0 = std::chrono::steady_clock::now();
 
     if (UNLIKELY(!request.has_sender_id())) {
@@ -297,7 +159,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         }
     }
 
-    auto res = _create_write_context(request, response);
+    auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
         res.status().to_protobuf(response->mutable_status());
         return;
@@ -309,7 +171,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
     }
 
     auto context = std::move(res).value();
-    auto channel_size = request.has_chunk() ? _tablet_id_to_sorted_indexes.size() : 0;
+    auto channel_size = chunk != nullptr ? _tablet_id_to_sorted_indexes.size() : 0;
     auto tablet_ids = request.tablet_ids().data();
     auto channel_row_idx_start_points = context->_channel_row_idx_start_points.get(); // May be a nullptr
     auto row_indexes = context->_row_indexes.get();                                   // May be a nullptr
@@ -330,7 +192,7 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         auto& delta_writer = it->second;
 
         AsyncDeltaWriterRequest req;
-        req.chunk = &context->_chunk;
+        req.chunk = chunk;
         req.indexes = row_indexes + from;
         req.indexes_size = size;
         req.commit_after_write = false;
@@ -351,17 +213,30 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
     // be executed ahead of the write requests submitted by other senders.
     if (request.eos() && _close_sender(request.partition_ids().data(), request.partition_ids_size()) == 0) {
         close_channel = true;
+        std::stringstream commit_tablets;
+        commit_tablets << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                       << " commit tablets: ";
+        std::stringstream abort_tablets;
+        abort_tablets << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(request.id())
+                      << " abort tablets: ";
         std::lock_guard l1(_partitions_ids_lock);
         for (auto& [tablet_id, delta_writer] : _delta_writers) {
             (void)tablet_id;
-            if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
-                // no data load, abort txn without printing log
-                delta_writer->abort(false);
-            } else {
-                auto cb = new WriteCallback(context);
-                delta_writer->commit(cb);
+            // Secondary replica will commit by Primary replica
+            if (delta_writer->replica_state() != vectorized::Secondary) {
+                if (UNLIKELY(_partition_ids.count(delta_writer->partition_id()) == 0)) {
+                    // no data load, abort txn without printing log
+                    delta_writer->abort(false);
+                    abort_tablets << tablet_id << ", ";
+                } else {
+                    auto cb = new WriteCallback(context);
+                    delta_writer->commit(cb);
+                    commit_tablets << tablet_id << ", ";
+                }
             }
         }
+        LOG(INFO) << commit_tablets.str();
+        LOG(INFO) << abort_tablets.str();
     }
 
     // Must reset the context pointer before waiting on the |count_down_latch|,
@@ -372,6 +247,44 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
 
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+
+    // We need wait all secondary replica commit before we close the channel
+    if (_is_replicated_storage && close_channel) {
+        bool timeout = false;
+        for (auto& [tablet_id, delta_writer] : _delta_writers) {
+            // Wait util seconary replica commit/abort by primary
+            if (delta_writer->replica_state() == vectorized::Secondary) {
+                int i = 0;
+                do {
+                    auto state = delta_writer->get_state();
+                    if (state == vectorized::kCommitted || state == vectorized::kAborted ||
+                        state == vectorized::kUninitialized) {
+                        break;
+                    }
+                    i++;
+                    // only sleep in bthread
+                    bthread_usleep(10000); // 10ms
+                    auto t1 = std::chrono::steady_clock::now();
+                    if (std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000 >
+                        request.timeout_ms()) {
+                        LOG(INFO) << "wait tablet " << tablet_id << " secondary replica finish timeout "
+                                  << request.timeout_ms() << "ms still in state " << state;
+                        timeout = true;
+                        break;
+                    }
+
+                    if (i % 6000 == 0) {
+                        LOG(INFO) << "wait tablet " << tablet_id << " secondary replica finish already "
+                                  << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000
+                                  << "ms still in state " << state;
+                    }
+                } while (true);
+            }
+            if (timeout) {
+                break;
+            }
+        }
+    }
 
     {
         std::lock_guard lock(_senders[request.sender_id()].lock);
@@ -389,10 +302,6 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         }
     }
 
-    auto t1 = std::chrono::steady_clock::now();
-    response->set_execution_time_us(std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
-    response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
-
     if (close_channel) {
         _load_channel->remove_tablets_channel(_index_id);
 
@@ -408,21 +317,15 @@ void LocalTabletsChannel::add_chunk(brpc::Controller* cntl, const PTabletWriterA
         auto st = StorageEngine::instance()->txn_manager()->persist_tablet_related_txns(tablets);
         LOG_IF(WARNING, !st.ok()) << "failed to persist transactions: " << st;
     }
-}
 
-Status LocalTabletsChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
-    if (_has_chunk_meta.load(std::memory_order_acquire)) {
-        return Status::OK();
+    int64_t last_execution_time_us = 0;
+    if (response->has_execution_time_us()) {
+        last_execution_time_us = response->execution_time_us();
     }
-    std::lock_guard l(_chunk_meta_lock);
-    if (_has_chunk_meta.load(std::memory_order_acquire)) {
-        return Status::OK();
-    }
-    StatusOr<serde::ProtobufChunkMeta> res = serde::build_protobuf_chunk_meta(*_row_desc, pb_chunk);
-    if (!res.ok()) return res.status();
-    _chunk_meta = std::move(res).value();
-    _has_chunk_meta.store(true, std::memory_order_release);
-    return Status::OK();
+    auto t1 = std::chrono::steady_clock::now();
+    response->set_execution_time_us(last_execution_time_us +
+                                    std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count());
+    response->set_wait_lock_time_us(0); // We didn't measure the lock wait time, just give the caller a fake time
 }
 
 int LocalTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
@@ -464,6 +367,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         }
     }
 
+    _is_replicated_storage = params.is_replicated_storage();
     std::vector<int64_t> tablet_ids;
     tablet_ids.reserve(params.tablets_size());
     for (const PTabletWithPartition& tablet : params.tablets()) {
@@ -476,6 +380,15 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.slots = index_slots;
         options.global_dicts = &_global_dicts;
         options.parent_span = _load_channel->get_span();
+        options.index_id = _index_id;
+        options.node_id = _node_id;
+        options.timeout_ms = params.timeout_ms();
+        options.is_replicated_storage = params.is_replicated_storage();
+        if (params.is_replicated_storage()) {
+            for (auto& replica : tablet.replicas()) {
+                options.replicas.emplace_back(replica);
+            }
+        }
 
         auto res = AsyncDeltaWriter::open(options, _mem_tracker);
         RETURN_IF_ERROR(res.status());
@@ -490,73 +403,54 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
     for (size_t i = 0; i < tablet_ids.size(); ++i) {
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
+    std::stringstream ss;
+    ss << "open delta writer ";
+    for (auto& [tablet_id, delta_writer] : _delta_writers) {
+        ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
+    }
+    LOG(INFO) << ss.str();
     return Status::OK();
 }
 
 void LocalTabletsChannel::cancel() {
+    vector<int64_t> tablet_ids;
+    tablet_ids.reserve(_delta_writers.size());
     for (auto& it : _delta_writers) {
-        (void)it.second->abort();
+        (void)it.second->abort(false);
+        tablet_ids.emplace_back(it.first);
     }
+    string tablet_id_list_str;
+    JoinInts(tablet_ids, ",", &tablet_id_list_str);
+    LOG(INFO) << "cancel LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << _key.id
+              << " index_id: " << _key.index_id << " #tablet:" << _delta_writers.size()
+              << " tablet_ids:" << tablet_id_list_str;
 }
 
-Status LocalTabletsChannel::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk& chunk,
-                                               faststring* uncompressed_buffer) {
-    if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
-        TRY_CATCH_BAD_ALLOC({
-            serde::ProtobufChunkDeserializer des(_chunk_meta);
-            StatusOr<vectorized::Chunk> res = des.deserialize(pchunk.data());
-            if (!res.ok()) return res.status();
-            chunk = std::move(res).value();
-        });
-    } else {
-        [[maybe_unused]] size_t uncompressed_size;
-        {
-            const BlockCompressionCodec* codec = nullptr;
-            RETURN_IF_ERROR(get_block_compression_codec(pchunk.compress_type(), &codec));
-            uncompressed_size = pchunk.uncompressed_size();
-            TRY_CATCH_BAD_ALLOC(uncompressed_buffer->resize(uncompressed_size));
-            Slice output{uncompressed_buffer->data(), uncompressed_size};
-            RETURN_IF_ERROR(codec->decompress(pchunk.data(), &output));
-        }
-        {
-            TRY_CATCH_BAD_ALLOC({
-                std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
-                serde::ProtobufChunkDeserializer des(_chunk_meta);
-                StatusOr<vectorized::Chunk> res = des.deserialize(buff);
-                if (!res.ok()) return res.status();
-                chunk = std::move(res).value();
-            });
-        }
+void LocalTabletsChannel::cancel(int64_t tablet_id) {
+    auto it = _delta_writers.find(tablet_id);
+    if (it != _delta_writers.end()) {
+        it->second->abort(true);
     }
-    return Status::OK();
 }
 
 StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel::_create_write_context(
-        const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
-    if (!request.has_chunk() && !request.eos()) {
+        vectorized::Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
+    if (chunk == nullptr && !request.eos()) {
         return Status::InvalidArgument("PTabletWriterAddChunkRequest has no chunk or eos");
     }
 
     auto context = std::make_shared<WriteContext>(response);
 
-    if (!request.has_chunk()) {
+    if (chunk == nullptr) {
         return std::move(context);
     }
 
-    auto& pchunk = request.chunk();
-    RETURN_IF_ERROR(_build_chunk_meta(pchunk));
-
-    vectorized::Chunk& chunk = context->_chunk;
-
-    faststring uncompressed_buffer;
-    RETURN_IF_ERROR(_deserialize_chunk(pchunk, chunk, &uncompressed_buffer));
-
-    if (UNLIKELY(request.tablet_ids_size() != chunk.num_rows())) {
+    if (UNLIKELY(request.tablet_ids_size() != chunk->num_rows())) {
         return Status::InvalidArgument("request.tablet_ids_size() != chunk.num_rows()");
     }
 
     const auto channel_size = _tablet_id_to_sorted_indexes.size();
-    context->_row_indexes = std::make_unique<uint32_t[]>(chunk.num_rows());
+    context->_row_indexes = std::make_unique<uint32_t[]>(chunk->num_rows());
     context->_channel_row_idx_start_points = std::make_unique<uint32_t[]>(channel_size + 1);
 
     auto& row_indexes = context->_row_indexes;
@@ -591,6 +485,7 @@ StatusOr<std::shared_ptr<LocalTabletsChannel::WriteContext>> LocalTabletsChannel
 void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRowsetInfo* info) {
     _context->update_status(st);
     if (info != nullptr) {
+        // committed tablets from primary replica
         PTabletInfo tablet_info;
         tablet_info.set_tablet_id(info->tablet->tablet_id());
         tablet_info.set_schema_hash(info->tablet->schema_hash());
@@ -603,6 +498,14 @@ void LocalTabletsChannel::WriteCallback::run(const Status& st, const CommittedRo
             }
         }
         _context->add_committed_tablet_info(&tablet_info);
+
+        // committed tablets from seconary replica
+        if (info->replicate_token) {
+            const auto replicated_tablet_infos = info->replicate_token->replicated_tablet_infos();
+            for (const auto& synced_tablet_info : *replicated_tablet_infos) {
+                _context->add_committed_tablet_info(synced_tablet_info.get());
+            }
+        }
     }
     delete this;
 }

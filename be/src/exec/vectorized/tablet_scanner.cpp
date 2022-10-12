@@ -1,13 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/tablet_scanner.h"
 
 #include <memory>
 #include <utility>
 
-#include "column/column_helper.h"
 #include "column/column_pool.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/vectorized/olap_scan_node.h"
@@ -34,7 +32,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _skip_aggregation = params.skip_aggregation;
     _need_agg_finalize = params.need_agg_finalize;
 
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(*params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
@@ -135,11 +133,11 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
         _params.chunk_size = runtime_state()->chunk_size();
     }
 
-    PredicateParser parser(_tablet->tablet_schema());
+    auto parser = _pool.add(new PredicateParser(_tablet->tablet_schema()));
     std::vector<PredicatePtr> preds;
-    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(&parser, &preds));
+    RETURN_IF_ERROR(_parent->_conjuncts_manager.get_column_predicates(parser, &preds));
     for (auto& p : preds) {
-        if (parser.can_pushdown(p.get())) {
+        if (parser->can_pushdown(p.get())) {
             _params.predicates.push_back(p.get());
         } else {
             _predicates.add(p.get());
@@ -282,6 +280,13 @@ Status TabletScanner::get_chunk(RuntimeState* state, Chunk* chunk) {
 }
 
 void TabletScanner::_update_realtime_counter(Chunk* chunk) {
+    long num_rows = chunk->num_rows();
+    const TQueryOptions& query_options = runtime_state()->query_options();
+    if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::INSERT_QUERY) {
+        size_t bytes_usage = chunk->bytes_usage();
+        runtime_state()->update_num_rows_load_from_source(num_rows);
+        runtime_state()->update_num_bytes_load_from_source(bytes_usage);
+    }
     COUNTER_UPDATE(_parent->_read_compressed_counter, _reader->stats().compressed_bytes_read);
     _compressed_bytes_read += _reader->stats().compressed_bytes_read;
     _reader->mutable_stats()->compressed_bytes_read = 0;
@@ -289,7 +294,7 @@ void TabletScanner::_update_realtime_counter(Chunk* chunk) {
     COUNTER_UPDATE(_parent->_raw_rows_counter, _reader->stats().raw_rows_read);
     _raw_rows_read += _reader->stats().raw_rows_read;
     _reader->mutable_stats()->raw_rows_read = 0;
-    _num_rows_read += chunk->num_rows();
+    _num_rows_read += num_rows;
 }
 
 void TabletScanner::update_counter() {
@@ -330,6 +335,8 @@ void TabletScanner::update_counter() {
     COUNTER_UPDATE(_parent->_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_parent->_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
     COUNTER_UPDATE(_parent->_seg_zm_filtered_counter, _reader->stats().segment_stats_filtered);
+    COUNTER_UPDATE(_parent->_seg_rt_filtered_counter, _reader->stats().runtime_stats_filtered);
+
     COUNTER_UPDATE(_parent->_zm_filtered_counter, _reader->stats().rows_stats_filtered);
     COUNTER_UPDATE(_parent->_bf_filtered_counter, _reader->stats().rows_bf_filtered);
     COUNTER_UPDATE(_parent->_sk_filtered_counter, _reader->stats().rows_key_range_filtered);

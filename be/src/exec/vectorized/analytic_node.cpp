@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/analytic_node.h"
 
@@ -14,9 +14,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/agg/count.h"
 #include "exprs/expr.h"
-#include "exprs/expr_context.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 

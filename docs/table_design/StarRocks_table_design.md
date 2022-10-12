@@ -1,37 +1,71 @@
-# Table Design
+# Understand table design
 
-## Columnar Storage
+## Columnar storage
 
-![column](../assets/3.1.1-1.png)
+![Columnar Storage](../assets/3.1-1.png)
 
-Similar to relational database tables, a StarRocks table consists of rows and columns. Each row of data corresponds to one record, and data in each column share the same data type. All data rows have the same number of columns, and columns can be added or deleted dynamically. In StarRocks, there are two types of columns --  key columns and value columns. The key columns are used for grouping and sorting, and value columns can be aggregated by `SUM,` `COUNT`, `MIN`, `MAX`, `REPLACE`, `HLL_UNION`, `BITMAP_UNION`, etc. Therefore, a StarRocks table can also be considered as a mapping of multidimensional keys to multidimensional metrics.
+Like in other relational databases, tables in StarRocks consist of rows and columns. Each row holds a record of user data, and data in each column has the same type. All rows in a table have the same number of columns. You can dynamically add columns to or delete columns from a table. The columns of a table can be categorized as dimension columns and metric columns. Dimension columns are also called key columns, and metric columns are also called value columns. Values in dimension columns are used to group and sort data, and values in metric columns can be accumulated by using functions such as sum, count, min, max, hll_union_agg, and bitmap_union. Therefore, you can consider tables in StarRocks to be mappings from multi-dimensional keys to multi-dimensional metrics.
 
-In StarRocks, data is stored in table columns. Physically, a column of data is chunked, encoded, and compressed, ending up being persisted on non-volatile storage. Logically, a column of data can be viewed as a vector of elements of the same type. All columns of a row of data remain aligned in their respective column vectors, i.e., they have the same vector subscript which is called the ordinal number or row number. The ordinal number is implicit and does not need to be stored. All rows in the table are sorted multiple times by key columns, and the sorted position is the row number of that row.
+StarRocks uses columnar storage for tables. Physically, the data in a column is segregated into data blocks, encoded, compressed, and then persistently stored on disk. Logically, the data in a column can be compared to an array that consists of elements of the same data type. The column values held in a row keep are listed as elements in the column order in their respective arrays. This means the column values held in a row have the same array index. Array indexes are implicit and do not need to be stored. All rows in a table are sorted in the order specified by one or more dimension columns. The location of a row in the sorted table is represented by the sequence number of that row.
 
-When querying, if you set the equality  or range conditions of key columns and the key columns form the prefix of the table’s key columns, then you can leverage the orderliness of data and use `range-scan` to quickly target rows. Take table1: `event_day, siteid, citycode, username`➜`pv` for instance. If the query condition is `event_day > 2020-09-18 and siteid = 2`, then you can use range-scan; if the query condition is `citycode = 4` and username in `["Andy", "Boby", "Christian", "StarRocks"]`, then you cannot use range-scan.
+For a query on a table, if you specify equality or range conditions on specific dimension columns that can comprise a dimension column prefix, StarRocks can run binary searches to quickly locate the rows of interest among sorted data. For example, you want to query data from a table named `table1`, and the table consists of four columns: `event_day`, `siteid`, `citycode`, and `username`, among which `event_day` and `siteid` are dimension columns. If you specify `event_day = 2020-09-18` and `siteid = 2` as query conditions, StarRocks can run binary searches and only needs to process the data within the specified range, because `event_day` and `siteid` can comprise a dimension column prefix. If you specify `citycode = 4` and `username = Andy` as query conditions, StarRocks cannot run binary searches and needs to process the data of the entire table, because `citycode` and `username` cannot comprise a dimension column prefix.
 
-## Sparse Indexing
+## Indexing
 
-When performing range search, how to quickly find the beginning and end of the target row? The answer is `shortkey indexing` (aka sparse indexing) as shown below.
+StarRocks uses prefix indexes and per-column indexes to quickly locate the starting rows of the data blocks taken by rows of interest.
 
-![index](../assets/3.1.1-2.png)
+The following figure shows how the StarRocks table design works to accelerate queries on a table in StarRocks.
 
-The data table consists of three components:
+![Indexing Overview](../assets/3.1-2.png)
 
-1. Shortkey index table: The shortkey index is a sparse index. Every 1024 rows of data constitute a logical block. Each logical block stores an index in the shortkey index table. The index contains the first 36 bytes of the starting row which can be used to locate the starting row of the block.
-2. Per-column data block: Each column of data is stored in 64KB chunks, and the data block is encoded and compressed as an I/O unit to support data read and write.
-3. Per-column cardinal index: Each column of data has its own per-column cardinal index. The index consists of the starting row number, position, and length information of the data block. With the starting row number, you can locate the index and get the other information of the data.  
+The data of a table in StarRocks is organized into the following three parts:
 
-Thus, the process to find the prefix of the key column is as follows:
-First,  look up the shortkey index, and get the starting row number of the logical block;
-Second,  look up the per-column cardinal index, and get the data block of the target column;
-Third, read the data block, that is, to decompress and decode it to get the data item corresponding to the prefix of the key column.
+- Prefix index
+  
+  StarRocks stores the data of every 1024 rows as a data block, for which an entry is maintained in the prefix index table. The content of the prefix index entry for each data block is the prefix composed of the dimension columns for the starting row in the data block and cannot exceed 36 bytes in length. The prefix index is a sparse index. When you query a row, StarRocks searches the prefix index table to retrieve the prefix that is composed of the dimension columns for the row. Then, StarRocks can quickly locate the sequence number of the starting row in the data block taken by the row of interest.
 
-## Speed up data processing
+- Per-column data block
+  
+  StarRocks segregates the data of each column into multiple 64-KB data blocks. Each data block is independently encoded and compressed as the minimal I/O unit and is read from or written to disk as a whole.
 
-1. Pre-aggregation: StarRocks supports an aggregation model where data rows with the same key column values can be merged. The key column values of the merged rows remain unchanged, while the value column shows aggregated results. The user needs to specify the aggregation function for the value column. The aggregation operation can be accelerated by pre-aggregation.
-2. Partitioning and bucketing: In fact, StarRocks tables are divided into tablets whose replicas are stored on BEs. The number of BEs and tablets can be scaled according to computing resources and data size. When querying, multiple BEs can be used in parallel to look up tablets  and get data quickly. In addition, the tablet replicas can be copied and migrated, which enhances data reliability and avoids data skew. In short, partitioning and bucketing ensure query efficiency and stability.
-3. RollUp table index: Shortkey indexing leverages the sequence of key columns to speed up queries. If you use non-prefixed key columns as a query condition, shortkey indexing won’t work. In this case, you can create several RollUp table indexes. The data layout and storage of RollUp table indexes are the same as tables. However, RollUp tables have their own shortkey indexes. When creating the RollUp tables, you can design the dimension of aggregation, the number of columns, and the sequence of the key columns, to ensure that frequently used query conditions will hit the corresponding RollUp table indexes.
-4. Columnar indexing techniques: Bloomfilter can quickly determine whether the data block contains the queried value, ZoneMap can quickly filter the value bydata range, and Bitmap indexes can quickly find the target row from the columns of enumerated types that satisfy certain conditions.
+- Per-column index
+  
+  StarRocks maintains a row number index for each column. In the row number index table, data blocks for the column are mapped one by one onto the sequence numbers of the rows held in the column. Additionally, each entry in the row number index table consists of the starting row number, address, and length of the data block that is mapped onto a specific row number. When you query a row, StarRocks searches the row number index table to retrieve the address of the data block mapped onto the sequence number of the row. Then, StarRocks reads the data block to locate the row.
 
-For more details on table design, see the following sections.
+In summary, StarRocks performs the following five steps to locate a row of a table by using the prefix that is composed of the dimension columns for the row:
+
+1. Search the prefix index table to locate the sequence number of the starting row in the data block taken by the row of interest.
+
+2. Search the row number index table of each dimension column to locate the data blocks for the dimension column.
+
+3. Read the data blocks.
+
+4. Decompress and decode the data blocks.
+
+5. Search the data blocks to locate the row onto which the dimension column index is mapped.
+
+## Accelerated processing
+
+This section introduces the mechanisms that help StarRocks process data at higher speeds.
+
+### Pre-aggregation
+
+StarRocks provides the data model Aggregate Key. For an Aggregate Key table, the rows that have the same values in the table's dimension columns can be aggregated into a single row. The value in each dimension column remains unchanged for the new row generated from the aggregation, and the values in each metric column are aggregated by the aggregate function you specify to produce the resulting value for the new row in the metric column. Pre-aggregation helps accelerate aggregate operations.
+
+### Partitioning and bucketing
+
+Each table in StarRocks is divided into multiple tablets. Each tablet is stored in multiple replicas on BEs. The number of BEs and the number of tablets can scale flexibly in line with changes in computing resources and data sizes. When you initiate a query, multiple BEs can search tablets in parallel to quickly locate the data of interest. Additionally, tablet replicas can be replicated and migrated, which increases data reliability and prevents data skews. Partitioning and bucketing help ensure the efficiency and stability of data retrieval.
+
+### Materialized view
+
+The prefix index of a table helps accelerate queries on the table but rely on the sequence of the table's dimension columns. If you construct query predicates by using dimension columns that are not included in a dimension column prefix, the prefix index does not work. In this case, you can create a materialized view for the table. The data of the materialized view is organized and stored in the same way as the data of the table. However, the materialized view can have its own prefix index. When you create a prefix index for the materialized view, you can specify appropriate aggregation granularity, column count, and dimension column ordering to ensure that frequently used query conditions can hit expected entries in the prefix index table for the materialized view.
+
+### Per-column index
+
+StarRocks supports per-column indexes such as Bloom filters, zone maps, and bitmap indexes:
+
+- A Bloom filter is used to determine whether data blocks contain the values you want to query.
+
+- A zone map is used to locate the values within a specified range.
+
+- A bitmap index is used to locate the rows that meet specified query conditions in a column of the ENUM data type.

@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/es/es_scroll_parser.h"
 
 #include <fmt/format.h>
 
+#include "column/array_column.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
 #include "common/config.h"
@@ -108,7 +109,7 @@ static Status get_int_value(const rapidjson::Value& col, PrimitiveType type, voi
 
 ScrollParser::ScrollParser(bool doc_value_mode)
         : _tuple_desc(nullptr),
-          _docvalue_context(nullptr),
+          _doc_value_context(nullptr),
           _size(0),
           _cur_line(0),
           _doc_value_mode(doc_value_mode),
@@ -174,7 +175,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
     // TODO: we could fill chunk by column rather than row
     for (size_t i = 0; i < fill_sz; ++i) {
         const rapidjson::Value& obj = _inner_hits_node[_cur_line + i];
-        bool pure_doc_value = _pure_doc_value(obj);
+        bool pure_doc_value = _is_pure_doc_value(obj);
         bool has_source = obj.HasMember(FIELD_SOURCE);
         bool has_fields = obj.HasMember(FIELD_FIELDS);
 
@@ -229,7 +230,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
             // if pure_doc_value enabled, docvalue_context must contains the key
             // todo: need move all `pure_docvalue` for every tuple outside fill_tuple
             //  should check pure_docvalue for one table scan not every tuple
-            const char* col_name = pure_doc_value ? _docvalue_context->at(slot_desc->col_name()).c_str()
+            const char* col_name = pure_doc_value ? _doc_value_context->at(slot_desc->col_name()).c_str()
                                                   : slot_desc->col_name().c_str();
 
             auto has_col = line.HasMember(col_name);
@@ -239,8 +240,7 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
                 bool is_null = col.IsNull() || (pure_doc_value && col.IsArray() && (col.Empty() || col[0].IsNull()));
                 if (!is_null) {
                     // append value from ES to column
-                    RETURN_IF_ERROR(
-                            _append_value_from_json_val(column.get(), slot_desc->type().type, col, pure_doc_value));
+                    RETURN_IF_ERROR(_append_value_from_json_val(column.get(), slot_desc->type(), col, pure_doc_value));
                     continue;
                 }
                 // handle null col
@@ -263,10 +263,10 @@ Status ScrollParser::fill_chunk(RuntimeState* state, ChunkPtr* chunk, bool* line
 void ScrollParser::set_params(const TupleDescriptor* descs,
                               const std::map<std::string, std::string>* docvalue_context) {
     _tuple_desc = descs;
-    _docvalue_context = docvalue_context;
+    _doc_value_context = docvalue_context;
 }
 
-bool ScrollParser::_pure_doc_value(const rapidjson::Value& obj) {
+bool ScrollParser::_is_pure_doc_value(const rapidjson::Value& obj) {
     if (obj.HasMember(FIELD_FIELDS)) {
         return true;
     }
@@ -296,8 +296,9 @@ void ScrollParser::_append_null(Column* column) {
     column->append_default();
 }
 
-Status ScrollParser::_append_value_from_json_val(Column* column, PrimitiveType type, const rapidjson::Value& col,
-                                                 bool pure_doc_value) {
+Status ScrollParser::_append_value_from_json_val(Column* column, const TypeDescriptor& type_desc,
+                                                 const rapidjson::Value& col, bool pure_doc_value) {
+    PrimitiveType type = type_desc.type;
     switch (type) {
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
@@ -357,6 +358,10 @@ Status ScrollParser::_append_value_from_json_val(Column* column, PrimitiveType t
     }
     case TYPE_DATETIME: {
         RETURN_IF_ERROR(_append_date_val<TYPE_DATETIME>(col, column, pure_doc_value));
+        break;
+    }
+    case TYPE_ARRAY: {
+        RETURN_IF_ERROR(_append_array_val(col, type_desc, column, pure_doc_value));
         break;
     }
     default: {
@@ -504,6 +509,75 @@ Status ScrollParser::_append_bool_val(const rapidjson::Value& col, Column* colum
 
     return Status::OK();
 }
+
+Status ScrollParser::_append_array_val(const rapidjson::Value& col, const TypeDescriptor& type_desc, Column* column,
+                                       bool pure_doc_value) {
+    // Array type must have child type.
+    const auto& child_type = type_desc.children[0];
+    DCHECK(child_type.type != INVALID_TYPE);
+
+    // In Elasticsearch, n-dimensional array will be flattened into one-dimensional array.
+    // https://www.elastic.co/guide/en/elasticsearch/reference/8.3/array.html
+    // So we do not support user to create nested array column.
+    // TODO: We should prevent user to create nested array column in FE, but we don't do any schema validation now.
+    if (child_type.type == TYPE_ARRAY) {
+        std::string str = fmt::format("Invalid array format; Document slice is: {}.", json_value_to_string(col));
+        return Status::RuntimeError(str);
+    }
+
+    ArrayColumn* array = nullptr;
+
+    if (column->is_nullable()) {
+        auto* nullable_column = down_cast<NullableColumn*>(column);
+        auto* data_column = nullable_column->data_column().get();
+        NullData& null_data = nullable_column->null_column_data();
+        null_data.push_back(0);
+        array = down_cast<ArrayColumn*>(data_column);
+    } else {
+        array = down_cast<ArrayColumn*>(column);
+    }
+
+    auto* offsets = array->offsets_column().get();
+    auto* elements = array->elements_column().get();
+
+    if (pure_doc_value) {
+        RETURN_IF_ERROR(_append_array_val_from_docvalue(col, child_type, elements));
+    } else {
+        RETURN_IF_ERROR(_append_array_val_from_source(col, child_type, elements));
+    }
+
+    size_t new_size = elements->size();
+    offsets->append(new_size);
+    return Status::OK();
+}
+
+Status ScrollParser::_append_array_val_from_docvalue(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+                                                     Column* column) {
+    for (auto& item : val.GetArray()) {
+        RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, item, true));
+    }
+    return Status::OK();
+}
+
+Status ScrollParser::_append_array_val_from_source(const rapidjson::Value& val, const TypeDescriptor& child_type_desc,
+                                                   Column* column) {
+    if (val.IsNull()) {
+        // Ignore null item in _source.
+        return Status::OK();
+    }
+
+    if (!val.IsArray()) {
+        // For one item situation, like "1" should be treated as "[1]".
+        RETURN_IF_ERROR(_append_value_from_json_val(column, child_type_desc, val, false));
+        return Status::OK();
+    }
+
+    for (auto& item : val.GetArray()) {
+        RETURN_IF_ERROR(_append_array_val_from_source(item, child_type_desc, column));
+    }
+    return Status::OK();
+}
+
 // TODO: test here
 template <PrimitiveType type, typename T>
 Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* column, bool pure_doc_value) {

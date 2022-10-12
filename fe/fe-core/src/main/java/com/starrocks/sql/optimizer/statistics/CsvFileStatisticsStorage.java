@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -14,10 +14,8 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.mortbay.log.Log;
 
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +34,7 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 public class CsvFileStatisticsStorage implements StatisticStorage {
     private static final Logger LOG = LogManager.getLogger(CsvFileStatisticsStorage.class);
 
-    private Map<Pair<String, String>, StatisticsEntry> columnStatisticMap = Maps.newHashMap();
+    private final Map<Pair<String, String>, StatisticsEntry> columnStatisticMap = Maps.newHashMap();
 
     private String path;
 
@@ -85,7 +83,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         try {
             return convert2ColumnStatistics(table, statisticsEntry);
         } catch (Exception e) {
-            Log.warn("convert to column statistics failed");
+            LOG.warn("convert to column statistics failed");
         }
         return null;
     }
@@ -118,11 +116,20 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
                     maxValue = getLongFromDateTime(LocalDateTime.parse(statisticsEntry.max, dtf));
                 }
             } else {
-                if (statisticsEntry.isSetMin() && !statisticsEntry.min.isEmpty()) {
-                    minValue = Double.parseDouble(statisticsEntry.min);
+                try {
+                    if (statisticsEntry.isSetMin() && !statisticsEntry.min.isEmpty()) {
+                        minValue = Double.parseDouble(statisticsEntry.min);
+                    }
+                } catch (Exception m) {
+                    minValue = Double.MIN_VALUE;
                 }
-                if (statisticsEntry.isSetMax() && !statisticsEntry.max.isEmpty()) {
-                    maxValue = Double.parseDouble(statisticsEntry.max);
+
+                try {
+                    if (statisticsEntry.isSetMax() && !statisticsEntry.max.isEmpty()) {
+                        maxValue = Double.parseDouble(statisticsEntry.max);
+                    }
+                } catch (Exception e) {
+                    maxValue = Double.MAX_VALUE;
                 }
             }
         } catch (Exception e) {
@@ -133,9 +140,9 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
         return builder.setMinValue(minValue).
                 setMaxValue(maxValue).
                 setDistinctValuesCount(Double.parseDouble(statisticsEntry.distinctCount)).
-                setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) * 1.0 /
+                setAverageRowSize(Double.parseDouble(statisticsEntry.dataSize) /
                         Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).
-                setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) * 1.0 /
+                setNullsFraction(Double.parseDouble(statisticsEntry.nullCount) /
                         Math.max(Double.parseDouble(statisticsEntry.rowCount), 1)).build();
     }
 
@@ -143,12 +150,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
     public void addColumnStatistic(Table table, String column, ColumnStatistic columnStatistic) {
     }
 
-    @Override
-    public Map<ColumnRefOperator, Histogram> getHistogramStatistics(Table table, List<ColumnRefOperator> columns) {
-        return Maps.newHashMap();
-    }
-
-    private class StatisticsEntry {
+    private static class StatisticsEntry {
         public String tableId;
         public String columnName;
         public String dbId;
@@ -164,7 +166,7 @@ public class CsvFileStatisticsStorage implements StatisticStorage {
 
         public void setValue(String[] row) {
             if (row.length != 12) {
-                Log.warn("row miss some field");
+                LOG.warn("row miss some field");
                 return;
             }
             this.tableId = row[0];

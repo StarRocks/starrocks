@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/morsel.h"
 
@@ -24,8 +24,7 @@ void LogicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderP
     params->short_key_ranges = _short_key_ranges;
 }
 
-/// MorselQueueFactory
-
+/// MorselQueueFactory.
 size_t SharedMorselQueueFactory::num_original_morsels() const {
     return _queue->num_original_morsels();
 }
@@ -38,7 +37,9 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
     return total;
 }
 
-IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq) {
+IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
+                                                           bool need_local_shuffle)
+        : _need_local_shuffle(need_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
         return;
@@ -72,7 +73,14 @@ std::vector<TInternalScanRange*> FixedMorselQueue::olap_scan_ranges() const {
     return _convert_morsels_to_olap_scan_ranges(_morsels);
 }
 
+void MorselQueue::unget(MorselPtr&& morsel) {
+    _unget_morsel = std::move(morsel);
+}
+
 StatusOr<MorselPtr> FixedMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
     auto idx = _pop_index.load();
     // prevent _num_morsels from superfluous addition
     if (idx >= _num_morsels) {
@@ -107,6 +115,9 @@ void PhysicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<
 }
 
 StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
     DCHECK(!_tablets.empty());
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
@@ -250,7 +261,7 @@ Status PhysicalSplitMorselQueue::_init_segment() {
     if (_tablet_seek_ranges.empty()) {
         _segment_scan_range.add(vectorized::Range(0, segment->num_rows()));
     } else {
-        RETURN_IF_ERROR(segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+        RETURN_IF_ERROR(segment->load_index());
         for (const auto& range : _tablet_seek_ranges) {
             rowid_t lower_rowid = 0;
             rowid_t upper_rowid = segment->num_rows();
@@ -295,6 +306,9 @@ void LogicalSplitMorselQueue::set_key_ranges(const std::vector<std::unique_ptr<O
 }
 
 StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
+    if (_unget_morsel != nullptr) {
+        return std::move(_unget_morsel);
+    }
     DCHECK(!_tablets.empty());
     DCHECK(!_tablet_rowsets.empty());
     DCHECK_EQ(_tablets.size(), _tablet_rowsets.size());
@@ -512,7 +526,7 @@ StatusOr<SegmentGroupPtr> LogicalSplitMorselQueue::_create_segment_group(Rowset*
     }
 
     for (const auto& segment : segments) {
-        RETURN_IF_ERROR(segment->load_index(StorageEngine::instance()->tablet_meta_mem_tracker()));
+        RETURN_IF_ERROR(segment->load_index());
     }
 
     return std::make_unique<SegmentGroup>(std::move(segments));

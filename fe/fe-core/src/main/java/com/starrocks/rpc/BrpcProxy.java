@@ -1,25 +1,50 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.rpc;
 
-import com.baidu.brpc.client.RpcClient;
-import com.baidu.brpc.client.RpcClientOptions;
-import com.baidu.brpc.loadbalance.LoadBalanceStrategy;
-import com.baidu.brpc.protocol.Options;
+import com.baidu.bjf.remoting.protobuf.utils.JDKCompilerHelper;
+import com.baidu.bjf.remoting.protobuf.utils.compiler.JdkCompiler;
+import com.baidu.jprotobuf.pbrpc.client.ProtobufRpcProxy;
+import com.baidu.jprotobuf.pbrpc.transport.RpcClient;
+import com.baidu.jprotobuf.pbrpc.transport.RpcClientOptions;
+import com.starrocks.common.Config;
+import com.starrocks.common.util.JdkUtils;
 import com.starrocks.thrift.TNetworkAddress;
 
 import java.util.concurrent.ConcurrentHashMap;
 
 public class BrpcProxy {
-    private final ConcurrentHashMap<TNetworkAddress, PBackendServiceAsync> backendServiceMap;
-    private final ConcurrentHashMap<TNetworkAddress, LakeServiceAsync> lakeServiceMap;
+    private final RpcClient rpcClient;
+    // TODO: Eviction
+    private final ConcurrentHashMap<TNetworkAddress, PBackendService> backendServiceMap;
+    private final ConcurrentHashMap<TNetworkAddress, LakeService> lakeServiceMap;
+
+    static {
+        int javaRuntimeVersion = JdkUtils.getJavaVersionAsInteger(System.getProperty("java.version"));
+        JDKCompilerHelper
+                .setCompiler(new JdkCompiler(JdkCompiler.class.getClassLoader(), String.valueOf(javaRuntimeVersion)));
+    }
 
     public BrpcProxy() {
+        final RpcClientOptions rpcOptions = new RpcClientOptions();
+        // If false, different methods to a service endpoint use different connection pool,
+        // which will create too many connections.
+        // If true, all the methods to a service endpoint use the same connection pool.
+        rpcOptions.setShareThreadPoolUnderEachProxy(true);
+        rpcOptions.setShareChannelPool(true);
+        rpcOptions.setMaxTotoal(Config.brpc_connection_pool_size);
+        // After the RPC request sending, the connection will be closed,
+        // if the number of total connections is greater than MaxIdleSize.
+        // Therefore, MaxIdleSize shouldn't less than MaxTotal for the async requests.
+        rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
+        rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
+
+        rpcClient = new RpcClient(rpcOptions);
         backendServiceMap = new ConcurrentHashMap<>();
         lakeServiceMap = new ConcurrentHashMap<>();
     }
 
-    public static BrpcProxy getInstance() {
+    private static BrpcProxy getInstance() {
         return BrpcProxy.SingletonHolder.INSTANCE;
     }
 
@@ -30,42 +55,38 @@ public class BrpcProxy {
         BrpcProxy.SingletonHolder.INSTANCE = proxy;
     }
 
-    public PBackendServiceAsync getBackendService(TNetworkAddress address) {
+    public static PBackendService getBackendService(TNetworkAddress address) {
+        return getInstance().getBackendServiceImpl(address);
+    }
+
+    public static LakeService getLakeService(TNetworkAddress address) {
+        return getInstance().getLakeServiceImpl(address);
+    }
+
+    public static LakeService getLakeService(String host, int port) {
+        return getInstance().getLakeServiceImpl(new TNetworkAddress(host, port));
+    }
+
+    protected PBackendService getBackendServiceImpl(TNetworkAddress address) {
         return backendServiceMap.computeIfAbsent(address, this::createBackendService);
     }
 
-    private PBackendServiceAsync createBackendService(TNetworkAddress address) {
-        RpcClientOptions clientOption = new RpcClientOptions();
-        clientOption.setProtocolType(Options.ProtocolType.PROTOCOL_BAIDU_STD_VALUE);
-        clientOption.setWriteTimeoutMillis(1000);
-        clientOption.setReadTimeoutMillis(5000);
-        clientOption.setMaxTotalConnections(1000);
-        clientOption.setMinIdleConnections(10);
-        clientOption.setLoadBalanceType(LoadBalanceStrategy.LOAD_BALANCE_FAIR);
-        clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
-        String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
-        RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        PBackendServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, PBackendServiceAsync.class);
-        return service;
-    }
-
-    public LakeServiceAsync getLakeService(TNetworkAddress address) {
+    protected LakeService getLakeServiceImpl(TNetworkAddress address) {
         return lakeServiceMap.computeIfAbsent(address, this::createLakeService);
     }
 
-    private LakeServiceAsync createLakeService(TNetworkAddress address) {
-        RpcClientOptions clientOption = new RpcClientOptions();
-        clientOption.setProtocolType(Options.ProtocolType.PROTOCOL_BAIDU_STD_VALUE);
-        clientOption.setWriteTimeoutMillis(1000);
-        clientOption.setReadTimeoutMillis(5000);
-        clientOption.setMaxTotalConnections(1000);
-        clientOption.setMinIdleConnections(10);
-        clientOption.setLoadBalanceType(LoadBalanceStrategy.LOAD_BALANCE_FAIR);
-        clientOption.setCompressType(Options.CompressType.COMPRESS_TYPE_NONE);
-        String serviceurl = "list://" + address.getHostname() + ":" + Integer.toString(address.getPort());
-        RpcClient rpcClient = new RpcClient(serviceurl, clientOption);
-        LakeServiceAsync service = com.baidu.brpc.client.BrpcProxy.getProxy(rpcClient, LakeServiceAsync.class);
-        return service;
+    private PBackendService createBackendService(TNetworkAddress address) {
+        ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy<>(rpcClient, PBackendService.class);
+        proxy.setHost(address.getHostname());
+        proxy.setPort(address.getPort());
+        return proxy.proxy();
+    }
+
+    private LakeService createLakeService(TNetworkAddress address) {
+        ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy<>(rpcClient, LakeService.class);
+        proxy.setHost(address.getHostname());
+        proxy.setPort(address.getPort());
+        return proxy.proxy();
     }
 
     private static class SingletonHolder {

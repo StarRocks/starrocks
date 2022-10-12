@@ -48,12 +48,14 @@ TOP-N (order by [[1: S_SUPPKEY ASC NULLS FIRST]])
                             AGGREGATE ([LOCAL] aggregate [{27: sum=sum(26: expr)}] group by [[11: L_SUPPKEY]] having [null]
                                 SCAN (columns[19: L_SHIPDATE, 11: L_SUPPKEY, 14: L_EXTENDEDPRICE, 15: L_DISCOUNT] predicate[19: L_SHIPDATE >= 1995-07-01 AND 19: L_SHIPDATE < 1995-10-01])
                     EXCHANGE BROADCAST
-                        AGGREGATE ([GLOBAL] aggregate [{47: max=max(47: max)}] group by [[]] having [47: max IS NOT NULL]
-                            EXCHANGE GATHER
-                                AGGREGATE ([LOCAL] aggregate [{47: max=max(46: sum)}] group by [[]] having [null]
-                                    AGGREGATE ([GLOBAL] aggregate [{46: sum=sum(46: sum)}] group by [[30: L_SUPPKEY]] having [null]
-                                        EXCHANGE SHUFFLE[30]
-                                            AGGREGATE ([LOCAL] aggregate [{46: sum=sum(45: expr)}] group by [[30: L_SUPPKEY]] having [null]
-                                                SCAN (columns[33: L_EXTENDEDPRICE, 34: L_DISCOUNT, 38: L_SHIPDATE, 30: L_SUPPKEY] predicate[38: L_SHIPDATE >= 1995-07-01 AND 38: L_SHIPDATE < 1995-10-01])
+                        PREDICATE 47: max IS NOT NULL
+                            ASSERT LE 1
+                                AGGREGATE ([GLOBAL] aggregate [{47: max=max(47: max)}] group by [[]] having [null]
+                                    EXCHANGE GATHER
+                                        AGGREGATE ([LOCAL] aggregate [{47: max=max(46: sum)}] group by [[]] having [null]
+                                            AGGREGATE ([GLOBAL] aggregate [{46: sum=sum(46: sum)}] group by [[30: L_SUPPKEY]] having [null]
+                                                EXCHANGE SHUFFLE[30]
+                                                    AGGREGATE ([LOCAL] aggregate [{46: sum=sum(45: expr)}] group by [[30: L_SUPPKEY]] having [null]
+                                                        SCAN (columns[33: L_EXTENDEDPRICE, 34: L_DISCOUNT, 38: L_SHIPDATE, 30: L_SUPPKEY] predicate[38: L_SHIPDATE >= 1995-07-01 AND 38: L_SHIPDATE < 1995-10-01])
 [end]
 

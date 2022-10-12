@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.scheduler;
 
@@ -20,7 +20,7 @@ public class TaskRunBuilder {
         taskRun.setProperties(task.getProperties());
         taskRun.setTask(task);
         if (task.getSource().equals(Constants.TaskSource.MV)) {
-            taskRun.setProcessor(new MvTaskRunProcessor());
+            taskRun.setProcessor(new PartitionBasedMaterializedViewRefreshProcessor());
         } else {
             taskRun.setProcessor(new SqlTaskRunProcessor());
         }

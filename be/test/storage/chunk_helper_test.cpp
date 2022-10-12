@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/chunk_helper.h"
 
@@ -12,6 +12,9 @@
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -39,6 +42,26 @@ private:
     TSlotDescriptor _create_slot_desc(PrimitiveType type, const std::string& col_name, int col_pos);
     TupleDescriptor* _create_tuple_desc();
 
+    // A tuple with one column
+    TupleDescriptor* _create_simple_desc() {
+        TDescriptorTableBuilder table_builder;
+        TTupleDescriptorBuilder tuple_builder;
+
+        tuple_builder.add_slot(_create_slot_desc(PrimitiveType::TYPE_INT, "c0", 0));
+        tuple_builder.build(&table_builder);
+
+        std::vector<TTupleId> row_tuples{0};
+        std::vector<bool> nullable_tuples{true};
+        DescriptorTbl* tbl = nullptr;
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* tuple_desc = row_desc->tuple_descriptors()[0];
+
+        return tuple_desc;
+    }
+
+    RuntimeState _runtime_state;
     ObjectPool _pool;
 };
 
@@ -65,7 +88,7 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -240,6 +263,40 @@ TEST_F(ChunkHelperTest, ReorderChunk) {
     ASSERT_EQ(chunk->columns()[6]->get_name(), "float-8");
     ASSERT_EQ(chunk->columns()[7]->get_name(), "binary");
     ASSERT_EQ(chunk->columns()[8]->get_name(), "binary");
+}
+
+TEST_F(ChunkHelperTest, Accumulator) {
+    constexpr size_t kDesiredSize = 4096;
+    auto* tuple_desc = _create_simple_desc();
+    ChunkAccumulator accumulator(kDesiredSize);
+    size_t input_rows = 0;
+    size_t output_rows = 0;
+    // push small chunks
+    for (int i = 0; i < 10; i++) {
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 1025);
+        chunk->get_column_by_index(0)->append_default(1025);
+        input_rows += 1025;
+
+        accumulator.push(std::move(chunk));
+        if (ChunkPtr output = accumulator.pull()) {
+            output_rows += output->num_rows();
+            EXPECT_EQ(kDesiredSize, output->num_rows());
+        }
+    }
+    // push large chunks
+    for (int i = 0; i < 10; i++) {
+        auto chunk = ChunkHelper::new_chunk(*tuple_desc, 8888);
+        chunk->get_column_by_index(0)->append_default(8888);
+        input_rows += 8888;
+        accumulator.push(std::move(chunk));
+    }
+
+    accumulator.finalize();
+    while (ChunkPtr output = accumulator.pull()) {
+        EXPECT_LE(output->num_rows(), kDesiredSize);
+        output_rows += output->num_rows();
+    }
+    EXPECT_EQ(input_rows, output_rows);
 }
 
 } // namespace vectorized

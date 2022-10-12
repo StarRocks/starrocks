@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -7,7 +7,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalMergeJoinOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 
@@ -16,10 +18,16 @@ public class MergeJoinImplementationRule extends JoinImplementationRule {
         super(RuleType.IMP_EQ_JOIN_TO_MERGE_JOIN);
     }
 
-    private static final MergeJoinImplementationRule instance = new MergeJoinImplementationRule();
+    private static final MergeJoinImplementationRule INSTANCE = new MergeJoinImplementationRule();
 
     public static MergeJoinImplementationRule getInstance() {
-        return instance;
+        return INSTANCE;
+    }
+
+    @Override
+    public boolean check(final OptExpression input, OptimizerContext context) {
+        List<BinaryPredicateOperator> eqPredicates = extractEqPredicate(input, context);
+        return CollectionUtils.isNotEmpty(eqPredicates);
     }
 
     @Override

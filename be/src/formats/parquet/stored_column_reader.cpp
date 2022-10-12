@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "formats/parquet/stored_column_reader.h"
 
@@ -592,7 +592,7 @@ bool StoredColumnReader::page_selected(size_t num_values) {
     if (!filter) {
         return true;
     }
-    int start_row = _opts.context->next_row;
+    size_t start_row = _opts.context->next_row;
     int end_row = std::min(start_row + num_values, filter->size()) - 1;
     return SIMD::find_nonzero(*filter, start_row) <= end_row;
 }

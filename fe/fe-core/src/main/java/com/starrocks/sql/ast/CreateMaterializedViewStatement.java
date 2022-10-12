@@ -1,18 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DistributionDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.MaterializedView;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Materialized view is performed to materialize the results of query.
@@ -38,9 +37,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private DistributionDesc distributionDesc;
     private KeysType keysType = KeysType.DUP_KEYS;
     protected String inlineViewDef;
+
+
+    private String simpleViewDef;
     // for create column in mv
     private List<Column> mvColumnItems = Lists.newArrayList();
-    private Set<Long> baseTableIds;
+    private List<MaterializedView.BaseTableInfo> baseTableInfos;
     private Column partitionColumn;
     // record expression which related with partition by clause
     private Expr partitionRefTableExpr;
@@ -131,6 +133,14 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.inlineViewDef = inlineViewDef;
     }
 
+    public String getSimpleViewDef() {
+        return simpleViewDef;
+    }
+
+    public void setSimpleViewDef(String simpleViewDef) {
+        this.simpleViewDef = simpleViewDef;
+    }
+
     public QueryStatement getQueryStatement() {
         return queryStatement;
     }
@@ -147,12 +157,12 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.mvColumnItems = mvColumnItems;
     }
 
-    public Set<Long> getBaseTableIds() {
-        return baseTableIds;
+    public List<MaterializedView.BaseTableInfo> getBaseTableInfos() {
+        return baseTableInfos;
     }
 
-    public void setBaseTableIds(Set<Long> baseTableIds) {
-        this.baseTableIds = baseTableIds;
+    public void setBaseTableInfos(List<MaterializedView.BaseTableInfo> baseTableInfos) {
+        this.baseTableInfos = baseTableInfos;
     }
 
     public Column getPartitionColumn() {

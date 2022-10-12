@@ -1,20 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ResourceMgr;
 import com.starrocks.common.DdlException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Map;
@@ -24,6 +28,12 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 public class HiveRepositoryTest extends DDLTestBase {
+    private static ConnectContext connectContext;
+
+    @Before
+    public void setUp() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
+    }
 
     @Test
     public void testGetClient() throws Exception {
@@ -33,7 +43,8 @@ public class HiveRepositoryTest extends DDLTestBase {
         properties.put("type", "hive");
         properties.put("hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, resourceName, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         HiveResource resource = (HiveResource) Resource.fromStmt(stmt);
 
         new MockUp<HiveMetaClient>() {

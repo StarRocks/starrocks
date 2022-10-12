@@ -331,6 +331,7 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_BINARY:
     case TYPE_STRUCT:
     case TYPE_MAP:
+    case TYPE_FUNCTION:
         DCHECK(false);
         break;
     }

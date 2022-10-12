@@ -45,6 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.function.Consumer;
 
 public class EtlStatus implements Writable {
@@ -320,14 +321,33 @@ public class EtlStatus implements Writable {
         @SerializedName("totalFileSizeB")
         public long totalFileSizeB = 0;
 
+        @SerializedName("sinkBytesCounterTbl")
+        private Table<String, String, Long> sinkBytesCounterTbl = HashBasedTable.create();
+
+        @SerializedName("sourceRowsCounterTbl")
+        private Table<String, String, Long> sourceRowsCounterTbl = HashBasedTable.create();
+
+        @SerializedName("sourceBytesCounterTbl")
+        private Table<String, String, Long> sourceBytesCounterTbl = HashBasedTable.create();
+
+        @SerializedName("loadFinish")
+        private boolean loadFinish = false;
 
         // init the statistic of specified load task
         public synchronized void initLoad(TUniqueId loadId, Set<TUniqueId> fragmentIds, List<Long> relatedBackendIds) {
             String loadStr = DebugUtil.printId(loadId);
             counterTbl.rowMap().remove(loadStr);
+            sinkBytesCounterTbl.rowMap().remove(loadStr);
+            sourceRowsCounterTbl.rowMap().remove(loadStr);
+            sourceBytesCounterTbl.rowMap().remove(loadStr);
+
             for (TUniqueId fragId : fragmentIds) {
                 counterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                sinkBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                sourceRowsCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
+                sourceBytesCounterTbl.put(loadStr, DebugUtil.printId(fragId), 0L);
             }
+            
             allBackendIds.put(loadStr, relatedBackendIds);
             // need to get a copy of relatedBackendIds, so that when we modify the "relatedBackendIds" in
             // allBackendIds, the list in unfinishedBackendIds will not be changed.
@@ -337,8 +357,77 @@ public class EtlStatus implements Writable {
         public synchronized void removeLoad(TUniqueId loadId) {
             String loadStr = DebugUtil.printId(loadId);
             counterTbl.rowMap().remove(loadStr);
+            sinkBytesCounterTbl.rowMap().remove(loadStr);
+            sourceRowsCounterTbl.rowMap().remove(loadStr);
+            sourceBytesCounterTbl.rowMap().remove(loadStr);
+            
             unfinishedBackendIds.remove(loadStr);
             allBackendIds.remove(loadStr);
+        }
+
+        public synchronized long totalFileSize() {
+            return totalFileSizeB;
+        }
+
+        public synchronized long totalSourceLoadBytes() {
+            long totalSourceBytes = 0;
+            if (loadFinish) {
+                totalSourceBytes = totalFileSizeB;
+            } else {
+                for (long bytes : sourceBytesCounterTbl.values()) {
+                    totalSourceBytes += bytes;
+                }
+            }
+            return totalSourceBytes;
+        }
+
+        public synchronized long totalSourceLoadRows() {
+            long totalSourceRows = 0;
+            for (long rows : sourceRowsCounterTbl.values()) {
+                totalSourceRows += rows;
+            }
+            return totalSourceRows;
+        }
+
+        public synchronized long totalSinkLoadRows() {
+            long totalSourceRows = 0;
+            for (long rows : counterTbl.values()) {
+                totalSourceRows += rows;
+            }
+            return totalSourceRows;
+        }
+
+        public synchronized long totalRows() {
+            long totalRows = 0;
+            for (long row : counterTbl.values()) {
+                totalRows += row;
+            }
+            return totalRows;
+        }
+
+        public synchronized void setLoadFinish() {
+            loadFinish = true;
+        }
+
+        public synchronized boolean getLoadFinish() {
+            return loadFinish;
+        }
+
+        public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
+                                                    long sinkRows, long sinkBytes, long sourceRows, 
+                                                    long sourceBytes, boolean isDone) {
+            String loadStr = DebugUtil.printId(loadId);
+            String fragmentStr = DebugUtil.printId(fragmentId);
+            if (counterTbl.contains(loadStr, fragmentStr)) {
+                counterTbl.put(loadStr, fragmentStr, sinkRows);
+                sinkBytesCounterTbl.put(loadStr, fragmentStr, sinkBytes);
+                sourceRowsCounterTbl.put(loadStr, fragmentStr, sourceRows);
+                sourceBytesCounterTbl.put(loadStr, fragmentStr, sourceBytes);
+            }
+
+            if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
+                unfinishedBackendIds.get(loadStr).remove(backendId);
+            }
         }
 
         public synchronized void updateLoadProgress(long backendId, TUniqueId loadId, TUniqueId fragmentId,
@@ -347,7 +436,11 @@ public class EtlStatus implements Writable {
             String fragmentStr = DebugUtil.printId(fragmentId);
             if (counterTbl.contains(loadStr, fragmentStr)) {
                 counterTbl.put(loadStr, fragmentStr, rows);
+                sinkBytesCounterTbl.put(loadStr, fragmentStr, 0L);
+                sourceRowsCounterTbl.put(loadStr, fragmentStr, 0L);
+                sourceBytesCounterTbl.put(loadStr, fragmentStr, 0L);
             }
+
             if (isDone && unfinishedBackendIds.containsKey(loadStr)) {
                 unfinishedBackendIds.get(loadStr).remove(backendId);
             }
@@ -355,13 +448,35 @@ public class EtlStatus implements Writable {
 
         // used for `show load`
         public synchronized String toShowInfoStr() {
-            long total = 0;
+            long totalSinkRows = 0;
             for (long rows : counterTbl.values()) {
-                total += rows;
+                totalSinkRows += rows;
             }
 
-            Map<String, Object> details = Maps.newHashMap();
-            details.put("ScannedRows", total);
+            long totalSourceRows = 0;
+            for (long rows : sourceRowsCounterTbl.values()) {
+                totalSourceRows += rows;
+            }
+
+            long totalSinkBytes = 0;
+            for (long bytes : sinkBytesCounterTbl.values()) {
+                totalSinkBytes += bytes;
+            }
+
+            long totalSourceBytes = 0;
+            if (loadFinish) {
+                totalSourceBytes = totalFileSizeB;
+            } else {
+                for (long bytes : sourceBytesCounterTbl.values()) {
+                    totalSourceBytes += bytes;
+                }
+            }
+
+            TreeMap<String, Object> details = Maps.newTreeMap();
+            details.put("ScanRows", totalSourceRows);
+            details.put("ScanBytes", totalSourceBytes);
+            details.put("InternalTableLoadRows", totalSinkRows);
+            details.put("InternalTableLoadBytes", totalSinkBytes);
             details.put("FileNumber", fileNum);
             details.put("FileSize", totalFileSizeB);
             details.put("TaskNumber", counterTbl.rowMap().size());
@@ -376,7 +491,20 @@ public class EtlStatus implements Writable {
         }
 
         public static LoadStatistic fromJson(String json) {
-            return GsonUtils.GSON.fromJson(json, LoadStatistic.class);
+            LoadStatistic loadStatistic = GsonUtils.GSON.fromJson(json, LoadStatistic.class);
+            if (!json.contains("sinkBytesCounterTbl")) {
+                loadStatistic.sinkBytesCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("sourceRowsCounterTbl")) {
+                loadStatistic.sourceRowsCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("sourceBytesCounterTbl")) {
+                loadStatistic.sourceBytesCounterTbl = HashBasedTable.create();
+            }
+            if (!json.contains("loadFinish")) {
+                loadStatistic.loadFinish = false;
+            }
+            return loadStatistic;
         }
 
     }

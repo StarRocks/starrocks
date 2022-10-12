@@ -60,7 +60,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/mem_pool.h"
-#include "runtime/runtime_filter_worker.h"
+#include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_state.h"
 #include "simd/simd.h"
 #include "util/debug_util.h"
@@ -129,7 +129,7 @@ void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
 
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
     if (collector->empty()) return;
-    if (_type != TPlanNodeType::AGGREGATION_NODE) {
+    if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
     _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
@@ -147,11 +147,15 @@ void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state,
 
 void ExecNode::register_runtime_filter_descriptor(RuntimeState* state,
                                                   vectorized::RuntimeFilterProbeDescriptor* rf_desc) {
+    rf_desc->set_probe_plan_node_id(_id);
     _runtime_filter_collector.add_descriptor(rf_desc);
+    ExecEnv::GetInstance()->add_rf_event({state->query_id(), rf_desc->filter_id(), BackendOptions::get_localhost(),
+                                          strings::Substitute("REGISTER_GRF(probe_node_id=$0", _id)});
     state->runtime_filter_port()->add_listener(rf_desc);
 }
 
 Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState* state) {
+    _runtime_filter_collector.set_plan_node_id(_id);
     if (state != nullptr && tnode.__isset.probe_runtime_filters) {
         for (const auto& desc : tnode.probe_runtime_filters) {
             vectorized::RuntimeFilterProbeDescriptor* rf_desc =
@@ -160,7 +164,6 @@ Status ExecNode::init_join_runtime_filters(const TPlanNode& tnode, RuntimeState*
             register_runtime_filter_descriptor(state, rf_desc);
         }
     }
-    _runtime_filter_collector.set_plan_node_id(_id);
     if (state != nullptr && state->query_options().__isset.runtime_filter_wait_timeout_ms) {
         _runtime_filter_collector.set_wait_timeout_ms(state->query_options().runtime_filter_wait_timeout_ms);
     }
@@ -437,6 +440,7 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new vectorized::TopNNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::CROSS_JOIN_NODE:
+    case TPlanNodeType::NESTLOOP_JOIN_NODE:
         *node = pool->add(new vectorized::CrossJoinNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::UNION_NODE:

@@ -1,17 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -22,11 +22,11 @@ import org.junit.Test;
 import java.util.Map;
 
 public class HudiResourceTest {
-    private Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @Before
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+    public void setUp() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
     }
 
     @Test
@@ -47,7 +47,8 @@ public class HudiResourceTest {
         properties.put("type", type);
         properties.put("hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         HudiResource resource = (HudiResource) Resource.fromStmt(stmt);
         Assert.assertEquals("hudi0", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());

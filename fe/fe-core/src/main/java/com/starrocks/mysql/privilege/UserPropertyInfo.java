@@ -18,6 +18,7 @@
 package com.starrocks.mysql.privilege;
 
 import com.google.common.collect.Lists;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -57,7 +58,7 @@ public class UserPropertyInfo implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, user);
+        Text.writeString(out, ClusterNamespace.getFullName(user));
         out.writeInt(properties.size());
         for (Pair<String, String> entry : properties) {
             Text.writeString(out, entry.first);
@@ -66,7 +67,7 @@ public class UserPropertyInfo implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        user = Text.readString(in);
+        user = ClusterNamespace.getNameFromFullName(Text.readString(in));
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             String key = Text.readString(in);

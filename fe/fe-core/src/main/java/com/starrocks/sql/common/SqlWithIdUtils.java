@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.common;
 
 import com.google.common.base.Joiner;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SelectList;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -19,6 +18,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.FieldReference;
+import com.starrocks.sql.ast.SelectList;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
@@ -52,6 +52,7 @@ public class SqlWithIdUtils {
     /**
      * decode sql which use database id and table id
      * warning: table id must before db id e.g. <db 10001>.<table 10002>
+     *
      * @param sql
      * @return StatementBase
      */
@@ -92,7 +93,7 @@ public class SqlWithIdUtils {
         for (Table table : tableMap.values()) {
             sql = sql.replaceAll(TABLE_ID_PREFIX + table.getId() + COMMON_SUFFIX, table.getName());
         }
-        return SqlParser.parse(sql, context.getSessionVariable().getSqlMode()).get(0);
+        return SqlParser.parse(sql, context.getSessionVariable()).get(0);
     }
 
     private static class SqlEncoderVisitor extends AST2SQL.SQLBuilder {

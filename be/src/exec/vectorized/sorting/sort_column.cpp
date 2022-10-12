@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <algorithm>
 
@@ -11,6 +11,7 @@
 #include "column/const_column.h"
 #include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
+#include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
@@ -22,12 +23,11 @@ namespace starrocks::vectorized {
 // Sort a column by permtuation
 class ColumnSorter final : public ColumnVisitorAdapter<ColumnSorter> {
 public:
-    explicit ColumnSorter(const bool& cancel, bool is_asc_order, bool is_null_first, SmallPermutation& permutation,
-                          Tie& tie, std::pair<int, int> range, bool build_tie)
+    explicit ColumnSorter(const bool& cancel, const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
+                          std::pair<int, int> range, bool build_tie)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
-              _is_asc_order(is_asc_order),
-              _is_null_first(is_null_first),
+              _sort_desc(sort_desc),
               _permutation(permutation),
               _tie(tie),
               _range(range),
@@ -41,15 +41,15 @@ public:
 
         const NullData& null_data = column.immutable_null_column_data();
         auto null_pred = [&](const SmallPermuteItem& item) -> bool {
-            if (_is_null_first) {
+            if (_sort_desc.is_null_first()) {
                 return null_data[item.index_in_chunk] == 1;
             } else {
                 return null_data[item.index_in_chunk] != 1;
             }
         };
 
-        return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _is_asc_order,
-                                            _is_null_first, _permutation, _tie, _range, _build_tie);
+        return sort_and_tie_helper_nullable(_cancel, &column, column.data_column(), null_pred, _sort_desc, _permutation,
+                                            _tie, _range, _build_tie);
     }
 
     Status do_visit(const vectorized::ConstColumn& column) {
@@ -59,10 +59,20 @@ public:
 
     Status do_visit(const vectorized::ArrayColumn& column) {
         auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
-            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _is_null_first ? -1 : 1);
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
         };
 
-        return sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range, _build_tie);
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                   _build_tie);
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
+        auto cmp = [&](const SmallPermuteItem& lhs, const SmallPermuteItem& rhs) {
+            return column.compare_at(lhs.index_in_chunk, rhs.index_in_chunk, column, _sort_desc.nan_direction());
+        };
+
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                   _build_tie);
     }
 
     template <typename T>
@@ -74,7 +84,8 @@ public:
         };
 
         auto inlined = create_inline_permutation<Slice>(_permutation, column.get_data());
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie));
+        RETURN_IF_ERROR(
+                sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range, _build_tie));
         restore_inline_permutation(inlined, _permutation);
 
         return Status::OK();
@@ -90,7 +101,8 @@ public:
         };
 
         auto inlined = create_inline_permutation<T>(_permutation, column.get_data());
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie));
+        RETURN_IF_ERROR(
+                sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range, _build_tie));
         restore_inline_permutation(inlined, _permutation);
 
         return Status::OK();
@@ -108,13 +120,13 @@ public:
             return column.get_object(lhs.index_in_chunk)->compare(*column.get_object(rhs.index_in_chunk));
         };
 
-        return sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range, _build_tie);
+        return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                   _build_tie);
     }
 
 private:
     const bool& _cancel;
-    bool _is_asc_order;
-    bool _is_null_first;
+    const SortDesc& _sort_desc;
     SmallPermutation& _permutation;
     Tie& _tie;
     std::pair<int, int> _range;
@@ -125,12 +137,11 @@ private:
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
     explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
-                                  bool is_asc_order, bool is_null_first, Permutation& permutation, Tie& tie,
+                                  const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
                                   std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
-              _is_asc_order(is_asc_order),
-              _is_null_first(is_null_first),
+              _sort_desc(sort_desc),
               _vertical_columns(columns),
               _permutation(permutation),
               _tie(tie),
@@ -150,22 +161,22 @@ public:
             data_columns.push_back(real->data_column());
         }
 
-        if (_is_null_first) {
+        if (_sort_desc.is_null_first()) {
             auto null_pred = [&](const PermutationItem& item) -> bool {
                 return (*null_datas[item.chunk_index])[item.index_in_chunk] == 1;
             };
 
-            RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order,
-                                                                  _is_null_first, _permutation, _tie, _range,
-                                                                  _build_tie, _limit, &_pruned_limit));
+            RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
+                                                                  _permutation, _tie, _range, _build_tie, _limit,
+                                                                  &_pruned_limit));
         } else {
             auto null_pred = [&](const PermutationItem& item) -> bool {
                 return (*null_datas[item.chunk_index])[item.index_in_chunk] != 1;
             };
 
-            RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _is_asc_order,
-                                                                  _is_null_first, _permutation, _tie, _range,
-                                                                  _build_tie, _limit, &_pruned_limit));
+            RETURN_IF_ERROR(sort_and_tie_helper_nullable_vertical(_cancel, data_columns, null_pred, _sort_desc,
+                                                                  _permutation, _tie, _range, _build_tie, _limit,
+                                                                  &_pruned_limit));
         }
 
         _prune_limit();
@@ -192,8 +203,8 @@ public:
             }
 
             auto inlined = _create_inlined_permutation<Slice>(containers);
-            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
-                                                _limit, &_pruned_limit));
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range,
+                                                _build_tie, _limit, &_pruned_limit));
             _restore_inlined_permutation(inlined);
         } else {
             auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
@@ -204,8 +215,8 @@ public:
                 return SorterComparator<Slice>::compare(left_value, right_value);
             };
 
-            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                                _build_tie, _limit, &_pruned_limit));
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp,
+                                                _range, _build_tie, _limit, &_pruned_limit));
         }
         _prune_limit();
         return Status::OK();
@@ -227,8 +238,8 @@ public:
                 containers.emplace_back(&real->get_data());
             }
             auto inlined = _create_inlined_permutation<T>(containers);
-            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, inlined, _tie, cmp, _range, _build_tie,
-                                                _limit, &_pruned_limit));
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), inlined, _tie, cmp, _range,
+                                                _build_tie, _limit, &_pruned_limit));
             _restore_inlined_permutation(inlined);
         } else {
             using ItemType = PermutationItem;
@@ -240,8 +251,8 @@ public:
                 return SorterComparator<T>::compare(left_value, right_value);
             };
 
-            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
-                                                _build_tie, _limit, &_pruned_limit));
+            RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp,
+                                                _range, _build_tie, _limit, &_pruned_limit));
         }
         _prune_limit();
         return Status::OK();
@@ -256,10 +267,23 @@ public:
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
-            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _is_null_first ? -1 : 1);
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
         };
 
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
+                                            _build_tie, _limit, &_pruned_limit));
+        _prune_limit();
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::MapColumn& column) {
+        auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
+            auto& lhs_col = _vertical_columns[lhs.chunk_index];
+            auto& rhs_col = _vertical_columns[rhs.chunk_index];
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
+        };
+
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
@@ -275,10 +299,10 @@ public:
         auto cmp = [&](const PermutationItem& lhs, const PermutationItem& rhs) {
             auto& lhs_col = _vertical_columns[lhs.chunk_index];
             auto& rhs_col = _vertical_columns[rhs.chunk_index];
-            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _is_null_first ? -1 : 1);
+            return lhs_col->compare_at(lhs.index_in_chunk, rhs.index_in_chunk, *rhs_col, _sort_desc.nan_direction());
         };
 
-        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _is_asc_order, _permutation, _tie, cmp, _range,
+        RETURN_IF_ERROR(sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
@@ -334,8 +358,7 @@ private:
 
 private:
     const std::atomic<bool>& _cancel;
-    const bool _is_asc_order;
-    const bool _is_null_first;
+    const SortDesc& _sort_desc;
 
     std::vector<ColumnPtr> _vertical_columns;
     Permutation& _permutation;
@@ -346,24 +369,23 @@ private:
     size_t _pruned_limit; // The pruned limit during partial sorting
 };
 
-Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const bool is_asc_order,
-                           const bool is_null_first, SmallPermutation& permutation, Tie& tie, std::pair<int, int> range,
-                           bool build_tie) {
-    ColumnSorter column_sorter(cancel, is_asc_order, is_null_first, permutation, tie, range, build_tie);
+Status sort_and_tie_column(const bool cancel, const ColumnPtr& column, const SortDesc& sort_desc,
+                           SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
+    ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const bool is_asc_order, const bool is_null_first,
+Status sort_and_tie_column(const bool cancel, ColumnPtr& column, const SortDesc& sort_desc,
                            SmallPermutation& permutation, Tie& tie, std::pair<int, int> range, bool build_tie) {
     if (column->is_nullable() && !column->is_constant()) {
         ColumnHelper::as_column<NullableColumn>(column)->fill_null_with_default();
     }
-    ColumnSorter column_sorter(cancel, is_asc_order, is_null_first, permutation, tie, range, build_tie);
+    ColumnSorter column_sorter(cancel, sort_desc, permutation, tie, range, build_tie);
     return column->accept(&column_sorter);
 }
 
-Status sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
-                            const std::vector<int>& null_firsts, Permutation* permutation) {
+Status sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+                            Permutation* permutation) {
     if (columns.size() < 1) {
         return Status::OK();
     }
@@ -374,11 +396,9 @@ Status sort_and_tie_columns(const bool cancel, const Columns& columns, const std
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
-        bool is_asc_order = (sort_orders[col_index] == 1);
-        bool is_null_first = is_asc_order ? (null_firsts[col_index] == -1) : (null_firsts[col_index] == 1);
         bool build_tie = col_index != columns.size() - 1;
-        RETURN_IF_ERROR(
-                sort_and_tie_column(cancel, column, is_asc_order, is_null_first, small_perm, tie, range, build_tie));
+        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), small_perm, tie,
+                                            range, build_tie));
     }
 
     restore_small_permutation(small_perm, *permutation);
@@ -386,8 +406,8 @@ Status sort_and_tie_columns(const bool cancel, const Columns& columns, const std
     return Status::OK();
 }
 
-Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const std::vector<int>& sort_orders,
-                                   const std::vector<int>& null_firsts, SmallPermutation* small_perm) {
+Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, const SortDescs& sort_desc,
+                                   SmallPermutation* small_perm) {
     if (columns.size() < 1) {
         return Status::OK();
     }
@@ -398,10 +418,8 @@ Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, co
 
     for (int col_index = 0; col_index < columns.size(); col_index++) {
         ColumnPtr column = columns[col_index];
-        bool is_asc_order = (sort_orders[col_index] == 1);
-        bool is_null_first = is_asc_order ? (null_firsts[col_index] == -1) : (null_firsts[col_index] == 1);
-        RETURN_IF_ERROR(
-                sort_and_tie_column(cancel, column, is_asc_order, is_null_first, *small_perm, tie, range, true));
+        RETURN_IF_ERROR(sort_and_tie_column(cancel, column, sort_desc.get_column_desc(col_index), *small_perm, tie,
+                                            range, true));
     }
 
     // Stable sort need extra runs of sorting on permutation
@@ -419,8 +437,8 @@ Status stable_sort_and_tie_columns(const bool cancel, const Columns& columns, co
 }
 
 Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
-                             const bool is_asc_order, const bool is_null_first, Permutation& permutation, Tie& tie,
-                             std::pair<int, int> range, const bool build_tie, const size_t limit, size_t* limited) {
+                             const SortDesc& sort_desc, Permutation& permutation, Tie& tie, std::pair<int, int> range,
+                             const bool build_tie, const size_t limit, size_t* limited) {
     DCHECK_GT(columns.size(), 0);
     DCHECK_GT(permutation.size(), 0);
 
@@ -430,8 +448,7 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
         }
     }
 
-    VerticalColumnSorter sorter(cancel, columns, is_asc_order, is_null_first, permutation, tie, range, build_tie,
-                                limit);
+    VerticalColumnSorter sorter(cancel, columns, sort_desc, permutation, tie, range, build_tie, limit);
     RETURN_IF_ERROR(columns[0]->accept(&sorter));
     if (limit > 0 && limited != nullptr) {
         *limited = std::min(*limited, sorter.get_limited());
@@ -440,8 +457,8 @@ Status sort_vertical_columns(const std::atomic<bool>& cancel, const std::vector<
 }
 
 Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<Columns>& vertical_chunks,
-                            const std::vector<int>& sort_orders, const std::vector<int>& null_firsts, Permutation& perm,
-                            const size_t limit, const bool is_limit_by_rank) {
+                            const SortDescs& sort_desc, Permutation& perm, const size_t limit,
+                            const bool is_limit_by_rank) {
     if (vertical_chunks.empty() || perm.empty()) {
         return Status::OK();
     }
@@ -450,13 +467,10 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
     size_t num_rows = perm.size();
     Tie tie(num_rows, 1);
 
-    DCHECK_EQ(num_columns, sort_orders.size());
-    DCHECK_EQ(num_columns, null_firsts.size());
+    DCHECK_EQ(num_columns, sort_desc.num_columns());
 
     for (int col = 0; col < num_columns; col++) {
         // TODO: use the flag directly
-        bool is_asc_order = (sort_orders[col] == 1);
-        bool is_null_first = is_asc_order ? (null_firsts[col] == -1) : (null_firsts[col] == 1);
         bool build_tie = col != num_columns - 1;
         std::pair<int, int> range(0, perm.size());
         DCHECK_GT(perm.size(), 0);
@@ -466,8 +480,8 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
             vertical_columns.push_back(columns[col]);
         }
 
-        RETURN_IF_ERROR(sort_vertical_columns(cancel, vertical_columns, is_asc_order, is_null_first, perm, tie, range,
-                                              build_tie, limit));
+        RETURN_IF_ERROR(sort_vertical_columns(cancel, vertical_columns, sort_desc.get_column_desc(col), perm, tie,
+                                              range, build_tie, limit));
     }
 
     if (limit < perm.size()) {

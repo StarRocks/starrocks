@@ -93,6 +93,11 @@ public:
         return _work_queue.blocking_put(std::move(task));
     }
 
+    bool try_offer(WorkFunction func) {
+        PriorityThreadPool::Task task = {0, std::move(func)};
+        return _work_queue.try_put(std::move(task));
+    }
+
     // Shuts the thread pool down, causing the work queue to cease accepting offered work
     // and the worker threads to terminate once they have processed their current work item.
     // Returns once the shutdown flag has been set, does not wait for the threads to

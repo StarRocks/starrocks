@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/delta_writer.h"
 
@@ -8,6 +8,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/rowset/rowset_factory.h"
+#include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_updates.h"
@@ -36,6 +37,7 @@ DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker,
           _mem_table_sink(nullptr),
           _tablet_schema(nullptr),
           _flush_token(nullptr),
+          _replicate_token(nullptr),
           _with_rollback_log(true) {}
 
 DeltaWriter::~DeltaWriter() {
@@ -43,7 +45,10 @@ DeltaWriter::~DeltaWriter() {
     if (_flush_token != nullptr) {
         _flush_token->cancel();
     }
-    switch (_get_state()) {
+    if (_replicate_token != nullptr) {
+        _replicate_token->cancel();
+    }
+    switch (get_state()) {
     case kUninitialized:
     case kCommitted:
         break;
@@ -75,6 +80,17 @@ void DeltaWriter::_garbage_collection() {
 
 Status DeltaWriter::_init() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
+
+    if (_opt.is_replicated_storage) {
+        if (_opt.replicas.size() > 0 && _opt.replicas[0].node_id() == _opt.node_id) {
+            _replica_state = Primary;
+        } else {
+            _replica_state = Secondary;
+        }
+    } else {
+        _replica_state = Peer;
+    }
+
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
@@ -141,7 +157,7 @@ Status DeltaWriter::_init() {
     }
 
     // from here, make sure to set state to kAborted if error happens
-    RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+    RowsetWriterContext writer_context;
 
     const std::size_t partial_cols_num = [this]() {
         if (_opt.slots->size() > 0 && _opt.slots->back()->col_name() == "__op") {
@@ -194,7 +210,14 @@ Status DeltaWriter::_init() {
     _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
     _flush_token = _storage_engine->memtable_flush_executor()->create_flush_token();
+    if (_replica_state == Primary && _opt.replicas.size() > 1) {
+        _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
+    }
     _set_state(kWriting);
+
+    VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
+            << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
+
     return Status::OK();
 }
 
@@ -205,10 +228,14 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     if (_mem_table == nullptr) {
         _reset_mem_table();
     }
-    auto state = _get_state();
+    auto state = get_state();
     if (state != kWriting) {
         return Status::InternalError(
                 fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+    }
+    if (_replica_state == Secondary) {
+        return Status::InternalError(fmt::format("Fail to write chunk, tablet_id: {}, replica_state: {}",
+                                                 _opt.tablet_id, _replica_state_name(_replica_state)));
     }
     Status st;
     bool full = _mem_table->insert(chunk, indexes, from, size);
@@ -230,9 +257,23 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     return st;
 }
 
+Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    auto state = get_state();
+    if (state != kWriting) {
+        return Status::InternalError(fmt::format("Fail to write segment: {}, tablet_id: {}, state: {}",
+                                                 segment_pb.segment_id(), _opt.tablet_id, _state_name(state)));
+    }
+    if (_replica_state != Secondary) {
+        return Status::InternalError(fmt::format("Fail to write segment: {}, tablet_id: {}, replica_state: {}",
+                                                 segment_pb.segment_id(), _opt.tablet_id,
+                                                 _replica_state_name(_replica_state)));
+    }
+    return _rowset_writer->flush_segment(segment_pb, data);
+}
+
 Status DeltaWriter::close() {
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    auto state = _get_state();
+    auto state = get_state();
     switch (state) {
     case kUninitialized:
     case kCommitted:
@@ -243,22 +284,42 @@ Status DeltaWriter::close() {
         return Status::OK();
     case kWriting:
         Status st = Status::OK();
-        if (_mem_table != nullptr) {
-            st = _flush_memtable_async();
-        }
+        st = _flush_memtable_async(true);
         _set_state(st.ok() ? kClosed : kAborted);
         return st;
     }
     return Status::OK();
 }
 
-Status DeltaWriter::_flush_memtable_async() {
+Status DeltaWriter::_flush_memtable_async(bool eos) {
     // _mem_table is nullptr means write() has not been called
-    if (_mem_table == nullptr) {
-        return Status::OK();
+    if (_mem_table != nullptr) {
+        RETURN_IF_ERROR(_mem_table->finalize());
     }
-    RETURN_IF_ERROR(_mem_table->finalize());
-    return _flush_token->submit(std::move(_mem_table));
+    if (_replica_state == Primary) {
+        // have secondary replica
+        if (_replicate_token != nullptr) {
+            // Although there maybe no data, but we still need send eos to seconary replica
+            auto replicate_token = _replicate_token.get();
+            return _flush_token->submit(std::move(_mem_table), eos,
+                                        [replicate_token](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                            auto st = replicate_token->submit(std::move(seg), eos);
+                                            if (!st.ok()) {
+                                                LOG(WARNING) << "Failed to submit sync segment err=" << st;
+                                                replicate_token->set_status(st);
+                                            }
+                                        });
+        } else {
+            if (_mem_table != nullptr) {
+                return _flush_token->submit(std::move(_mem_table), eos, nullptr);
+            }
+        }
+    } else if (_replica_state == Peer) {
+        if (_mem_table != nullptr) {
+            return _flush_token->submit(std::move(_mem_table), eos, nullptr);
+        }
+    }
+    return Status::OK();
 }
 
 Status DeltaWriter::_flush_memtable() {
@@ -286,7 +347,7 @@ Status DeltaWriter::commit() {
     }
     auto scoped = trace::Scope(span);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_mem_tracker, false);
-    auto state = _get_state();
+    auto state = get_state();
     switch (state) {
     case kUninitialized:
     case kAborted:
@@ -322,6 +383,14 @@ Status DeltaWriter::commit() {
         }
     }
 
+    if (_replicate_token != nullptr) {
+        if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
+            LOG(WARNING) << st;
+            _set_state(kAborted);
+            return st;
+        }
+    }
+
     auto res = _storage_engine->txn_manager()->commit_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id,
                                                           _cur_rowset, false);
 
@@ -350,6 +419,10 @@ void DeltaWriter::abort(bool with_log) {
         // https://github.com/StarRocks/starrocks/issues/8906
         _flush_token->cancel();
     }
+    if (_replicate_token != nullptr) {
+        _replicate_token->cancel();
+    }
+    VLOG(1) << "Aborted delta writer. tablet_id: " << _tablet->tablet_id();
 }
 
 int64_t DeltaWriter::partition_id() const {
@@ -368,6 +441,18 @@ const char* DeltaWriter::_state_name(State state) const {
         return "kCommitted";
     case kClosed:
         return "kClosed";
+    }
+    return "";
+}
+
+const char* DeltaWriter::_replica_state_name(ReplicaState state) const {
+    switch (state) {
+    case Primary:
+        return "Primary Replica";
+    case Secondary:
+        return "Secondary Replica";
+    case Peer:
+        return "Peer Replica";
     }
     return "";
 }

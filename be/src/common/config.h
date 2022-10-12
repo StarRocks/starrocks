@@ -46,9 +46,9 @@ CONF_String(priority_networks, "");
 //// tcmalloc gc parameter
 ////
 // Min memory for TCmalloc, when used memory is smaller than this, do not returned to OS.
-CONF_mInt64(tc_use_memory_min, "10737418240");
+CONF_mInt64(tc_use_memory_min, "0");
 // free memory rate.[0-100]
-CONF_mInt64(tc_free_memory_rate, "20");
+CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
@@ -133,6 +133,10 @@ CONF_mInt32(download_low_speed_time, "300");
 CONF_Int32(sleep_one_second, "1");
 // The sleep time for five seconds.
 CONF_Int32(sleep_five_seconds, "5");
+
+// The count of thread to compact
+CONF_Int32(compact_threads, "4");
+CONF_Int32(compact_thread_pool_queue_size, "100");
 
 // The log dir.
 CONF_String(sys_log_dir, "${STARROCKS_HOME}/log");
@@ -220,6 +224,7 @@ CONF_mDouble(memory_ratio_for_sorting_schema_change, "0.8");
 CONF_mInt32(update_cache_expire_sec, "360");
 CONF_mInt32(file_descriptor_cache_clean_interval, "3600");
 CONF_mInt32(disk_stat_monitor_interval, "5");
+CONF_mInt32(profile_report_interval, "30");
 CONF_mInt32(unused_rowset_monitor_interval, "30");
 CONF_String(storage_root_path, "${STARROCKS_HOME}/storage");
 // BE process will exit if the percentage of error disk reach this value.
@@ -248,10 +253,10 @@ CONF_Int32(min_file_descriptor_number, "60000");
 CONF_Int64(index_stream_cache_capacity, "10737418240");
 // CONF_Int64(max_packed_row_block_size, "20971520");
 
-// Cache for stoage page size
-CONF_String(storage_page_cache_limit, "0");
+// Cache for storage page size
+CONF_mString(storage_page_cache_limit, "20%");
 // whether to disable page cache feature in storage
-CONF_Bool(disable_storage_page_cache, "true");
+CONF_Bool(disable_storage_page_cache, "false");
 // whether to disable column pool
 CONF_Bool(disable_column_pool, "false");
 
@@ -272,10 +277,6 @@ CONF_mInt64(max_cumulative_compaction_num_singleton_deltas, "1000");
 // -1 means no limit if enable event_based_compaction_framework, and the max concurrency will be:
 CONF_Int32(cumulative_compaction_num_threads_per_disk, "1");
 // CONF_Int32(cumulative_compaction_write_mbytes_per_sec, "100");
-// cumulative compaction skips recently published deltas in order to prevent
-// compacting a version that might be queried (in case the query planning phase took some time).
-// the following config set the window size
-CONF_mInt32(cumulative_compaction_skip_window_seconds, "30");
 
 CONF_mInt32(update_compaction_check_interval_seconds, "60");
 CONF_Int32(update_compaction_num_threads_per_disk, "1");
@@ -286,6 +287,9 @@ CONF_mInt32(repair_compaction_interval_seconds, "600"); // 10 min
 // if compaction of a tablet failed, this tablet should not be chosen to
 // compaction until this interval passes.
 CONF_mInt64(min_compaction_failure_interval_sec, "120"); // 2 min
+
+CONF_mInt64(min_cmumulative_compaction_failure_interval_sec, "30"); // 30s
+
 // Too many compaction tasks may run out of memory.
 // This config is to limit the max concurrency of running compaction tasks.
 // -1 means no limit, and the max concurrency will be:
@@ -303,6 +307,8 @@ CONF_mInt32(compaction_trace_threshold, "60");
 CONF_Int64(vertical_compaction_max_columns_per_group, "5");
 
 CONF_Bool(enable_event_based_compaction_framework, "false");
+
+CONF_Bool(enable_check_string_lengths, "true");
 // 5GB
 CONF_mInt64(min_cumulative_compaction_size, "5368709120");
 // 20GB
@@ -325,6 +331,9 @@ CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
 CONF_Int32(number_tablet_writer_threads, "16");
+
+// delta writer hang after this time, be will exit since storage is in error state
+CONF_Int32(be_exit_after_disk_write_hang_second, "60");
 
 // Automatically detect whether a char/varchar column to use dictionary encoding
 // If the number of keys in a dictionary is greater than this fraction of the total number of rows
@@ -492,12 +501,18 @@ CONF_Bool(enable_metric_calculator, "true");
 // Max consumer num in one data consumer group, for routine load.
 CONF_mInt32(max_consumer_num_per_group, "3");
 
+// Max pulsar consumer num in one data consumer group, for routine load.
+CONF_mInt32(max_pulsar_consumer_num_per_group, "10");
+
 // The size of thread pool for routine load task.
 // this should be larger than FE config 'max_concurrent_task_num_per_be' (default 5).
 CONF_Int32(routine_load_thread_pool_size, "10");
 
 // kafka reqeust timeout
 CONF_Int32(routine_load_kafka_timeout_second, "10");
+
+// pulsar reqeust timeout
+CONF_Int32(routine_load_pulsar_timeout_second, "10");
 
 // Is set to true, index loading failure will not causing BE exit,
 // and the tablet will be marked as bad, so that FE will try to repair it.
@@ -639,7 +654,7 @@ CONF_mInt32(sys_minidump_interval, "600");
 // The maximum number of version per tablet. If the
 // number of version exceeds this value, new write
 // requests will fail.
-CONF_Int16(tablet_max_versions, "1000");
+CONF_mInt16(tablet_max_versions, "1000");
 
 // The maximum number of pending versions allowed for a primary key tablet
 CONF_mInt32(tablet_max_pending_versions, "1000");
@@ -657,13 +672,17 @@ CONF_Int64(pipeline_exec_thread_pool_thread_num, "0");
 // The number of threads for preparing fragment instances in pipeline engine, vCPUs by default.
 CONF_Int64(pipeline_prepare_thread_pool_thread_num, "0");
 CONF_Int64(pipeline_prepare_thread_pool_queue_size, "102400");
+// The number of threads for executing sink io task in pipeline engine, vCPUs by default.
+CONF_Int64(pipeline_sink_io_thread_pool_thread_num, "0");
+CONF_Int64(pipeline_sink_io_thread_pool_queue_size, "102400");
 // The buffer size of SinkBuffer.
 CONF_Int64(pipeline_sink_buffer_size, "64");
 // The degree of parallelism of brpc.
-CONF_Int64(pipeline_sink_brpc_dop, "8");
+CONF_Int64(pipeline_sink_brpc_dop, "64");
 // Used to reject coming fragment instances, when the number of running drivers
 // exceeds it*pipeline_exec_thread_pool_thread_num.
 CONF_Int64(pipeline_max_num_drivers_per_exec_thread, "10240");
+CONF_mBool(pipeline_print_profile, "false");
 
 /// For parallel scan on the single tablet.
 // These three configs are used to calculate the minimum number of rows picked up from a segment at one time.
@@ -702,6 +721,9 @@ CONF_Int64(object_storage_max_connection, "102400");
 // Acccess object storage using https.
 // this options is applicable only if `object_storage_endpoint` is not specified.
 CONF_Bool(object_storage_endpoint_use_https, "false");
+// https://github.com/aws/aws-sdk-cpp/issues/587
+// https://hadoop.apache.org/docs/current2/hadoop-aws/tools/hadoop-aws/index.html
+CONF_Bool(object_storage_endpoint_path_style_access, "false");
 
 CONF_Bool(enable_orc_late_materialization, "true");
 // orc reader, if RowGroup/Stripe/File size is less than this value, read all data.
@@ -721,12 +743,21 @@ CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 
+// Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
+// Once logging is enabled in your application, the SDK will generate log files in your current working directory
+// following the default naming pattern of aws_sdk_<date>.log.
+// The log file generated by the prefix-naming option rolls over once per hour to allow for archiving or deleting log files.
+// https://docs.aws.amazon.com/zh_cn/sdk-for-cpp/v1/developer-guide/logging.html
+CONF_mBool(aws_sdk_logging_trace_enabled, "false");
+
 // default: 16MB
 CONF_mInt64(experimental_s3_max_single_part_size, "16777216");
 // default: 16MB
 CONF_mInt64(experimental_s3_min_upload_part_size, "16777216");
 
 CONF_Int64(max_load_dop, "16");
+
+CONF_Bool(enable_load_colocate_mv, "false");
 
 CONF_Int64(meta_threshold_to_manual_compact, "10737418240"); // 10G
 CONF_Bool(manual_compact_before_data_dir_load, "false");
@@ -765,10 +796,10 @@ CONF_String(starlet_cache_dir, "");
 
 CONF_Int64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_Int64(lake_gc_metadata_max_versions, "10");
-CONF_Int64(lake_gc_metadata_check_interval, /*10 minutes=*/"600");
+CONF_Int64(lake_gc_metadata_check_interval, /*30 minutes=*/"1800");
 CONF_Int64(lake_gc_segment_check_interval, /*60 minutes=*/"3600");
 // This value should be much larger than the maximum timeout of loading/compaction/schema change jobs.
-CONF_Int64(lake_gc_segment_expire_seconds, /*1 day=*/"86400");
+CONF_Int64(lake_gc_segment_expire_seconds, /*3 days=*/"259200");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -782,4 +813,41 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
+CONF_Int16(jdbc_connection_pool_size, "8");
+
+// Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
+// The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
+CONF_Int32(internal_service_async_thread_num, "10");
+
+/*
+ * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject
+ * to inject error through return random status(except ok).
+ */
+CONF_Int32(cardinality_of_inject, "10");
+
+/*
+ * Config range for inject erros,
+ * Specify the source code directory,
+ * Split by "," strictly.
+ */
+CONF_String(directory_of_inject,
+            "/src/exec/pipeline/hashjoin,/src/exec/pipeline/scan,/src/exec/pipeline/aggregate,/src/exec/pipeline/"
+            "crossjoin,/src/exec/pipeline/sort,/src/exec/pipeline/exchange,/src/exec/pipeline/analysis");
+
+// Used by to_base64
+CONF_Int64(max_length_for_to_base64, "200000");
+// Used by bitmap functions
+CONF_Int64(max_length_for_bitmap_function, "1000000");
+
+CONF_Bool(block_cache_enable, "false");
+CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
+CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
+//CONF_Int64(block_cache_block_size, "4194304");    // 4MB
+CONF_Int64(block_cache_block_size, "1048576");
+CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
+
+// Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
+CONF_Int64(query_cache_capacity, "536870912");
 } // namespace starrocks::config

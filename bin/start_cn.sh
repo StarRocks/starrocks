@@ -39,19 +39,10 @@ while true; do
 done
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# export env variables from cn.conf
-#
-# UDF_RUNTIME_DIR
-# LOG_DIR
-# PID_DIR
-export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
-export LOG_DIR=${STARROCKS_HOME}/log
-export PID_DIR=`cd "$curdir"; pwd`
-
+# actions shared between start_be.sh & start_cn.sh
+export_shared_envvars
 export_env_from_conf $STARROCKS_HOME/conf/cn.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/cn.conf
 
@@ -125,5 +116,5 @@ fi
 if [ ${RUN_DAEMON} -eq 1 ]; then
     nohup ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null &
 else
-    ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null
+    exec ${STARROCKS_HOME}/lib/starrocks_be --cn "$@" >> $LOG_DIR/cn.out 2>&1 </dev/null
 fi

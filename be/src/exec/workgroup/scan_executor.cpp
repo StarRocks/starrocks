@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/workgroup/scan_executor.h"
 
 #include "exec/workgroup/scan_task_queue.h"
-#include "runtime/exec_env.h"
 
 namespace starrocks::workgroup {
 
@@ -32,18 +31,23 @@ void ScanExecutor::change_num_threads(int32_t num_threads) {
 }
 
 void ScanExecutor::worker_thread() {
-    const int worker_id = _next_id++;
     while (true) {
         if (_num_threads_setter.should_shrink()) {
             break;
         }
 
-        auto maybe_task = _task_queue->take(worker_id);
+        auto maybe_task = _task_queue->take();
         if (maybe_task.status().is_cancelled()) {
             return;
         }
+        auto& task = maybe_task.value();
 
-        maybe_task.value().work_function(worker_id);
+        int64_t time_spent_ns = 0;
+        {
+            SCOPED_RAW_TIMER(&time_spent_ns);
+            task.work_function();
+        }
+        _task_queue->update_statistics(task.workgroup, time_spent_ns);
     }
 }
 

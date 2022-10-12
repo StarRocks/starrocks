@@ -24,9 +24,7 @@
 
 #include <cstdlib>
 #include <cstring>
-#include <iostream>
 
-#include "Adaptor.hh"
 #include "orc/Int128.hh"
 
 namespace orc {

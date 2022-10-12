@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -59,7 +59,7 @@ public class IcebergResource extends Resource {
     @Override
     protected void setProperties(Map<String, String> properties) throws DdlException {
         Preconditions.checkNotNull(properties, "Properties of iceberg resource is null!");
-
+        this.properties = Maps.newHashMap(properties);
         catalogType = properties.get(ICEBERG_CATALOG);
         if (StringUtils.isBlank(catalogType)) {
             catalogType = properties.get(ICEBERG_CATALOG_LEGACY);
@@ -109,6 +109,10 @@ public class IcebergResource extends Resource {
 
     public String getHiveMetastoreURIs() {
         return metastoreURIs;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties == null ? Maps.newHashMap() : properties;
     }
 
     public String getIcebergImpl() {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.utframe.UtFrameUtils;
@@ -40,27 +40,30 @@ public class AnalyzeAnalyticTest {    // use a unique dir so that it won't be co
 
     @Test
     public void testRange() {
-        analyzeFail(
-                "select sum(v1) over(partition by v2 order by v3 range between 1 preceding and unbounded following) from t0",
-                "RANGE is only supported with both the lower and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
+        analyzeFail("select sum(v1) " +
+                        "over(partition by v2 order by v3 range between 1 preceding and unbounded following) from t0",
+                "RANGE is only supported with both the lower " +
+                        "and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
 
-        analyzeFail(
-                "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and 1 following) from t0",
-                "RANGE is only supported with both the lower and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
+        analyzeFail("select sum(v1) " +
+                        "over(partition by v2 order by v3 range between unbounded preceding and 1 following) from t0",
+                "RANGE is only supported with both the lower " +
+                        "and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
 
-        analyzeFail(
-                "select sum(v1) over(partition by v2 order by v3 range between current row and current row) from t0",
-                "RANGE is only supported with both the lower and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
+        analyzeFail("select sum(v1) " +
+                        "over(partition by v2 order by v3 range between current row and current row) from t0",
+                "RANGE is only supported with both the lower " +
+                        "and upper bounds UNBOUNDED or one UNBOUNDED and the other CURRENT ROW");
 
         analyzeFail("select sum(v1) over(partition by v2 order by v3 range unbounded following) from t0",
                 "UNBOUNDED FOLLOWING is only allowed for upper bound of BETWEEN");
 
-        analyzeSuccess(
-                "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and unbounded following) from t0");
-        analyzeSuccess(
-                "select sum(v1) over(partition by v2 order by v3 range between current row and unbounded following) from t0");
-        analyzeSuccess(
-                "select sum(v1) over(partition by v2 order by v3 range between unbounded preceding and current row) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between unbounded preceding and unbounded following) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between current row and unbounded following) from t0");
+        analyzeSuccess("select sum(v1) " +
+                "over(partition by v2 order by v3 range between unbounded preceding and current row) from t0");
         analyzeSuccess("select sum(v1) over(partition by v2 order by v3 range unbounded preceding) from t0");
     }
 

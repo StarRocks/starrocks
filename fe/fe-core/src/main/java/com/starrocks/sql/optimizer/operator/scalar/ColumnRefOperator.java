@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.catalog.Type;
@@ -19,11 +19,22 @@ public final class ColumnRefOperator extends ScalarOperator {
     private final String name;
     private boolean nullable;
 
+    private boolean isLambdaArgument;
+
     public ColumnRefOperator(int id, Type type, String name, boolean nullable) {
         super(OperatorType.VARIABLE, type);
         this.id = id;
         this.name = requireNonNull(name, "name is null");
         this.nullable = nullable;
+        this.isLambdaArgument = false;
+    }
+
+    public ColumnRefOperator(int id, Type type, String name, boolean nullable, boolean isLambdaArgument) {
+        super(OperatorType.VARIABLE, type);
+        this.id = id;
+        this.name = requireNonNull(name, "name is null");
+        this.nullable = nullable;
+        this.isLambdaArgument = isLambdaArgument;
     }
 
     public int getId() {
@@ -69,6 +80,9 @@ public final class ColumnRefOperator extends ScalarOperator {
     }
 
     public ColumnRefSet getUsedColumns() {
+        if (isLambdaArgument) {
+            return new ColumnRefSet();
+        }
         return new ColumnRefSet(id);
     }
 

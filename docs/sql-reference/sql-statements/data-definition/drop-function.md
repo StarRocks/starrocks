@@ -24,7 +24,3 @@ Delete a custom function. It can only be deleted when its name and parameter typ
     ```sql
     DROP FUNCTION my_add(INT, INT)
     ```
-
-## keyword
-
-DROP,FUNCTION

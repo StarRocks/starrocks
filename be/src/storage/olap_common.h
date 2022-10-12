@@ -376,7 +376,17 @@ struct Version {
 
     bool contains(const Version& other) const { return first <= other.first && second >= other.second; }
 
-    bool operator<(const Version& rhs) const { return second < rhs.second; }
+    bool operator<(const Version& rhs) const {
+        if (second < rhs.second) {
+            return true;
+        } else if (second > rhs.second) {
+            return false;
+        } else {
+            // version with bigger first will be smaller.
+            // design this for fast search in _contains_version() in tablet.cpp.
+            return first > rhs.first;
+        }
+    }
 };
 
 typedef std::vector<Version> Versions;
@@ -453,6 +463,8 @@ struct OlapReaderStatistics {
     int64_t rowsets_read_count = 0;
     int64_t segments_read_count = 0;
     int64_t total_columns_data_page_count = 0;
+
+    int64_t runtime_stats_filtered = 0;
 };
 
 typedef uint32_t ColumnId;

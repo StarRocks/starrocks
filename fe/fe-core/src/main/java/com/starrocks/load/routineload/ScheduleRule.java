@@ -30,7 +30,7 @@ import com.starrocks.system.SystemInfoService;
  */
 public class ScheduleRule {
 
-    private static int deadBeCount(String clusterName) {
+    private static int deadBeCount() {
         SystemInfoService systemInfoService = GlobalStateMgr.getCurrentSystemInfo();
         int total = systemInfoService.getTotalBackendNumber();
         int alive = systemInfoService.getAliveBackendNumber();
@@ -56,7 +56,7 @@ public class ScheduleRule {
          * Handle all backends are down.
          */
         if (jobRoutine.pauseReason != null && jobRoutine.pauseReason.getCode() == InternalErrorCode.REPLICA_FEW_ERR) {
-            int dead = deadBeCount(jobRoutine.clusterName);
+            int dead = deadBeCount();
             if (dead > Config.max_tolerable_backend_down_num) {
                 return false;
             }

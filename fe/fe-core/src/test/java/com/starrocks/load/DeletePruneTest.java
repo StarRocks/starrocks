@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.load;
 
 import com.starrocks.analysis.DeleteStmt;
@@ -76,7 +76,7 @@ public class DeletePruneTest {
     @Test
     public void testDeletePrune() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Database db = ctx.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = ctx.getGlobalStateMgr().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("test_delete");
 
         String deleteSQL = "delete from test_delete where k1 = '2020-01-01'";
@@ -141,7 +141,7 @@ public class DeletePruneTest {
     @Test
     public void testDeletePruneMultiPartition() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
-        Database db = ctx.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = ctx.getGlobalStateMgr().getDb("test");
         OlapTable tbl = (OlapTable) db.getTable("test_delete2");
 
         String deleteSQL = "delete from test_delete2 where date in ('2020-02-02') and id = 1000";

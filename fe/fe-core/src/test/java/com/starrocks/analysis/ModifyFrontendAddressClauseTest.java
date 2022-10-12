@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
 import com.starrocks.ha.FrontendNodeType;
 
+import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import org.junit.Assert;
 import org.junit.Test;
 

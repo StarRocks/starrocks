@@ -1,12 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/table_function/json_each.h"
 
-#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/table_function/table_function.h"
-#include "exprs/table_function/table_function_factory.h"
 #include "velocypack/vpack.h"
 
 namespace starrocks::vectorized {

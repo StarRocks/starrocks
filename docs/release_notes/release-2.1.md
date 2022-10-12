@@ -1,5 +1,41 @@
 # StarRocks version 2.1
 
+## 2.1.13
+
+Release date: September 6, 2022
+
+### Improvements
+
+- Added a BE configuration item `enable_check_string_lengths` to check the length of loaded data. This mechanism helps prevent compaction failures caused by VARCHAR data size out of range. [#10380](https://github.com/StarRocks/starrocks/issues/10380)
+- Optimized the query performance when a query contains more than 1000 OR operators. [#9332](https://github.com/StarRocks/starrocks/pull/9332)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- An error may occur and BEs may crash when you query ARRAY columns (calculated by using the REPLACE_IF_NOT_NULL function) from a table using the Aggregate Key model. [#10144](https://github.com/StarRocks/starrocks/issues/10144)
+- The query result is incorrect if more than one IFNULL() function is nested in the query. [#5028](https://github.com/StarRocks/starrocks/issues/5028) [#10486](https://github.com/StarRocks/starrocks/pull/10486)
+- After a dynamic partition is truncated, the number of tablets in the partition changes from the value configured by dynamic partitioning to the default value. [#10435](https://github.com/StarRocks/starrocks/issues/10435)
+- If the Kafka cluster is stopped when you use Routine Load to load data into StarRocks, deadlocks may occur, affecting query performance. [#8947](https://github.com/StarRocks/starrocks/issues/8947)
+- An error occurs when a query contains both subqueries and ORDER BY clauses. [#10066](https://github.com/StarRocks/starrocks/pull/10066)
+
+## 2.1.12
+
+Release date: August 9, 2022
+
+### Improvements
+
+Added two parameters, `bdbje_cleaner_threads` and `bdbje_replay_cost_percent`, to speed up metadata cleanup in BDB JE. [#8371](https://github.com/StarRocks/starrocks/pull/8371)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Some queries are forwarded to the Leader FE, causing the `/api/query_detail` action to return incorrect execution information about SQL statements such as SHOW FRONTENDS. [#9185](https://github.com/StarRocks/starrocks/issues/9185)
+- After a BE is terminated, the current process is not completely terminated, resulting in a failed restart of the BE. [#9175](https://github.com/StarRocks/starrocks/pull/9267)
+- When multiple Broker Load jobs are created to load the same HDFS data file, if one job encounters exceptions, the other jobs may not be able to properly read data and consequently fail. [#9506](https://github.com/StarRocks/starrocks/issues/9506)
+- The related variables are not reset when the schema of a table changes, resulting in an error (`no delete vector found tablet`) when querying the table. [#9192](https://github.com/StarRocks/starrocks/issues/9192)
+
 ## 2.1.11
 
 Release date: July 9, 2022

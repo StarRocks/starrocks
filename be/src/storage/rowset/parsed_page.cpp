@@ -27,7 +27,6 @@
 
 #include "column/nullable_column.h"
 #include "common/status.h"
-#include "gen_cpp/segment.pb.h"
 #include "gutil/strings/substitute.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitshuffle_page.h"

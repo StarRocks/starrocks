@@ -28,6 +28,7 @@ option java_package = "com.starrocks.proto";
 import "olap_common.proto";
 import "tablet_schema.proto";
 import "types.proto";
+import "segment.proto";
 
 message ZoneMapOfRowset {
     required bytes min = 1;

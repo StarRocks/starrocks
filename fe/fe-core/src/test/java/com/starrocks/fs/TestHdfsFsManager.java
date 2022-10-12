@@ -17,20 +17,15 @@
 
 package com.starrocks.fs;
 
-import junit.framework.TestCase;
-
 import com.starrocks.common.UserException;
 import com.starrocks.fs.hdfs.HdfsFs;
 import com.starrocks.fs.hdfs.HdfsFsManager;
-import com.starrocks.thrift.TBrokerFD;
-import com.starrocks.thrift.TBrokerFileStatus;
-
+import junit.framework.TestCase;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class TestHdfsFsManager extends TestCase {

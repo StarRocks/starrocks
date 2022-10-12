@@ -24,7 +24,6 @@
 #include <unistd.h>
 
 #include "fs/fs.h"
-#include "fs/fs_util.h"
 #include "util/debug_util.h"
 #include "util/system_metrics.h"
 

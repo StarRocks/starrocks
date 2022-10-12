@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -79,7 +79,7 @@ static std::string dubug_column(const Column* column, const PermutationType& per
 template <class NullPred>
 static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<bool>& cancel,
                                                            const std::vector<ColumnPtr>& data_columns,
-                                                           NullPred null_pred, bool is_asc_order, bool is_null_first,
+                                                           NullPred null_pred, const SortDesc& sort_desc,
                                                            Permutation& permutation, Tie& tie,
                                                            std::pair<int, int> range, bool build_tie, size_t limit,
                                                            size_t* limited) {
@@ -101,7 +101,7 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
             int pivot_start = pivot_iter - permutation.begin();
             std::pair<size_t, size_t> null_range = {range_first, pivot_start};
             std::pair<size_t, size_t> notnull_range = {pivot_start, range_last};
-            if (!is_null_first) {
+            if (!sort_desc.is_null_first()) {
                 std::swap(null_range, notnull_range);
             }
 
@@ -124,8 +124,8 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
     }
 
     // TODO(Murphy): avoid sort the null datums in the column
-    RETURN_IF_ERROR(sort_vertical_columns(cancel, data_columns, is_asc_order, is_null_first, permutation, tie, range,
-                                          build_tie, limit, limited));
+    RETURN_IF_ERROR(
+            sort_vertical_columns(cancel, data_columns, sort_desc, permutation, tie, range, build_tie, limit, limited));
 
     return Status::OK();
 }
@@ -134,8 +134,8 @@ static inline Status sort_and_tie_helper_nullable_vertical(const std::atomic<boo
 // 2. Sort by not-null values
 template <class NullPred>
 static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cancel, const NullableColumn* column,
-                                                  const ColumnPtr data_column, NullPred null_pred, bool is_asc_order,
-                                                  bool is_null_first, SmallPermutation& permutation, Tie& tie,
+                                                  const ColumnPtr data_column, NullPred null_pred,
+                                                  const SortDesc& sort_desc, SmallPermutation& permutation, Tie& tie,
                                                   std::pair<int, int> range, bool build_tie) {
     TieIterator iterator(tie, range.first, range.second);
     while (iterator.next()) {
@@ -151,7 +151,7 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
             int pivot_start = pivot_iter - permutation.begin();
             std::pair<int, int> null_range = {range_first, pivot_start};
             std::pair<int, int> notnull_range = {pivot_start, range_last};
-            if (!is_null_first) {
+            if (!sort_desc.is_null_first()) {
                 std::swap(null_range, notnull_range);
             }
 
@@ -181,8 +181,7 @@ static inline Status sort_and_tie_helper_nullable(const std::atomic<bool>& cance
     // BM_fullsort_column_incr_nullable/512/4    568248214 ns    568200327 ns            1    41.943M       3.69087M/s   92.2911M    2.09715M
     // BM_fullsort_column_incr_nullable/4096/4  5816112918 ns   5815603071 ns            1   335.544M       2.88486M/s   738.214M    16.7772M
     // BM_fullsort_column_incr_nullable/32768/4 60430519397 ns   60424234298 ns            1   2.68435G       2.22126M/s    5.9056G    134.218M
-    RETURN_IF_ERROR(
-            sort_and_tie_column(cancel, data_column, is_asc_order, is_null_first, permutation, tie, range, build_tie));
+    RETURN_IF_ERROR(sort_and_tie_column(cancel, data_column, sort_desc, permutation, tie, range, build_tie));
 
     return Status::OK();
 }

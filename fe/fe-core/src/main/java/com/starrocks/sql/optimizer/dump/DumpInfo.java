@@ -1,23 +1,47 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.dump;
 
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
+import java.util.Map;
+
 public interface DumpInfo {
-    void setOriginStmt(String stmt);
+    default void setOriginStmt(String stmt) {
+    }
 
-    void addException(String exception);
+    default void addException(String exception) {
+    }
 
-    void addTable(String dbName, Table table);
+    default void addTable(String dbName, Table table) {
+    }
 
-    void addView(String dbName, View view);
+    default void addView(String dbName, View view) {
+    }
 
-    void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic);
+    default void addTableStatistics(Table table, String column, ColumnStatistic columnStatistic) {
+    }
 
-    void addPartitionRowCount(Table table, String partition, long rowCount);
+    default void addPartitionRowCount(Table table, String partition, long rowCount) {
+    }
 
-    void reset();
+    default void addResource(Resource resource) {
+    }
+
+    default void addHMSTable(String resourceName, String dbName, String tableName) {
+    }
+
+    default Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> getHmsTableMap() {
+        return null;
+    }
+
+    default HiveMetaStoreTableDumpInfo getHMSTable(String resourceName, String dbName, String tableName) {
+        return new HiveTableDumpInfo();
+    }
+
+    default void reset() {
+    }
 }

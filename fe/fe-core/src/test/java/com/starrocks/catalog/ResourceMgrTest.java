@@ -22,20 +22,19 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.AlterResourceStmt;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.DropResourceStmt;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.ProcResult;
-import com.starrocks.external.hive.HiveMetaCache;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -44,10 +43,10 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 public class ResourceMgrTest {
+    private static ConnectContext connectContext;
     private String name;
     private String type;
     private String master;
@@ -55,10 +54,10 @@ public class ResourceMgrTest {
     private String broker;
     private String hiveMetastoreUris;
     private Map<String, String> properties;
-    private Analyzer analyzer;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
         name = "spark0";
         type = "spark";
         master = "spark://127.0.0.1:7077";
@@ -70,7 +69,6 @@ public class ResourceMgrTest {
         properties.put("spark.submit.deployMode", "cluster");
         properties.put("working_dir", workingDir);
         properties.put("broker", broker);
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
         hiveMetastoreUris = "thrift://10.10.44.98:9083";
     }
 
@@ -125,7 +123,8 @@ public class ResourceMgrTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("hive.metastore.uris", newThriftPath);
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         mgr.alterResource(stmt);
 
         // assert
@@ -149,7 +148,8 @@ public class ResourceMgrTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("broker", "broker2");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
@@ -168,7 +168,8 @@ public class ResourceMgrTest {
         properties.put("hive.metastore.uris", "thrift://10.10.44.xxx:9083");
         String noExistName = "hive1";
         AlterResourceStmt stmt = new AlterResourceStmt(noExistName, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
@@ -186,13 +187,14 @@ public class ResourceMgrTest {
         Map<String, String> properties = new HashMap<>();
         properties.put("hive.metastore.uris.xxx", "thrift://10.10.44.xxx:9083");
         AlterResourceStmt stmt = new AlterResourceStmt(name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         mgr.alterResource(stmt);
     }
 
     @Test
     public void testReplayCreateResource(@Injectable EditLog editLog, @Mocked GlobalStateMgr globalStateMgr,
-                                                  @Injectable Auth auth) throws UserException {
+                                         @Injectable Auth auth) throws UserException {
         ResourceMgr mgr = new ResourceMgr();
         type = "hive";
         name = "hive0";
@@ -239,7 +241,8 @@ public class ResourceMgrTest {
         properties.put("type", type);
         properties.put("hive.metastore.uris", hiveMetastoreUris);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         Assert.assertEquals(0, mgr.getResourceNum());
         mgr.createResource(stmt);
         Assert.assertEquals(1, mgr.getResourceNum());
@@ -267,7 +270,8 @@ public class ResourceMgrTest {
         };
 
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         Assert.assertEquals(0, mgr.getResourceNum());
         mgr.createResource(stmt);
         Assert.assertEquals(1, mgr.getResourceNum());

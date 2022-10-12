@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
@@ -11,7 +11,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
@@ -31,7 +30,6 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 public class AnalyzeStmtAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -43,7 +41,7 @@ public class AnalyzeStmtAnalyzer {
             StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
 
             StatsConstants.HISTOGRAM_BUCKET_NUM,
-            StatsConstants.HISTOGRAM_TOPN_SIZE,
+            StatsConstants.HISTOGRAM_MCV_SIZE,
             StatsConstants.HISTOGRAM_SAMPLE_RATIO,
 
             //Deprecated , just not throw exception
@@ -55,7 +53,7 @@ public class AnalyzeStmtAnalyzer {
     public static final List<String> NUMBER_PROP_KEY_LIST = ImmutableList.<String>builder().addAll(
             Lists.newArrayList(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS,
                     StatsConstants.HISTOGRAM_BUCKET_NUM,
-                    StatsConstants.HISTOGRAM_TOPN_SIZE,
+                    StatsConstants.HISTOGRAM_MCV_SIZE,
                     StatsConstants.HISTOGRAM_SAMPLE_RATIO)).build();
 
     static class AnalyzeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
@@ -71,18 +69,12 @@ public class AnalyzeStmtAnalyzer {
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
             }
-            if (!analyzeTable.isNativeTable()) {
-                throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
-            }
 
             // Analyze columns mentioned in the statement.
             Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
             List<String> columnNames = statement.getColumnNames();
-            if (columnNames == null || columnNames.isEmpty()) {
-                statement.setColumnNames(
-                        analyzeTable.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList()));
-            } else {
+            if (columnNames != null) {
                 for (String colName : columnNames) {
                     Column col = analyzeTable.getColumn(colName);
                     if (col == null) {
@@ -105,7 +97,6 @@ public class AnalyzeStmtAnalyzer {
                 TableName tbl = statement.getTableName();
 
                 if (null != tbl.getDb() && null == tbl.getTbl()) {
-                    tbl.setDb(ClusterNamespace.getFullName(tbl.getDb()));
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
 
                     if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
@@ -118,10 +109,6 @@ public class AnalyzeStmtAnalyzer {
                     Database db = MetaUtils.getDatabase(session, statement.getTableName());
                     Table analyzeTable = MetaUtils.getTable(session, statement.getTableName());
 
-                    if (!analyzeTable.isNativeTable()) {
-                        throw new SemanticException("Table '%s' is not a OLAP/LAKE table", analyzeTable.getName());
-                    }
-
                     // Analyze columns mentioned in the statement.
                     Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
 
@@ -130,7 +117,8 @@ public class AnalyzeStmtAnalyzer {
                         for (String colName : columnNames) {
                             Column col = analyzeTable.getColumn(colName);
                             if (col == null) {
-                                throw new SemanticException("Unknown column '%s' in '%s'", colName, analyzeTable.getName());
+                                throw new SemanticException("Unknown column '%s' in '%s'", colName,
+                                        analyzeTable.getName());
                             }
                             if (!mentionedColumns.add(colName)) {
                                 throw new SemanticException("Column '%s' specified twice", colName);
@@ -160,7 +148,8 @@ public class AnalyzeStmtAnalyzer {
             }
         }
 
-        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement, AnalyzeTypeDesc analyzeTypeDesc) {
+        private void analyzeAnalyzeTypeDesc(ConnectContext session, AnalyzeStmt statement,
+                                            AnalyzeTypeDesc analyzeTypeDesc) {
             if (analyzeTypeDesc instanceof AnalyzeHistogramDesc) {
                 List<String> columns = statement.getColumnNames();
                 OlapTable analyzeTable = (OlapTable) MetaUtils.getTable(session, statement.getTableName());
@@ -183,35 +172,28 @@ public class AnalyzeStmtAnalyzer {
                 }
                 statement.getProperties().put(StatsConstants.HISTOGRAM_BUCKET_NUM, String.valueOf(bucket));
 
-                properties.computeIfAbsent(StatsConstants.HISTOGRAM_TOPN_SIZE,
-                        p -> String.valueOf(Config.histogram_topn_size));
+                properties.computeIfAbsent(StatsConstants.HISTOGRAM_MCV_SIZE,
+                        p -> String.valueOf(Config.histogram_mcv_size));
                 properties.computeIfAbsent(StatsConstants.HISTOGRAM_SAMPLE_RATIO,
                         p -> String.valueOf(Config.histogram_sample_ratio));
 
-                long sampleRows = Config.statistic_sample_collect_rows;
-                if (properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS) != null) {
-                    sampleRows = Long.parseLong(properties.get(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS));
-                }
-
                 long totalRows = analyzeTable.getRowCount();
-                sampleRows = Math.max(sampleRows,
-                        (long) (totalRows * Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO))));
+                long sampleRows = (long) (totalRows *
+                        Double.parseDouble(properties.get(StatsConstants.HISTOGRAM_SAMPLE_RATIO)));
 
-                if (totalRows < sampleRows) {
-                    sampleRows = totalRows;
-                }
-                if (sampleRows > Config.histogram_max_sample_row_count) {
-                    sampleRows = Config.histogram_max_sample_row_count;
-                }
-
-                if (totalRows == 0) {
-                    properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
-                } else {
+                if (sampleRows < Config.statistic_sample_collect_rows && totalRows != 0) {
+                    if (Config.statistic_sample_collect_rows > totalRows) {
+                        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, "1");
+                    } else {
+                        properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
+                                BigDecimal.valueOf((double) Config.statistic_sample_collect_rows / (double) totalRows)
+                                        .setScale(8, RoundingMode.HALF_UP).doubleValue()));
+                    }
+                } else if (sampleRows > Config.histogram_max_sample_row_count) {
                     properties.put(StatsConstants.HISTOGRAM_SAMPLE_RATIO, String.valueOf(
-                            BigDecimal.valueOf((double) sampleRows / (double) totalRows)
-                                    .setScale(2, RoundingMode.HALF_UP).doubleValue()));
+                            BigDecimal.valueOf((double) Config.histogram_max_sample_row_count / (double) totalRows)
+                                    .setScale(8, RoundingMode.HALF_UP).doubleValue()));
                 }
-                properties.put(StatsConstants.STATISTIC_SAMPLE_COLLECT_ROWS, String.valueOf(sampleRows));
             }
         }
 

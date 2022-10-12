@@ -39,19 +39,10 @@ while true; do
 done
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
-# compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
-export DORIS_HOME="$STARROCKS_HOME"
 source $STARROCKS_HOME/bin/common.sh
 
-# export env variables from be.conf
-#
-# UDF_RUNTIME_DIR
-# LOG_DIR
-# PID_DIR
-export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
-export LOG_DIR=${STARROCKS_HOME}/log
-export PID_DIR=`cd "$curdir"; pwd`
-
+# actions shared between start_be.sh & start_cn.sh
+export_shared_envvars
 export_env_from_conf $STARROCKS_HOME/conf/be.conf
 export_mem_limit_from_conf $STARROCKS_HOME/conf/be.conf
 
@@ -85,7 +76,8 @@ else
     fi
 fi
 
-export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$LD_LIBRARY_PATH
+CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
+export LD_LIBRARY_PATH=$STARROCKS_HOME/lib/hadoop/native:$CACHELIB_DIR/lib:$CACHELIB_DIR/lib64:$CACHELIB_DIR/deps/lib:$CACHELIB_DIR/deps/lib64:$LD_LIBRARY_PATH
 
 # check java version and choose correct JAVA_OPTS
 JAVA_VERSION=$(jdk_version)
@@ -99,10 +91,7 @@ export LIBHDFS_OPTS=$final_java_opt
 
 # HADOOP_CLASSPATH defined in $STARROCKS_HOME/conf/hadoop_env.sh
 # put $STARROCKS_HOME/conf ahead of $HADOOP_CLASSPATH so that custom config can replace the config in $HADOOP_CLASSPATH
-export CLASSPATH=$STARROCKS_HOME/conf:$HADOOP_CLASSPATH:$CLASSPATH
-# https://github.com/aws/aws-cli/issues/5623
-# https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
-export AWS_EC2_METADATA_DISABLED=true
+export CLASSPATH=$STARROCKS_HOME/conf:$STARROCKS_HOME/lib/jni-packages/*:$HADOOP_CLASSPATH:$CLASSPATH
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
@@ -112,7 +101,9 @@ if [ ! -d $UDF_RUNTIME_DIR ]; then
     mkdir -p ${UDF_RUNTIME_DIR}
 fi
 
-rm -f ${UDF_RUNTIME_DIR}/*
+if [ ! -z ${UDF_RUNTIME_DIR} ]; then
+    rm -f ${UDF_RUNTIME_DIR}/*
+fi
 
 pidfile=$PID_DIR/be.pid
 
@@ -132,7 +123,9 @@ if [[ $(ulimit -n) -lt 60000 ]]; then
   ulimit -n 65535
 fi
 
-export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:30000,dirty_decay_ms:30000,lg_tcache_max:23,metadata_thp:auto,background_thread:true"
+export JEMALLOC_CONF="percpu_arena:percpu,oversize_threshold:0,muzzy_decay_ms:5000,dirty_decay_ms:5000,metadata_thp:auto,background_thread:true"
+# enable coredump when BE build with ASAN
+export ASAN_OPTIONS=abort_on_error=1:disable_coredump=0:unmap_shadow_on_exit=1
 
 # Prevent JVM from handling any internally or externally generated signals.
 # Otherwise, JVM will overwrite the signal handlers for SIGINT and SIGTERM.

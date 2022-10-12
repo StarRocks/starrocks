@@ -1,9 +1,9 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CreateDbStmt;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
@@ -11,6 +11,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -22,9 +23,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.physical.PredicateReorderRule;
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.OlapScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.tree.PredicateReorderRule;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
@@ -63,8 +64,8 @@ public class PredicateReorderRuleTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(connectContext);
-        String DB_NAME = "test";
-        starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
+        String dbName = "test";
+        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
         connectContext.getSessionVariable().setMaxTransformReorderJoins(8);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
@@ -126,8 +127,8 @@ public class PredicateReorderRuleTest {
 
         GlobalStateMgr catalog = GlobalStateMgr.getCurrentState();
         CachedStatisticStorage cachedStatisticStorage = new CachedStatisticStorage();
-        OlapTable t0 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t0");
-        OlapTable t1 = (OlapTable) catalog.getDb("default_cluster:test").getTable("t1");
+        OlapTable t0 = (OlapTable) catalog.getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) catalog.getDb("test").getTable("t1");
         cachedStatisticStorage.addColumnStatistic(t0, v1.getName(), statistics.getColumnStatistic(v1));
         cachedStatisticStorage.addColumnStatistic(t0, v2.getName(), statistics.getColumnStatistic(v2));
         cachedStatisticStorage.addColumnStatistic(t1, v1.getName(), statistics.getColumnStatistic(v1));
@@ -143,7 +144,7 @@ public class PredicateReorderRuleTest {
 
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("t0");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 
@@ -217,8 +218,8 @@ public class PredicateReorderRuleTest {
     public void testHashJoinPredicateReorder() {
         sessionVariable.enablePredicateReorder();
 
-        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("t0");
-        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("default_cluster:test").getTable("t1");
+        OlapTable t0 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t0");
+        OlapTable t1 = (OlapTable) GlobalStateMgr.getCurrentState().getDb("test").getTable("t1");
 
         PredicateReorderRule predicateReorderRule = new PredicateReorderRule(sessionVariable);
 

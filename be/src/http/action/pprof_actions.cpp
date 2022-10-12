@@ -20,7 +20,9 @@
 // under the License.
 
 #include "http/action/pprof_actions.h"
-
+#ifdef USE_JEMALLOC
+#include "jemalloc/jemalloc.h"
+#endif
 #include <gperftools/heap-profiler.h>
 #include <gperftools/malloc_extension.h>
 #include <gperftools/profiler.h>
@@ -28,17 +30,14 @@
 #include <fstream>
 #include <iostream>
 #include <mutex>
-#include <sstream>
 
 #include "common/config.h"
 #include "common/status.h"
 #include "common/tracer.h"
 #include "http/ev_http_server.h"
 #include "http/http_channel.h"
-#include "http/http_handler.h"
 #include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "util/bfd_parser.h"
 
 namespace starrocks {
@@ -60,8 +59,17 @@ void HeapAction::handle(HttpRequest* req) {
 #elif defined(USE_JEMALLOC)
     (void)kPprofDefaultSampleSecs; // Avoid unused variable warning.
 
-    std::string str = "Heap profiling is not available with jemalloc builds.";
-
+    std::lock_guard<std::mutex> lock(kPprofActionMutex);
+    std::string str;
+    std::stringstream tmp_prof_file_name;
+    tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
+    const char* file_name = tmp_prof_file_name.str().c_str();
+    if (je_mallctl("prof.dump", NULL, NULL, &file_name, sizeof(const char*)) == 0) {
+        std::ifstream f(file_name);
+        str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
+    } else {
+        std::string str = "dump jemalloc prof file failed";
+    }
     HttpChannel::send_reply(req, str);
 #else
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
@@ -93,7 +101,9 @@ void GrowthAction::handle(HttpRequest* req) {
     std::string str = "Growth profiling is not available with address sanitizer builds.";
     HttpChannel::send_reply(req, str);
 #elif defined(USE_JEMALLOC)
-    std::string str = "Growth profiling is not available with jemalloc builds.";
+    std::string str =
+            "Growth profiling is not available with jemalloc builds.You can set the `--base` flag to jeprof to compare "
+            "the results of two Heap Profiling";
     HttpChannel::send_reply(req, str);
 #else
     std::lock_guard<std::mutex> lock(kPprofActionMutex);
@@ -108,9 +118,6 @@ void GrowthAction::handle(HttpRequest* req) {
 void ProfileAction::handle(HttpRequest* req) {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     std::string str = "CPU profiling is not available with address sanitizer builds.";
-    HttpChannel::send_reply(req, str);
-#elif defined(USE_JEMALLOC)
-    std::string str = "CPU profiling is not available with jemalloc builds.";
     HttpChannel::send_reply(req, str);
 #else
     std::lock_guard<std::mutex> lock(kPprofActionMutex);

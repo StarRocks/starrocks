@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -23,7 +23,8 @@ inline void avx2_select_if(uint8_t*& selector, T*& dst, const T*& a, const T*& b
     const T* dst_end = dst + size;
     while (dst + 32 < dst_end) {
         __m256i loaded_mask = _mm256_loadu_si256(reinterpret_cast<__m256i*>(selector));
-        loaded_mask = _mm256_cmpgt_epi8(loaded_mask, _mm256_setzero_si256());
+        loaded_mask = _mm256_cmpeq_epi8(loaded_mask, _mm256_setzero_si256());
+        loaded_mask = ~loaded_mask;
         __m256i vec_a;
         __m256i vec_b;
         if constexpr (!left_const) {
@@ -58,7 +59,8 @@ inline void avx2_select_if(uint8_t*& selector, T*& dst, const T*& a, const T*& b
         uint64_t value = UNALIGNED_LOAD64(selector);
         __m128i v = _mm_set1_epi64x(value);
         __m256i loaded_mask = _mm256_cvtepi8_epi32(v);
-        __m256i cond = _mm256_cmpgt_epi8(loaded_mask, _mm256_setzero_si256());
+        __m256i cond = _mm256_cmpeq_epi8(loaded_mask, _mm256_setzero_si256());
+        cond = ~cond;
 
         // Mask Shuffle
         // convert 0x 10 00 00 00 14 00 00 00
@@ -95,7 +97,8 @@ inline void avx2_select_if_common_implement(uint8_t*& selector, T*& dst, const T
     while (dst + 32 < dst_end) {
         // load selector mask from selector
         __m256i loaded_mask = _mm256_loadu_si256(reinterpret_cast<__m256i*>(selector));
-        loaded_mask = _mm256_cmpgt_epi8(loaded_mask, _mm256_setzero_si256());
+        loaded_mask = _mm256_cmpeq_epi8(loaded_mask, _mm256_setzero_si256());
+        loaded_mask = ~loaded_mask;
         uint32_t mask = _mm256_movemask_epi8(loaded_mask);
 
         __m256i vec_a[data_size];

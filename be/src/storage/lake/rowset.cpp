@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/rowset.h"
 
@@ -68,7 +68,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
     }
 
     std::vector<SegmentPtr> segments;
-    RETURN_IF_ERROR(load_segments(&segments));
+    RETURN_IF_ERROR(load_segments(&segments, /*fill_cache=*/seg_options.reader_type == READER_QUERY));
     for (auto& seg_ptr : segments) {
         if (seg_ptr->num_rows() == 0) {
             continue;
@@ -92,7 +92,7 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
         }
     }
     if (segment_iterators.empty()) {
-        return vectorized::new_empty_iterator(*segment_schema, options.chunk_size);
+        return vectorized::new_empty_iterator(schema, options.chunk_size);
     } else if (segment_iterators.size() == 1) {
         return segment_iterators[0];
     } else if (options.sorted) {
@@ -102,12 +102,12 @@ StatusOr<ChunkIteratorPtr> Rowset::read(const vectorized::Schema& schema, const 
     }
 }
 
-Status Rowset::load_segments(std::vector<SegmentPtr>* segments) {
+Status Rowset::load_segments(std::vector<SegmentPtr>* segments, bool fill_cache) {
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;
     segments->reserve(_rowset_metadata->segments().size());
     for (const auto& seg_name : _rowset_metadata->segments()) {
-        ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, true));
+        ASSIGN_OR_RETURN(auto segment, _tablet->load_segment(seg_name, seg_id++, &footer_size_hint, fill_cache));
         segments->emplace_back(std::move(segment));
     }
     return Status::OK();

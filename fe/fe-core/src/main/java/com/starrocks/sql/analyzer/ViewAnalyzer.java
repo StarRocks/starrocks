@@ -1,21 +1,30 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.BaseViewStmt;
 import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.BaseViewStmt;
 import com.starrocks.sql.ast.QueryRelation;
 
 import java.util.List;
 
 public class ViewAnalyzer {
     public static void analyze(BaseViewStmt stmt, ConnectContext session) {
+        // normalize & validate view name
         stmt.getTableName().normalization(session);
+        final String tableName = stmt.getTableName().getTbl();
+        try {
+            FeNameFormat.checkTableName(tableName);
+        } catch (AnalysisException e) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_TABLE_NAME, tableName);
+        }
         Analyzer.analyze(stmt.getQueryStatement(), session);
         QueryRelation queryRelation = stmt.getQueryStatement().getQueryRelation();
 

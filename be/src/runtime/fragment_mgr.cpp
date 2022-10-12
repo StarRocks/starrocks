@@ -33,10 +33,7 @@
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
-#include "gen_cpp/InternalService_types.h"
-#include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/QueryPlanExtra_types.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
@@ -44,11 +41,10 @@
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/plan_fragment_executor.h"
+#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_filter_cache.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/backend_options.h"
-#include "util/debug_util.h"
-#include "util/defer_op.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -98,6 +94,14 @@ public:
     PlanFragmentExecutor* executor() { return &_executor; }
 
     const DateTimeValue& start_time() const { return _start_time; }
+
+    const TNetworkAddress& coord_addr() const { return _coord_addr; }
+
+    ExecEnv* exec_env() const { return _exec_env; }
+
+    const TUniqueId& query_id() const { return _query_id; }
+
+    int backend_num() const { return _backend_num; }
 
     // Update status of this fragment execute
     Status update_status(const Status& status) {
@@ -236,10 +240,10 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
     DCHECK(runtime_state != nullptr);
     if (runtime_state->query_options().query_type == TQueryType::LOAD && !done && status.ok()) {
         // this is a load plan, and load is not finished, just make a brief report
-        params.__set_loaded_rows(runtime_state->num_rows_load_total());
+        runtime_state->update_report_load_status(&params);
     } else {
         if (runtime_state->query_options().query_type == TQueryType::LOAD) {
-            params.__set_loaded_rows(runtime_state->num_rows_load_total());
+            runtime_state->update_report_load_status(&params);
         }
         profile->to_thrift(&params.profile);
         params.__isset.profile = true;
@@ -250,7 +254,7 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
                 params.delta_urls.push_back(to_http_path(it));
             }
         }
-        if (runtime_state->num_rows_load_total() > 0 || runtime_state->num_rows_load_filtered() > 0) {
+        if (runtime_state->num_rows_load_from_sink() > 0 || runtime_state->num_rows_load_filtered() > 0) {
             params.__isset.load_counters = true;
             // TODO(zc)
             static std::string s_dpp_normal_all = "dpp.norm.ALL";
@@ -258,10 +262,10 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
             static std::string s_unselected_rows = "unselected.rows";
             static std::string s_loaded_bytes = "loaded.bytes";
 
-            params.load_counters.emplace(s_dpp_normal_all, std::to_string(runtime_state->num_rows_load_success()));
+            params.load_counters.emplace(s_dpp_normal_all, std::to_string(runtime_state->num_rows_load_sink_success()));
             params.load_counters.emplace(s_dpp_abnormal_all, std::to_string(runtime_state->num_rows_load_filtered()));
             params.load_counters.emplace(s_unselected_rows, std::to_string(runtime_state->num_rows_load_unselected()));
-            params.load_counters.emplace(s_loaded_bytes, std::to_string(runtime_state->num_bytes_load_total()));
+            params.load_counters.emplace(s_loaded_bytes, std::to_string(runtime_state->num_bytes_load_from_sink()));
         }
         if (!runtime_state->get_error_log_file_path().empty()) {
             params.__set_tracking_url(to_load_error_http_path(runtime_state->get_error_log_file_path()));
@@ -558,6 +562,174 @@ Status FragmentMgr::trigger_profile_report(const PTriggerProfileReportRequest* r
     return Status::OK();
 }
 
+void FragmentMgr::report_fragments_with_same_host(
+        const std::vector<std::shared_ptr<FragmentExecState>>& need_report_exec_states, std::vector<bool>& reported,
+        const TNetworkAddress& last_coord_addr, std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
+        std::vector<int32_t>& cur_batch_report_indexes) {
+    for (int i = 0; i < need_report_exec_states.size(); i++) {
+        if (reported[i] == false) {
+            FragmentExecState* fragment_exec_state = need_report_exec_states[i].get();
+            PlanFragmentExecutor* executor = fragment_exec_state->executor();
+
+            if (executor->is_done()) {
+                reported[i] = true;
+                continue;
+            }
+
+            Status executor_status = executor->status();
+            if (!executor_status.ok()) {
+                reported[i] = true;
+                continue;
+            }
+
+            const TNetworkAddress& coord_addr = fragment_exec_state->coord_addr();
+            if (coord_addr == last_coord_addr) {
+                TReportExecStatusParams params;
+                params.protocol_version = FrontendServiceVersion::V1;
+                params.__set_query_id(fragment_exec_state->query_id());
+                params.__set_backend_num(fragment_exec_state->backend_num());
+                params.__set_fragment_instance_id(fragment_exec_state->fragment_instance_id());
+                executor_status.set_t_status(&params);
+                params.__set_done(executor->is_done());
+
+                RuntimeState* runtime_state = executor->runtime_state();
+                DCHECK(runtime_state != nullptr);
+                if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                    runtime_state->update_report_load_status(&params);
+                }
+
+                auto backend_id = get_backend_id();
+                if (backend_id.has_value()) {
+                    params.__set_backend_id(backend_id.value());
+                }
+
+                report_exec_status_params_vector.push_back(params);
+                cur_batch_report_indexes.push_back(i);
+                reported[i] = true;
+            }
+        }
+    }
+}
+
+void FragmentMgr::report_fragments(const std::vector<TUniqueId>& non_pipeline_need_report_fragment_ids) {
+    std::vector<std::shared_ptr<FragmentExecState>> need_report_exec_states;
+
+    std::vector<TUniqueId> fragments_non_exist;
+
+    std::unique_lock<std::mutex> lock(_lock);
+    for (const auto& id : non_pipeline_need_report_fragment_ids) {
+        auto iter = _fragment_map.find(id);
+        if (iter != _fragment_map.end()) {
+            need_report_exec_states.emplace_back(iter->second);
+        } else {
+            fragments_non_exist.emplace_back(id);
+        }
+    }
+    lock.unlock();
+
+    std::vector<bool> reported(need_report_exec_states.size(), false);
+    for (int i = 0; i < need_report_exec_states.size(); i++) {
+        if (reported[i] == false) {
+            reported[i] = true;
+
+            FragmentExecState* fragment_exec_state = need_report_exec_states[i].get();
+            PlanFragmentExecutor* executor = fragment_exec_state->executor();
+
+            if (executor->is_done()) {
+                continue;
+            }
+
+            Status executor_status = executor->status();
+            if (!executor_status.ok()) {
+                continue;
+            }
+
+            Status fe_connection_status;
+
+            FrontendServiceConnection fe_connection(fragment_exec_state->exec_env()->frontend_client_cache(),
+                                                    fragment_exec_state->coord_addr(), &fe_connection_status);
+            if (!fe_connection_status.ok()) {
+                std::stringstream ss;
+                ss << "couldn't get a client for " << fragment_exec_state->coord_addr();
+                LOG(WARNING) << ss.str();
+                fragment_exec_state->exec_env()->frontend_client_cache()->close_connections(
+                        fragment_exec_state->coord_addr());
+                continue;
+            }
+
+            std::vector<TReportExecStatusParams> report_exec_status_params_vector;
+
+            TReportExecStatusParams params;
+            params.protocol_version = FrontendServiceVersion::V1;
+            params.__set_query_id(fragment_exec_state->query_id());
+            params.__set_backend_num(fragment_exec_state->backend_num());
+            params.__set_fragment_instance_id(fragment_exec_state->fragment_instance_id());
+            executor_status.set_t_status(&params);
+            params.__set_done(executor->is_done());
+
+            RuntimeState* runtime_state = executor->runtime_state();
+            DCHECK(runtime_state != nullptr);
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                runtime_state->update_report_load_status(&params);
+            }
+
+            auto backend_id = get_backend_id();
+            if (backend_id.has_value()) {
+                params.__set_backend_id(backend_id.value());
+            }
+
+            report_exec_status_params_vector.push_back(params);
+
+            std::vector<int32_t> cur_batch_report_indexes;
+            cur_batch_report_indexes.push_back(i);
+
+            report_fragments_with_same_host(need_report_exec_states, reported, fragment_exec_state->coord_addr(),
+                                            report_exec_status_params_vector, cur_batch_report_indexes);
+
+            TBatchReportExecStatusParams report_batch;
+            report_batch.__set_params_list(report_exec_status_params_vector);
+
+            TBatchReportExecStatusResult res;
+            Status rpc_status;
+
+            VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+            try {
+                try {
+                    fe_connection->batchReportExecStatus(res, report_batch);
+                } catch (TTransportException& e) {
+                    LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
+                    rpc_status = fe_connection.reopen();
+                    if (!rpc_status.ok()) {
+                        continue;
+                    }
+                    fe_connection->batchReportExecStatus(res, report_batch);
+                }
+
+            } catch (TException& e) {
+                std::stringstream msg;
+                msg << "ReportExecStatus() to " << fragment_exec_state->coord_addr() << " failed:\n" << e.what();
+                LOG(WARNING) << msg.str();
+            }
+
+            const std::vector<TStatus>& status_list = res.status_list;
+            for (int j = 0; j < status_list.size(); j++) {
+                Status rpc_status = Status(status_list[j]);
+                if (!rpc_status.ok()) {
+                    int32_t index = cur_batch_report_indexes[j];
+                    FragmentExecState* fragment_exec_state = need_report_exec_states[index].get();
+                    PlanFragmentExecutor* executor = fragment_exec_state->executor();
+                    fragment_exec_state->update_status(rpc_status);
+                    executor->cancel();
+                }
+            }
+        }
+    }
+
+    for (const auto& fragment_instance_id : fragments_non_exist) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_non_pipeline_load(fragment_instance_id);
+    }
+}
+
 void FragmentMgr::debug(std::stringstream& ss) {
     // Keep things simple
     std::lock_guard<std::mutex> lock(_lock);
@@ -603,7 +775,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     ObjectPool obj_pool;
-    st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl, params.batch_size);
+    st = DescriptorTbl::create(nullptr, &obj_pool, t_query_plan_info.desc_tbl, &desc_tbl, params.batch_size);
     if (!st.ok()) {
         LOG(WARNING) << "open context error: extract DescriptorTbl failure";
         std::stringstream msg;

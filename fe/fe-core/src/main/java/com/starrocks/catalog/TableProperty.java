@@ -31,6 +31,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 
 import java.io.DataInput;
@@ -68,6 +69,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
      * This property should be set when creating the table, and can only be changed to V2 using Alter Table stmt.
      */
     private TStorageFormat storageFormat = TStorageFormat.DEFAULT;
+
+    // the default compression type of this table.
+    private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
@@ -141,6 +145,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildCompressionType() {
+        compressionType = TCompressionType.valueOf(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_COMPRESSION,
+                TCompressionType.LZ4_FRAME.name()));
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -177,6 +187,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TStorageFormat getStorageFormat() {
         return storageFormat;
+    }
+
+    public TCompressionType getCompressionType() {
+        return compressionType;
     }
 
     public boolean hasDelete() {
@@ -219,5 +233,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildInMemory();
         buildStorageFormat();
         buildEnablePersistentIndex();
+        buildCompressionType();
     }
 }

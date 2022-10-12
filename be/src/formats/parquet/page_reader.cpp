@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "formats/parquet/page_reader.h"
 
@@ -31,7 +31,7 @@ Status PageReader::next_header() {
     size_t remaining = _finish_offset - _offset;
     do {
         nbytes = std::min(nbytes, remaining);
-        RETURN_IF_ERROR(_stream->get_bytes(&page_buf, _offset, &nbytes));
+        RETURN_IF_ERROR(_stream->get_bytes(&page_buf, _offset, &nbytes, true));
 
         header_length = nbytes;
         auto st = deserialize_thrift_msg(page_buf, &header_length, TProtocolType::COMPACT, &_cur_header);
@@ -47,6 +47,7 @@ Status PageReader::next_header() {
 
     _offset += header_length;
     _next_header_pos = _offset + _cur_header.compressed_page_size;
+    _stream->skip(header_length);
     return Status::OK();
 }
 
@@ -55,7 +56,7 @@ Status PageReader::read_bytes(const uint8_t** buffer, size_t size) {
         return Status::InternalError("Size to read exceed page size");
     }
     uint64_t nbytes = size;
-    RETURN_IF_ERROR(_stream->get_bytes(buffer, _offset, &nbytes));
+    RETURN_IF_ERROR(_stream->get_bytes(buffer, _offset, &nbytes, false));
     DCHECK_EQ(nbytes, size);
     _offset += nbytes;
     return Status::OK();

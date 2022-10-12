@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/fixed_length_column.h"
 
@@ -543,14 +543,14 @@ TEST(FixedLengthColumnTest, test_compare_row) {
     CompareVector cmp_vector(column->size());
 
     // ascending
-    EXPECT_EQ(1, compare_column(column, cmp_vector, {30}, 1, 1));
+    EXPECT_EQ(1, compare_column(column, cmp_vector, {30}, SortDesc(1, 1)));
     EXPECT_EQ(30, std::count(cmp_vector.begin(), cmp_vector.end(), -1));
     EXPECT_EQ(70, std::count(cmp_vector.begin(), cmp_vector.end(), 1));
     EXPECT_EQ(1, std::count(cmp_vector.begin(), cmp_vector.end(), 0));
 
     // descending
     std::fill(cmp_vector.begin(), cmp_vector.end(), 0);
-    EXPECT_EQ(1, compare_column(column, cmp_vector, {30}, -1, 1));
+    EXPECT_EQ(1, compare_column(column, cmp_vector, {30}, SortDesc(-1, 1)));
     EXPECT_EQ(70, std::count(cmp_vector.begin(), cmp_vector.end(), -1));
     EXPECT_EQ(30, std::count(cmp_vector.begin(), cmp_vector.end(), 1));
     EXPECT_EQ(1, std::count(cmp_vector.begin(), cmp_vector.end(), 0));
@@ -588,6 +588,26 @@ TEST(FixedLengthColumnTest, test_fixed_length_column_downgrade) {
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
     ASSERT_FALSE(column->has_large_column());
+}
+
+// NOLINTNEXTLINE
+TEST(FixedLengthColumnTest, test_replicate) {
+    auto column = FixedLengthColumn<int32_t>::create();
+    column->append(7);
+    column->append(3);
+
+    Offsets offsets;
+    offsets.push_back(0);
+    offsets.push_back(3);
+    offsets.push_back(5);
+
+    auto c2 = column->replicate(offsets);
+    ASSERT_EQ(5, c2->size());
+    ASSERT_EQ(c2->get(0).get_int32(), 7);
+    ASSERT_EQ(c2->get(1).get_int32(), 7);
+    ASSERT_EQ(c2->get(2).get_int32(), 7);
+    ASSERT_EQ(c2->get(3).get_int32(), 3);
+    ASSERT_EQ(c2->get(4).get_int32(), 3);
 }
 
 } // namespace starrocks::vectorized

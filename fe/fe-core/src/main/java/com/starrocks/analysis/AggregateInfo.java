@@ -119,6 +119,7 @@ public final class AggregateInfo extends AggregateInfoBase {
     private ArrayList<Integer> firstIdx_ = Lists.newArrayList();
     private ArrayList<Integer> lastIdx_ = Lists.newArrayList();
 
+    private List<Expr> intermediateAggrExprs = Lists.newArrayList();
     // C'tor creates copies of groupingExprs and aggExprs.
     private AggregateInfo(ArrayList<Expr> groupingExprs,
                           ArrayList<FunctionCallExpr> aggExprs, AggPhase aggPhase) {
@@ -364,22 +365,6 @@ public final class AggregateInfo extends AggregateInfoBase {
 
     public void setIsMultiDistinct(boolean value) {
         this.isMultiDistinct_ = value;
-    }
-
-    /**
-     * Append ids of all slots that are being referenced in the process
-     * of performing the aggregate computation described by this AggregateInfo.
-     */
-    public void getRefdSlots(List<SlotId> ids) {
-        Preconditions.checkState(outputTupleDesc_ != null);
-        if (groupingExprs_ != null) {
-            Expr.getIds(groupingExprs_, null, ids);
-        }
-        Expr.getIds(aggregateExprs_, null, ids);
-        // The backend assumes that the entire aggTupleDesc is materialized
-        for (int i = 0; i < outputTupleDesc_.getSlots().size(); ++i) {
-            ids.add(outputTupleDesc_.getSlots().get(i).getId());
-        }
     }
 
     /**
@@ -699,6 +684,12 @@ public final class AggregateInfo extends AggregateInfoBase {
             return new DataPartition(TPartitionType.HASH_PARTITIONED, groupingExprs_);
         }
     }
+
+    public void setIntermediateAggrExprs(List<Expr> intermediateAggrExprs) {
+        this.intermediateAggrExprs = intermediateAggrExprs;
+    }
+
+    public List<Expr> getIntermediateAggrExprs() { return intermediateAggrExprs; }
 
     public String debugString() {
         StringBuilder out = new StringBuilder(super.debugString());

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/olap_scan_context.h"
 
@@ -12,7 +12,6 @@ using namespace vectorized;
 /// OlapScanContext.
 void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
-    DCHECK(_active_inputs.count(key) == 0);
     VLOG_ROW << fmt::format("attach_shared_input ({}, {}), active {}", operator_seq, source_index,
                             _active_inputs.size());
     _active_inputs.emplace(key);
@@ -20,7 +19,6 @@ void OlapScanContext::attach_shared_input(int32_t operator_seq, int32_t source_i
 
 void OlapScanContext::detach_shared_input(int32_t operator_seq, int32_t source_index) {
     auto key = std::make_pair(operator_seq, source_index);
-    DCHECK(_active_inputs.count(key) == 1);
     VLOG_ROW << fmt::format("detach_shared_input ({}, {}), remain {}", operator_seq, source_index,
                             _active_inputs.size());
     _active_inputs.erase(key);
@@ -95,8 +93,8 @@ Status OlapScanContext::parse_conjuncts(RuntimeState* state, const std::vector<E
 /// OlapScanContextFactory.
 OlapScanContextPtr OlapScanContextFactory::get_or_create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _dop);
-    // ScanOperators sharing one morsel and chunk buffer use the same context.
-    int32_t idx = _shared_scan ? 0 : driver_sequence;
+    // ScanOperators sharing one morsel use the same context.
+    int32_t idx = _shared_morsel_queue ? 0 : driver_sequence;
     DCHECK_LT(idx, _contexts.size());
 
     if (_contexts[idx] == nullptr) {

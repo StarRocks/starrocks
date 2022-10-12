@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rewrite.scalar;
 
@@ -40,10 +40,10 @@ public class ImplicitCastRuleTest {
         ));
 
         new Expectations(op) {{
-            op.getFunction();
-            minTimes = 0;
-            result = fn;
-        }};
+                op.getFunction();
+                minTimes = 0;
+                result = fn;
+            }};
 
         ImplicitCastRule rule = new ImplicitCastRule();
         ScalarOperator result = rule.apply(op, null);

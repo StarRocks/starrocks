@@ -23,8 +23,8 @@ package com.starrocks.alter;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AlterClause;
 import com.starrocks.common.DdlException;
+import com.starrocks.sql.ast.AlterClause;
 
 import java.util.List;
 import java.util.Set;
@@ -82,6 +82,10 @@ public class AlterOperations {
 
     public boolean hasSwapOp() {
         return currentOps.contains(AlterOpType.SWAP);
+    }
+
+    public boolean hasTruncatePartitionOp() {
+        return currentOps.contains(AlterOpType.TRUNCATE_PARTITION);
     }
 
     public boolean contains(AlterOpType op) {

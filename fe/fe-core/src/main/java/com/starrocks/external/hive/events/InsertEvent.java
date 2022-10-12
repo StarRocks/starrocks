@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -6,7 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HivePartitionName;
 import com.starrocks.external.hive.HiveTableKey;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Partition;
@@ -39,7 +39,7 @@ public class InsertEvent extends MetastoreTableEvent {
             if (insertPartition != null) {
                 hivePartitionKeys.clear();
                 hivePartitionKeys.add(
-                        new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
+                        new HivePartitionName(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
             }
         } catch (Exception e) {
             LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
@@ -75,7 +75,7 @@ public class InsertEvent extends MetastoreTableEvent {
     protected boolean existInCache() {
         if (isPartitionTbl()) {
             List<String> partVals = insertPartition.getValues();
-            HivePartitionKey partitionKey = new HivePartitionKey(dbName, tblName, Table.TableType.HIVE, partVals);
+            HivePartitionName partitionKey = new HivePartitionName(dbName, tblName, Table.TableType.HIVE, partVals);
             return cache.partitionExistInCache(partitionKey);
         } else {
             HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);

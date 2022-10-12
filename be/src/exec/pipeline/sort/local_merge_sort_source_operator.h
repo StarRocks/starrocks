@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -20,7 +20,7 @@ class LocalMergeSortSourceOperator final : public SourceOperator {
 public:
     LocalMergeSortSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                                  SortContext* sort_context)
-            : SourceOperator(factory, id, "local_merge_sort_source", plan_node_id, driver_sequence),
+            : SourceOperator(factory, id, "local_merge_source", plan_node_id, driver_sequence),
               _sort_context(sort_context) {
         _sort_context->ref();
     }
@@ -49,7 +49,7 @@ class LocalMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
                                         const std::shared_ptr<SortContextFactory>& sort_context_factory)
-            : SourceOperatorFactory(id, "local_merge_sort_source", plan_node_id),
+            : SourceOperatorFactory(id, "local_merge_source", plan_node_id),
               _sort_context_factory(sort_context_factory) {}
 
     ~LocalMergeSortSourceOperatorFactory() override = default;

@@ -1,18 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.sql.common.ErrorType;
-import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -30,8 +28,21 @@ import java.util.stream.Collectors;
 public class PushDownPredicateScanRule extends TransformationRule {
     public static final PushDownPredicateScanRule OLAP_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_OLAP_SCAN);
-    public static final PushDownPredicateScanRule ES_SCAN =
-            new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
+    public static final PushDownPredicateScanRule HIVE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_HIVE_SCAN);
+    public static final PushDownPredicateScanRule ICEBERG_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final PushDownPredicateScanRule HUDI_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final PushDownPredicateScanRule SCHEMA_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
+    public static final PushDownPredicateScanRule MYSQL_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_MYSQL_SCAN);
+    public static final PushDownPredicateScanRule ES_SCAN = new PushDownPredicateScanRule(OperatorType.LOGICAL_ES_SCAN);
+    public static final PushDownPredicateScanRule META_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_META_SCAN);
+    public static final PushDownPredicateScanRule JDBC_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_JDBC_SCAN);
 
     public PushDownPredicateScanRule(OperatorType type) {
         super(RuleType.TF_PUSH_DOWN_PREDICATE_SCAN, Pattern.create(OperatorType.LOGICAL_FILTER, type));
@@ -54,45 +65,16 @@ public class PushDownPredicateScanRule extends TransformationRule {
                 ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
         predicates = Utils.transTrue2Null(predicates);
 
-        if (logicalScanOperator instanceof LogicalOlapScanOperator) {
-            LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) logicalScanOperator;
-            LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator(
-                    olapScanOperator.getTable(),
-                    olapScanOperator.getColRefToColumnMetaMap(),
-                    olapScanOperator.getColumnMetaToColRefMap(),
-                    olapScanOperator.getDistributionSpec(),
-                    olapScanOperator.getLimit(),
-                    predicates,
-                    olapScanOperator.getSelectedIndexId(),
-                    olapScanOperator.getSelectedPartitionId(),
-                    olapScanOperator.getPartitionNames(),
-                    olapScanOperator.getSelectedTabletId(),
-                    olapScanOperator.getHintsTabletIds());
-
-            Map<ColumnRefOperator, ScalarOperator> projectMap =
-                    newScanOperator.getOutputColumns().stream()
-                            .collect(Collectors.toMap(Function.identity(), Function.identity()));
-            LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
-            OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
-            return Lists.newArrayList(project);
-        } else if (logicalScanOperator instanceof LogicalEsScanOperator) {
-            LogicalEsScanOperator esScanOperator = (LogicalEsScanOperator) logicalScanOperator;
-            LogicalEsScanOperator newScanOperator = new LogicalEsScanOperator(
-                    esScanOperator.getTable(),
-                    esScanOperator.getColRefToColumnMetaMap(),
-                    esScanOperator.getColumnMetaToColRefMap(),
-                    esScanOperator.getLimit(),
-                    predicates,
-                    esScanOperator.getProjection());
-
-            Map<ColumnRefOperator, ScalarOperator> projectMap =
-                    newScanOperator.getOutputColumns().stream()
-                            .collect(Collectors.toMap(Function.identity(), Function.identity()));
-            LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
-            OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
-            return Lists.newArrayList(project);
-        } else {
-            throw new StarRocksPlannerException("Error scan push down type", ErrorType.INTERNAL_ERROR);
-        }
+        // clone a new scan operator and rewrite predicate.
+        Operator.Builder builder = OperatorBuilderFactory.build(logicalScanOperator);
+        LogicalScanOperator newScanOperator = (LogicalScanOperator) builder.withOperator(logicalScanOperator).build();
+        newScanOperator.setPredicate(predicates);
+        newScanOperator.buildColumnFilters(predicates);
+        Map<ColumnRefOperator, ScalarOperator> projectMap =
+                newScanOperator.getOutputColumns().stream()
+                        .collect(Collectors.toMap(Function.identity(), Function.identity()));
+        LogicalProjectOperator logicalProjectOperator = new LogicalProjectOperator(projectMap);
+        OptExpression project = OptExpression.create(logicalProjectOperator, OptExpression.create(newScanOperator));
+        return Lists.newArrayList(project);
     }
 }

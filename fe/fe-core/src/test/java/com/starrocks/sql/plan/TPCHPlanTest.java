@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
@@ -18,7 +18,7 @@ public class TPCHPlanTest extends PlanTestBase {
     @Test
     public void testJoin() {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
-        OlapTable table1 = (OlapTable) globalStateMgr.getDb("default_cluster:test").getTable("t0");
+        OlapTable table1 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
         setTableStatistics(table1, 10000);
         runFileUnitTest("optimized-plan/join");
         setTableStatistics(table1, 0);

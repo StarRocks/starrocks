@@ -27,7 +27,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -53,6 +52,8 @@ import com.starrocks.common.ThriftServerContext;
 import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
+import com.starrocks.http.BaseAction;
+import com.starrocks.http.UnauthorizedException;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
@@ -76,6 +77,7 @@ import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.StreamLoadTask;
@@ -83,6 +85,9 @@ import com.starrocks.thrift.FrontendService;
 import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TAbortRemoteTxnRequest;
 import com.starrocks.thrift.TAbortRemoteTxnResponse;
+import com.starrocks.thrift.TAuthenticateParams;
+import com.starrocks.thrift.TBatchReportExecStatusParams;
+import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
 import com.starrocks.thrift.TColumnDef;
@@ -104,6 +109,10 @@ import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TGetTablePrivsParams;
 import com.starrocks.thrift.TGetTablePrivsResult;
+import com.starrocks.thrift.TGetTablesConfigRequest;
+import com.starrocks.thrift.TGetTablesConfigResponse;
+import com.starrocks.thrift.TGetTablesInfoRequest;
+import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTablesParams;
 import com.starrocks.thrift.TGetTablesResult;
 import com.starrocks.thrift.TGetTaskInfoResult;
@@ -155,7 +164,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -313,12 +321,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     if (listingViews) {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
-                        List<TableRef> tblRefs = new ArrayList<>();
-                        view.getQueryStmt().collectTableRefs(tblRefs);
-                        for (TableRef tblRef : tblRefs) {
-                            if (!GlobalStateMgr.getCurrentState().getAuth()
-                                    .checkTblPriv(currentUser, tblRef.getName().getDb(),
-                                            tblRef.getName().getTbl(), PrivPredicate.SHOW)) {
+                        Map<TableName, Table> allTables = AnalyzerUtils.collectAllTable(view.getQueryStatement());
+                        for (TableName tableName : allTables.keySet()) {
+                            if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                                    currentUser, tableName.getDb(), tableName.getTbl(), PrivPredicate.SHOW)) {
                                 ddlSql = "";
                                 break;
                             }
@@ -348,15 +354,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         db.readLock();
         try {
-            for (Table materializedView : db.getMaterializedViews()) {
+            for (MaterializedView mvTable : db.getMaterializedViews()) {
                 if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(currentUser, dbName,
-                        materializedView.getName(), PrivPredicate.SHOW)) {
+                        mvTable.getName(), PrivPredicate.SHOW)) {
                     continue;
                 }
-                if (matcher != null && !matcher.match(materializedView.getName())) {
+                if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
-                MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> createTableStmt = Lists.newArrayList();
                 GlobalStateMgr.getDdlStmt(mvTable, createTableStmt, null, null, false, true);
                 String ddlSql = createTableStmt.get(0);
@@ -455,7 +460,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             TTaskInfo info = new TTaskInfo();
             info.setTask_name(task.getName());
             info.setCreate_time(task.getCreateTime() / 1000);
-            String scheduleStr = task.getType().name();
+            String scheduleStr = "UNKNOWN";
+            if (task.getType() != null) {
+                scheduleStr = task.getType().name();
+            }
             if (task.getType() == Constants.TaskType.PERIODICAL) {
                 scheduleStr += task.getSchedule();
             }
@@ -519,7 +527,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             PrivBitSet savedPrivs = entry.getPrivSet();
             String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
             String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            String dbName = ClusterNamespace.getNameFromFullName(entry.getOrigDb());
+            String dbName = entry.getOrigDb();
             boolean isGrantable = savedPrivs.satisfy(PrivPredicate.GRANT);
             List<TDBPrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
                     priv -> {
@@ -561,7 +569,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             PrivBitSet savedPrivs = entry.getPrivSet();
             String clusterPrefix = SystemInfoService.DEFAULT_CLUSTER + ClusterNamespace.CLUSTER_DELIMITER;
             String userIdentStr = currentUser.toString().replace(clusterPrefix, "");
-            String dbName = ClusterNamespace.getNameFromFullName(entry.getOrigDb());
+            String dbName = entry.getOrigDb();
             boolean isGrantable = savedPrivs.satisfy(PrivPredicate.GRANT);
             List<TTablePrivDesc> tPrivs = savedPrivs.toPrivilegeList().stream().map(
                     priv -> {
@@ -793,6 +801,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     @Override
+    public TBatchReportExecStatusResult batchReportExecStatus(TBatchReportExecStatusParams params) throws TException {
+        return QeProcessorImpl.INSTANCE.batchReportExecStatus(params, getClientAddr());
+    }
+
+    @Override
     public TMasterResult finishTask(TFinishTaskRequest request) throws TException {
         return leaderImpl.finishTask(request);
     }
@@ -844,11 +857,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     private void checkPasswordAndPrivs(String cluster, String user, String passwd, String db, String tbl,
                                        String clientIp, PrivPredicate predicate) throws AuthenticationException {
 
-        final String fullUserName = ClusterNamespace.getFullName(user);
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth()
-                .checkPlainPassword(fullUserName, clientIp, passwd, currentUser)) {
-            throw new AuthenticationException("Access denied for " + fullUserName + "@" + clientIp);
+                .checkPlainPassword(user, clientIp, passwd, currentUser)) {
+            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
         }
 
         Preconditions.checkState(currentUser.size() == 1);
@@ -1025,7 +1037,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 entity.counterRoutineLoadFinishedTotal.increase(1L);
                 entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
                 entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-
+                entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
+                entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
                 break;
             case MANUAL_LOAD:
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
@@ -1282,8 +1295,74 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         return leaderImpl.getTableMeta(request);
     }
 
+    // Authenticate a FrontendServiceImpl#beginRemoteTxn RPC for StarRocks external table.
+    // The beginRemoteTxn is sent by the source cluster, and received by the target cluster.
+    // The target cluster should do authentication using the TAuthenticateParams. This method
+    // will check whether the user has an authorization, and whether the user has a
+    // PrivPredicate.LOAD on the given tables. The implementation is similar with that
+    // of stream load, and you can refer to RestBaseAction#execute and LoadAction#executeWithoutPassword
+    // to know more about the related part.
+    static TStatus checkPasswordAndLoadPrivilege(TAuthenticateParams authParams) {
+        if (authParams == null) {
+            LOG.debug("received null TAuthenticateParams");
+            return new TStatus(TStatusCode.OK);
+        }
+
+        LOG.debug("Receive TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names());
+        if (!Config.enable_starrocks_external_table_auth_check) {
+            LOG.debug("enable_starrocks_external_table_auth_check is disabled, " +
+                    "and skip to check authorization and privilege for {}", authParams);
+            return new TStatus(TStatusCode.OK);
+        }
+        String configHintMsg = "Set the configuration 'enable_starrocks_external_table_auth_check' to 'false' on the" +
+                " target cluster if you don't want to check the authorization and privilege.";
+
+        // 1. check user and password
+        UserIdentity userIdentity;
+        try {
+            BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
+                    authParams.getUser(), authParams.getPasswd(), authParams.getHost());
+            userIdentity = BaseAction.checkPassword(authInfo);
+        } catch (Exception e) {
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), "Please check that your user or password " +
+                    "is correct", configHintMsg));
+            return status;
+        }
+
+        // 2. check privilege
+        try {
+            String dbName = authParams.getDb_name();
+            for (String tableName : authParams.getTable_names()) {
+                if (!GlobalStateMgr.getCurrentState().getAuth().checkTblPriv(
+                        userIdentity, dbName, tableName, PrivPredicate.LOAD)) {
+                    String errMsg = String.format("Access denied; user '%s'@'%s' need (at least one of) the " +
+                                    "privilege(s) in [%s] for table '%s' in database '%s'", userIdentity.getQualifiedUser(),
+                            userIdentity.getHost(), PrivPredicate.LOAD.getPrivs().toString().trim(), tableName, dbName);
+                    throw new UnauthorizedException(errMsg);
+                }
+            }
+            return new TStatus(TStatusCode.OK);
+        } catch (Exception e) {
+            LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
+                    authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
+            TStatus status = new TStatus(TStatusCode.NOT_AUTHORIZED);
+            status.setError_msgs(Lists.newArrayList(e.getMessage(), configHintMsg));
+            return status;
+        }
+    }
+
     @Override
     public TBeginRemoteTxnResponse beginRemoteTxn(TBeginRemoteTxnRequest request) throws TException {
+        TStatus status = checkPasswordAndLoadPrivilege(request.getAuth_info());
+        if (status.getStatus_code() != TStatusCode.OK) {
+            TBeginRemoteTxnResponse response = new TBeginRemoteTxnResponse();
+            response.setStatus(status);
+            return response;
+        }
         return leaderImpl.beginRemoteTxn(request);
     }
 
@@ -1313,5 +1392,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TSetConfigResponse(status);
         }
+    }
+
+    @Override
+    public TGetTablesConfigResponse getTablesConfig(TGetTablesConfigRequest request) throws TException {
+
+        return InformationSchemaDataSource.generateTablesConfigResponse(request);
+    }
+
+    @Override
+    public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
+
+        return InformationSchemaDataSource.generateTablesInfoResponse(request);
     }
 }

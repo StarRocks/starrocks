@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -29,6 +29,7 @@ public class ExpressionStatisticCalculator {
     private static final Logger LOG = LogManager.getLogger(ExpressionStatisticCalculator.class);
 
     public static final int DAYS_FROM_0_TO_1970 = 719528;
+    public static final int DAYS_FROM_0_TO_9999 = 3652424;
 
     public static ColumnStatistic calculate(ScalarOperator operator, Statistics input) {
         return calculate(operator, input, input != null ? input.getOutputRowCount() : 0);
@@ -40,7 +41,7 @@ public class ExpressionStatisticCalculator {
 
     private static class ExpressionStatisticVisitor extends ScalarOperatorVisitor<ColumnStatistic, Void> {
         private final Statistics inputStatistics;
-        // Some function estimate need plan node row count, such as COUNT
+        // Some functions estimate need plan node row count, such as COUNT
         private final double rowCount;
 
         public ExpressionStatisticVisitor(Statistics statistics, double rowCount) {
@@ -325,14 +326,25 @@ public class ExpressionStatisticCalculator {
                     if (minValue < DAYS_FROM_0_TO_1970) {
                         minValue = LocalDate.ofEpochDay(0).atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     } else {
-                        minValue = LocalDate.ofEpochDay((long) (minValue - DAYS_FROM_0_TO_1970))
-                                .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                        if (minValue > DAYS_FROM_0_TO_9999) {
+                            minValue = LocalDate.ofEpochDay(DAYS_FROM_0_TO_9999 - DAYS_FROM_0_TO_1970)
+                                    .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                        } else {
+                            minValue = LocalDate.ofEpochDay((long) (minValue - DAYS_FROM_0_TO_1970))
+                                    .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                        }
                     }
+
                     if (maxValue < DAYS_FROM_0_TO_1970) {
                         maxValue = LocalDate.ofEpochDay(0).atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
                     } else {
-                        maxValue = LocalDate.ofEpochDay((long) (maxValue - DAYS_FROM_0_TO_1970))
-                                .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                        if (maxValue > DAYS_FROM_0_TO_9999) {
+                            maxValue = LocalDate.ofEpochDay(DAYS_FROM_0_TO_9999 - DAYS_FROM_0_TO_1970)
+                                    .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                        } else {
+                            maxValue = LocalDate.ofEpochDay((long) (maxValue - DAYS_FROM_0_TO_1970))
+                                    .atStartOfDay(ZoneId.systemDefault()).toEpochSecond();
+                        }
                     }
                     break;
                 case FunctionSet.TIMESTAMP:

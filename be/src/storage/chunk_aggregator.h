@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -13,8 +13,6 @@
 #include "storage/row_source_mask.h"
 
 namespace starrocks::vectorized {
-
-using CompareFN = void (*)(const Column* col, uint8_t* flags);
 
 class ChunkAggregator {
 private:

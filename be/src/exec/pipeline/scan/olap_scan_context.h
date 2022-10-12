@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -84,21 +84,23 @@ private:
 // Otherwise, it outputs the same context for each scan operator.
 class OlapScanContextFactory {
 public:
-    OlapScanContextFactory(vectorized::OlapScanNode* const scan_node, int32_t dop, bool shared_scan,
-                           ChunkBufferLimiterPtr chunk_buffer_limiter)
+    OlapScanContextFactory(vectorized::OlapScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
+                           bool shared_scan, ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _scan_node(scan_node),
               _dop(dop),
+              _shared_morsel_queue(shared_morsel_queue),
               _shared_scan(shared_scan),
               _chunk_buffer(shared_scan ? BalanceStrategy::kRoundRobin : BalanceStrategy::kDirect, dop,
                             std::move(chunk_buffer_limiter)),
-              _contexts(shared_scan ? 1 : dop) {}
+              _contexts(shared_morsel_queue ? 1 : dop) {}
 
     OlapScanContextPtr get_or_create(int32_t driver_sequence);
 
 private:
     vectorized::OlapScanNode* const _scan_node;
     const int32_t _dop;
-    const bool _shared_scan;           // Whether the scan operators share one morsel and chunk buffer.
+    const bool _shared_morsel_queue;   // Whether the scan operators share a morsel queue.
+    const bool _shared_scan;           // Whether the scan operators share a chunk buffer.
     BalancedChunkBuffer _chunk_buffer; // Shared Chunk buffer for all the scan operators.
 
     std::vector<OlapScanContextPtr> _contexts;

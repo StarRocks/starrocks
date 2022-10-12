@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -21,6 +21,7 @@ namespace starrocks::vectorized {
 class ColumnRef;
 
 #define APPLY_FOR_JOIN_VARIANTS(M) \
+    M(empty)                       \
     M(keyboolean)                  \
     M(key8)                        \
     M(key16)                       \
@@ -434,6 +435,97 @@ private:
                                        const Columns& data_columns, const NullColumns& null_columns, uint8_t* ptr);
 };
 
+// When hash table is empty, specific its implemention.
+// TODO: Merge with JoinHashMap?
+class JoinHashMapForEmpty {
+public:
+    explicit JoinHashMapForEmpty(JoinHashTableItems* table_items, HashTableProbeState* probe_state)
+            : _table_items(table_items), _probe_state(probe_state) {}
+
+    void build_prepare(RuntimeState* state) { return; }
+    void probe_prepare(RuntimeState* state) { return; }
+    void build(RuntimeState* state) { return; }
+    void probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
+               bool* has_remain) {
+        DCHECK_EQ(0, _table_items->row_count);
+        *has_remain = false;
+        switch (_table_items->join_type) {
+        case TJoinOp::FULL_OUTER_JOIN:
+        case TJoinOp::LEFT_ANTI_JOIN:
+        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
+        case TJoinOp::LEFT_OUTER_JOIN: {
+            _probe_state->count = (*probe_chunk)->num_rows();
+            _probe_output(probe_chunk, chunk);
+            _build_output(chunk);
+            _probe_state->count = 0;
+            break;
+        }
+        default: {
+            break;
+        }
+        }
+        return;
+    }
+    void probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* has_remain) {
+        // For RIGHT ANTI-JOIN, RIGHT SEMI-JOIN, FULL OUTER-JOIN, right table is empty,
+        // do nothing for probe_remain.
+        DCHECK_EQ(0, _table_items->row_count);
+        *has_remain = false;
+        return;
+    }
+
+private:
+    void _probe_output(ChunkPtr* probe_chunk, ChunkPtr* chunk) {
+        SCOPED_TIMER(_probe_state->output_probe_column_timer);
+        bool to_nullable = _table_items->left_to_nullable;
+        for (size_t i = 0; i < _table_items->probe_column_count; i++) {
+            HashTableSlotDescriptor hash_table_slot = _table_items->probe_slots[i];
+            SlotDescriptor* slot = hash_table_slot.slot;
+            auto& column = (*probe_chunk)->get_column_by_slot_id(slot->id());
+            if (hash_table_slot.need_output) {
+                if (to_nullable && !column->is_nullable()) {
+                    DCHECK_EQ(column->size(), _probe_state->count);
+                    ColumnPtr dest_column =
+                            NullableColumn::create(std::move(column), NullColumn::create(_probe_state->count));
+                    (*chunk)->append_column(std::move(dest_column), slot->id());
+                } else {
+                    // DCHECK_EQ(column->is_nullable(), to_nullable);
+                    (*chunk)->append_column(std::move(column), slot->id());
+                }
+            } else {
+                ColumnPtr default_column =
+                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+                default_column->append_default(_probe_state->count);
+                (*chunk)->append_column(std::move(default_column), slot->id());
+            }
+        }
+    }
+    void _build_output(ChunkPtr* chunk) {
+        SCOPED_TIMER(_table_items->output_build_column_timer);
+        bool to_nullable = _table_items->right_to_nullable;
+        for (size_t i = 0; i < _table_items->build_column_count; i++) {
+            HashTableSlotDescriptor hash_table_slot = _table_items->build_slots[i];
+            SlotDescriptor* slot = hash_table_slot.slot;
+            ColumnPtr& column = _table_items->build_chunk->columns()[i];
+            if (hash_table_slot.need_output) {
+                // always output nulls.
+                DCHECK(to_nullable);
+                ColumnPtr dest_column = ColumnHelper::create_column(slot->type(), true);
+                dest_column->append_nulls(_probe_state->count);
+                (*chunk)->append_column(std::move(dest_column), slot->id());
+            } else {
+                ColumnPtr default_column =
+                        ColumnHelper::create_column(slot->type(), column->is_nullable() || to_nullable);
+                default_column->append_default(_probe_state->count);
+                (*chunk)->append_column(std::move(default_column), slot->id());
+            }
+        }
+    }
+
+    JoinHashTableItems* _table_items = nullptr;
+    HashTableProbeState* _probe_state = nullptr;
+};
+
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 class JoinHashMap {
 public:
@@ -527,6 +619,12 @@ private:
     void _probe_from_ht_for_left_anti_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
                                                                const Buffer<CppType>& probe_data);
 
+    // for null aware anti join with other join conjunct
+    template <bool first_probe>
+    void _probe_from_ht_for_null_aware_anti_join_with_other_conjunct(RuntimeState* state,
+                                                                     const Buffer<CppType>& build_data,
+                                                                     const Buffer<CppType>& probe_data);
+
     // for one key right outer join with other conjunct
     template <bool first_probe>
     void _probe_from_ht_for_right_outer_join_with_other_conjunct(RuntimeState* state, const Buffer<CppType>& build_data,
@@ -608,6 +706,7 @@ private:
     void _remove_duplicate_index_for_right_anti_join(Column::Filter* filter);
     void _remove_duplicate_index_for_full_outer_join(Column::Filter* filter);
 
+    std::unique_ptr<JoinHashMapForEmpty> _empty = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_BOOLEAN)> _keyboolean = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_TINYINT)> _key8 = nullptr;
     std::unique_ptr<JoinHashMapForDirectMapping(TYPE_SMALLINT)> _key16 = nullptr;

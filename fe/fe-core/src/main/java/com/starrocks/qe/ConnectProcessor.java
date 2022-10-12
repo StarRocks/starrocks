@@ -23,8 +23,6 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.KillStmt;
-import com.starrocks.analysis.QueryStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
@@ -38,6 +36,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.external.iceberg.StarRocksIcebergException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
@@ -50,6 +49,7 @@ import com.starrocks.plugin.AuditEvent.EventType;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.parser.ParsingException;
@@ -191,12 +191,7 @@ public class ConnectProcessor {
     }
 
     public String computeStatementDigest(StatementBase queryStmt) {
-        String digest;
-        if (queryStmt instanceof QueryStmt) {
-            digest = ((QueryStmt) queryStmt).toDigest();
-        } else {
-            digest = SqlDigestBuilder.build(queryStmt);
-        }
+        String digest = SqlDigestBuilder.build(queryStmt);
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
             md.reset();
@@ -245,7 +240,7 @@ public class ConnectProcessor {
         } else {
             sql = parsedStmt.getOrigStmt().originStmt;
         }
-        boolean isQuery = parsedStmt instanceof QueryStmt || parsedStmt instanceof QueryStatement;
+        boolean isQuery = parsedStmt instanceof QueryStatement;
         QueryDetail queryDetail = new QueryDetail(
                 DebugUtil.printId(ctx.getQueryId()),
                 isQuery,
@@ -279,7 +274,9 @@ public class ConnectProcessor {
                 .setTimestamp(System.currentTimeMillis())
                 .setClientIp(ctx.getMysqlChannel().getRemoteHostPortString())
                 .setUser(ctx.getQualifiedUser())
-                .setDb(ctx.getDatabase());
+                .setAuthorizedUser(ctx.getCurrentUserIdentity() == null ? "null" : ctx.getCurrentUserIdentity().toString())
+                .setDb(ctx.getDatabase())
+                .setCatalog(ctx.getCurrentCatalog());
         ctx.getPlannerProfile().reset();
 
         // execute this query.
@@ -288,7 +285,7 @@ public class ConnectProcessor {
             ctx.setQueryId(UUIDUtil.genUUID());
             List<StatementBase> stmts;
             try {
-                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable().getSqlMode());
+                stmts = com.starrocks.sql.parser.SqlParser.parse(originStmt, ctx.getSessionVariable());
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
             }
@@ -398,6 +395,8 @@ public class ConnectProcessor {
                 channel.sendOnePacket(serializer.toByteBuffer());
             }
 
+        } catch (StarRocksIcebergException e) {
+            LOG.warn("errors happened when getting Iceberg table {}", tableName, e);
         } finally {
             db.readUnlock();
         }
@@ -490,8 +489,12 @@ public class ConnectProcessor {
                 // ShowResultSet is null means this is not ShowStmt, use remote packet(executor.getOutputPacket())
                 // or use local packet (getResultPacket())
                 if (resultSet == null) {
-                    packet = executor.getOutputPacket();
-                } else {
+                    if (executor.sendResultToChannel(ctx.getMysqlChannel())) {  // query statement result
+                        packet = getResultPacket();
+                    } else { // for lower version, in consideration of compatibility
+                        packet = executor.getOutputPacket();
+                    }
+                } else { // show statement result
                     executor.sendShowResult(resultSet);
                     packet = getResultPacket();
                     if (packet == null) {
@@ -636,8 +639,12 @@ public class ConnectProcessor {
         }
         result.setPacket(getResultPacket());
         result.setState(ctx.getState().getStateType().toString());
-        if (executor != null && executor.getProxyResultSet() != null) {
-            result.setResultSet(executor.getProxyResultSet().tothrift());
+        if (executor != null) {
+            if (executor.getProxyResultSet() != null) {  // show statement
+                result.setResultSet(executor.getProxyResultSet().tothrift());
+            } else if (executor.getProxyResultBuffer() != null) {  // query statement
+                result.setChannelBufferList(executor.getProxyResultBuffer());
+            }
         }
         return result;
     }

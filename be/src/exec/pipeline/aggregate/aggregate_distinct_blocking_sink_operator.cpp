@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "aggregate_distinct_blocking_sink_operator.h"
 
@@ -76,5 +76,9 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
     }
 
     return Status::OK();
+}
+Status AggregateDistinctBlockingSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    return _aggregator->reset_state(std::move(chunks));
 }
 } // namespace starrocks::pipeline

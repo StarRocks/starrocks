@@ -70,6 +70,9 @@ struct TTextFileDesc {
 
     // property 'mapkey.delim'
     4: optional string mapkey_delim
+
+    // compression type.
+    5: optional Types.TCompressionType compression_type;
 }
 
 enum TSchemaTableType {
@@ -101,6 +104,7 @@ enum TSchemaTableType {
     SCH_STATISTICS,
     SCH_STATUS,
     SCH_TABLES,
+    SCH_TABLES_CONFIG,
     SCH_TABLE_CONSTRAINTS,
     SCH_TABLE_NAMES,
     SCH_TABLE_PRIVILEGES,
@@ -330,6 +334,24 @@ struct THudiTable {
 
     // The prefixes of locations of partitions in this table
     5: optional list<string> partition_prefixes
+
+    // hudi table instant time
+    6: optional string instant_time
+
+    // hudi table hive_column_names
+    7: optional string hive_column_names
+
+    // hudi table hive_column_types
+    8: optional string hive_column_types
+
+    // hudi table input_format
+    9: optional string input_format
+
+    // hudi table serde_lib
+    10: optional string serde_lib
+
+    // hudi table type: copy on write or merge on read
+    11: optional bool is_mor_table
 }
 
 struct TJDBCTable {

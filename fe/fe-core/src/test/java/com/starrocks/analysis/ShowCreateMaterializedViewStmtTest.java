@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
@@ -9,6 +9,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -54,8 +55,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 new ShowCreateTableStmt(new TableName("test", "mv1"),
                         ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW CREATE MATERIALIZED VIEW default_cluster:test.mv1", stmt.toString());
-        Assert.assertEquals("default_cluster:test", stmt.getDb());
+        Assert.assertEquals("test", stmt.getDb());
         Assert.assertEquals("mv1", stmt.getTable());
         Assert.assertEquals(2, ShowCreateTableStmt.getMaterializedViewMetaData().getColumnCount());
         Assert.assertEquals("Materialized View",
@@ -67,13 +67,13 @@ public class ShowCreateMaterializedViewStmtTest {
     @Test
     public void testShowSimpleCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv1 " +
-                "distributed by hash(k1) " +
+                "distributed by hash(k1) buckets 10 " +
                 "refresh manual " +
                 "as select k1, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv1");
+        Table table = currentState.getDb("test").getTable("mv1");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv1`\n" +
@@ -84,7 +84,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv1", "mv1_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -94,13 +94,13 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithAliasCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv2 " +
                 "partition by k3 " +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv2");
+        Table table = currentState.getDb("test").getTable("mv2");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv2`\n" +
@@ -112,7 +112,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv2", "mv2_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -122,13 +122,13 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithFunctionCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv3 " +
                 "partition by date_trunc('month',k1)" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1, k2+v1 as k3 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv3");
+        Table table = currentState.getDb("test").getTable("mv3");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv3`\n" +
@@ -140,7 +140,8 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k1`, `test`.`tbl1`.`k2` + `test`.`tbl1`.`v1` AS `k3` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1`, `tbl1`.`k2` + `tbl1`.`v1` AS `k3`\n" +
+                "FROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv3", "mv3_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -150,13 +151,13 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithFunctionAliasCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv4 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh manual " +
                 "as select k1 as k3, k2 from tbl1;";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv4");
+        Table table = currentState.getDb("test").getTable("mv4");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv4`\n" +
@@ -168,7 +169,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"storage_medium\" = \"HDD\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv4", "mv4_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -178,7 +179,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowPartitionWithAllPropertiesCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv5 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -189,7 +190,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv5");
+        Table table = currentState.getDb("test").getTable("mv5");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv5`\n" +
@@ -202,7 +203,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv5", "mv5_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -212,7 +213,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowRefreshWithNoStartTimeCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv6 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async " +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -223,7 +224,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv6");
+        Table table = currentState.getDb("test").getTable("mv6");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv6`\n" +
@@ -236,7 +237,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv6", "mv6_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));
@@ -246,7 +247,7 @@ public class ShowCreateMaterializedViewStmtTest {
     public void testShowRefreshWithIntervalCreateMvSql() throws Exception {
         String createMvSql = "create materialized view mv7 " +
                 "partition by (date_trunc('month',k3))" +
-                "distributed by hash(k3) " +
+                "distributed by hash(k3) buckets 10 " +
                 "refresh async EVERY(INTERVAL 1 HOUR)" +
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
@@ -257,7 +258,7 @@ public class ShowCreateMaterializedViewStmtTest {
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(createMvSql, ctx);
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
         currentState.createMaterializedView((CreateMaterializedViewStatement) statementBase);
-        Table table = currentState.getDb("default_cluster:test").getTable("mv7");
+        Table table = currentState.getDb("test").getTable("mv7");
         List<String> createTableStmt = Lists.newArrayList();
         GlobalStateMgr.getDdlStmt(table, createTableStmt, null, null, false, true);
         Assert.assertEquals(createTableStmt.get(0), "CREATE MATERIALIZED VIEW `mv7`\n" +
@@ -270,7 +271,7 @@ public class ShowCreateMaterializedViewStmtTest {
                 "\"storage_medium\" = \"SSD\",\n" +
                 "\"storage_cooldown_time\" = \"2122-12-31 23:59:59\"\n" +
                 ")\n" +
-                "AS SELECT `test`.`tbl1`.`k1` AS `k3`, `test`.`tbl1`.`k2` AS `k2` FROM `test`.`tbl1`;");
+                "AS SELECT `tbl1`.`k1` AS `k3`, `tbl1`.`k2`\nFROM `tbl1`;");
         String copySql = createTableStmt.get(0).replaceAll("mv7", "mv7_copy");
         currentState.createMaterializedView(
                 (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(copySql, ctx));

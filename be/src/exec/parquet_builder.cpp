@@ -21,7 +21,6 @@
 
 #include "exec/parquet_builder.h"
 
-#include <arrow/io/api.h>
 #include <arrow/io/file.h>
 #include <arrow/io/interfaces.h>
 

@@ -23,7 +23,6 @@
 
 #include <cxxabi.h>
 
-#include <boost/algorithm/string.hpp>
 #include <boost/algorithm/string/regex.hpp>
 #include <sstream>
 

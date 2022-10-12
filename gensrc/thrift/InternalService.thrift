@@ -50,6 +50,13 @@ enum TQueryType {
     EXTERNAL
 }
 
+enum TLoadJobType {
+    Broker,
+    Spark,
+    INSERT_QUERY,
+    INSERT_VALUES
+}
+
 enum TErrorHubType {
     MYSQL,
     BROKER,
@@ -86,6 +93,11 @@ enum TPipelineProfileLevel {
   CORE_METRICS,
   ALL_METRICS,
   DETAIL
+}
+
+enum TTabletInternalParallelMode {
+  AUTO,
+  FORCE_SPLIT
 }
 
 // Query options with their respective defaults
@@ -171,6 +183,16 @@ struct TQueryOptions {
   60: optional i32 query_delivery_timeout;
   
   61: optional bool enable_query_debug_trace;
+
+  62: optional Types.TCompressionType load_transmission_compression_type;
+
+  63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
+
+  64: optional TLoadJobType load_job_type
+
+  65: optional bool enable_replicated_storage;
+
+  66: optional bool use_scan_block_cache;
 }
 
 
@@ -364,64 +386,6 @@ struct TTransmitDataResult {
   2: optional i64 packet_seq
   3: optional Types.TUniqueId dest_fragment_instance_id
   4: optional Types.TPlanNodeId dest_node_id
-}
-
-struct TTabletWithPartition {
-    1: required i64 partition_id
-    2: required i64 tablet_id
-}
-
-// open a tablet writer
-struct TTabletWriterOpenParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-    3: required i64 txn_id
-    4: required Descriptors.TOlapTableSchemaParam schema
-    5: required list<TTabletWithPartition> tablets
-
-    6: required i32 num_senders
-}
-
-struct TTabletWriterOpenResult {
-    1: required Status.TStatus status
-}
-
-// add batch to tablet writer
-struct TTabletWriterAddBatchParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-
-    3: required i64 packet_seq
-    4: required list<Types.TTabletId> tablet_ids
-    5: required Data.TRowBatch row_batch
-
-    6: required i32 sender_no
-}
-
-struct TTabletWriterAddBatchResult {
-    1: required Status.TStatus status
-}
-
-struct TTabletWriterCloseParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-
-    3: required i32 sender_no
-}
-
-struct TTabletWriterCloseResult {
-    1: required Status.TStatus status
-}
-
-//
-struct TTabletWriterCancelParams {
-    1: required Types.TUniqueId id
-    2: required i64 index_id
-
-    3: required i32 sender_no
-}
-
-struct TTabletWriterCancelResult {
 }
 
 struct TFetchDataParams {

@@ -24,7 +24,6 @@ package com.starrocks.mysql;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -50,30 +49,38 @@ public class MysqlProto {
     private static boolean authenticate(ConnectContext context, byte[] scramble, byte[] randomString, String user) {
         String usePasswd = scramble.length == 0 ? "NO" : "YES";
 
-        String tmpUser = user;
-        if (tmpUser == null || tmpUser.isEmpty()) {
+        if (user == null || user.isEmpty()) {
             ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, "", usePasswd);
             return false;
         }
 
-        // check cluster, user name may contains cluster name or cluster id.
-        // eg:
-        // user_name@cluster_name
-
-        String qualifiedUser = ClusterNamespace.getFullName(tmpUser);
         String remoteIp = context.getMysqlChannel().getRemoteIp();
 
+        if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+            if (Config.enable_auth_check) {
+                UserIdentity currentUser = context.getGlobalStateMgr().getAuthenticationManager().checkPassword(
+                        user, remoteIp, scramble, randomString);
+                if (currentUser == null) {
+                    ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
+                    return false;
+                }
+                context.setAuthDataSalt(randomString);
+                context.setCurrentUserIdentity(currentUser);
+                context.setQualifiedUser(user);
+            }
+            return true;
+        }
         List<UserIdentity> currentUserIdentity = Lists.newArrayList();
-        if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(qualifiedUser, remoteIp,
+        if (!GlobalStateMgr.getCurrentState().getAuth().checkPassword(user, remoteIp,
                 scramble, randomString, currentUserIdentity)) {
-            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, qualifiedUser, usePasswd);
+            ErrorReport.report(ErrorCode.ERR_ACCESS_DENIED_ERROR, user, usePasswd);
             return false;
         }
         context.setAuthDataSalt(randomString);
         if (Config.enable_auth_check) {
             context.setCurrentUserIdentity(currentUserIdentity.get(0));
         }
-        context.setQualifiedUser(qualifiedUser);
+        context.setQualifiedUser(user);
         return true;
     }
 

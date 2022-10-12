@@ -40,7 +40,7 @@ class BitmapIndexTest : public testing::Test {
 public:
     const std::string kTestDir = "/bitmap_index_test";
 
-    BitmapIndexTest() {}
+    BitmapIndexTest() = default;
 
 protected:
     void SetUp() override {

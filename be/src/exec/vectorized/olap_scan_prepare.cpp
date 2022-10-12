@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/olap_scan_prepare.h"
 
@@ -12,6 +12,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
+#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_parser.h"
 #include "storage/vectorized_column_predicate.h"
 #include "types/date_value.hpp"
@@ -378,15 +379,18 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
         using ValueType = typename vectorized::RunTimeTypeTraits<SlotType>::CppType;
         SlotId slot_id;
 
-        // runtime filter existed and does not have null.
-        if (rf == nullptr || rf->has_null()) continue;
         // probe expr is slot ref and slot id matches.
         if (!desc->is_probe_slot_ref(&slot_id) || slot_id != slot.id()) continue;
 
+        // runtime filter existed and does not have null.
+        if (rf == nullptr) {
+            rt_ranger_params.add_unarrived_rf(desc, &slot);
+            continue;
+        }
+
+        if (rf->has_null()) continue;
+
         const RuntimeBloomFilter<SlotType>* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
-        // For some cases such as in bucket shuffle, some hash join node may not have any input chunk from right table.
-        // Runtime filter does not have any min/max values in this case.
-        if (!filter->has_min_max()) continue;
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
         if (range->is_init_state()) {

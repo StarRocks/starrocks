@@ -26,7 +26,6 @@
 #include <gperftools/malloc_extension.h>
 #endif
 #include <runtime/exec_env.h>
-#include <runtime/mem_tracker.h>
 
 #include <cstdio>
 #include <memory>
@@ -59,64 +58,6 @@ public:
 
 const char* const CpuMetrics::cpu_metrics[] = {"user", "nice",     "system", "idle",  "iowait",
                                                "irq",  "soft_irq", "steal",  "guest", "guest_nice"};
-
-class MemoryMetrics {
-public:
-#ifndef USE_JEMALLOC
-    // tcmalloc metrics.
-    METRIC_DEFINE_INT_GAUGE(allocated_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(total_thread_cache_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(central_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(transfer_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(thread_cache_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(pageheap_free_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(pageheap_unmapped_bytes, MetricUnit::BYTES);
-#else
-    METRIC_DEFINE_INT_GAUGE(jemalloc_allocated_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_active_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_metadata_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_metadata_thp, MetricUnit::NOUNIT);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_resident_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_mapped_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(jemalloc_retained_bytes, MetricUnit::BYTES);
-#endif
-    // MemPool metrics
-    // Process memory usage
-    METRIC_DEFINE_INT_GAUGE(process_mem_bytes, MetricUnit::BYTES);
-    // Query memory usage
-    METRIC_DEFINE_INT_GAUGE(query_mem_bytes, MetricUnit::BYTES);
-    // Load memory usage
-    METRIC_DEFINE_INT_GAUGE(load_mem_bytes, MetricUnit::BYTES);
-    // Tablet meta memory usage
-    METRIC_DEFINE_INT_GAUGE(tablet_meta_mem_bytes, MetricUnit::BYTES);
-    // Compaction memory usage
-    METRIC_DEFINE_INT_GAUGE(compaction_mem_bytes, MetricUnit::BYTES);
-    // SchemaChange memory usage
-    METRIC_DEFINE_INT_GAUGE(schema_change_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(storage_page_cache_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(update_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(chunk_allocator_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(clone_mem_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(consistency_mem_bytes, MetricUnit::BYTES);
-
-    // column pool metrics.
-    METRIC_DEFINE_INT_GAUGE(column_pool_total_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_local_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_central_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_binary_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_uint8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int8_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int16_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int32_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int64_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_int128_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_float_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_double_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_decimal_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_date_bytes, MetricUnit::BYTES);
-    METRIC_DEFINE_INT_GAUGE(column_pool_datetime_bytes, MetricUnit::BYTES);
-};
 
 class DiskMetrics {
 public:
@@ -274,7 +215,18 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
     registry->register_metric("query_mem_bytes", &_memory_metrics->query_mem_bytes);
     registry->register_metric("load_mem_bytes", &_memory_metrics->load_mem_bytes);
-    registry->register_metric("tablet_meta_mem_bytes", &_memory_metrics->tablet_meta_mem_bytes);
+    registry->register_metric("metadata_mem_bytes", &_memory_metrics->metadata_mem_bytes);
+    registry->register_metric("tablet_metadata_mem_bytes", &_memory_metrics->tablet_metadata_mem_bytes);
+    registry->register_metric("rowset_metadata_mem_bytes", &_memory_metrics->rowset_metadata_mem_bytes);
+    registry->register_metric("segment_metadata_mem_bytes", &_memory_metrics->segment_metadata_mem_bytes);
+    registry->register_metric("column_metadata_mem_bytes", &_memory_metrics->column_metadata_mem_bytes);
+    registry->register_metric("tablet_schema_mem_bytes", &_memory_metrics->tablet_schema_mem_bytes);
+    registry->register_metric("column_zonemap_index_mem_bytes", &_memory_metrics->column_zonemap_index_mem_bytes);
+    registry->register_metric("ordinal_index_mem_bytes", &_memory_metrics->ordinal_index_mem_bytes);
+    registry->register_metric("bitmap_index_mem_bytes", &_memory_metrics->bitmap_index_mem_bytes);
+    registry->register_metric("bloom_filter_index_mem_bytes", &_memory_metrics->bloom_filter_index_mem_bytes);
+    registry->register_metric("segment_zonemap_mem_bytes", &_memory_metrics->segment_zonemap_mem_bytes);
+    registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
     registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
@@ -352,49 +304,35 @@ void SystemMetrics::_update_memory_metrics() {
     _memory_metrics->pageheap_unmapped_bytes.set_value(value);
 #endif
 
-    if (ExecEnv::GetInstance()->process_mem_tracker() != nullptr) {
-        _memory_metrics->process_mem_bytes.set_value(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
+#define SET_MEM_METRIC_VALUE(tracker, key)                                                \
+    if (ExecEnv::GetInstance()->tracker() != nullptr) {                                   \
+        _memory_metrics->key.set_value(ExecEnv::GetInstance()->tracker()->consumption()); \
     }
-    if (ExecEnv::GetInstance()->query_pool_mem_tracker() != nullptr) {
-        _memory_metrics->query_mem_bytes.set_value(ExecEnv::GetInstance()->query_pool_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->load_mem_tracker() != nullptr) {
-        _memory_metrics->load_mem_bytes.set_value(ExecEnv::GetInstance()->load_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->tablet_meta_mem_tracker() != nullptr) {
-        _memory_metrics->tablet_meta_mem_bytes.set_value(
-                ExecEnv::GetInstance()->tablet_meta_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->compaction_mem_tracker() != nullptr) {
-        _memory_metrics->compaction_mem_bytes.set_value(
-                ExecEnv::GetInstance()->compaction_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->schema_change_mem_tracker() != nullptr) {
-        _memory_metrics->schema_change_mem_bytes.set_value(
-                ExecEnv::GetInstance()->schema_change_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->page_cache_mem_tracker() != nullptr) {
-        _memory_metrics->storage_page_cache_mem_bytes.set_value(
-                ExecEnv::GetInstance()->page_cache_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->update_mem_tracker() != nullptr) {
-        _memory_metrics->update_mem_bytes.set_value(ExecEnv::GetInstance()->update_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->chunk_allocator_mem_tracker() != nullptr) {
-        _memory_metrics->chunk_allocator_mem_bytes.set_value(
-                ExecEnv::GetInstance()->chunk_allocator_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->clone_mem_tracker() != nullptr) {
-        _memory_metrics->clone_mem_bytes.set_value(ExecEnv::GetInstance()->clone_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->column_pool_mem_tracker() != nullptr) {
-        _memory_metrics->column_pool_mem_bytes.set_value(
-                ExecEnv::GetInstance()->column_pool_mem_tracker()->consumption());
-    }
-    if (ExecEnv::GetInstance()->consistency_mem_tracker() != nullptr) {
-        _memory_metrics->consistency_mem_bytes.set_value(
-                ExecEnv::GetInstance()->consistency_mem_tracker()->consumption());
-    }
+
+    SET_MEM_METRIC_VALUE(process_mem_tracker, process_mem_bytes)
+    SET_MEM_METRIC_VALUE(query_pool_mem_tracker, query_mem_bytes)
+    SET_MEM_METRIC_VALUE(load_mem_tracker, load_mem_bytes)
+    SET_MEM_METRIC_VALUE(metadata_mem_tracker, metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(tablet_metadata_mem_tracker, tablet_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(rowset_metadata_mem_tracker, rowset_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(segment_metadata_mem_tracker, segment_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_metadata_mem_tracker, column_metadata_mem_bytes)
+    SET_MEM_METRIC_VALUE(tablet_schema_mem_tracker, tablet_schema_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_zonemap_index_mem_tracker, column_zonemap_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(ordinal_index_mem_tracker, ordinal_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(bitmap_index_mem_tracker, bitmap_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(bloom_filter_index_mem_tracker, bloom_filter_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(segment_zonemap_mem_tracker, segment_zonemap_mem_bytes)
+    SET_MEM_METRIC_VALUE(short_key_index_mem_tracker, short_key_index_mem_bytes)
+    SET_MEM_METRIC_VALUE(compaction_mem_tracker, compaction_mem_bytes)
+    SET_MEM_METRIC_VALUE(schema_change_mem_tracker, schema_change_mem_bytes)
+    SET_MEM_METRIC_VALUE(page_cache_mem_tracker, storage_page_cache_mem_bytes)
+    SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
+    SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
+    SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
+    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
+    SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
+#undef SET_MEM_METRIC_VALUE
 
 #define UPDATE_COLUMN_POOL_METRIC(var, type)                                         \
     value = vectorized::describe_column_pool<vectorized::type>().central_free_bytes; \

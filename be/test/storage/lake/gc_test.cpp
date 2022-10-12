@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/gc.h"
 
@@ -8,6 +8,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_metadata.h"
 #include "storage/lake/txn_log.h"
@@ -20,7 +21,10 @@ namespace starrocks::lake {
 class GCTest : public ::testing::Test {
 public:
     static void SetUpTestCase() {
-        CHECK_OK(FileSystem::Default()->create_dir_recursive(kTestDir));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestDir, kSegmentDirectoryName)));
+
         s_location_provider = std::make_unique<FixedLocationProvider>(kTestDir);
         s_tablet_manager = std::make_unique<lake::TabletManager>(s_location_provider.get(), 16384);
     }
@@ -37,7 +41,12 @@ protected:
 TEST_F(GCTest, test_metadata_gc) {
     auto fs = FileSystem::Default();
     auto tablet_id = next_id();
-    auto version_count = config::lake_gc_metadata_max_versions + 3;
+    auto version_count = config::lake_gc_metadata_max_versions + 4;
+    int64_t txn_id = 1;
+    auto expire_time =
+            std::chrono::duration_cast<std::chrono::seconds>(std::chrono::system_clock::now().time_since_epoch())
+                    .count() +
+            100000;
     for (int i = 0; i < version_count; i++) {
         auto metadata = std::make_shared<TabletMetadata>();
         // leave scheme and rowset unsetted.
@@ -45,18 +54,57 @@ TEST_F(GCTest, test_metadata_gc) {
         metadata->set_version(i + 1);
         metadata->set_next_rowset_id(i + 1);
 
+        if (i == 0 || i == 1) {
+            ASSERT_OK(s_tablet_manager->put_tablet_metadata_lock(tablet_id, i + 1, expire_time));
+            ++txn_id;
+        }
+
         ASSERT_OK(s_tablet_manager->put_tablet_metadata(metadata));
-        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get()));
+        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), 0));
     }
 
     // Ensure all metadata are still exist.
     for (int i = 0; i < version_count; i++) {
-        if (i < 3) {
+        // Version 1 and 2 will be kept because their metadata are locked.
+        if (i == 2 || i == 3) {
             auto location = s_tablet_manager->tablet_metadata_location(tablet_id, i + 1);
             auto st = fs->path_exists(location);
             ASSERT_TRUE(st.is_not_found()) << st;
         } else {
             auto location = s_tablet_manager->tablet_metadata_location(tablet_id, i + 1);
+            ASSERT_OK(fs->path_exists(location));
+        }
+    }
+
+    // txn log
+    int64_t min_active_txn_log_id = 100;
+    {
+        for (int i = 0; i < 5; i++) {
+            auto txn_log = std::make_shared<lake::TxnLog>();
+            txn_log->set_tablet_id(tablet_id);
+            txn_log->set_txn_id(i);
+            ASSERT_OK(s_tablet_manager->put_txn_log(txn_log));
+        }
+        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), min_active_txn_log_id));
+
+        for (int i = 0; i < 5; i++) {
+            auto txn = s_tablet_manager->txn_log_location(tablet_id, i);
+            auto st = fs->path_exists(txn);
+            ASSERT_TRUE(st.is_not_found()) << st;
+        }
+    }
+
+    {
+        for (int i = 100; i < 105; i++) {
+            auto txn_log = std::make_shared<lake::TxnLog>();
+            txn_log->set_tablet_id(tablet_id);
+            txn_log->set_txn_id(i);
+            ASSERT_OK(s_tablet_manager->put_txn_log(txn_log));
+        }
+        ASSERT_OK(metadata_gc(kTestDir, s_tablet_manager.get(), min_active_txn_log_id));
+
+        for (int i = 100; i < 105; i++) {
+            auto location = s_tablet_manager->txn_log_location(tablet_id, i);
             ASSERT_OK(fs->path_exists(location));
         }
     }

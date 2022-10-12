@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.metric;
 
@@ -20,6 +20,10 @@ public final class TableMetricsEntity {
     private static final String TABLE_LOAD_BYTES_COMMENT = "total loaded bytes of a table";
     public static final String TABLE_LOAD_ROWS = "table_load_rows";
     private static final String TABLE_LOAD_ROWS_COMMENT = "total loaded rows of a table";
+    public static final String TABLE_LOAD_ERROR_ROWS = "table_load_error_rows";
+    private static final String TABLE_LOAD_ERROR_COMMENT = "total error rows in load job of a table";
+    public static final String TABLE_LOAD_UNSELECTED_ROWS = "table_load_unselected_rows";
+    private static final String TABLE_LOAD_UNSELECTED_COMMENT = "total unselected rows in load job of a table";
     public static final String TABLE_LOAD_FINISHED = "table_load_finished";
     private static final String TABLE_LOAD_FINISHED_COMMENT = "total loaded times of this table";
 
@@ -35,6 +39,8 @@ public final class TableMetricsEntity {
 
     public LongCounterMetric counterRoutineLoadBytesTotal;
     public LongCounterMetric counterRoutineLoadRowsTotal;
+    public LongCounterMetric counterRoutineLoadErrorRowsTotal;
+    public LongCounterMetric counterRoutineLoadUnselectedRowsTotal;
     public LongCounterMetric counterRoutineLoadFinishedTotal;
 
     public LongCounterMetric counterInsertLoadBytesTotal;
@@ -91,6 +97,14 @@ public final class TableMetricsEntity {
                 new LongCounterMetric(TABLE_LOAD_ROWS, MetricUnit.ROWS, TABLE_LOAD_ROWS_COMMENT);
         counterRoutineLoadRowsTotal.addLabel(new MetricLabel("type", "routine_load"));
         metrics.add(counterRoutineLoadRowsTotal);
+        counterRoutineLoadErrorRowsTotal =
+                new LongCounterMetric(TABLE_LOAD_ERROR_ROWS, MetricUnit.ROWS,  TABLE_LOAD_ERROR_COMMENT);
+        counterRoutineLoadErrorRowsTotal.addLabel(new MetricLabel("type", "routine_load"));
+        metrics.add(counterRoutineLoadErrorRowsTotal);
+        counterRoutineLoadUnselectedRowsTotal =
+                new LongCounterMetric(TABLE_LOAD_UNSELECTED_ROWS, MetricUnit.ROWS, TABLE_LOAD_UNSELECTED_COMMENT);
+        counterRoutineLoadUnselectedRowsTotal.addLabel(new MetricLabel("type", "routine_load"));
+        metrics.add(counterRoutineLoadUnselectedRowsTotal);
         counterRoutineLoadFinishedTotal =
                 new LongCounterMetric(TABLE_LOAD_FINISHED, MetricUnit.REQUESTS, TABLE_LOAD_FINISHED_COMMENT);
         counterRoutineLoadFinishedTotal.addLabel(new MetricLabel("type", "routine_load"));

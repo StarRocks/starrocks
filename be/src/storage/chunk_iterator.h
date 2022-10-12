@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -101,7 +101,7 @@ public:
         if (_is_init_output_schema) {
             return _output_schema;
         } else {
-            return _schema;
+            return encoded_schema();
         }
     }
 
@@ -113,7 +113,11 @@ protected:
         return Status::NotSupported("Chunk* chunk, vector<uint32_t>* rowid) not supported");
     }
     virtual Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
-        return Status::NotSupported("get chunk with sources not supported");
+        if (source_masks == nullptr) {
+            return do_get_next(chunk);
+        } else {
+            return Status::NotSupported("get chunk with sources not supported");
+        }
     }
 
     vectorized::Schema _schema;

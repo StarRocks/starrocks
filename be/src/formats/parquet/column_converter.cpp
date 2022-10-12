@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "formats/parquet/column_converter.h"
 
@@ -12,7 +12,6 @@
 #include "column/type_traits.h"
 #include "formats/parquet/schema.h"
 #include "formats/parquet/stored_column_reader.h"
-#include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/decimalv2_value.h"
@@ -97,7 +96,7 @@ public:
         // hive only support null column
         // TODO: support not null
         auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-        dst_nullable_column->resize(src_nullable_column->size());
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<SourceType>>(
                 src_nullable_column->data_column());
@@ -145,7 +144,7 @@ public:
         // hive only support null column
         // TODO: support not null
         auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-        dst_nullable_column->resize(src_nullable_column->size());
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<SourceType>>(
                 src_nullable_column->data_column());
@@ -181,20 +180,62 @@ private:
     DestPrimitiveType _scale_factor = 1;
 };
 
+// This class is to convert *fixed length* binary to decimal
+// and for fixed length binary in parquet, string data is contiguous,
+// and that's why we can do memcpy 8 bytes without accessing invalid address.
 template <PrimitiveType DestType>
 class BinaryToDecimalConverter : public ColumnConverter {
 public:
     using DecimalType = typename vectorized::RunTimeTypeTraits<DestType>::CppType;
     using ColumnType = typename vectorized::RunTimeTypeTraits<DestType>::ColumnType;
     using DestPrimitiveType = typename vectorized::RunTimeTypeTraits<TYPE_DECIMAL128>::CppType;
-
-    BinaryToDecimalConverter(int32_t src_scale, int32_t dst_scale) {
+    BinaryToDecimalConverter(int32_t src_scale, int32_t dst_scale, int32_t type_length) {
         if (src_scale < dst_scale) {
             _scale_type = DecimalScaleType::kScaleUp;
             _scale_factor = get_scale_factor<DestPrimitiveType>(dst_scale - src_scale);
         } else if (src_scale > dst_scale) {
             _scale_type = DecimalScaleType::kScaleDown;
             _scale_factor = get_scale_factor<DestPrimitiveType>(src_scale - dst_scale);
+        }
+        _type_length = type_length;
+    }
+
+    template <int BINSZ, DecimalScaleType scale_type, typename T>
+    void t_convert(size_t size, uint8_t* dst_null_data, uint8_t* src_null_data, DecimalType* dst_data,
+                   const uint8* src_data, bool* has_null) {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (dst_null_data[i]) {
+                *has_null = true;
+                continue;
+            }
+            // When Decimal in parquet is stored in byte arrays, binary and fixed,
+            // the unscaled number must be encoded as two's complement using big-endian byte order.
+
+            DestPrimitiveType unscale = 0;
+            T value = 0;
+            static_assert(BINSZ <= sizeof(value));
+
+            // NOTE(yan): since fixed length binary data is contiguous, with condition check (i+8) < size
+            // we can assure that there is no illegal memory access
+            // UPDATE: bytes are allocated by `RawVectorPad16`, so there will be extra bytes at tail.
+
+            // mempcy 8 bytes to compiler, it's instruction to move 8 bytes from memory to register
+            // and follow actions are all in-register instructions.
+            memcpy(reinterpret_cast<char*>(&value), src_data, sizeof(value));
+            value = BitUtil::big_endian_to_host(value);
+            value = value >> ((sizeof(value) - BINSZ) * 8);
+            unscale = value;
+
+            src_data += BINSZ;
+            // hardware branch predicator works well here.
+            if constexpr (scale_type == DecimalScaleType::kScaleUp) {
+                unscale *= _scale_factor;
+            }
+            if constexpr (scale_type == DecimalScaleType::kScaleDown) {
+                unscale /= _scale_factor;
+            }
+            dst_data[i] = DecimalType(unscale);
         }
     }
 
@@ -203,41 +244,65 @@ public:
         // hive only support null column
         // TODO: support not null
         auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-        dst_nullable_column->resize(src_nullable_column->size());
+        dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
         auto* src_column =
                 vectorized::ColumnHelper::as_raw_column<vectorized::BinaryColumn>(src_nullable_column->data_column());
         auto* dst_column = vectorized::ColumnHelper::as_raw_column<ColumnType>(dst_nullable_column->data_column());
 
-        auto& src_data = src_column->get_data();
+        const vectorized::BinaryColumn::Bytes& src_data = src_column->get_bytes();
         auto& dst_data = dst_column->get_data();
         auto& src_null_data = src_nullable_column->null_column()->get_data();
         auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
         size_t size = src_column->size();
+        if (_type_length > sizeof(DestPrimitiveType)) {
+            memset(dst_null_data.data(), 0x1, size);
+            dst_nullable_column->set_has_null(true);
+            return Status::OK();
+        }
+
         bool has_null = false;
-        for (size_t i = 0; i < size; i++) {
-            // If src_data[i].size > DestPrimitiveType, this means  we treat as null.
-            dst_null_data[i] = src_null_data[i] | (src_data[i].size > sizeof(DestPrimitiveType));
-            if (dst_null_data[i]) {
-                has_null = true;
-                continue;
-            }
 
-            // When Decimal in parquet is stored in byte arrays, binary and fixed,
-            // the unscaled number must be encoded as two's complement using big-endian byte order.
-            DestPrimitiveType value = src_data[i].data[0] & 0x80 ? -1 : 0;
-            memcpy(reinterpret_cast<char*>(&value) + sizeof(DestPrimitiveType) - src_data[i].size, src_data[i].data,
-                   src_data[i].size);
-            value = BitUtil::big_endian_to_host(value);
+        // For calling `src_data.get_bytes().data()` , we don't need to call `build_slices` underneath.
+        // And notice bytes are allocated by `RawVectorPad16`, there will be extra 16 bytes.
+#define M(SZ, K, T)                                                                                             \
+    case SZ:                                                                                                    \
+        t_convert<SZ, K, T>(size, dst_null_data.data(), src_null_data.data(), dst_data.data(), src_data.data(), \
+                            &has_null);                                                                         \
+        break;
 
-            // scale up/down
-            if (_scale_type == DecimalScaleType::kScaleUp) {
-                value *= _scale_factor;
-            } else if (_scale_type == DecimalScaleType::kScaleDown) {
-                value /= _scale_factor;
+#define MX(T)          \
+    M(1, T, int64_t)   \
+    M(2, T, int64_t)   \
+    M(3, T, int64_t)   \
+    M(4, T, int64_t)   \
+    M(5, T, int64_t)   \
+    M(6, T, int64_t)   \
+    M(7, T, int64_t)   \
+    M(8, T, int64_t)   \
+    M(9, T, int128_t)  \
+    M(10, T, int128_t) \
+    M(11, T, int128_t) M(12, T, int128_t) M(13, T, int128_t) M(14, T, int128_t) M(15, T, int128_t) M(16, T, int128_t)
+
+        if (_scale_type == DecimalScaleType::kScaleUp) {
+            switch (_type_length) {
+                MX(DecimalScaleType::kScaleUp);
+            default:
+                __builtin_unreachable();
             }
-            dst_data[i] = DecimalType(value);
+        } else if (_scale_type == DecimalScaleType::kScaleDown) {
+            switch (_type_length) {
+                MX(DecimalScaleType::kScaleDown);
+            default:
+                __builtin_unreachable();
+            }
+        } else {
+            switch (_type_length) {
+                MX(DecimalScaleType::kNoScale);
+            default:
+                __builtin_unreachable();
+            }
         }
         dst_nullable_column->set_has_null(has_null);
         return Status::OK();
@@ -246,6 +311,7 @@ public:
 private:
     DecimalScaleType _scale_type = DecimalScaleType::kNoScale;
     DestPrimitiveType _scale_factor = 1;
+    int32_t _type_length = 0;
 };
 
 Status ColumnConverterFactory::create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
@@ -360,22 +426,26 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::FIXED_LEN_BYTE_ARRAY: {
+        int32_t type_length = field.type_length;
         if (col_type != PrimitiveType::TYPE_VARCHAR && col_type != PrimitiveType::TYPE_CHAR) {
             need_convert = true;
         }
         switch (col_type) {
         case PrimitiveType::TYPE_DECIMALV2:
             // All DecimalV2 use scale 9 as scale
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMALV2>>(field.scale, 9, type_length);
             break;
         case PrimitiveType::TYPE_DECIMAL32:
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL32>>(field.scale, typeDescriptor.scale,
+                                                                                    type_length);
             break;
         case PrimitiveType::TYPE_DECIMAL64:
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL64>>(field.scale, typeDescriptor.scale,
+                                                                                    type_length);
             break;
         case PrimitiveType::TYPE_DECIMAL128:
-            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale);
+            *converter = std::make_unique<BinaryToDecimalConverter<TYPE_DECIMAL128>>(field.scale, typeDescriptor.scale,
+                                                                                     type_length);
             break;
         default:
             break;
@@ -383,8 +453,8 @@ Status ColumnConverterFactory::create_converter(const ParquetField& field, const
         break;
     }
     case tparquet::Type::type::INT96: {
+        need_convert = true;
         if (col_type == PrimitiveType::TYPE_DATETIME) {
-            need_convert = true;
             auto _converter = std::make_unique<Int96ToDateTimeConverter>();
             RETURN_IF_ERROR(_converter->init(timezone));
             *converter = std::move(_converter);
@@ -455,7 +525,7 @@ Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, 
     // hive only support null column
     // TODO: support not null
     auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int32_t>>(
             src_nullable_column->data_column());
@@ -468,11 +538,9 @@ Status parquet::Int32ToDateConverter::convert(const vectorized::ColumnPtr& src, 
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
     size_t size = src_column->size();
+    memcpy(dst_null_data.data(), src_null_data.data(), size);
     for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
-        }
+        dst_data[i]._julian = src_data[i] + vectorized::date::UNIX_EPOCH_JULIAN;
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -496,7 +564,7 @@ Status Int96ToDateTimeConverter::convert(const vectorized::ColumnPtr& src, vecto
     // hive only support null column
     // TODO: support not null
     auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int96_t>>(
             src_nullable_column->data_column());
@@ -587,7 +655,7 @@ Status Int64ToDateTimeConverter::_convert_to_timestamp_column(const vectorized::
     // hive only support null column
     // TODO: support not null
     auto* dst_nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-    dst_nullable_column->resize(src_nullable_column->size());
+    dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
     auto* src_column = vectorized::ColumnHelper::as_raw_column<vectorized::FixedLengthColumn<int64_t>>(
             src_nullable_column->data_column());

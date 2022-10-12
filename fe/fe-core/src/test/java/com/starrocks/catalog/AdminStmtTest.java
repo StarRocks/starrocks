@@ -22,16 +22,14 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AdminSetReplicaStatusStmt;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.catalog.MaterializedIndex.IndexExtState;
-import com.starrocks.catalog.Replica.ReplicaStatus;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -74,14 +72,14 @@ public class AdminStmtTest {
 
     @Test
     public void testAdminSetReplicaStatus() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         Assert.assertNotNull(db);
         OlapTable tbl = (OlapTable) db.getTable("tbl1");
         Assert.assertNotNull(tbl);
         // tablet id, backend id
         List<Pair<Long, Long>> tabletToBackendList = Lists.newArrayList();
         for (Partition partition : tbl.getPartitions()) {
-            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+            for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.VISIBLE)) {
                 for (Tablet tablet : index.getTablets()) {
                     for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
                         tabletToBackendList.add(Pair.create(tablet.getId(), replica.getBackendId()));
@@ -122,7 +120,7 @@ public class AdminStmtTest {
             file.createNewFile();
             DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
 
-            SetReplicaStatusOperationLog log = new SetReplicaStatusOperationLog(10000, 100001, ReplicaStatus.BAD);
+            SetReplicaStatusOperationLog log = new SetReplicaStatusOperationLog(10000, 100001, Replica.ReplicaStatus.BAD);
             log.write(out);
             out.flush();
             out.close();

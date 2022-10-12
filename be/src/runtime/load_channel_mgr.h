@@ -65,8 +65,12 @@ public:
     void open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request, PTabletWriterOpenResult* response,
               google::protobuf::Closure* done);
 
-    void add_chunk(brpc::Controller* cntl, const PTabletWriterAddChunkRequest& request,
-                   PTabletWriterAddBatchResult* response, google::protobuf::Closure* done);
+    void add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
+
+    void add_chunks(const PTabletWriterAddChunksRequest& request, PTabletWriterAddBatchResult* response);
+
+    void add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
+                     PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done);
 
     void cancel(brpc::Controller* cntl, const PTabletWriterCancelRequest& request, PTabletWriterCancelResult* response,
                 google::protobuf::Closure* done);

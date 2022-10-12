@@ -76,6 +76,7 @@ struct TCreateTabletReq {
     13: optional TStorageFormat storage_format
     14: optional TTabletType tablet_type
     15: optional bool enable_persistent_index
+    16: optional Types.TCompressionType compression_type = Types.TCompressionType.LZ4_FRAME
 }
 
 struct TDropTabletReq {
@@ -99,8 +100,9 @@ struct TAlterTabletReqV2 {
     4: required Types.TSchemaHash new_schema_hash
     // version of data which this alter task should transform
     5: optional Types.TVersion alter_version
-    6: optional Types.TVersionHash alter_version_hash // Deprecated
     7: optional list<TAlterMaterializedViewParam> materialized_view_params
+    8: optional TTabletType tablet_type
+    9: optional i64 txn_id
 }
 
 struct TAlterMaterializedViewParam {
@@ -138,6 +140,8 @@ struct TPushReq {
     30: optional bool use_vectorized
     // 31 are used by spark load
     31: optional string timezone
+
+    32: optional TTabletType tablet_type
 }
 
 struct TCloneReq {
@@ -182,6 +186,13 @@ struct TUploadReq {
     2: required map<string, string> src_dest_map
     3: required Types.TNetworkAddress broker_addr
     4: optional map<string, string> broker_prop
+    // If use_broker is set, we will write hdfs thourgh broker
+    // If use_broker is not set, we will write through libhdfs/S3 directly
+    5: optional bool use_broker = false
+    // hdfs_write_buffer_size_kb for writing through lib hdfs directly
+    6: optional i32 hdfs_write_buffer_size_kb = 0
+    // properties from hdfs-site.xml, core-site.xml and load_properties
+    7: optional PlanNodes.THdfsProperties hdfs_properties 
 }
 
 struct TDownloadReq {
@@ -189,6 +200,13 @@ struct TDownloadReq {
     2: required map<string, string> src_dest_map
     3: required Types.TNetworkAddress broker_addr
     4: optional map<string, string> broker_prop
+    // If use_broker is set, we will write hdfs thourgh broker
+    // If use_broker is not set, we will write through libhdfs/S3 directly
+    5: optional bool use_broker = false
+    // hdfs_read_buffer_size_kb for writing through lib hdfs directly
+    6: optional i32 hdfs_read_buffer_size_kb = 0
+    // properties from hdfs-site.xml, core-site.xml and load_properties
+    7: optional PlanNodes.THdfsProperties hdfs_properties 
 }
 
 struct TSnapshotRequest {

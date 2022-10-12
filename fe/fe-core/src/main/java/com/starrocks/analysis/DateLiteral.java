@@ -32,8 +32,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -172,6 +170,10 @@ public class DateLiteral extends LiteralExpr {
 
     public static DateLiteral createMinValue(Type type) throws AnalysisException {
         return new DateLiteral(type, false);
+    }
+
+    public static DateLiteral createMaxValue(Type type) throws AnalysisException {
+        return new DateLiteral(type, true);
     }
 
     private void init(String s, Type type) throws AnalysisException {
@@ -447,7 +449,7 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(unixTimestamp(TimeZone.getDefault()));
+        return Objects.hash(super.hashCode(), Objects.hashCode(unixTimestamp(TimeZone.getDefault())));
     }
 
     @Override

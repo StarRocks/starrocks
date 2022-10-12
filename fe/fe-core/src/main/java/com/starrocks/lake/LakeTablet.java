@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -18,6 +18,8 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import java.util.Set;
+
+import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
 /**
  * This class represents the StarRocks lake tablet related metadata.
@@ -83,7 +85,7 @@ public class LakeTablet extends Tablet {
     public void getQueryableReplicas(List<Replica> allQuerableReplicas, List<Replica> localReplicas,
                                      long visibleVersion, long localBeId, int schemaHash) {
         for (long backendId : getBackendIds()) {
-            Replica replica = new Replica(-1, backendId, -1, null);
+            Replica replica = new Replica(getId(), backendId, -1, NORMAL);
             allQuerableReplicas.add(replica);
             if (localBeId != -1 && backendId == localBeId) {
                 localReplicas.add(replica);

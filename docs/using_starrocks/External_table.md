@@ -537,16 +537,16 @@ Description:
     |  VARCHAR  | VARCHAR   |
     |  CHAR  | CHAR   |
     |  DOUBLE | DOUBLE |
-    | FLOATE | FLOAT|
+    | FLOAT | FLOAT|
+    | DECIMAL | DECIMAL|
+    | ARRAY | ARRAY |
 
-Note:
-
-* Hive table schema changes **will not be automatically synchronized to the external table**. You must create another Hive external table in StarRocks.
-* Currently, the supported Hive storage formats are Parquet, ORC, and CSV.
-
- > If the storage format is CSV, quotation marks cannot be used as escape characters.
-
-* The SNAPPY and LZ4 compression formats are supported.
+> Note:
+>
+> * Hive table schema changes **will not be automatically synchronized to the external table**. You must create another Hive external table in StarRocks.
+> * Currently, the supported Hive storage formats are Parquet, ORC, and CSV.
+If the storage format is CSV, quotation marks cannot be used as escape characters.
+> * The SNAPPY and LZ4 compression formats are supported.
 
 ### Use a Hive external table
 
@@ -761,8 +761,9 @@ When you create an external table, you need to specify the data types of columns
 | UUID              | STRING / VARCHAR           |
 | FIXED(L)          | CHAR                       |
 | BINARY            | VARCHAR                    |
+| LIST              | ARRAY                      |
 
-StarRocks does not support querying Iceberg data whose data type is TIMESTAMPTZ, STRUCT, LIST, and MAP.
+StarRocks does not support querying Iceberg data whose data type is TIMESTAMPTZ, STRUCT, and MAP.
 
 #### Step 4: Query the data in Apache Iceberg
 

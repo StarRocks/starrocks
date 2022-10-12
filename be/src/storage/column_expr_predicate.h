@@ -1,5 +1,5 @@
 
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/olap_common.h"
 #include "storage/types.h"
@@ -68,6 +68,7 @@ private:
     // Share the ownership, is necessary to clone it
     void _add_expr_ctx(ExprContext* expr_ctx);
 
+    ObjectPool _pool;
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;

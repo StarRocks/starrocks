@@ -31,8 +31,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.DropBackendClause;
-import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DiskInfo;
@@ -56,6 +54,8 @@ import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.DropBackendClause;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import com.starrocks.system.Backend.BackendState;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -148,8 +148,11 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addComputeNode(computeNode.getId());
-        computeNode.setOwnerClusterName(DEFAULT_CLUSTER);
         computeNode.setBackendState(BackendState.using);
+    }
+
+    public boolean isSingleBackendAndComputeNode() {
+        return idToBackendRef.size() + idToComputeNodeRef.size() == 1;
     }
 
     /**
@@ -194,7 +197,6 @@ public class SystemInfoService {
         final Cluster cluster = GlobalStateMgr.getCurrentState().getCluster();
         Preconditions.checkState(cluster != null);
         cluster.addBackend(backend.getId());
-        backend.setOwnerClusterName(DEFAULT_CLUSTER);
         backend.setBackendState(BackendState.using);
     }
 
@@ -241,7 +243,7 @@ public class SystemInfoService {
         GlobalStateMgr.getCurrentState().getEditLog().logBackendStateChange(updateBackend);
 
         // Message
-        StringBuffer formatSb = new StringBuffer();
+        StringBuilder formatSb = new StringBuilder();
         String opMessage;
         formatSb.append("%s:%d's host has been modified to %s");
         if (candidateBackends.size() >= 2) {
@@ -293,7 +295,7 @@ public class SystemInfoService {
         if (null != cluster) {
             cluster.removeComputeNode(dropComputeNode.getId());
         } else {
-            LOG.error("Cluster " + dropComputeNode.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog()
@@ -303,7 +305,7 @@ public class SystemInfoService {
 
     public void dropBackends(DropBackendClause dropBackendClause) throws DdlException {
         List<Pair<String, Integer>> hostPortPairs = dropBackendClause.getHostPortPairs();
-        boolean needCheckUnforce = !dropBackendClause.isOldStyle() && !dropBackendClause.isForce();
+        boolean needCheckUnforce = !dropBackendClause.isForce();
 
         for (Pair<String, Integer> pair : hostPortPairs) {
             // check is already exist
@@ -397,16 +399,16 @@ public class SystemInfoService {
             // remove worker
             if (Config.integrate_starmgr) {
                 long starletPort = droppedBackend.getStarletPort();
-                if (starletPort == 0) {
-                    throw new DdlException("starletPort has not been updated by heartbeat from this backend");
+                // only need to remove worker after be reported its staretPort
+                if (starletPort != 0) {
+                    String workerAddr = droppedBackend.getHost() + ":" + starletPort;
+                    GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
                 }
-                String workerAddr = droppedBackend.getHost() + ":" + starletPort;
-                GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorker(workerAddr);
             }
 
             cluster.removeBackend(droppedBackend.getId());
         } else {
-            LOG.error("Cluster " + droppedBackend.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
         // log
         GlobalStateMgr.getCurrentState().getEditLog().logDropBackend(droppedBackend);
@@ -588,28 +590,42 @@ public class SystemInfoService {
         return backendIds;
     }
 
+    public List<Long> getAvailableBackendIds() {
+        ImmutableMap<Long, Backend> idToBackend = idToBackendRef;
+        List<Long> backendIds = Lists.newArrayList(idToBackend.keySet());
+
+        Iterator<Long> iter = backendIds.iterator();
+        while (iter.hasNext()) {
+            Backend backend = this.getBackend(iter.next());
+            if (backend == null || !backend.isAvailable()) {
+                iter.remove();
+            }
+        }
+        return backendIds;
+    }
+
     public List<Backend> getBackends() {
         return idToBackendRef.values().asList();
     }
 
-    public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAlive, boolean isCreate,
+    public List<Long> seqChooseBackendIdsByStorageMedium(int backendNum, boolean needAvailable, boolean isCreate,
                                                          TStorageMedium storageMedium) {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimitByStorageMedium(storageMedium))
                         .collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
-    public List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate) {
+    public List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate) {
         final List<Backend> backends =
                 getBackends().stream().filter(v -> !v.diskExceedLimit()).collect(Collectors.toList());
-        return seqChooseBackendIds(backendNum, needAlive, isCreate, backends);
+        return seqChooseBackendIds(backendNum, needAvailable, isCreate, backends);
     }
 
     // choose backends by round-robin
     // return null if not enough backend
     // use synchronized to run serially
-    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAlive, boolean isCreate,
+    public synchronized List<Long> seqChooseBackendIds(int backendNum, boolean needAvailable, boolean isCreate,
                                                        final List<Backend> srcBackends) {
         long lastBackendId;
 
@@ -622,6 +638,11 @@ public class SystemInfoService {
         // host -> BE list
         Map<String, List<Backend>> backendMaps = Maps.newHashMap();
         for (Backend backend : srcBackends) {
+            // If needAvailable is true, unavailable backend won't go into the pick list
+            if (needAvailable && !backend.isAvailable()) {
+                continue;
+            }
+
             if (backendMaps.containsKey(backend.getHost())) {
                 backendMaps.get(backend.getHost()).add(backend);
             } else {
@@ -666,12 +687,6 @@ public class SystemInfoService {
                 break;
             }
 
-            if (needAlive) {
-                if (!backend.isAlive() || backend.isDecommissioned()) {
-                    continue;
-                }
-            }
-
             long backendId = backend.getId();
             if (!backendIds.contains(backendId)) {
                 backendIds.add(backendId);
@@ -682,25 +697,25 @@ public class SystemInfoService {
             }
         }
 
-        if (isCreate) {
-            lastBackendIdForCreation = lastBackendId;
-        } else {
-            lastBackendIdForOther = lastBackendId;
-        }
         if (backendIds.size() != backendNum) {
             failed = true;
         }
 
         if (!failed) {
+            if (isCreate) {
+                lastBackendIdForCreation = lastBackendId;
+            } else {
+                lastBackendIdForOther = lastBackendId;
+            }
             return backendIds;
         }
 
         // debug
         for (Backend backend : backends) {
-            LOG.debug("random select: {}", backend.toString());
+            LOG.debug("random select: {}", backend);
         }
 
-        return null;
+        return Collections.emptyList();
     }
 
     public ImmutableMap<Long, Backend> getIdToBackend() {
@@ -738,20 +753,6 @@ public class SystemInfoService {
             backends.add(idToComputeNode.get(backendId));
         }
         return ImmutableList.copyOf(backends);
-    }
-
-    public ImmutableMap<Long, Backend> getBackendsInCluster(String cluster) {
-        if (Strings.isNullOrEmpty(cluster)) {
-            return idToBackendRef;
-        }
-
-        Map<Long, Backend> retMaps = Maps.newHashMap();
-        for (Backend backend : idToBackendRef.values().asList()) {
-            if (cluster.equals(backend.getOwnerClusterName())) {
-                retMaps.put(backend.getId(), backend);
-            }
-        }
-        return ImmutableMap.copyOf(retMaps);
     }
 
     public long getBackendReportVersion(long backendId) {
@@ -829,13 +830,11 @@ public class SystemInfoService {
         try {
             String s = Text.readString(dis);
             SystemInfoService.SerializeData data = GsonUtils.GSON.fromJson(s, SystemInfoService.SerializeData.class);
-            if (data != null) {
-                if (data.computeNodes != null) {
-                    for (ComputeNode computeNode : data.computeNodes) {
-                        replayAddComputeNode(computeNode);
-                    }
-                    computeNodeSize = data.computeNodes.size();
+            if (data != null && data.computeNodes != null) {
+                for (ComputeNode computeNode : data.computeNodes) {
+                    replayAddComputeNode(computeNode);
                 }
+                computeNodeSize = data.computeNodes.size();
             }
             checksum ^= computeNodeSize;
             LOG.info("finished replaying compute node from image");
@@ -895,7 +894,6 @@ public class SystemInfoService {
 
     public void replayAddComputeNode(ComputeNode newComputeNode) {
         // update idToComputeNode
-        newComputeNode.setOwnerClusterName(DEFAULT_CLUSTER);
         newComputeNode.setBackendState(BackendState.using);
         Map<Long, ComputeNode> copiedComputeNodes = Maps.newHashMap(idToComputeNodeRef);
         copiedComputeNodes.put(newComputeNode.getId(), newComputeNode);
@@ -917,7 +915,6 @@ public class SystemInfoService {
     public void replayAddBackend(Backend newBackend) {
         // update idToBackend
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            newBackend.setOwnerClusterName(DEFAULT_CLUSTER);
             newBackend.setBackendState(BackendState.using);
         }
         Map<Long, Backend> copiedBackends = Maps.newHashMap(idToBackendRef);
@@ -985,7 +982,7 @@ public class SystemInfoService {
                 GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerId, workerAddr);
             }
         } else {
-            LOG.error("Cluster " + backend.getOwnerClusterName() + " no exist.");
+            LOG.error("Cluster {} no exist.", SystemInfoService.DEFAULT_CLUSTER);
         }
     }
 
@@ -1010,7 +1007,6 @@ public class SystemInfoService {
         memoryBe.setLastStartTime(be.getLastStartTime());
         memoryBe.setDisks(be.getDisks());
         memoryBe.setBackendState(be.getBackendState());
-        memoryBe.setOwnerClusterName(be.getOwnerClusterName());
         memoryBe.setDecommissionType(be.getDecommissionType());
     }
 

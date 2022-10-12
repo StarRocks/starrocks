@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -96,6 +96,10 @@ public class ListPartitionPruner implements PartitionPruner {
 
     public List<ScalarOperator> getNoEvalConjuncts() {
         return noEvalConjuncts;
+    }
+
+    public List<ScalarOperator> getPartitionConjuncts() {
+        return partitionConjuncts;
     }
 
     /**

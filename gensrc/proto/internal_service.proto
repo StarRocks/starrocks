@@ -28,6 +28,7 @@ import "data.proto";
 import "descriptors.proto";
 import "status.proto";
 import "types.proto";
+import "olap_common.proto";
 
 option cc_generic_services = true;
 
@@ -120,6 +121,7 @@ message PTransmitRuntimeFilterResult {
 message PTabletWithPartition {
     required int64 partition_id = 1;
     required int64 tablet_id = 2;
+    repeated PNetworkAddress replicas = 3;
 }
 
 message PTabletInfo {
@@ -127,6 +129,7 @@ message PTabletInfo {
     required int32 schema_hash = 2;
     repeated string invalid_dict_cache_columns = 3;
     repeated string valid_dict_cache_columns = 4;
+    optional int64 node_id = 5;
 }
 
 // Open a tablet writer.
@@ -140,13 +143,17 @@ message PTabletWriterOpenRequest {
     required bool need_gen_rollup = 7; // Deprecated
     optional int64 load_mem_limit = 8;
     optional int64 load_channel_timeout_s = 9;
+    optional int64 node_id = 10;
     optional bool is_vectorized = 20; // Deprecate if we confirm all customer have upgrade to 2.1
     optional bool is_lake_tablet = 21;
     optional string txn_trace_parent = 22;
+    optional bool is_replicated_storage = 23;
+    optional int64 timeout_ms = 24;
 };
 
 message PTabletWriterOpenResult {
     required StatusPB status = 1;
+    optional bool is_repeated_chunk = 2 [default = false];
 };
 
 // Add batch to tablet writer.
@@ -183,7 +190,16 @@ message PTabletWriterAddChunkRequest {
     // valid partition ids that would write in this writer
     repeated int64 partition_ids = 8;
     optional int64 txn_id = 9;
+    optional int64 timeout_ms = 10;
 };
+
+message PTabletWriterAddChunksRequest {
+    optional PUniqueId id = 1;
+    repeated PTabletWriterAddChunkRequest requests = 2;
+    // all request's chunk are repeated if true
+    // only first request's chunk will be set
+    optional bool is_repeated_chunk = 3 [default = false];
+}
 
 message PTabletWriterAddBatchResult {
     required StatusPB status = 1;
@@ -192,29 +208,42 @@ message PTabletWriterAddBatchResult {
     optional int64 wait_lock_time_us = 4;
 };
 
+message PTabletWriterAddSegmentRequest {
+    optional PUniqueId id = 1;
+    optional int64 index_id = 2;
+    optional int64 tablet_id = 3;
+    optional int64 txn_id = 4;
+    optional bool eos = 5;
+    optional int64 num_segments = 6;
+    optional SegmentPB segment = 7;
+};
+
+message PTabletWriterAddSegmentResult {
+    optional StatusPB status = 1;
+    optional int64 execution_time_us = 2;
+    repeated PTabletInfo tablet_vec = 3;
+};
+
 // Tablet writer cancel.
 message PTabletWriterCancelRequest {
     required PUniqueId id = 1;
     required int64 index_id = 2;
     required int32 sender_id = 3;
     optional int64 txn_id = 4;
+    optional int64 tablet_id = 5;
 };
 
 message PTabletWriterCancelResult {
 };
 
-// If request is null, there will be an error when brpc encode request.
 message PExecPlanFragmentRequest {
-    optional bool pad = 1;
 };
 
 message PExecPlanFragmentResult {
     required StatusPB status = 1;
 };
 
-// If request is null, there will be an error when brpc encode request.
 message PExecBatchPlanFragmentsRequest {
-    optional bool pad = 1;
 };
 
 message PExecBatchPlanFragmentsResult {
@@ -278,16 +307,17 @@ message PKafkaMetaProxyRequest {
 message PKafkaOffsetProxyRequest {
     optional PKafkaLoadInfo kafka_info = 1;
     repeated int32 partition_ids = 2;
-}
+};
 
 message PKafkaOffsetBatchProxyRequest {
     repeated PKafkaOffsetProxyRequest requests = 1;
-}
+};
 
 message PProxyRequest {
     optional PKafkaMetaProxyRequest kafka_meta_request = 1;
     optional PKafkaOffsetProxyRequest kafka_offset_request = 101;
     optional PKafkaOffsetBatchProxyRequest kafka_offset_batch_request = 102;
+    optional int64 timeout = 103;
 };
 
 message PKafkaMetaProxyResult {
@@ -312,6 +342,53 @@ message PProxyResult {
     optional PKafkaOffsetBatchProxyResult kafka_offset_batch_result = 102;
 };
 
+message PPulsarLoadInfo {
+    required string service_url = 1;
+    required string topic = 2;
+    required string subscription = 3;
+    repeated PStringPair properties = 4;
+};
+
+message PPulsarMetaProxyRequest {
+    optional PPulsarLoadInfo pulsar_info = 1;
+};
+
+message PPulsarBacklogProxyRequest {
+    optional PPulsarLoadInfo pulsar_info = 1;
+    repeated string partitions = 2;
+};
+
+message PPulsarBacklogBatchProxyRequest {
+    repeated PPulsarBacklogProxyRequest requests = 1;
+};
+
+message PPulsarProxyRequest {
+    optional PPulsarMetaProxyRequest pulsar_meta_request = 1;
+    optional PPulsarBacklogProxyRequest pulsar_backlog_request = 101;
+    optional PPulsarBacklogBatchProxyRequest pulsar_backlog_batch_request = 102;
+    optional int64 timeout = 103;
+};
+
+message PPulsarMetaProxyResult {
+    repeated string partitions = 1;
+};
+
+message PPulsarBacklogProxyResult {
+    repeated string partitions = 1;
+    repeated int64 backlog_nums = 2;
+}
+
+message PPulsarBacklogBatchProxyResult {
+    repeated PPulsarBacklogProxyResult results = 1;
+}
+
+message PPulsarProxyResult {
+    required StatusPB status = 1;
+    optional PPulsarMetaProxyResult pulsar_meta_result = 2;
+    optional PPulsarBacklogProxyResult pulsar_backlog_result = 101;
+    optional PPulsarBacklogBatchProxyResult pulsar_backlog_batch_result = 102;
+};
+
 // NOTE(zc): If you want to add new method here,
 // you must add same method to 'doris_internal_service.proto'.
 service PInternalService {
@@ -325,10 +402,13 @@ service PInternalService {
     rpc tablet_writer_cancel(PTabletWriterCancelRequest) returns (PTabletWriterCancelResult);
     rpc trigger_profile_report(PTriggerProfileReportRequest) returns (PTriggerProfileReportResult);
     rpc get_info(PProxyRequest) returns (PProxyResult); 
+    rpc get_pulsar_info(PPulsarProxyRequest) returns (PPulsarProxyResult); 
 
     // Transmit vectorized data between backends.
     rpc transmit_chunk(PTransmitChunkParams) returns (PTransmitChunkResult);
     rpc tablet_writer_add_chunk(starrocks.PTabletWriterAddChunkRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_chunks(starrocks.PTabletWriterAddChunksRequest) returns (starrocks.PTabletWriterAddBatchResult);
+    rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 };
 

@@ -39,6 +39,7 @@
 #include "runtime/routine_load/routine_load_task_executor.h"
 #include "runtime/runtime_filter_worker.h"
 #include "service/brpc.h"
+#include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/uid_util.h"
 
@@ -50,7 +51,10 @@ using PromiseStatus = std::promise<Status>;
 using PromiseStatusSharedPtr = std::shared_ptr<PromiseStatus>;
 
 template <typename T>
-PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env) : _exec_env(exec_env) {}
+PInternalServiceImplBase<T>::PInternalServiceImplBase(ExecEnv* exec_env)
+        : _exec_env(exec_env),
+          _async_thread_pool("async_thread_pool", config::internal_service_async_thread_num,
+                             config::internal_service_async_thread_num) {}
 
 template <typename T>
 PInternalServiceImplBase<T>::~PInternalServiceImplBase() = default;
@@ -198,6 +202,24 @@ void PInternalServiceImplBase<T>::tablet_writer_add_chunk(google::protobuf::RpcC
                                                           const PTabletWriterAddChunkRequest* request,
                                                           PTabletWriterAddBatchResult* response,
                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_chunks(google::protobuf::RpcController* cntl_base,
+                                                           const PTabletWriterAddChunksRequest* request,
+                                                           PTabletWriterAddBatchResult* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::tablet_writer_add_segment(google::protobuf::RpcController* controller,
+                                                            const PTabletWriterAddSegmentRequest* request,
+                                                            PTabletWriterAddSegmentResult* response,
+                                                            google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     response->mutable_status()->set_status_code(TStatusCode::NOT_IMPLEMENTED_ERROR);
 }
@@ -382,10 +404,45 @@ template <typename T>
 void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* controller, const PProxyRequest* request,
                                            PProxyResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
+
+    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
+
+    int timeout_ms =
+            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_kafka_timeout_second * 1000;
+
+    // watch estimates the interval before the task is actually executed.
+    MonotonicStopWatch watch;
+    watch.start();
+
+    if (!_async_thread_pool.try_offer([&]() {
+            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
+            _get_info_impl(request, response, &latch, timeout_ms);
+        })) {
+        Status::ServiceUnavailable(
+                "too busy to get kafka info, please check the kafka broker status, or set "
+                "internal_service_async_thread_num bigger")
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+
+    latch.wait();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_get_info_impl(
+        const PProxyRequest* request, PProxyResult* response,
+        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
+    DeferOp defer([latch] { latch->count_down(); });
+
+    if (timeout_ms <= 0) {
+        Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
+        return;
+    }
+
     if (request->has_kafka_meta_request()) {
         std::vector<int32_t> partition_ids;
         Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_meta(request->kafka_meta_request(),
-                                                                                      &partition_ids);
+                                                                                      &partition_ids, timeout_ms);
         if (st.ok()) {
             PKafkaMetaProxyResult* kafka_result = response->mutable_kafka_meta_result();
             for (int32_t id : partition_ids) {
@@ -399,7 +456,7 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
         std::vector<int64_t> beginning_offsets;
         std::vector<int64_t> latest_offsets;
         Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                request->kafka_offset_request(), &beginning_offsets, &latest_offsets);
+                request->kafka_offset_request(), &beginning_offsets, &latest_offsets, timeout_ms);
         if (st.ok()) {
             auto result = response->mutable_kafka_offset_result();
             for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -412,11 +469,20 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
         return;
     }
     if (request->has_kafka_offset_batch_request()) {
+        MonotonicStopWatch watch;
+        watch.start();
         for (auto offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
+
+            auto left_ms = timeout_ms - watch.elapsed_time() / 1000 / 1000;
+            if (left_ms <= 0) {
+                Status::TimedOut("get kafka info timeout").to_protobuf(response->mutable_status());
+                return;
+            }
+
             Status st = _exec_env->routine_load_task_executor()->get_kafka_partition_offset(
-                    offset_req, &beginning_offsets, &latest_offsets);
+                    offset_req, &beginning_offsets, &latest_offsets, left_ms);
             auto offset_result = response->mutable_kafka_offset_batch_result()->add_results();
             if (st.ok()) {
                 for (int i = 0; i < beginning_offsets.size(); i++) {
@@ -426,6 +492,94 @@ void PInternalServiceImplBase<T>::get_info(google::protobuf::RpcController* cont
                 }
             } else {
                 response->clear_kafka_offset_batch_result();
+                st.to_protobuf(response->mutable_status());
+                return;
+            }
+        }
+    }
+    Status::OK().to_protobuf(response->mutable_status());
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::get_pulsar_info(google::protobuf::RpcController* controller,
+                                                  const PPulsarProxyRequest* request, PPulsarProxyResult* response,
+                                                  google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+
+    GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
+
+    int timeout_ms =
+            request->has_timeout() ? request->timeout() * 1000 : config::routine_load_pulsar_timeout_second * 1000;
+
+    // watch estimates the interval before the task is actually executed.
+    MonotonicStopWatch watch;
+    watch.start();
+
+    if (!_async_thread_pool.try_offer([&]() {
+            timeout_ms -= watch.elapsed_time() / 1000 / 1000;
+            _get_pulsar_info_impl(request, response, &latch, timeout_ms);
+        })) {
+        Status::ServiceUnavailable(
+                "too busy to get pulsar info, please check the pulsar service status, or set "
+                "internal_service_async_thread_num bigger")
+                .to_protobuf(response->mutable_status());
+        return;
+    }
+
+    latch.wait();
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
+        const PPulsarProxyRequest* request, PPulsarProxyResult* response,
+        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms) {
+    DeferOp defer([latch] { latch->count_down(); });
+
+    if (timeout_ms <= 0) {
+        Status::TimedOut("get pulsar info timeout").to_protobuf(response->mutable_status());
+        return;
+    }
+
+    if (request->has_pulsar_meta_request()) {
+        std::vector<std::string> partitions;
+        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_meta(request->pulsar_meta_request(),
+                                                                                       &partitions);
+        if (st.ok()) {
+            PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
+            for (std::string p : partitions) {
+                pulsar_result->add_partitions(p);
+            }
+        }
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
+    if (request->has_pulsar_backlog_request()) {
+        std::vector<int64_t> backlog_nums;
+        Status st = _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(
+                request->pulsar_backlog_request(), &backlog_nums);
+        if (st.ok()) {
+            auto result = response->mutable_pulsar_backlog_result();
+            for (int i = 0; i < backlog_nums.size(); i++) {
+                result->add_partitions(request->pulsar_backlog_request().partitions(i));
+                result->add_backlog_nums(backlog_nums[i]);
+            }
+        }
+        st.to_protobuf(response->mutable_status());
+        return;
+    }
+    if (request->has_pulsar_backlog_batch_request()) {
+        for (auto backlog_req : request->pulsar_backlog_batch_request().requests()) {
+            std::vector<int64_t> backlog_nums;
+            Status st =
+                    _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);
+            auto backlog_result = response->mutable_pulsar_backlog_batch_result()->add_results();
+            if (st.ok()) {
+                for (int i = 0; i < backlog_nums.size(); i++) {
+                    backlog_result->add_partitions(backlog_req.partitions(i));
+                    backlog_result->add_backlog_nums(backlog_nums[i]);
+                }
+            } else {
+                response->clear_pulsar_backlog_batch_result();
                 st.to_protobuf(response->mutable_status());
                 return;
             }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -11,6 +11,7 @@
 #include "exec/pipeline/pipeline_fwd.h"
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
+#include "runtime/profile_report_worker.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
@@ -105,10 +106,6 @@ public:
     void add_cur_scan_stats_item(const QueryStatisticsItemPB& stats_item);
     const std::vector<QueryStatisticsItemPB>& get_cur_scan_stats_items() { return _cur_scan_stats_items; };
 
-    // Record the cpu time of the query run, for big query checking
-    int64_t init_wg_cpu_cost() const { return _init_wg_cpu_cost; }
-    void set_init_wg_cpu_cost(int64_t wg_cpu_cost) { _init_wg_cpu_cost = wg_cpu_cost; }
-
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
     int64_t query_begin_time() const { return _query_begin_time; }
@@ -153,7 +150,6 @@ private:
     std::vector<QueryStatisticsItemPB> _cur_scan_stats_items;
 
     int64_t _scan_limit = 0;
-    int64_t _init_wg_cpu_cost = 0;
 };
 
 class QueryContextManager {
@@ -167,6 +163,14 @@ public:
     bool remove(const TUniqueId& query_id);
     // used for graceful exit
     void clear();
+
+    void report_fragments(const std::vector<starrocks::PipeLineReportTaskKey>& non_pipeline_need_report_fragment_ids);
+
+    void report_fragments_with_same_host(
+            const std::vector<std::shared_ptr<FragmentContext>>& need_report_fragment_context,
+            std::vector<bool>& reported, const TNetworkAddress& last_coord_addr,
+            std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
+            std::vector<int32_t>& cur_batch_report_indexes);
 
 private:
     static void _clean_func(QueryContextManager* manager);

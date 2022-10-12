@@ -21,15 +21,23 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
-import com.starrocks.analysis.RecoverPartitionStmt;
+import com.google.common.collect.Lists;
+import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.ShardStorageInfo;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -47,13 +55,48 @@ public class DropPartitionTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         // create database
         String createDbStmtStr = "create database test;";
-        String createTablleStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
+        String createTableStr = "create table test.tbl1(d1 date, k1 int, k2 bigint) duplicate key(d1, k1) "
                 + "PARTITION BY RANGE(d1) (PARTITION p20210201 VALUES [('2021-02-01'), ('2021-02-02')),"
                 + "PARTITION p20210202 VALUES [('2021-02-02'), ('2021-02-03')),"
                 + "PARTITION p20210203 VALUES [('2021-02-03'), ('2021-02-04'))) distributed by hash(k1) "
                 + "buckets 1 properties('replication_num' = '1');";
         createDb(createDbStmtStr);
-        createTable(createTablleStr);
+        createTable(createTableStr);
+
+        Config.use_staros = true;
+        StarOSAgent agent = new StarOSAgent();
+        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
+        ShardStorageInfo shardStorageInfo =
+                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+
+        new Expectations(agent) {
+            {
+                agent.getServiceShardStorageInfo();
+                result = shardStorageInfo;
+                agent.createShards(anyInt, (ShardStorageInfo) any);
+                returns(Lists.newArrayList(10001L, 10002L, 10003L),
+                        Lists.newArrayList(10004L, 10005L, 10006L),
+                        Lists.newArrayList(10007L, 10008L, 10009L));
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
+            }
+        };
+        Deencapsulation.setField(GlobalStateMgr.getCurrentState(), "starOSAgent", agent);
+
+        String createLakeTableStr = "create table test.lake_table(k1 date, k2 int, k3 smallint, v1 varchar(2048), "
+                + "v2 datetime default '2014-02-04 15:36:00')"
+                + " engine = starrocks duplicate key(k1, k2, k3)"
+                + " PARTITION BY RANGE(k1, k2, k3)"
+                + " (PARTITION p1 VALUES [(\"2014-01-01\", \"10\", \"200\"), (\"2014-01-01\", \"20\", \"300\")),"
+                + " PARTITION p2 VALUES [(\"2014-06-01\", \"100\", \"200\"), (\"2014-07-01\", \"100\", \"300\")))"
+                + " DISTRIBUTED BY HASH(k2) BUCKETS 3"
+                + " PROPERTIES ( \"enable_storage_cache\" = \"true\", \"storage_cache_ttl\" = \"3600\");";
+        createTable(createLakeTableStr);
+    }
+
+    @AfterClass
+    public static void afterClass() {
+        Config.use_staros = false;
     }
 
     private static void createDb(String sql) throws Exception {
@@ -73,7 +116,7 @@ public class DropPartitionTest {
 
     @Test
     public void testNormalDropPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("tbl1");
         Partition partition = table.getPartition("p20210201");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
@@ -95,7 +138,7 @@ public class DropPartitionTest {
 
     @Test
     public void testForceDropPartition() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("tbl1");
         Partition partition = table.getPartition("p20210202");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
@@ -116,7 +159,7 @@ public class DropPartitionTest {
 
     @Test
     public void testDropPartitionAndReserveTablets() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:test");
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
         OlapTable table = (OlapTable) db.getTable("tbl1");
         Partition partition = table.getPartition("p20210203");
         long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
@@ -126,5 +169,47 @@ public class DropPartitionTest {
         partition = table.getPartition("p20210203");
         Assert.assertEquals(1, replicaList.size());
         Assert.assertNull(partition);
+    }
+
+    @Test
+    public void testNormalDropLakePartition() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("lake_table");
+        Partition partition = table.getPartition("p1");
+        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+        String dropPartitionSql = " alter table test.lake_table drop partition p1;";
+        dropPartition(dropPartitionSql);
+        List<Replica> replicaList =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        partition = table.getPartition("p1");
+        Assert.assertNull(partition);
+        String recoverPartitionSql = "recover partition p1 from test.lake_table";
+        RecoverPartitionStmt recoverPartitionStmt =
+                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
+        GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt);
+        partition = table.getPartition("p1");
+        Assert.assertNotNull(partition);
+        Assert.assertEquals("p1", partition.getName());
+    }
+
+    @Test
+    public void testForceDropLakePartition() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        OlapTable table = (OlapTable) db.getTable("lake_table");
+        Partition partition = table.getPartition("p1");
+        long tabletId = partition.getBaseIndex().getTablets().get(0).getId();
+        String dropPartitionSql = " alter table test.lake_table drop partition p1 force;";
+        dropPartition(dropPartitionSql);
+        List<Replica> replicaList =
+                GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(tabletId);
+        partition = table.getPartition("p1");
+        Assert.assertTrue(replicaList.isEmpty());
+        Assert.assertNull(partition);
+        String recoverPartitionSql = "recover partition p1 from test.lake_table";
+        RecoverPartitionStmt recoverPartitionStmt =
+                (RecoverPartitionStmt) UtFrameUtils.parseStmtWithNewParser(recoverPartitionSql, connectContext);
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "No partition named p1 in table lake_table",
+                () -> GlobalStateMgr.getCurrentState().recoverPartition(recoverPartitionStmt));
     }
 }

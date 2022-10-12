@@ -84,16 +84,15 @@ public:
     /// If 'auto_unregister' is true, never call unregister_from_parent().
     /// If 'log_usage_if_zero' is false, this tracker (and its children) will not be included
     /// in LogUsage() output if consumption is 0.
-    explicit MemTracker(int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr,
-                        bool auto_unregister = true);
+    explicit MemTracker(int64_t byte_limit = -1, std::string label = std::string(), MemTracker* parent = nullptr);
 
     explicit MemTracker(Type type, int64_t byte_limit = -1, std::string label = std::string(),
-                        MemTracker* parent = nullptr, bool auto_unregister = true);
+                        MemTracker* parent = nullptr);
 
     /// C'tor for tracker for which consumption counter is created as part of a profile.
     /// The counter is created with name COUNTER_NAME.
     MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label = std::string(),
-               MemTracker* parent = nullptr, bool auto_unregister = true);
+               MemTracker* parent = nullptr);
 
     ~MemTracker();
 
@@ -304,19 +303,22 @@ private:
     // Iterator into _parent->_child_trackers for this object. Stored to have O(1)
     // remove.
     std::list<MemTracker*>::iterator _child_tracker_it;
-
-    // If true, calls unregister_from_parent() in the dtor. This is only used for
-    // the query wide trackers to remove it from the process mem tracker. The
-    // process tracker never gets deleted so it is safe to reference it in the dtor.
-    // The query tracker has lifetime shared by multiple plan fragments so it's hard
-    // to do cleanup another way.
-    bool _auto_unregister = false;
 };
+
+#define MEM_TRACKER_SAFE_CONSUME(mem_tracker, mem_bytes) \
+    if (LIKELY((mem_tracker) != nullptr)) {              \
+        (mem_tracker)->consume(mem_bytes);               \
+    }
+
+#define MEM_TRACKER_SAFE_RELEASE(mem_tracker, mem_bytes) \
+    if (LIKELY((mem_tracker) != nullptr)) {              \
+        (mem_tracker)->release(mem_bytes);               \
+    }
 
 template <typename T>
 class DeleterWithMemTracker {
 public:
-    DeleterWithMemTracker(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
+    explicit DeleterWithMemTracker(MemTracker* mem_tracker) : _mem_tracker(mem_tracker) {}
 
     void operator()(T* ptr) const {
         _mem_tracker->release(ptr->mem_usage());

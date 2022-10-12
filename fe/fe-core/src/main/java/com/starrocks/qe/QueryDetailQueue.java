@@ -30,12 +30,12 @@ import java.util.List;
 // Queue of QueryDetail.
 // It's used to collect queries for monitor.
 public class QueryDetailQueue {
-    private static final LinkedList<QueryDetail> totalQueries = new LinkedList<QueryDetail>();
+    private static final LinkedList<QueryDetail> TOTAL_QUERIES = new LinkedList<QueryDetail>();
 
     //starrocks-manager pull queries every 1 second
     //metrics calculate query latency every 15 second
     //do not set cacheTime lower than these time
-    private static final long cacheTimeNS = 30000000000L;
+    private static final long CACHE_TIME_NS = 30000000000L;
     private static long latestMS;
     private static long latestMSCnt;
 
@@ -43,10 +43,10 @@ public class QueryDetailQueue {
         //set event time here to guarantee order
         long now = getCurrentTimeNS();
         queryDetail.setEventTime(now);
-        totalQueries.add(queryDetail);
+        TOTAL_QUERIES.add(queryDetail);
 
-        Iterator<QueryDetail> it = totalQueries.iterator();
-        long deleteTime = now - cacheTimeNS;
+        Iterator<QueryDetail> it = TOTAL_QUERIES.iterator();
+        long deleteTime = now - CACHE_TIME_NS;
         while (it.hasNext()) {
             QueryDetail detail = it.next();
             if (detail.getEventTime() < deleteTime) {
@@ -59,7 +59,7 @@ public class QueryDetailQueue {
 
     public static synchronized List<QueryDetail> getQueryDetailsAfterTime(long eventTime) {
         List<QueryDetail> results = Lists.newArrayList();
-        for (QueryDetail queryDetail : totalQueries) {
+        for (QueryDetail queryDetail : TOTAL_QUERIES) {
             if (queryDetail.getEventTime() > eventTime) {
                 results.add(queryDetail);
             }

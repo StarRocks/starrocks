@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <numeric>
 
@@ -8,7 +8,6 @@
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
 #include "column/datum.h"
-#include "column/fixed_length_column_base.h"
 #include "column/json_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
@@ -107,7 +106,7 @@ public:
 
     // General implementation
     template <class ColumnType>
-    Status do_visit(const ColumnType&) {
+    Status do_visit_slow(const ColumnType&) {
         auto cmp = [&](size_t lhs_index, size_t rhs_index) {
             int x = _left_col->compare_at(lhs_index, rhs_index, *_right_col, _null_first);
             if (_sort_order == -1) {
@@ -143,6 +142,11 @@ public:
         return do_merge(cmp, cmp_left, cmp_right);
     }
 
+    template <class ColumnType>
+    Status do_visit(const ColumnType& _) {
+        return do_visit_slow(_);
+    }
+
     // Specific version for FixedlengthColumn
     template <class T>
     Status do_visit(const FixedLengthColumn<T>& _) {
@@ -162,10 +166,19 @@ public:
         return merge_ordinary_column<Container, Slice>(left_data, right_data);
     }
 
-    // TODO: Murphy
-    // Status do_visit(const NullableColumn& _) {
-    // return Status::NotSupported("TODO");
-    // }
+    Status do_visit(const NullableColumn& _) {
+        // Fast path
+        if (!_left_col->has_null() && !_right_col->has_null()) {
+            DCHECK(_left_col->is_nullable() && _right_col->is_nullable());
+            const auto* lhs_data = down_cast<const NullableColumn*>(_left_col)->data_column().get();
+            const auto* rhs_data = down_cast<const NullableColumn*>(_right_col)->data_column().get();
+            MergeTwoColumn merge2({_sort_order, _null_first}, lhs_data, rhs_data, _equal_ranges, _perm);
+            return lhs_data->accept(&merge2);
+        }
+
+        // Slow path
+        return do_visit_slow(_);
+    }
 
 private:
     constexpr static uint32_t kLeftIndex = 0;
@@ -316,27 +329,36 @@ ChunkUniquePtr SortedRun::clone_slice() const {
     }
 }
 
-ChunkPtr SortedRun::steal_chunk(size_t size) {
+ChunkPtr SortedRun::steal_chunk(size_t size, size_t skipped_rows) {
     if (empty()) {
         return {};
     }
-    if (size >= num_rows()) {
+    if (skipped_rows >= num_rows()) {
+        // all data should be skipped
+        chunk.reset();
+        range.first = range.second = 0;
+        return {};
+    }
+
+    size_t reserved_rows = num_rows() - skipped_rows;
+
+    if (size >= reserved_rows) {
         ChunkPtr res;
-        if (range.first == 0 && range.second == chunk->num_rows()) {
+        if (skipped_rows == 0 && range.first == 0 && range.second == chunk->num_rows()) {
             // No others reference this chunk
             res = chunk;
         } else {
-            res = chunk->clone_empty(num_rows());
-            res->append(*chunk, range.first, num_rows());
+            res = chunk->clone_empty(reserved_rows);
+            res->append(*chunk, range.first + skipped_rows, reserved_rows);
         }
         range.first = range.second = 0;
         chunk.reset();
         return res;
     } else {
-        size_t required_rows = std::min(size, num_rows());
+        size_t required_rows = std::min(size, reserved_rows);
         ChunkPtr res = chunk->clone_empty(required_rows);
-        res->append(*chunk, range.first, required_rows);
-        range.first += required_rows;
+        res->append(*chunk, range.first + skipped_rows, required_rows);
+        range.first += skipped_rows + required_rows;
         return res;
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -160,6 +160,9 @@ struct DecimalBinaryFunction {
                 all_null = adjust_evaluate<lhs_is_const, rhs_is_const, true, BinaryOperator>(
                         num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
             }
+        } else if constexpr (is_decimal_fast_mul_op<Op>) {
+            all_null = adjust_evaluate<lhs_is_const, rhs_is_const, false, BinaryOperator>(
+                    num_rows, lhs_data, rhs_data, result_data, nulls, &has_null, adjust_scale);
         }
 
         if constexpr (check_overflow) {

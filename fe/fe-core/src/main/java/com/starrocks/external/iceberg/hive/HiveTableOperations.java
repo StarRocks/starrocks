@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.iceberg.hive;
 
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import com.google.common.base.Strings;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.NoSuchObjectException;
@@ -13,6 +14,7 @@ import org.apache.iceberg.ClientPool;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.exceptions.NoSuchIcebergTableException;
 import org.apache.iceberg.exceptions.NoSuchTableException;
+import org.apache.iceberg.exceptions.NotFoundException;
 import org.apache.iceberg.io.FileIO;
 import org.apache.thrift.TException;
 
@@ -77,6 +79,10 @@ public class HiveTableOperations extends BaseMetastoreTableOperations {
             validateTableIsIceberg(table, fullName);
 
             metadataLocation = table.getParameters().get(METADATA_LOCATION_PROP);
+            if (Strings.isNullOrEmpty(metadataLocation)) {
+                throw new NotFoundException("Property 'metadata_location' can not be found in table %s.%s. " +
+                        "Probably this table is created by Spark2, which is not supported.", database, tableName);
+            }
 
         } catch (NoSuchObjectException e) {
             if (currentMetadataLocation() != null) {

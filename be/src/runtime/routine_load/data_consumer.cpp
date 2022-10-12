@@ -273,15 +273,15 @@ Status KafkaDataConsumer::group_consume(TimedBlockingQueue<RdKafka::Message*>* q
 
 Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_ids,
                                                std::vector<int64_t>* beginning_offsets,
-                                               std::vector<int64_t>* latest_offsets) {
+                                               std::vector<int64_t>* latest_offsets, int timeout) {
     _last_visit_time = time(nullptr);
     beginning_offsets->reserve(partition_ids->size());
     latest_offsets->reserve(partition_ids->size());
     for (auto p_id : *partition_ids) {
         int64_t beginning_offset;
         int64_t latest_offset;
-        RdKafka::ErrorCode err = _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset,
-                                                                      config::routine_load_kafka_timeout_second * 1000);
+        RdKafka::ErrorCode err =
+                _k_consumer->query_watermark_offsets(_topic, p_id, &beginning_offset, &latest_offset, timeout);
         if (err != RdKafka::ERR_NO_ERROR) {
             LOG(WARNING) << "failed to query watermark offset of topic: " << _topic << " partition: " << p_id
                          << ", err: " << RdKafka::err2str(err);
@@ -294,7 +294,7 @@ Status KafkaDataConsumer::get_partition_offset(std::vector<int32_t>* partition_i
     return Status::OK();
 }
 
-Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids) {
+Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids, int timeout) {
     _last_visit_time = time(nullptr);
     // create topic conf
     RdKafka::Conf* tconf = RdKafka::Conf::create(RdKafka::Conf::CONF_TOPIC);
@@ -315,8 +315,7 @@ Status KafkaDataConsumer::get_partition_meta(std::vector<int32_t>* partition_ids
 
     // get topic metadata
     RdKafka::Metadata* metadata = nullptr;
-    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata,
-                                                   config::routine_load_kafka_timeout_second * 1000);
+    RdKafka::ErrorCode err = _k_consumer->metadata(true /* for this topic */, topic, &metadata, timeout);
     if (err != RdKafka::ERR_NO_ERROR) {
         std::stringstream ss;
         ss << "failed to get partition meta: " << RdKafka::err2str(err);
@@ -404,6 +403,217 @@ bool KafkaDataConsumer::match(StreamLoadContext* ctx) {
             return false;
         }
     }
+    return true;
+}
+
+// init pulsar consumer will only set common configs
+Status PulsarDataConsumer::init(StreamLoadContext* ctx) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (_init) {
+        // this consumer has already been initialized.
+        return Status::OK();
+    }
+
+    pulsar::ClientConfiguration config;
+    for (auto& item : ctx->pulsar_info->properties) {
+        if (item.first == "auth.token") {
+            config.setAuth(pulsar::AuthToken::createWithToken(item.second));
+        } else {
+            LOG(WARNING) << "Config " << item.first << " not supported for now.";
+        }
+
+        _custom_properties.emplace(item.first, item.second);
+    }
+
+    _p_client = new pulsar::Client(_service_url, config);
+
+    VLOG(3) << "finished to init pulsar consumer. " << ctx->brief();
+
+    _init = true;
+    return Status::OK();
+}
+
+Status PulsarDataConsumer::assign_partition(const std::string& partition, StreamLoadContext* ctx,
+                                            int64_t initial_position) {
+    DCHECK(_p_client);
+
+    std::stringstream ss;
+    ss << "consumer: " << _id << ", grp: " << _grp_id << " assign partition: " << _topic
+       << ", subscription: " << _subscription << ", initial_position: " << initial_position;
+    LOG(INFO) << ss.str();
+
+    // do subscribe
+    pulsar::Result result;
+    result = _p_client->subscribe(partition, _subscription, _p_consumer);
+    if (result != pulsar::ResultOk) {
+        LOG(WARNING) << "PAUSE: failed to create pulsar consumer: " << ctx->brief(true) << ", err: " << result;
+        return Status::InternalError("PAUSE: failed to create pulsar consumer: " +
+                                     std::string(pulsar::strResult(result)));
+    }
+
+    if (initial_position == InitialPosition::LATEST || initial_position == InitialPosition::EARLIEST) {
+        pulsar::InitialPosition p_initial_position = initial_position == InitialPosition::LATEST
+                                                             ? pulsar::InitialPosition::InitialPositionLatest
+                                                             : pulsar::InitialPosition::InitialPositionEarliest;
+        result = _p_consumer.seek(p_initial_position);
+        if (result != pulsar::ResultOk) {
+            LOG(WARNING) << "PAUSE: failed to reset the subscription: " << ctx->brief(true) << ", err: " << result;
+            return Status::InternalError("PAUSE: failed to reset the subscription: " +
+                                         std::string(pulsar::strResult(result)));
+        }
+    }
+
+    return Status::OK();
+}
+
+Status PulsarDataConsumer::group_consume(TimedBlockingQueue<pulsar::Message*>* queue, int64_t max_running_time_ms) {
+    _last_visit_time = time(nullptr);
+    int64_t left_time = max_running_time_ms;
+    LOG(INFO) << "start pulsar consumer: " << _id << ", grp: " << _grp_id << ", max running time(ms): " << left_time;
+
+    int64_t received_rows = 0;
+    int64_t put_rows = 0;
+    Status st = Status::OK();
+    MonotonicStopWatch consumer_watch;
+    MonotonicStopWatch watch;
+    watch.start();
+    while (true) {
+        {
+            std::unique_lock<std::mutex> l(_lock);
+            if (_cancelled) {
+                break;
+            }
+        }
+
+        if (left_time <= 0) {
+            break;
+        }
+
+        bool done = false;
+        auto msg = std::make_unique<pulsar::Message>();
+        // consume 1 message at a time
+        consumer_watch.start();
+        pulsar::Result res = _p_consumer.receive(*(msg.get()), 1000 /* timeout, ms */);
+        consumer_watch.stop();
+        switch (res) {
+        case pulsar::ResultOk:
+            if (!queue->blocking_put(msg.get())) {
+                // queue is shutdown
+                done = true;
+            } else {
+                ++put_rows;
+                msg.release(); // release the ownership, msg will be deleted after being processed
+            }
+            ++received_rows;
+            break;
+        case pulsar::ResultTimeout:
+            // leave the status as OK, because this may happened
+            // if there is no data in pulsar.
+            LOG(INFO) << "pulsar consumer"
+                      << "[" << _id << "]"
+                      << " consume timeout.";
+            break;
+        default:
+            LOG(WARNING) << "pulsar consumer"
+                         << "[" << _id << "]"
+                         << " consume failed: "
+                         << ", errmsg: " << res;
+            done = true;
+            st = Status::InternalError(pulsar::strResult(res));
+            break;
+        }
+
+        left_time = max_running_time_ms - watch.elapsed_time() / 1000 / 1000;
+        if (done) {
+            break;
+        }
+    }
+
+    LOG(INFO) << "pulsar consume done: " << _id << ", grp: " << _grp_id << ". cancelled: " << _cancelled
+              << ", left time(ms): " << left_time << ", total cost(ms): " << watch.elapsed_time() / 1000 / 1000
+              << ", consume cost(ms): " << consumer_watch.elapsed_time() / 1000 / 1000
+              << ", received rows: " << received_rows << ", put rows: " << put_rows;
+
+    return st;
+}
+
+const std::string& PulsarDataConsumer::get_partition() {
+    _last_visit_time = time(nullptr);
+    return _p_consumer.getTopic();
+}
+
+Status PulsarDataConsumer::get_partition_backlog(int64_t* backlog) {
+    _last_visit_time = time(nullptr);
+    pulsar::BrokerConsumerStats broker_consumer_stats;
+    pulsar::Result result = _p_consumer.getBrokerConsumerStats(broker_consumer_stats);
+    if (result != pulsar::ResultOk) {
+        LOG(WARNING) << "Failed to get broker consumer stats: "
+                     << ", err: " << result;
+        return Status::InternalError("Failed to get broker consumer stats: " + std::string(pulsar::strResult(result)));
+    }
+    *backlog = broker_consumer_stats.getMsgBacklog();
+
+    return Status::OK();
+}
+
+Status PulsarDataConsumer::get_topic_partition(std::vector<std::string>* partitions) {
+    _last_visit_time = time(nullptr);
+    pulsar::Result result = _p_client->getPartitionsForTopic(_topic, *partitions);
+    if (result != pulsar::ResultOk) {
+        LOG(WARNING) << "Failed to get partitions for topic: " << _topic << ", err: " << result;
+        return Status::InternalError("Failed to get partitions for topic: " + std::string(pulsar::strResult(result)));
+    }
+
+    return Status::OK();
+}
+
+Status PulsarDataConsumer::cancel(StreamLoadContext* ctx) {
+    std::unique_lock<std::mutex> l(_lock);
+    if (!_init) {
+        return Status::InternalError("consumer is not initialized");
+    }
+
+    _cancelled = true;
+    LOG(INFO) << "pulsar consumer cancelled. " << _id;
+    return Status::OK();
+}
+
+Status PulsarDataConsumer::reset() {
+    std::unique_lock<std::mutex> l(_lock);
+    _cancelled = false;
+    _p_consumer.close();
+    return Status::OK();
+}
+
+Status PulsarDataConsumer::acknowledge_cumulative(pulsar::MessageId& message_id) {
+    pulsar::Result res = _p_consumer.acknowledgeCumulative(message_id);
+    if (res != pulsar::ResultOk) {
+        std::stringstream ss;
+        ss << "failed to acknowledge pulsar message : " << res;
+        return Status::InternalError(ss.str());
+    }
+    return Status::OK();
+}
+
+bool PulsarDataConsumer::match(StreamLoadContext* ctx) {
+    if (ctx->load_src_type != TLoadSourceType::PULSAR) {
+        return false;
+    }
+    if (_service_url != ctx->pulsar_info->service_url || _topic != ctx->pulsar_info->topic ||
+        _subscription != ctx->pulsar_info->subscription) {
+        return false;
+    }
+    // check properties
+    if (_custom_properties.size() != ctx->pulsar_info->properties.size()) {
+        return false;
+    }
+    for (auto& item : ctx->pulsar_info->properties) {
+        auto it = _custom_properties.find(item.first);
+        if (it == _custom_properties.end() || it->second != item.second) {
+            return false;
+        }
+    }
+
     return true;
 }
 

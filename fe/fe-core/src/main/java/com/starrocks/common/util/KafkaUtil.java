@@ -52,29 +52,29 @@ import java.util.concurrent.TimeUnit;
 public class KafkaUtil {
     private static final Logger LOG = LogManager.getLogger(KafkaUtil.class);
 
-    private static final ProxyAPI proxyApi = new ProxyAPI();
+    private static final ProxyAPI PROXY_API = new ProxyAPI();
 
     public static List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties) throws UserException {
-        return proxyApi.getAllKafkaPartitions(brokerList, topic, properties);
+        return PROXY_API.getAllKafkaPartitions(brokerList, topic, properties);
     }
 
     // latest offset is (the latest existing message offset + 1)
     public static Map<Integer, Long> getLatestOffsets(String brokerList, String topic,
                                                       ImmutableMap<String, String> properties,
                                                       List<Integer> partitions) throws UserException {
-        return proxyApi.getLatestOffsets(brokerList, topic, properties, partitions);
+        return PROXY_API.getLatestOffsets(brokerList, topic, properties, partitions);
     }
 
     public static Map<Integer, Long> getBeginningOffsets(String brokerList, String topic,
                                                          ImmutableMap<String, String> properties,
                                                          List<Integer> partitions) throws UserException {
-        return proxyApi.getBeginningOffsets(brokerList, topic, properties, partitions);
+        return PROXY_API.getBeginningOffsets(brokerList, topic, properties, partitions);
     }
 
     public static List<PKafkaOffsetProxyResult> getBatchOffsets(List<PKafkaOffsetProxyRequest> requests)
             throws UserException {
-        return proxyApi.getBatchOffsets(requests);
+        return PROXY_API.getBatchOffsets(requests);
     }
 
     public static PKafkaLoadInfo genPKafkaLoadInfo(String brokerList, String topic,
@@ -173,6 +173,7 @@ public class KafkaUtil {
                 address = new TNetworkAddress(be.getHost(), be.getBrpcPort());
 
                 // get info
+                request.timeout = Config.routine_load_kafka_timeout_second;
                 Future<PProxyResult> future = BackendServiceClient.getInstance().getInfo(address, request);
                 PProxyResult result = future.get(Config.routine_load_kafka_timeout_second, TimeUnit.SECONDS);
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
@@ -183,6 +184,10 @@ public class KafkaUtil {
                 } else {
                     return result;
                 }
+            } catch (InterruptedException ie) {
+                LOG.warn("got interrupted exception when sending proxy request to " + address);
+                Thread.currentThread().interrupt();
+                throw new LoadException("got interrupted exception when sending proxy request to " + address);
             } catch (Exception e) {
                 LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
                 throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());

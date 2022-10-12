@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # encoding: utf-8
 
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 # The format is:
 #   <function id> <name>, <return_type>, [<args>], <backend fn>,
@@ -244,11 +244,11 @@ vectorized_functions = [
     [30311, 'split', 'ARRAY_VARCHAR', ['VARCHAR', 'VARCHAR'], 'StringFunctions::split', 'StringFunctions::split_prepare', 'StringFunctions::split_close'],
 
     [30320, 'regexp_extract', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'BIGINT'], 'StringFunctions::regexp_extract',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_extract_prepare', 'StringFunctions::regexp_close'],
     [30330, 'regexp_replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30331, 'replace', 'VARCHAR', ['VARCHAR', 'VARCHAR', 'VARCHAR'], 'StringFunctions::regexp_replace',
-     'StringFunctions::regexp_prepare', 'StringFunctions::regexp_close'],
+     'StringFunctions::regexp_replace_prepare', 'StringFunctions::regexp_close'],
     [30400, "money_format", "VARCHAR", ["BIGINT"], "StringFunctions::money_format_bigint"],
     [30401, "money_format", "VARCHAR", ["LARGEINT"], "StringFunctions::money_format_largeint"],
     [30402, "money_format", "VARCHAR", ["DECIMALV2"], "StringFunctions::money_format_decimalv2val"],
@@ -355,7 +355,10 @@ vectorized_functions = [
     [50340, 'date_trunc', 'DATETIME', ['VARCHAR', 'DATETIME'], 'TimeFunctions::datetime_trunc', 'TimeFunctions::datetime_trunc_prepare', 'TimeFunctions::datetime_trunc_close'],
     [50350, 'date_trunc', 'DATE', ['VARCHAR', 'DATE'], 'TimeFunctions::date_trunc', 'TimeFunctions::date_trunc_prepare', 'TimeFunctions::date_trunc_close'],
     [50360, 'timestamp', 'DATETIME', ['DATETIME'], 'TimeFunctions::timestamp'],
-    [50370, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50370, 'time_slice', 'DATE', ['DATE', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50371, 'time_slice', 'DATE', ['DATE', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50372, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
+    [50373, 'time_slice', 'DATETIME', ['DATETIME', 'INT', 'VARCHAR', 'VARCHAR'], 'TimeFunctions::time_slice', 'TimeFunctions::time_slice_prepare', 'TimeFunctions::time_slice_close'],
 
     # 60xxx: like predicate
     # important ref: LikePredicate.java, must keep name equals LikePredicate.Operator
@@ -490,6 +493,7 @@ vectorized_functions = [
     [100015, 'uuid', 'VARCHAR', [], "UtilityFunctions::uuid"],
     [100016, 'uuid_numeric', 'LARGEINT', [], "UtilityFunctions::uuid_numeric"],
     [100017, 'assert_true', 'BOOLEAN', ['BOOLEAN'], 'UtilityFunctions::assert_true'],
+    [100018, 'host_name', 'VARCHAR', [], "UtilityFunctions::host_name"],
 
     # json string function
     [110000, "get_json_int", "INT", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_int",
@@ -506,6 +510,8 @@ vectorized_functions = [
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
     [110015, "get_json_object", "VARCHAR", ["JSON", "VARCHAR"], "JsonFunctions::get_native_json_string",
      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110016, "get_json_object", "VARCHAR", ["VARCHAR", "VARCHAR"], "JsonFunctions::get_json_string",
+     "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # json type function
     [110003, "parse_json", "JSON", ["VARCHAR"], "JsonFunctions::parse_json", False],
@@ -519,6 +525,12 @@ vectorized_functions = [
     [110009, "json_array", "JSON", ["JSON", "..."], "JsonFunctions::json_array", False],
     [110010, "json_object", "JSON", [], "JsonFunctions::json_object_empty", False],
     [110011, "json_array", "JSON", [], "JsonFunctions::json_array_empty", False],
+    [110016, "json_length", "INT", ["JSON"], "JsonFunctions::json_length", False],
+    [110017, "json_length", "INT", ["JSON", "VARCHAR"], "JsonFunctions::json_length", 
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
+    [110018, "json_keys", "JSON", ["JSON"], "JsonFunctions::json_keys", False],
+    [110018, "json_keys", "JSON", ["JSON", "VARCHAR"], "JsonFunctions::json_keys", 
+      "JsonFunctions::native_json_path_prepare", "JsonFunctions::native_json_path_close", False],
 
     # aes and base64 function
     [120100, "aes_encrypt", "VARCHAR", ["VARCHAR", "VARCHAR"], "EncryptionFunctions::aes_encrypt", False],
@@ -527,6 +539,7 @@ vectorized_functions = [
     [120130, "to_base64", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::to_base64", False],
     [120140, "md5", "VARCHAR", ["VARCHAR"], "EncryptionFunctions::md5", False],
     [120150, "md5sum", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum", False],
+    [120151, "md5sum_numeric", "VARCHAR", ["VARCHAR", "..."], "EncryptionFunctions::md5sum_numeric", False],
     [120160, "sha2", "VARCHAR", ["VARCHAR", "INT"], "EncryptionFunctions::sha2", "EncryptionFunctions::sha2_prepare", "EncryptionFunctions::sha2_close", False],
 
       # geo function
@@ -747,4 +760,9 @@ vectorized_functions = [
 
     # reserve 150281
     [150282, 'array_contains_all', 'BOOLEAN', ['ANY_ARRAY', 'ANY_ARRAY'], 'ArrayFunctions::array_contains_all'],
+
+    [150300, 'array_filter', 'ANY_ARRAY',   ['ANY_ARRAY', 'ARRAY_BOOLEAN'],   'ArrayFunctions::array_filter'],
+
+    # high-order functions related to lambda functions.
+    [160100, 'array_map','ANY_ARRAY',['FUNCTION','ANY_ARRAY', "..."],'ArrayFunctions::array_map'],
 ]

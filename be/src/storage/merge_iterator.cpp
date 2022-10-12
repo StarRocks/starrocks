@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/merge_iterator.h"
 
@@ -153,7 +153,7 @@ inline Status MergeIterator::init() {
     DCHECK(_chunk_size > 0);
     DCHECK_EQ(_children.size(), _chunk_pool.size());
     for (size_t i = 0; i < _children.size(); i++) {
-        _chunk_pool[i] = ChunkHelper::new_chunk(encoded_schema(), _chunk_size);
+        _chunk_pool[i] = ChunkHelper::new_chunk(output_schema(), _chunk_size);
         RETURN_IF_ERROR(fill(i));
     }
     _inited = true;
@@ -330,7 +330,7 @@ public:
     }
 
 protected:
-    Status do_get_next(Chunk* chunk) override { return Status::NotSupported("get chunk not supported"); }
+    Status do_get_next(Chunk* chunk) override { return do_get_next(chunk, nullptr); }
     Status do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) override;
     Status fill(size_t child) override;
 
@@ -367,7 +367,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
             if (rows == 0) {
                 chunk->swap_chunk(*min_chunk._chunk);
                 for (int i = 0; i < min_chunk_num_rows; ++i) {
-                    source_masks->emplace_back(_mask_buffer->current());
+                    if (source_masks) {
+                        source_masks->emplace_back(_mask_buffer->current());
+                    }
                     _mask_buffer->advance();
                 }
                 return fill(child);
@@ -390,7 +392,9 @@ inline Status MaskMergeIterator::do_get_next(Chunk* chunk, std::vector<RowSource
         min_chunk.advance(append_row_num);
         rows += append_row_num;
         for (size_t i = 0; i < append_row_num; ++i) {
-            source_masks->emplace_back(_mask_buffer->current());
+            if (source_masks) {
+                source_masks->emplace_back(_mask_buffer->current());
+            }
             _mask_buffer->advance();
         }
 
@@ -446,6 +450,9 @@ inline Status MaskMergeIterator::fill(size_t child) {
 
 ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& children,
                                          RowSourceMaskBuffer* mask_buffer) {
+    if (children.size() == 1) {
+        return children[0];
+    }
     DCHECK(children.size() > 1 && children.size() <= RowSourceMask::MAX_SOURCES);
     return std::make_shared<MaskMergeIterator>(std::move(children), mask_buffer);
 }

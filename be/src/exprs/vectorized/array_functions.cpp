@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/array_functions.h"
 
@@ -957,6 +957,15 @@ ColumnPtr ArrayFunctions::array_contains_all([[maybe_unused]] FunctionContext* c
     const ColumnPtr& arg1 = columns[1]; // element
 
     return ArrayHasImpl<false>::evaluate(*arg0, *arg1);
+}
+
+// cannot be called anymore
+ColumnPtr ArrayFunctions::array_map([[maybe_unused]] FunctionContext* context, const Columns& columns) {
+    return nullptr;
+}
+
+ColumnPtr ArrayFunctions::array_filter(FunctionContext* context, const Columns& columns) {
+    return ArrayFilter::process(context, columns);
 }
 
 class ArrayArithmeticImpl {

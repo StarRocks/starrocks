@@ -22,10 +22,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateResourceStmt;
-import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.proc.BaseProcResult;
@@ -33,6 +29,10 @@ import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.ResourceDesc;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -43,16 +43,17 @@ import org.junit.Test;
 import java.util.Map;
 
 public class SparkResourceTest {
+    private static ConnectContext connectContext;
     private String name;
     private String type;
     private String master;
     private String workingDir;
     private String broker;
     private Map<String, String> properties;
-    private Analyzer analyzer;
 
     @Before
-    public void setUp() {
+    public void setUp() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
         name = "spark0";
         type = "spark";
         master = "spark://127.0.0.1:7077";
@@ -64,7 +65,6 @@ public class SparkResourceTest {
         properties.put("spark.submit.deployMode", "cluster");
         properties.put("working_dir", workingDir);
         properties.put("broker", broker);
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
     }
 
     @Test
@@ -86,7 +86,8 @@ public class SparkResourceTest {
 
         // master: spark, deploy_mode: cluster
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         SparkResource resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertEquals(name, resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());
@@ -100,7 +101,8 @@ public class SparkResourceTest {
         // master: spark, deploy_mode: client
         properties.put("spark.submit.deployMode", "client");
         stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertEquals("client", resource.getDeployMode().name().toLowerCase());
 
@@ -113,7 +115,8 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.address", "127.0.0.1:9999");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertTrue(resource.isYarnMaster());
         Map<String, String> map = resource.getSparkConfigs();
@@ -135,7 +138,8 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm2", "host2");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         resource = (SparkResource) Resource.fromStmt(stmt);
         Assert.assertTrue(resource.isYarnMaster());
         map = resource.getSparkConfigs();
@@ -164,7 +168,8 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.hostname.rm3", "host3");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
 
@@ -191,7 +196,8 @@ public class SparkResourceTest {
         properties.put("spark.hadoop.yarn.resourcemanager.address", "127.0.0.1:9999");
         properties.put("spark.hadoop.fs.defaultFS", "hdfs://127.0.0.1:10000");
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         SparkResource resource = (SparkResource) Resource.fromStmt(stmt);
         SparkResource copiedResource = resource.getCopiedResource();
         Map<String, String> newProperties = Maps.newHashMap();
@@ -224,7 +230,8 @@ public class SparkResourceTest {
         };
 
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         Resource.fromStmt(stmt);
     }
 }

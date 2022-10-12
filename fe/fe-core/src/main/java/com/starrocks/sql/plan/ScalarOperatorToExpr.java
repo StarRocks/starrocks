@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
 import com.google.common.base.Preconditions;
@@ -35,8 +35,10 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.ast.LambdaFunctionExpr;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
@@ -53,10 +55,12 @@ import com.starrocks.sql.optimizer.operator.scalar.DictMappingOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.thrift.TExprOpcode;
 import com.starrocks.thrift.TFunctionBinaryType;
 
@@ -475,6 +479,27 @@ public class ScalarOperatorToExpr {
         }
 
         @Override
+        public Expr visitLambdaFunctionOperator(LambdaFunctionOperator operator, FormatterContext context) {
+            // lambda arguments
+            List<Expr> arguments = Lists.newArrayList();
+            List<Expr> newArguments = Lists.newArrayList();
+            for (ColumnRefOperator ref : operator.getRefColumns()) {
+                SlotRef slot = new SlotRef(new SlotDescriptor(
+                        new SlotId(ref.getId()), ref.getName(), ref.getType(), ref.isNullable()));
+                context.colRefToExpr.put(ref, slot);
+                arguments.add(slot);
+            }
+            // lambda expression and put it at the first
+            final ScalarOperator lambdaOp = operator.getLambdaExpr();
+            final Expr lambdaExpr = buildExpr.build(lambdaOp, context);
+            newArguments.add(lambdaExpr);
+            newArguments.addAll(arguments);
+            Expr result = new LambdaFunctionExpr(newArguments);
+            result.setType(Type.FUNCTION);
+            return result;
+        }
+
+        @Override
         public Expr visitDictMappingOperator(DictMappingOperator operator, FormatterContext context) {
             final ColumnRefOperator dictColumn = operator.getDictColumn();
             final SlotRef dictExpr = (SlotRef) dictColumn.accept(this, context);
@@ -494,7 +519,9 @@ public class ScalarOperatorToExpr {
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column
-            context.colRefToExpr.put(key, old);
+            if (old != null) {
+                context.colRefToExpr.put(key, old);
+            }
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
             return result;
@@ -503,6 +530,13 @@ public class ScalarOperatorToExpr {
         @Override
         public Expr visitCloneOperator(CloneOperator operator, FormatterContext context) {
             return new CloneExpr(buildExpr.build(operator.getChild(0), context));
+        }
+
+        @Override
+        public Expr visitSubqueryOperator(SubqueryOperator operator, FormatterContext context) {
+            Subquery subquery = new Subquery(operator.getQueryStatement());
+            subquery.setUseSemiAnti(operator.getApplyOperator().isUseSemiAnti());
+            return subquery;
         }
     }
 

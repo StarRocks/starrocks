@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
 import com.starrocks.common.AnalysisException;
 
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -19,7 +20,7 @@ public class ModifyBackendAddressClauseTest {
 
     @Test
     public void testNormal() throws AnalysisException {
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(null);
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("", "");
         Assert.assertTrue(clause.getHostPortPairs().size() == 0);
     }
 }

@@ -44,7 +44,3 @@ Details：    display the data directory and file structure of the whole backup 
     SHOW SNAPSHOT ON example_repo
     WHERE SNAPSHOT = "backup1" AND TIMESTAMP = "2018-05-05-15-34-26";
     ```
-
-## keyword
-
-SHOW, SNAPSHOT

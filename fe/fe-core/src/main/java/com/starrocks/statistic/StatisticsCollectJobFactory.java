@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -63,13 +62,13 @@ public class StatisticsCollectJobFactory {
         return statsJobs;
     }
 
-    public static StatisticsCollectJob buildStatisticsCollectJob(Database db, OlapTable table,
+    public static StatisticsCollectJob buildStatisticsCollectJob(Database db, Table table,
                                                                  List<Long> partitionIdList,
                                                                  List<String> columns,
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties) {
-        if (columns == null) {
+        if (columns == null || columns.isEmpty()) {
             columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
         }
@@ -101,7 +100,7 @@ public class StatisticsCollectJobFactory {
         if (basicStatsMeta != null) {
             if (basicStatsMeta.getType().equals(StatsConstants.AnalyzeType.SAMPLE)
                     && job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)
-                    && ((OlapTable) table).getPartitions().stream()
+                    && table.getPartitions().stream()
                     .noneMatch(p -> p.getDataSize() > Config.statistic_max_full_collect_data_size)) {
                 createFullStatsJob(allTableJobMap, job, LocalDateTime.MIN, db, table, columns);
                 return;
@@ -113,16 +112,17 @@ public class StatisticsCollectJobFactory {
                 return;
             }
 
-            double statisticAutoCollectRatio = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
-                    Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
-                    Config.statistic_auto_collect_ratio;
+            double statisticAutoCollectRatio =
+                    job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
+                            Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
+                            Config.statistic_auto_collect_ratio;
             if (basicStatsMeta.getHealthy() > statisticAutoCollectRatio) {
                 return;
             }
         }
 
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
-            allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, null, columns,
+            allTableJobMap.add(buildStatisticsCollectJob(db, table, null, columns,
                     job.getAnalyzeType(), job.getScheduleType(), job.getProperties()));
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
             if (basicStatsMeta == null) {
@@ -131,7 +131,8 @@ public class StatisticsCollectJobFactory {
                 createFullStatsJob(allTableJobMap, job, basicStatsMeta.getUpdateTime(), db, table, columns);
             }
         } else {
-            throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(), ErrorType.INTERNAL_ERROR);
+            throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(),
+                    ErrorType.INTERNAL_ERROR);
         }
     }
 
@@ -139,14 +140,14 @@ public class StatisticsCollectJobFactory {
                                            AnalyzeJob job, LocalDateTime statsLastUpdateTime,
                                            Database db, Table table, List<String> columns) {
         StatsConstants.AnalyzeType analyzeType;
-        if (((OlapTable) table).getPartitions().stream().anyMatch(
+        if (table.getPartitions().stream().anyMatch(
                 p -> p.getDataSize() > Config.statistic_max_full_collect_data_size)) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
         } else {
             analyzeType = StatsConstants.AnalyzeType.FULL;
         }
 
-        List<Partition> partitions = Lists.newArrayList(((OlapTable) table).getPartitions());
+        List<Partition> partitions = Lists.newArrayList(table.getPartitions());
         List<Long> partitionIdList = new ArrayList<>();
         for (Partition partition : partitions) {
             LocalDateTime partitionUpdateTime = StatisticUtils.getPartitionLastUpdateTime(partition);
@@ -156,7 +157,7 @@ public class StatisticsCollectJobFactory {
         }
 
         if (!partitionIdList.isEmpty()) {
-            allTableJobMap.add(buildStatisticsCollectJob(db, (OlapTable) table, partitionIdList, columns,
+            allTableJobMap.add(buildStatisticsCollectJob(db, table, partitionIdList, columns,
                     analyzeType, job.getScheduleType(), Maps.newHashMap()));
         }
     }

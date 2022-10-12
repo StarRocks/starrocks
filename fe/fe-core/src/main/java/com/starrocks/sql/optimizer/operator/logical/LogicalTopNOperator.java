@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -25,7 +25,7 @@ public class LogicalTopNOperator extends LogicalOperator {
     private final long offset;
     private final SortPhase sortPhase;
     private final TopNType topNType;
-    private boolean isSplit = false;
+    private final boolean isSplit;
 
     public LogicalTopNOperator(List<Ordering> orderByElements) {
         this(DEFAULT_LIMIT, null, null, null, DEFAULT_LIMIT, orderByElements, DEFAULT_OFFSET, SortPhase.FINAL,
@@ -75,10 +75,6 @@ public class LogicalTopNOperator extends LogicalOperator {
 
     public boolean isSplit() {
         return isSplit;
-    }
-
-    public void setSplit() {
-        isSplit = true;
     }
 
     public ColumnRefSet getRequiredChildInputColumns() {
@@ -142,13 +138,20 @@ public class LogicalTopNOperator extends LogicalOperator {
             return false;
         }
         LogicalTopNOperator that = (LogicalTopNOperator) o;
-        return offset == that.offset && Objects.equals(orderByElements, that.orderByElements) &&
-                sortPhase == that.sortPhase;
+        return partitionLimit == that.partitionLimit && offset == that.offset && isSplit == that.isSplit &&
+                Objects.equals(partitionByColumns, that.partitionByColumns) &&
+                Objects.equals(orderByElements, that.orderByElements) &&
+                sortPhase == that.sortPhase && topNType == that.topNType;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), sortPhase, orderByElements, offset);
+        return Objects.hash(super.hashCode(), partitionByColumns, partitionLimit, orderByElements, offset,
+                sortPhase, topNType, isSplit);
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder

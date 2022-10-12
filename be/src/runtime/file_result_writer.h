@@ -44,7 +44,7 @@ struct ResultFileOptions {
     std::vector<TNetworkAddress> broker_addresses;
     std::map<std::string, std::string> broker_properties;
     int write_buffer_size_kb;
-    const THdfsProperties* hdfs_properties;
+    THdfsProperties hdfs_properties;
     bool use_broker;
 
     ResultFileOptions(const TResultFileSinkOptions& t_opt) {
@@ -63,7 +63,7 @@ struct ResultFileOptions {
             write_buffer_size_kb = t_opt.hdfs_write_buffer_size_kb;
         }
         if (t_opt.__isset.hdfs_properties) {
-            hdfs_properties = &t_opt.hdfs_properties;
+            hdfs_properties = t_opt.hdfs_properties;
             is_local_file = false;
         }
         if (t_opt.__isset.use_broker) {
@@ -90,6 +90,8 @@ public:
 
 private:
     void _init_profile();
+
+    Status _create_fs();
 
     Status _create_file_writer();
     // get next export file name

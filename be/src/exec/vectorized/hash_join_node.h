@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -72,8 +72,6 @@ private:
 
     Status _do_publish_runtime_filters(RuntimeState* state, int64_t limit);
     Status _push_down_in_filter(RuntimeState* state);
-
-    static std::string _get_join_type_str(TJoinOp::type join_type);
 
     friend ExecNode;
     // _hash_join_node is used to construct HashJoiner, the reference is sound since

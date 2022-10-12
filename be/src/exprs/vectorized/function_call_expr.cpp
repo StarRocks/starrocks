@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/function_call_expr.h"
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
 #include "column/const_column.h"
-#include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/anyval_util.h"
 #include "exprs/expr_context.h"

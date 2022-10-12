@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #ifdef USE_STAROS
 
@@ -12,24 +12,11 @@
 #include "fs/fs_starlet.h"
 #include "gutil/strings/util.h"
 #include "service/staros_worker.h"
-#include "storage/lake/filenames.h"
 
 namespace starrocks::lake {
 
 std::string StarletLocationProvider::root_location(int64_t tablet_id) const {
     return build_starlet_uri(tablet_id, "");
-}
-
-std::string StarletLocationProvider::tablet_metadata_location(int64_t tablet_id, int64_t version) const {
-    return build_starlet_uri(tablet_id, tablet_metadata_filename(tablet_id, version));
-}
-
-std::string StarletLocationProvider::txn_log_location(int64_t tablet_id, int64_t txn_id) const {
-    return build_starlet_uri(tablet_id, txn_log_filename(tablet_id, txn_id));
-}
-
-std::string StarletLocationProvider::segment_location(int64_t tablet_id, std::string_view segment_name) const {
-    return build_starlet_uri(tablet_id, segment_name);
 }
 
 Status StarletLocationProvider::list_root_locations(std::set<std::string>* roots) const {

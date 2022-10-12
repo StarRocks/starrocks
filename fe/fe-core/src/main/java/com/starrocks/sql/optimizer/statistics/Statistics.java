@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -125,6 +125,10 @@ public class Statistics {
         public Builder addColumnStatistics(Map<ColumnRefOperator, ColumnStatistic> columnStatistics) {
             this.columnStatistics.putAll(columnStatistics);
             return this;
+        }
+
+        public ColumnStatistic getColumnStatistics(ColumnRefOperator columnRefOperator) {
+            return this.columnStatistics.get(columnRefOperator);
         }
 
         public Builder removeColumnStatistics(ColumnRefOperator column) {

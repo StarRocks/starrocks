@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -8,11 +8,13 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "storage/rowset/rowset_writer.h"
+#include "storage/segment_flush_executor.h"
 #include "storage/tablet.h"
 
 namespace starrocks {
 
 class FlushToken;
+class ReplicateToken;
 class MemTracker;
 class Schema;
 class StorageEngine;
@@ -34,6 +36,27 @@ struct DeltaWriterOptions {
     const std::vector<SlotDescriptor*>* slots;
     vectorized::GlobalDictByNameMaps* global_dicts = nullptr;
     Span parent_span;
+    int64_t index_id;
+    int64_t node_id;
+    bool is_replicated_storage = false;
+    std::vector<PNetworkAddress> replicas;
+    int64_t timeout_ms;
+};
+
+enum ReplicaState {
+    // peer storage engine
+    Peer,
+    // replicated storage engine
+    Primary,
+    Secondary,
+};
+
+enum State {
+    kUninitialized,
+    kWriting,
+    kClosed,
+    kAborted,
+    kCommitted, // committed state can transfer to kAborted state
 };
 
 // Writer for a particular (load, index, tablet).
@@ -48,6 +71,9 @@ public:
 
     // [NOT thread-safe]
     [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    // [thread-safe]
+    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 
     // Flush all in-memory data to disk, without waiting.
     // Subsequent `write()`s to this DeltaWriter will fail after this method returned.
@@ -73,6 +99,8 @@ public:
 
     int64_t partition_id() const;
 
+    int64_t node_id() const { return _opt.node_id; }
+
     const Tablet* tablet() const { return _tablet.get(); }
 
     MemTracker* mem_tracker() { return _mem_tracker; };
@@ -83,6 +111,8 @@ public:
     // REQUIRE: has successfully `commit()`ed
     const RowsetWriter* committed_rowset_writer() const { return _rowset_writer.get(); }
 
+    const ReplicateToken* replicate_token() const { return _replicate_token.get(); }
+
     // REQUIRE: has successfully `commit()`ed
     const vectorized::DictColumnsValidMap& global_dict_columns_valid_info() const {
         CHECK_EQ(kCommitted, _state);
@@ -90,30 +120,27 @@ public:
         return _rowset_writer->global_dict_columns_valid_info();
     }
 
-private:
-    enum State {
-        kUninitialized,
-        kWriting,
-        kClosed,
-        kAborted,
-        kCommitted, // committed state can transfer to kAborted state
-    };
+    ReplicaState replica_state() const { return _replica_state; }
 
+    State get_state() const { return _state.load(std::memory_order_acquire); }
+
+private:
     DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
-    Status _flush_memtable_async();
+    Status _flush_memtable_async(bool eos = false);
     Status _flush_memtable();
     const char* _state_name(State state) const;
+    const char* _replica_state_name(ReplicaState state) const;
 
     void _garbage_collection();
 
     void _reset_mem_table();
 
-    State _get_state() { return _state.load(std::memory_order_acquire); }
     void _set_state(State state) { _state.store(state, std::memory_order_release); }
 
     std::atomic<State> _state;
+    ReplicaState _replica_state;
     DeltaWriterOptions _opt;
     MemTracker* _mem_tracker;
     StorageEngine* _storage_engine;
@@ -128,6 +155,7 @@ private:
     const TabletSchema* _tablet_schema;
 
     std::unique_ptr<FlushToken> _flush_token;
+    std::unique_ptr<ReplicateToken> _replicate_token;
     bool _with_rollback_log;
 };
 

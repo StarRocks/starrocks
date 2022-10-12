@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/join_hash_map.h"
 
 #include <column/chunk.h>
-#include <gen_cpp/PlanNodes_types.h>
 #include <runtime/descriptors.h>
 
 #include "exec/vectorized/hash_join_node.h"
@@ -209,8 +208,6 @@ JoinHashTable JoinHashTable::clone_readable_table() {
     ht._probe_state = std::make_unique<HashTableProbeState>(*this->_probe_state);
 
     switch (ht._hash_map_type) {
-    case JoinHashMapType::empty:
-        break;
 #define M(NAME)                                                                                         \
     case JoinHashMapType::NAME:                                                                         \
         ht._##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(ht._table_items.get(),  \
@@ -370,8 +367,6 @@ Status JoinHashTable::build(RuntimeState* state) {
     _hash_map_type = _choose_join_hash_map();
 
     switch (_hash_map_type) {
-    case JoinHashMapType::empty:
-        break;
 #define M(NAME)                                                                                                       \
     case JoinHashMapType::NAME:                                                                                       \
         _##NAME = std::make_unique<typename decltype(_##NAME)::element_type>(_table_items.get(), _probe_state.get()); \
@@ -391,8 +386,6 @@ Status JoinHashTable::build(RuntimeState* state) {
 Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, ChunkPtr* probe_chunk, ChunkPtr* chunk,
                             bool* eos) {
     switch (_hash_map_type) {
-    case JoinHashMapType::empty:
-        break;
 #define M(NAME)                                                      \
     case JoinHashMapType::NAME:                                      \
         _##NAME->probe(state, key_columns, probe_chunk, chunk, eos); \
@@ -410,8 +403,6 @@ Status JoinHashTable::probe(RuntimeState* state, const Columns& key_columns, Chu
 
 Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
     switch (_hash_map_type) {
-    case JoinHashMapType::empty:
-        break;
 #define M(NAME)                                   \
     case JoinHashMapType::NAME:                   \
         _##NAME->probe_remain(state, chunk, eos); \
@@ -477,6 +468,25 @@ void JoinHashTable::append_chunk(RuntimeState* state, const ChunkPtr& chunk, con
 }
 
 void JoinHashTable::remove_duplicate_index(Column::Filter* filter) {
+    if (_hash_map_type == JoinHashMapType::empty) {
+        switch (_table_items->join_type) {
+        case TJoinOp::LEFT_OUTER_JOIN:
+        case TJoinOp::LEFT_ANTI_JOIN:
+        case TJoinOp::FULL_OUTER_JOIN:
+        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN: {
+            size_t row_count = filter->size();
+            for (size_t i = 0; i < row_count; i++) {
+                (*filter)[i] = 1;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+        return;
+    }
+
+    DCHECK_LT(0, _table_items->row_count);
     switch (_table_items->join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
         _remove_duplicate_index_for_left_outer_join(filter);
@@ -520,6 +530,10 @@ Status JoinHashTable::_upgrade_key_columns_if_overflow() {
 }
 
 JoinHashMapType JoinHashTable::_choose_join_hash_map() {
+    if (_table_items->row_count == 0) {
+        return JoinHashMapType::empty;
+    }
+
     size_t size = _table_items->join_keys.size();
     DCHECK_GT(size, 0);
 

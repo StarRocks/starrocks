@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "aggregate_streaming_source_operator.h"
 
@@ -29,23 +29,7 @@ bool AggregateStreamingSourceOperator::has_output() const {
 }
 
 bool AggregateStreamingSourceOperator::is_finished() const {
-    // source operator may finish early
-    if (_is_finished) {
-        return true;
-    }
-
-    // since there are two behavior of streaming operator
-    // case 1: chunk-at-a-time, so we check whether the chunk buffer is empty
-    // case 2: local aggregate, so we check whether hash table is eos
-    if (_aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos()) {
-        _is_finished = true;
-    }
-    return _is_finished;
-}
-
-Status AggregateStreamingSourceOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
-    return Status::OK();
+    return _aggregator->is_sink_complete() && _aggregator->is_chunk_buffer_empty() && _aggregator->is_ht_eos();
 }
 
 Status AggregateStreamingSourceOperator::set_finished(RuntimeState* state) {
@@ -100,4 +84,5 @@ void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::C
         DCHECK(false);
     }
 }
+
 } // namespace starrocks::pipeline

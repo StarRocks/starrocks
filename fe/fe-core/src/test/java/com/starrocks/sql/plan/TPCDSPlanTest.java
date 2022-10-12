@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -31,51 +31,47 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ1() throws Exception {
-        getFragmentPlan(Q1);
+        getFragmentPlan(Q01);
     }
 
     @Test
     public void testQ2() throws Exception {
-        getFragmentPlan(Q2);
+        getFragmentPlan(Q02);
     }
 
     @Test
     public void testQ3() throws Exception {
-        String costPlanFragment = getCostExplain(Q3);
-        Assert.assertTrue(costPlanFragment.contains("hasNullableGenerateChild: true"));
-        Assert.assertTrue(costPlanFragment.contains(" column statistics: \n" +
-                "     * i_item_sk-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN\n" +
-                "     * i_brand_id-->[-Infinity, Infinity, 0.0, 1.0, 1.0] UNKNOWN"));
+        getCostExplain(Q03);
     }
 
     @Test
     public void testQ4() throws Exception {
-        getFragmentPlan(Q4);
+        getFragmentPlan(Q04);
     }
 
     @Test
     public void testQ5() throws Exception {
-        getFragmentPlan(Q5);
+        getFragmentPlan(Q05);
     }
 
     @Test
     public void testQ6() throws Exception {
-        getFragmentPlan(Q6);
+        getFragmentPlan(Q06);
     }
 
     @Test
     public void testQ7() throws Exception {
-        getFragmentPlan(Q7);
+        getFragmentPlan(Q07);
     }
 
     @Test
     public void testQ8() throws Exception {
-        getFragmentPlan(Q8);
+        getFragmentPlan(Q08);
     }
 
     @Test
     public void testQ9() throws Exception {
-        getFragmentPlan(Q9);
+        getFragmentPlan(Q09);
     }
 
     @Test
@@ -100,7 +96,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ14() throws Exception {
-        getFragmentPlan(Q14);
+        getFragmentPlan(Q14_1);
     }
 
     @Test
@@ -145,12 +141,12 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ23() throws Exception {
-        getFragmentPlan(Q23);
+        getFragmentPlan(Q23_1);
     }
 
     @Test
     public void testQ24() throws Exception {
-        getFragmentPlan(Q24);
+        getFragmentPlan(Q24_1);
     }
 
     @Test
@@ -225,7 +221,7 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ39() throws Exception {
-        getFragmentPlan(Q39);
+        getFragmentPlan(Q39_1);
     }
 
     @Test
@@ -530,13 +526,13 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
 
     @Test
     public void testQ80_2() throws Exception {
-        String planFragment = getFragmentPlan(Q80_2);
+        String planFragment = getFragmentPlan(Q80);
         Assert.assertFalse(planFragment.contains("cross join"));
     }
 
     @Test
     public void testQ95_2() throws Exception {
-        String planFragment = getFragmentPlan(Q95_2);
+        String planFragment = getFragmentPlan(Q95);
         Assert.assertFalse(planFragment.contains("cross join"));
     }
 
@@ -632,8 +628,8 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
                 "     ));";
 
         String plan = getFragmentPlan(sql);
-        assertContains(plan,
-                "PREDICATES: 14: ss_sales_price >= 50.00, 14: ss_sales_price <= 200.00, 23: ss_net_profit >= 50, 23: ss_net_profit <= 300");
+        assertContains(plan, "PREDICATES: 14: ss_sales_price >= 50.00, 14: ss_sales_price <= 200.00, 23: " +
+                "ss_net_profit >= 50, 23: ss_net_profit <= 300");
     }
 
     @Test
@@ -644,35 +640,20 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     }
 
     @Test
-    public void testQuery33LeftDeepJoinReorderAvoidInnerJoinOnSameTable() throws Exception {
+    public void testQuery48LeftDeepJoinReorderAvoidInnerJoinOnSameTable() throws Exception {
         setTPCDSFactor(1);
-        String plan = getFragmentPlan(Q33);
-        assertContains(plan, "  16:HASH JOIN\n" +
+        String plan = getFragmentPlan(Q48);
+        assertContains(plan, "  11:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 44: wr_returning_cdemo_sk = 82: cd_demo_sk\n" +
-                "  |  equal join conjunct: 75: cd_marital_status = 84: cd_marital_status\n" +
-                "  |  equal join conjunct: 76: cd_education_status = 85: cd_education_status\n" +
+                "  |  equal join conjunct: 6: ss_cdemo_sk = 53: cd_demo_sk\n" +
+                "  |  other predicates: ((((55: cd_marital_status = 'M') AND (56: cd_education_status = '4 yr Degree')) " +
+                "AND ((14: ss_sales_price >= 100.00) AND (14: ss_sales_price <= 150.00))) OR " +
+                "(((55: cd_marital_status = 'D') AND (56: cd_education_status = '2 yr Degree')) AND " +
+                "((14: ss_sales_price >= 50.00) AND (14: ss_sales_price <= 100.00)))) OR (((55: cd_marital_status = 'S') " +
+                "AND (56: cd_education_status = 'College')) AND ((14: ss_sales_price >= 150.00) " +
+                "AND (14: ss_sales_price <= 200.00)))\n" +
                 "  |  \n" +
-                "  |----15:EXCHANGE");
-        assertContains(plan, "  12:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 40: wr_refunded_cdemo_sk = 73: cd_demo_sk\n" +
-                "  |  other join predicates: ((((75: cd_marital_status = 'D') AND (76: cd_education_status = 'Primary')) AND ((22: ws_sales_price >= 100.00) AND (22: ws_sales_price <= 150.00))) OR (((75: cd_marital_status = 'U') AND (76: cd_education_status = 'Unknown')) AND ((22: ws_sales_price >= 50.00) AND (22: ws_sales_price <= 100.00)))) OR (((75: cd_marital_status = 'M') AND (76: cd_education_status = 'Advanced Degree')) AND ((22: ws_sales_price >= 150.00) AND (22: ws_sales_price <= 200.00)))\n" +
-                "  |  \n" +
-                "  |----11:EXCHANGE");
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 15\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  14:OlapScanNode\n" +
-                "     TABLE: customer_demographics");
-        assertContains(plan, "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 11\n" +
-                "    UNPARTITIONED\n" +
-                "\n" +
-                "  10:OlapScanNode\n" +
-                "     TABLE: customer_demographics");
+                "  |----10:EXCHANGE");
     }
 }

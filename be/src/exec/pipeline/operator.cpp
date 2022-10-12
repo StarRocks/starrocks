@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/operator.h"
 
@@ -49,12 +49,17 @@ Status Operator::prepare(RuntimeState* state) {
     _finishing_timer = ADD_TIMER(_common_metrics, "SetFinishingTime");
     _finished_timer = ADD_TIMER(_common_metrics, "SetFinishedTime");
     _close_timer = ADD_TIMER(_common_metrics, "CloseTime");
+    _prepare_timer = ADD_TIMER(_common_metrics, "PrepareTime");
 
     _push_chunk_num_counter = ADD_COUNTER(_common_metrics, "PushChunkNum", TUnit::UNIT);
     _push_row_num_counter = ADD_COUNTER(_common_metrics, "PushRowNum", TUnit::UNIT);
     _pull_chunk_num_counter = ADD_COUNTER(_common_metrics, "PullChunkNum", TUnit::UNIT);
     _pull_row_num_counter = ADD_COUNTER(_common_metrics, "PullRowNum", TUnit::UNIT);
     return Status::OK();
+}
+
+void Operator::set_prepare_time(int64_t cost_ns) {
+    _prepare_timer->set(cost_ns);
 }
 
 void Operator::set_precondition_ready(RuntimeState* state) {
@@ -107,7 +112,8 @@ const std::vector<SlotId>& Operator::filter_null_value_columns() const {
     return _factory->get_filter_null_value_columns();
 }
 
-Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk) {
+Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
+                                               vectorized::FilterPtr* filter) {
     if (UNLIKELY(!_conjuncts_and_in_filters_is_cached)) {
         _cached_conjuncts_and_in_filters.insert(_cached_conjuncts_and_in_filters.end(), conjuncts.begin(),
                                                 conjuncts.end());
@@ -127,10 +133,30 @@ Status Operator::eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& 
         SCOPED_TIMER(_conjuncts_timer);
         auto before = chunk->num_rows();
         _conjuncts_input_counter->update(before);
-        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk));
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(_cached_conjuncts_and_in_filters, chunk, filter));
         auto after = chunk->num_rows();
         _conjuncts_output_counter->update(after);
-        _conjuncts_eval_counter->update(before - after);
+    }
+
+    return Status::OK();
+}
+
+Status Operator::eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
+                                vectorized::FilterPtr* filter) {
+    if (conjuncts.empty()) {
+        return Status::OK();
+    }
+    if (chunk == nullptr || chunk->is_empty()) {
+        return Status::OK();
+    }
+    _init_conjuct_counters();
+    {
+        SCOPED_TIMER(_conjuncts_timer);
+        size_t before = chunk->num_rows();
+        _conjuncts_input_counter->update(before);
+        RETURN_IF_ERROR(starrocks::ExecNode::eval_conjuncts(conjuncts, chunk, filter));
+        size_t after = chunk->num_rows();
+        _conjuncts_output_counter->update(after);
     }
 
     return Status::OK();
@@ -160,6 +186,8 @@ void Operator::_init_rf_counters(bool init_bloom) {
     }
     if (init_bloom && _bloom_filter_eval_context.join_runtime_filter_timer == nullptr) {
         _bloom_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "JoinRuntimeFilterTime");
+        _bloom_filter_eval_context.join_runtime_filter_hash_timer =
+                ADD_TIMER(_common_metrics, "JoinRuntimeFilterHashTime");
         _bloom_filter_eval_context.join_runtime_filter_input_counter =
                 ADD_COUNTER(_common_metrics, "JoinRuntimeFilterInputRows", TUnit::UNIT);
         _bloom_filter_eval_context.join_runtime_filter_output_counter =
@@ -174,9 +202,9 @@ void Operator::_init_conjuct_counters() {
         _conjuncts_timer = ADD_TIMER(_common_metrics, "ConjunctsTime");
         _conjuncts_input_counter = ADD_COUNTER(_common_metrics, "ConjunctsInputRows", TUnit::UNIT);
         _conjuncts_output_counter = ADD_COUNTER(_common_metrics, "ConjunctsOutputRows", TUnit::UNIT);
-        _conjuncts_eval_counter = ADD_COUNTER(_common_metrics, "ConjunctsEvaluate", TUnit::UNIT);
     }
 }
+
 OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
         : _id(id), _name(name), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);
@@ -197,9 +225,14 @@ Status OperatorFactory::prepare(RuntimeState* state) {
                 continue;
             }
             auto grf = state->exec_env()->runtime_filter_cache()->get(state->query_id(), filter_id);
+            ExecEnv::GetInstance()->add_rf_event({_state->query_id(), filter_id, BackendOptions::get_localhost(),
+                                                  strings::Substitute("INSTALL_GRF_TO_OPERATOR(op_id=$0, success=$1",
+                                                                      this->_plan_node_id, grf != nullptr)});
+
             if (grf == nullptr) {
                 continue;
             }
+
             desc->set_shared_runtime_filter(grf);
         }
     }

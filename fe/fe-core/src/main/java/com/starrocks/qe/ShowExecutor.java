@@ -26,41 +26,11 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AdminShowConfigStmt;
-import com.starrocks.analysis.AdminShowReplicaDistributionStmt;
-import com.starrocks.analysis.AdminShowReplicaStatusStmt;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.HelpStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.ShowAlterStmt;
-import com.starrocks.analysis.ShowAuthorStmt;
-import com.starrocks.analysis.ShowBackendsStmt;
-import com.starrocks.analysis.ShowBackupStmt;
-import com.starrocks.analysis.ShowBrokerStmt;
-import com.starrocks.analysis.ShowCollationStmt;
-import com.starrocks.analysis.ShowColumnStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDataStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowEnginesStmt;
 import com.starrocks.analysis.ShowExportStmt;
-import com.starrocks.analysis.ShowFrontendsStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
 import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowLoadStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowPluginsStmt;
-import com.starrocks.analysis.ShowProcStmt;
-import com.starrocks.analysis.ShowProcesslistStmt;
-import com.starrocks.analysis.ShowRepositoriesStmt;
-import com.starrocks.analysis.ShowResourcesStmt;
 import com.starrocks.analysis.ShowRestoreStmt;
 import com.starrocks.analysis.ShowRolesStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
@@ -69,13 +39,7 @@ import com.starrocks.analysis.ShowSmallFilesStmt;
 import com.starrocks.analysis.ShowSnapshotStmt;
 import com.starrocks.analysis.ShowSqlBlackListStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowTabletStmt;
 import com.starrocks.analysis.ShowTransactionStmt;
-import com.starrocks.analysis.ShowUserPropertyStmt;
-import com.starrocks.analysis.ShowUserStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
@@ -102,7 +66,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.ConfigBase;
@@ -136,13 +99,50 @@ import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.AdminShowConfigStmt;
+import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
+import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowAuthorStmt;
+import com.starrocks.sql.ast.ShowBackendsStmt;
+import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
+import com.starrocks.sql.ast.ShowBrokerStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
+import com.starrocks.sql.ast.ShowCollationStmt;
+import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowFrontendsStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowProcesslistStmt;
+import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.ast.ShowResourcesStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.ShowUserStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
 import com.starrocks.statistic.BasicStatsMeta;
@@ -285,12 +285,21 @@ public class ShowExecutor {
             handleShowCatalogs();
         } else if (stmt instanceof ShowComputeNodesStmt) {
             handleShowComputeNodes();
+        } else if (stmt instanceof ShowAuthenticationStmt) {
+            handleShowAuthentication();
         } else {
             handleEmtpy();
         }
 
         List<List<String>> rows = doPredicate(stmt, stmt.getMetaData(), resultSet.getResultRows());
         return new ShowResultSet(resultSet.getMetaData(), rows);
+    }
+
+    private void handleShowAuthentication() {
+        final ShowAuthenticationStmt showAuthenticationStmt = (ShowAuthenticationStmt) stmt;
+        List<List<String>> rows = GlobalStateMgr.getCurrentState().getAuth().getAuthenticationInfo(
+                showAuthenticationStmt.getUserIdent());
+        resultSet = new ShowResultSet(showAuthenticationStmt.getMetaData(), rows);
     }
 
     private void handleShowComputeNodes() {
@@ -315,13 +324,12 @@ public class ShowExecutor {
                 matcher = PatternMatcher.createMysqlPattern(showMaterializedViewStmt.getPattern(),
                         CaseSensibility.TABLE.getCaseSensibility());
             }
-            for (Table materializedView : db.getMaterializedViews()) {
-                if (matcher != null && !matcher.match(materializedView.getName())) {
+            for (MaterializedView mvTable : db.getMaterializedViews()) {
+                if (matcher != null && !matcher.match(mvTable.getName())) {
                     continue;
                 }
-                MaterializedView mvTable = (MaterializedView) materializedView;
                 List<String> resultRow = Lists.newArrayList(String.valueOf(mvTable.getId()), mvTable.getName(), dbName,
-                        mvTable.getViewDefineSql(), String.valueOf(mvTable.getRowCount()));
+                        mvTable.getMaterializedViewDdlStmt(true), String.valueOf(mvTable.getRowCount()));
                 rowSets.add(resultRow);
             }
             for (Table table : db.getTables()) {
@@ -502,21 +510,21 @@ public class ShowExecutor {
 
         PatternMatcher matcher = null;
         if (showDbStmt.getPattern() != null) {
-            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(), CaseSensibility.DATABASE.getCaseSensibility());
+            matcher = PatternMatcher.createMysqlPattern(showDbStmt.getPattern(),
+                    CaseSensibility.DATABASE.getCaseSensibility());
         }
         Set<String> dbNameSet = Sets.newTreeSet();
-        for (String fullName : dbNames) {
-            final String db = ClusterNamespace.getNameFromFullName(fullName);
+        for (String dbName : dbNames) {
             // Filter dbname
-            if (matcher != null && !matcher.match(db)) {
+            if (matcher != null && !matcher.match(dbName)) {
                 continue;
             }
 
             if (!PrivilegeChecker.checkDbPriv(ConnectContext.get(), catalogName,
-                    fullName, PrivPredicate.SHOW)) {
+                    dbName, PrivPredicate.SHOW)) {
                 continue;
             }
-            dbNameSet.add(db);
+            dbNameSet.add(dbName);
         }
 
         for (String dbName : dbNameSet) {
@@ -644,9 +652,8 @@ public class ShowExecutor {
         if (db == null) {
             ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_DB_ERROR, showStmt.getDb());
         }
-        StringBuilder sb = new StringBuilder();
-        sb.append("CREATE DATABASE `").append(ClusterNamespace.getNameFromFullName(showStmt.getDb())).append("`");
-        rows.add(Lists.newArrayList(ClusterNamespace.getNameFromFullName(showStmt.getDb()), sb.toString()));
+        rows.add(Lists.newArrayList(showStmt.getDb(),
+                "CREATE DATABASE `" + showStmt.getDb() + "`"));
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
@@ -1075,7 +1082,7 @@ public class ShowExecutor {
         resultSet = new ShowResultSet(showStmt.getMetaData(), rows);
     }
 
-    private void handleShowData() throws AnalysisException {
+    private void handleShowData() {
         ShowDataStmt showStmt = (ShowDataStmt) stmt;
         resultSet = new ShowResultSet(showStmt.getMetaData(), showStmt.getResultRows());
     }
@@ -1188,7 +1195,7 @@ public class ShowExecutor {
                 if (table == null) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTableName());
                 }
-                if (!(table instanceof OlapTable)) {
+                if (!table.isLocalTable()) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 
@@ -1615,7 +1622,8 @@ public class ShowExecutor {
 
     private void handleShowResourceGroup() throws AnalysisException {
         ShowResourceGroupStmt showResourceGroupStmt = (ShowResourceGroupStmt) stmt;
-        List<List<String>> rows = GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
+        List<List<String>> rows =
+                GlobalStateMgr.getCurrentState().getResourceGroupMgr().showResourceGroup(showResourceGroupStmt);
         resultSet = new ShowResultSet(showResourceGroupStmt.getMetaData(), rows);
     }
 

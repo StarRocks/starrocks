@@ -48,7 +48,3 @@ Note：
     ```sql
     RECOVER PARTITION p1 FROM example_tbl;
     ```
-
-## keyword
-
-RECOVER

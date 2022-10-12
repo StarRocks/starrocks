@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -168,6 +168,8 @@ public:
 
     bool append_continuous_strings(const Buffer<Slice>& strs) override;
 
+    bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) override;
+
     size_t append_numbers(const void* buff, size_t length) override { return -1; }
 
     void append_value_multiple_times(const void* value, size_t count) override;
@@ -181,6 +183,8 @@ public:
         _offsets.insert(_offsets.end(), count, _bytes.size());
         _slices_cache = false;
     }
+
+    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 

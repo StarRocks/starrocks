@@ -1,41 +1,24 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DescribeStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LikePredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowAlterStmt;
-import com.starrocks.analysis.ShowColumnStmt;
-import com.starrocks.analysis.ShowCreateDbStmt;
-import com.starrocks.analysis.ShowCreateTableStmt;
-import com.starrocks.analysis.ShowDataStmt;
-import com.starrocks.analysis.ShowDbStmt;
-import com.starrocks.analysis.ShowDeleteStmt;
-import com.starrocks.analysis.ShowDynamicPartitionStmt;
-import com.starrocks.analysis.ShowFunctionsStmt;
-import com.starrocks.analysis.ShowIndexStmt;
-import com.starrocks.analysis.ShowLoadStmt;
-import com.starrocks.analysis.ShowLoadWarningsStmt;
-import com.starrocks.analysis.ShowMaterializedViewStmt;
-import com.starrocks.analysis.ShowPartitionsStmt;
-import com.starrocks.analysis.ShowProcStmt;
 import com.starrocks.analysis.ShowRoutineLoadStmt;
+import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
 import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTableStatusStmt;
-import com.starrocks.analysis.ShowTableStmt;
-import com.starrocks.analysis.ShowTabletStmt;
-import com.starrocks.analysis.ShowVariablesStmt;
+import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;
@@ -58,6 +41,27 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.ShowAlterStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowColumnStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowDeleteStmt;
+import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowIndexStmt;
+import com.starrocks.sql.ast.ShowLoadStmt;
+import com.starrocks.sql.ast.ShowLoadWarningsStmt;
+import com.starrocks.sql.ast.ShowMaterializedViewStmt;
+import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowProcStmt;
+import com.starrocks.sql.ast.ShowTableStatusStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
+import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowVariablesStmt;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,7 +82,7 @@ public class ShowStmtAnalyzer {
 
     static class ShowStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
 
-        private static final Logger logger = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
+        private static final Logger LOGGER = LoggerFactory.getLogger(ShowStmtAnalyzerVisitor.class);
 
         public void analyze(ShowStmt statement, ConnectContext session) {
             analyzeShowPredicate(statement);
@@ -125,7 +129,7 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowFunctions(ShowFunctionsStmt node, ConnectContext context) {
+        public Void visitShowFunctionsStmt(ShowFunctionsStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
                 dbName = context.getDatabase();
@@ -181,6 +185,20 @@ public class ShowStmtAnalyzer {
         }
 
         @Override
+        public Void visitShowRoutineLoadTaskStatement(ShowRoutineLoadTaskStmt node, ConnectContext context) {
+            String dbName = node.getDbFullName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDbFullName(dbName);
+            try {
+                node.checkJobNameExpr();
+            } catch (AnalysisException e) {
+                LOGGER.error("analysis show routine load task error:", e);
+                throw new SemanticException("analysis show routine load task error: %s", e.getMessage());
+            }
+            return null;
+        }
+
+        @Override
         public Void visitShowAlterStmt(ShowAlterStmt statement, ConnectContext context) {
             ShowAlterStmtAnalyzer.analyze(statement, context);
             return null;
@@ -214,7 +232,12 @@ public class ShowStmtAnalyzer {
             return null;
         }
 
-        // used for remove default_cluster from stmt
+        @Override
+        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext context) {
+            ShowTransactionStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
         String getDatabaseName(String db, ConnectContext session) {
             if (Strings.isNullOrEmpty(db)) {
                 db = session.getDatabase();
@@ -479,7 +502,7 @@ public class ShowStmtAnalyzer {
                     stringBuilder.append("/partitions");
                 }
 
-                logger.debug("process SHOW PROC '{}';", stringBuilder);
+                LOGGER.debug("process SHOW PROC '{}';", stringBuilder);
 
                 try {
                     statement.setNode(ProcService.getInstance().open(stringBuilder.toString()));
@@ -589,5 +612,23 @@ public class ShowStmtAnalyzer {
             ShowLoadWarningsStmtAnalyzer.analyze(statement, context);
             return null;
         }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null) {
+                try {
+                    user.analyze();
+                } catch (AnalysisException e) {
+                    SemanticException exception = new SemanticException("failed to show authentication for " + user.toString());
+                    exception.initCause(e);
+                    throw exception;
+                }
+            } else if (!statement.isAll()) {
+                statement.setUserIdent(context.getCurrentUserIdentity());
+            }
+            return null;
+        }
+
     }
 }

@@ -131,11 +131,15 @@ public class TypeTest {
         Assert.assertEquals(60, arrayType.getMysqlResultSetFieldLength());
         Assert.assertEquals(0, arrayType.getMysqlResultSetFieldDecimals());
         Assert.assertEquals(33, arrayType.getMysqlResultSetFieldCharsetIndex());
+
+        // function (an invisible type for users, just used to express the lambda Functions in high-order functions)
+        type = Type.FUNCTION;
+        Assert.assertEquals(60, type.getMysqlResultSetFieldLength());
     }
 
     @Test
     public void testCanonicalName() {
-        Object[][] testCases = new Object[][]{
+        Object[][] testCases = new Object[][] {
                 {ScalarType.createDecimalV3NarrowestType(9, 2), "DECIMAL(9,2)"},
                 {ScalarType.createDecimalV3NarrowestType(18, 4), "DECIMAL(18,4)"},
                 {ScalarType.createDecimalV3NarrowestType(38, 6), "DECIMAL(38,6)"},

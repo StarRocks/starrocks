@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -36,8 +36,8 @@ struct DataSegment {
     //     compare every row in compare_results_array that <= 0 (i.e. `INCLUDE_IN_SEGMENT` part) with the first row of this DataSegment,
     //     if < 0, then mark it with `SMALLER_THAN_MIN_OF_SEGMENT`
     Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                            std::vector<std::vector<uint8_t>>& filter_array, const std::vector<int>& sort_order_flags,
-                            const std::vector<int>& null_first_flags, uint32_t& least_num, uint32_t& middle_num);
+                            std::vector<std::vector<uint8_t>>& filter_array, const SortDescs& sort_order_flags,
+                            uint32_t& least_num, uint32_t& middle_num);
 
     void clear() {
         chunk.reset(std::make_unique<Chunk>().release());
@@ -119,9 +119,7 @@ protected:
 
     // sort rules
     const std::vector<ExprContext*>* _sort_exprs;
-    // TODO: refactor it with SortDesc
-    std::vector<int> _sort_order_flag; // 1 for ascending, -1 for descending.
-    std::vector<int> _null_first_flag; // 1 for greatest, -1 for least.
+    const SortDescs _sort_desc;
     const std::string _sort_keys;
     const bool _is_topn;
 

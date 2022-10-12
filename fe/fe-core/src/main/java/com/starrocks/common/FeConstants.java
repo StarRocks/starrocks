@@ -64,5 +64,7 @@ public class FeConstants {
 
     public static boolean USE_MOCK_DICT_MANAGER = false;
 
-    public static final int default_tablet_number = 128;
+    public static final int DEFAULT_TABLET_NUMBER = 128;
+
+    public static final int AGG_FUNC_VERSION = 3;
 }

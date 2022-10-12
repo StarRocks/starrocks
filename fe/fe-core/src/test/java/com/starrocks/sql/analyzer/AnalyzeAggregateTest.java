@@ -1,7 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -16,7 +19,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestAggregate() {
+    public void testAggregate() {
         analyzeFail("select v1 from t0 where abs(sum(v2)) = 2;",
                 "WHERE clause cannot contain aggregations");
         analyzeFail("select sum(v1) from t0 order by sum(max(v2) over ())",
@@ -47,10 +50,17 @@ public class AnalyzeAggregateTest {
         analyzeSuccess("select ta,tc from tall group by ta,tc having ta = user()");
 
         analyzeSuccess("select count() from t0");
+        
+        analyzeSuccess("select max_by(v1,v2) from t0");
+        analyzeFail("select max_by(v1) from t0", "No matching function with signature: max_by(bigint(20)).");
+        analyzeFail("select max_by(v1,v2,v3) from t0", 
+                "No matching function with signature: max_by(bigint(20), bigint(20), bigint(20)).");
+        analyzeFail("select max_by(v1,1) from t0", "max_by function args must be column");
+        analyzeFail("select max_by(1,v1) from t0", "max_by function args must be column");
     }
 
     @Test
-    public void TestGrouping() {
+    public void testGrouping() {
         analyzeFail("select grouping(foo) from t0 group by grouping sets((v1), (v2))",
                 "cannot be resolved");
 
@@ -84,7 +94,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestAggInSort() {
+    public void testAggInSort() {
         analyzeSuccess("SELECT max(v1) FROM t0 WHERE true ORDER BY sum(1)");
         analyzeSuccess("SELECT v1 FROM t0 group by v1 ORDER BY sum(1)");
         analyzeFail("SELECT 1 FROM t0 WHERE true ORDER BY sum(1)",
@@ -94,7 +104,7 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestDistinct() {
+    public void testDistinct() {
         analyzeSuccess("select distinct v1, v2 from t0 order by v1");
         analyzeSuccess("select distinct v1, v2 as v from t0 order by v");
         analyzeSuccess("select distinct abs(v1) as v from t0 order by v");
@@ -131,10 +141,61 @@ public class AnalyzeAggregateTest {
     }
 
     @Test
-    public void TestGroupByUseOutput() {
+    public void testGroupByUseOutput() {
         analyzeSuccess("select v1 + 1 as v from t0 group by v");
         analyzeSuccess("select v1 + 1 as v from t0 group by grouping sets((v))");
         analyzeSuccess("select v1 + 1 as v from t0 group by cube(v)");
         analyzeSuccess("select v1 + 1 as v from t0 group by rollup(v)");
+    }
+
+    @Test
+    public void testForQualifiedName() {
+        QueryRelation query = ((QueryStatement) analyzeSuccess("select grouping_id(t0.v1, t0.v3), " +
+                "grouping(t0.v2) from t0 group by cube(t0.v1, t0.v2, t0.v3);"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1, v3), grouping(v2)",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select grouping_id(test.t0.v1, test.t0.v3), grouping(test.t0.v2) from t0 " +
+                "group by cube(test.t0.v1, test.t0.v2, test.t0.v3);"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1, v3), grouping(v2)",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select grouping(t0.v1), grouping(t0.v2), grouping_id(t0.v1,t0.v2), " +
+                "v1,v2 from t0 group by grouping sets((t0.v1,t0.v2),(t0.v1),(t0.v2))"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select grouping(test.t0.v1), grouping(test.t0.v2), " +
+                "grouping_id(test.t0.v1,test.t0.v2), v1,v2 from t0 " +
+                "group by grouping sets((test.t0.v1,test.t0.v2),(test.t0.v1),(test.t0.v2))"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select t0.v1, t0.v2, grouping_id(t0.v1, t0.v2), " +
+                "SUM(t0.v3) from t0 group by cube(t0.v1, t0.v2)"))
+                .getQueryRelation();
+        Assert.assertEquals("v1, v2, grouping(v1, v2), sum(v3)",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select test.t0.v1, test.t0.v2, grouping_id(test.t0.v1, test.t0.v2), " +
+                "SUM(test.t0.v3) from t0 group by cube(test.t0.v1, test.t0.v2)"))
+                .getQueryRelation();
+        Assert.assertEquals("v1, v2, grouping(v1, v2), sum(v3)",
+                String.join(", ", query.getColumnOutputNames()));
+
+        query = ((QueryStatement) analyzeSuccess("select grouping(v1), grouping(v2), grouping_id(v1,v2), " +
+                "v1,v2 from t0 group by grouping sets((v1,v2),(v1),(v2))"))
+                .getQueryRelation();
+        Assert.assertEquals("grouping(v1), grouping(v2), grouping(v1, v2), v1, v2",
+                String.join(", ", query.getColumnOutputNames()));
+    }
+
+    @Test
+    public void testAnyValueFunction() {
+        analyzeSuccess("select v1, any_value(v2) from t0 group by v1");
     }
 }

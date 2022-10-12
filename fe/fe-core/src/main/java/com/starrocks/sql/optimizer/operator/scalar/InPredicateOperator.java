@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -10,20 +10,34 @@ import java.util.stream.Collectors;
 
 public class InPredicateOperator extends PredicateOperator {
     private final boolean isNotIn;
+    private final boolean isSubquery;
 
     public InPredicateOperator(ScalarOperator... arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = false;
+        this.isSubquery = false;
     }
 
     public InPredicateOperator(boolean isNotIn, ScalarOperator... arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
+        this.isSubquery = false;
+    }
+
+    public InPredicateOperator(boolean isNotIn, boolean isSubquery, ScalarOperator... arguments) {
+        super(OperatorType.IN, arguments);
+        this.isNotIn = isNotIn;
+        this.isSubquery = isSubquery;
     }
 
     public InPredicateOperator(boolean isNotIn, List<ScalarOperator> arguments) {
         super(OperatorType.IN, arguments);
         this.isNotIn = isNotIn;
+        this.isSubquery = false;
+    }
+
+    public boolean isSubquery() {
+        return isSubquery;
     }
 
     public boolean isNotIn() {
@@ -84,11 +98,11 @@ public class InPredicateOperator extends PredicateOperator {
             return false;
         }
         InPredicateOperator that = (InPredicateOperator) o;
-        return isNotIn == that.isNotIn;
+        return isNotIn == that.isNotIn && isSubquery == that.isSubquery;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), isNotIn);
+        return Objects.hash(super.hashCode(), isNotIn, isSubquery);
     }
 }

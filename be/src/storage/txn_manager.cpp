@@ -36,11 +36,12 @@
 #include "util/runtime_profile.h"
 #include "util/scoped_cleanup.h"
 #include "util/starrocks_metrics.h"
+#include "util/threadpool.h"
 #include "util/time.h"
 
 namespace starrocks {
 
-TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
+TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32_t store_num)
         : _txn_map_shard_size(txn_map_shard_size), _txn_shard_size(txn_shard_size) {
     DCHECK_GT(_txn_map_shard_size, 0);
     DCHECK_GT(_txn_shard_size, 0);
@@ -49,6 +50,15 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size)
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
+    // we will get "store_num = 0" if it acts as cn, just ignore flush pool
+    if (store_num > 0) {
+        auto st = ThreadPoolBuilder("meta-flush")
+                          .set_min_threads(1)
+                          .set_max_threads(store_num * 2)
+                          .set_idle_timeout(MonoDelta::FromSeconds(30))
+                          .build(&_flush_thread_pool);
+        CHECK(st.ok());
+    }
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -245,6 +255,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     SCOPED_RAW_TIMER(&duration_ns);
 
     std::unordered_set<std::string> persisted;
+    std::vector<TabletSharedPtr> to_flush_tablet;
     for (auto& tablet : tablets) {
         if (tablet == nullptr) {
             continue;
@@ -252,13 +263,27 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
         auto path = tablet->data_dir()->path();
         // skip persisted meta.
         if (persisted.find(path) != persisted.end()) continue;
+        to_flush_tablet.push_back(tablet);
+        persisted.insert(path);
+    }
 
-        auto st = tablet->data_dir()->get_meta()->flush();
+    auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
+    std::vector<std::pair<Status, int64_t>> pair_vec(to_flush_tablet.size());
+    int i = 0;
+    for (auto& tablet : to_flush_tablet) {
+        auto dir = tablet->data_dir();
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        pair_vec[i].second = tablet->tablet_id();
+        i++;
+    }
+
+    token->wait();
+    for (const auto& pair : pair_vec) {
+        auto& st = pair.first;
         if (!st.ok()) {
-            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << tablet->tablet_id() << " res: " << st;
+            LOG(WARNING) << "Failed to persist tablet meta, tablet_id: " << pair.second << " res: " << st;
             return st;
         }
-        persisted.insert(path);
     }
 
     StarRocksMetrics::instance()->txn_persist_total.increment(1);
@@ -269,12 +294,24 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
 void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     int64_t duration_ns = 0;
     SCOPED_RAW_TIMER(&duration_ns);
+
+    int i = 0;
+    std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
+    auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        auto st = dir->get_meta()->flush();
-        if (!st.ok()) {
-            LOG(WARNING) << "failed to flush tablet meta, dir:" << dir->path() << " res:" << st;
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
+        pair_vec[i].second = dir->path();
+        i++;
+    }
+
+    // wait for all the flush task complete
+    token->wait();
+    for (const auto& pair : pair_vec) {
+        if (!pair.first.ok()) {
+            LOG(WARNING) << "failed to flush tablet meta, dir:" << pair.second << " res:" << pair.first;
         }
     }
+
     StarRocksMetrics::instance()->txn_persist_total.increment(1);
     StarRocksMetrics::instance()->txn_persist_duration_us.increment(duration_ns / 1000);
 }

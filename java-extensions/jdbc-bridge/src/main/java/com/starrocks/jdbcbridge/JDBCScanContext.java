@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.jdbcbridge;
 
@@ -10,16 +10,18 @@ public class JDBCScanContext {
     private String sql;
 
     private int statementFetchSize;
+    private int connectionPoolSize;
 
     public JDBCScanContext() {}
     public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password,
-                           String sql, int statementFetchSize) {
+                           String sql, int statementFetchSize, int connectionPoolSize) {
         this.driverClassName = driverClassName;
         this.jdbcURL = jdbcURL;
         this.user = user;
         this.password = password;
         this.sql = sql;
         this.statementFetchSize = statementFetchSize;
+        this.connectionPoolSize = connectionPoolSize;
     }
 
     public void setDriverClassName(String driverClassName) {
@@ -70,5 +72,8 @@ public class JDBCScanContext {
         return statementFetchSize;
     }
 
+    public int getConnectionPoolSize() {
+        return connectionPoolSize;
+    }
 
 }

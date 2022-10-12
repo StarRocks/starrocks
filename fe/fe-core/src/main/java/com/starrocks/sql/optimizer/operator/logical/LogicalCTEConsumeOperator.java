@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -9,9 +9,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.Map;
@@ -30,13 +28,6 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
 
     public LogicalCTEConsumeOperator(int cteId, Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
         super(OperatorType.LOGICAL_CTE_CONSUME, Operator.DEFAULT_LIMIT, null, null);
-        this.cteId = cteId;
-        this.cteOutputColumnRefMap = cteOutputColumnRefMap;
-    }
-
-    public LogicalCTEConsumeOperator(long limit, ScalarOperator predicate, Projection projection, int cteId,
-                                     Map<ColumnRefOperator, ColumnRefOperator> cteOutputColumnRefMap) {
-        super(OperatorType.LOGICAL_CTE_CONSUME, limit, predicate, projection);
         this.cteId = cteId;
         this.cteOutputColumnRefMap = cteOutputColumnRefMap;
     }
@@ -87,6 +78,10 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), cteId, cteOutputColumnRefMap);
+    }
+
+    public static Builder builder() {
+        return new Builder();
     }
 
     public static class Builder

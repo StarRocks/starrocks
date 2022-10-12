@@ -74,7 +74,6 @@ public class ClusterLoadStatisticsTest {
 
         be1.setDisks(ImmutableMap.copyOf(disks));
         be1.setAlive(true);
-        be1.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         // be2
         be2 = new Backend(10002, "192.168.0.2", 9052);
@@ -93,7 +92,6 @@ public class ClusterLoadStatisticsTest {
 
         be2.setDisks(ImmutableMap.copyOf(disks));
         be2.setAlive(true);
-        be2.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         // be3
         be3 = new Backend(10003, "192.168.0.3", 9053);
@@ -118,7 +116,6 @@ public class ClusterLoadStatisticsTest {
 
         be3.setDisks(ImmutableMap.copyOf(disks));
         be3.setAlive(true);
-        be3.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         systemInfoService = new SystemInfoService();
         systemInfoService.addBackend(be1);

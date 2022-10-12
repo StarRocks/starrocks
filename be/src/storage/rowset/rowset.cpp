@@ -21,9 +21,8 @@
 
 #include "storage/rowset/rowset.h"
 
-#include <unistd.h> // for link()
+#include <unistd.h>
 
-#include <cstdio> // for remove()
 #include <memory>
 #include <set>
 
@@ -31,7 +30,6 @@
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
 #include "rowset_options.h"
-#include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
 #include "storage/chunk_helper.h"
@@ -43,7 +41,6 @@
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/storage_engine.h"
 #include "storage/union_iterator.h"
-#include "storage/update_manager.h"
 #include "storage/utils.h"
 #include "util/defer_op.h"
 #include "util/time.h"
@@ -54,7 +51,13 @@ Rowset::Rowset(const TabletSchema* schema, std::string rowset_path, RowsetMetaSh
         : _schema(schema),
           _rowset_path(std::move(rowset_path)),
           _rowset_meta(std::move(rowset_meta)),
-          _refs_by_reader(0) {}
+          _refs_by_reader(0) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+}
+
+Rowset::~Rowset() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->rowset_metadata_mem_tracker(), _mem_usage());
+}
 
 Status Rowset::load() {
     // if the state is ROWSET_UNLOADING it means close() is called
@@ -131,8 +134,8 @@ Status Rowset::do_load() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
-                                 &footer_size_hint, rowset_meta()->partial_rowset_footer(seg_id));
+        auto res = Segment::open(fs, seg_path, seg_id, _schema, &footer_size_hint,
+                                 rowset_meta()->partial_rowset_footer(seg_id));
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -151,8 +154,7 @@ Status Rowset::reload() {
     size_t footer_size_hint = 16 * 1024;
     for (int seg_id = 0; seg_id < num_segments(); ++seg_id) {
         std::string seg_path = segment_file_path(_rowset_path, rowset_id(), seg_id);
-        auto res = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), fs, seg_path, seg_id, _schema,
-                                 &footer_size_hint);
+        auto res = Segment::open(fs, seg_path, seg_id, _schema, &footer_size_hint);
         if (!res.ok()) {
             LOG(WARNING) << "Fail to open " << seg_path << ": " << res.status();
             _segments.clear();
@@ -161,14 +163,6 @@ Status Rowset::reload() {
         _segments.push_back(std::move(res).value());
     }
     return Status::OK();
-}
-
-bool Rowset::check_path(const std::string& path) {
-    std::set<std::string> valid_paths;
-    for (int i = 0; i < num_segments(); ++i) {
-        valid_paths.insert(segment_file_path(_rowset_path, rowset_id(), i));
-    }
-    return valid_paths.find(path) != valid_paths.end();
 }
 
 StatusOr<int64_t> Rowset::estimate_compaction_segment_iterator_num() {
@@ -352,6 +346,7 @@ Status Rowset::get_segment_iterators(const vectorized::Schema& schema, const Row
     seg_options.chunk_size = options.chunk_size;
     seg_options.global_dictmaps = options.global_dictmaps;
     seg_options.unused_output_column_ids = options.unused_output_column_ids;
+    seg_options.runtime_range_pruner = options.runtime_range_pruner;
     if (options.delete_predicates != nullptr) {
         seg_options.delete_predicates = options.delete_predicates->get_predicates(end_version());
     }

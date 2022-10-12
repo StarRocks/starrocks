@@ -32,9 +32,11 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.FailMsg;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TabletCommitInfo;
@@ -42,6 +44,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 public class LoadLoadingTask extends LoadTask {
@@ -65,15 +68,18 @@ public class LoadLoadingTask extends LoadTask {
     private final boolean partialUpdate;
     // timeout of load job, in seconds
     private final long timeoutS;
+    private final Map<String, String> sessionVariables;
+    private final TLoadJobType loadJobType;
 
     private LoadingTaskPlanner planner;
+    private ConnectContext context;
 
-    public LoadLoadingTask(Database db, OlapTable table,
-                           BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
-                           long jobDeadlineMs, long execMemLimit, boolean strictMode,
-                           long txnId, LoadTaskCallback callback, String timezone,
-                           long timeoutS, long createTimestamp, boolean partialUpdate) {
-        super(callback, TaskType.LOADING);
+    public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
+            long jobDeadlineMs, long execMemLimit, boolean strictMode,
+            long txnId, LoadTaskCallback callback, String timezone,
+            long timeoutS, long createTimestamp, boolean partialUpdate, Map<String, String> sessionVariables, 
+            ConnectContext context, TLoadJobType loadJobType, int priority) {
+        super(callback, TaskType.LOADING, priority);
         this.db = db;
         this.table = table;
         this.brokerDesc = brokerDesc;
@@ -83,11 +89,14 @@ public class LoadLoadingTask extends LoadTask {
         this.strictMode = strictMode;
         this.txnId = txnId;
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
-        this.retryTime = 2; // 2 times is enough
+        this.retryTime = 1; // load task retry does not satisfy transaction's atomic
         this.timezone = timezone;
         this.timeoutS = timeoutS;
         this.createTimestamp = createTimestamp;
         this.partialUpdate = partialUpdate;
+        this.sessionVariables = sessionVariables;
+        this.context = context;
+        this.loadJobType = loadJobType;
     }
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
@@ -117,8 +126,9 @@ public class LoadLoadingTask extends LoadTask {
         // New one query id,
         Coordinator curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
                 planner.getFragments(), planner.getScanNodes(),
-                planner.getTimezone(), planner.getStartTime());
+                planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
         curCoordinator.setQueryType(TQueryType.LOAD);
+        curCoordinator.setLoadJobType(loadJobType);
         curCoordinator.setExecMemoryLimit(execMemLimit);
         /*
          * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.

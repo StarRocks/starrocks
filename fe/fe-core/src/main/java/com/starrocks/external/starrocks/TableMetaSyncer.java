@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.starrocks;
 
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.rpc.FrontendServiceProxy;
-import com.starrocks.thrift.TAuthenticateParams;
 import com.starrocks.thrift.TGetTableMetaRequest;
 import com.starrocks.thrift.TGetTableMetaResponse;
 import com.starrocks.thrift.TNetworkAddress;
@@ -25,10 +24,6 @@ public class TableMetaSyncer {
         TGetTableMetaRequest request = new TGetTableMetaRequest();
         request.setDb_name(table.getSourceTableDbName());
         request.setTable_name(table.getSourceTableName());
-        TAuthenticateParams authInfo = new TAuthenticateParams();
-        authInfo.setUser(table.getSourceTableUser());
-        authInfo.setPasswd(table.getSourceTablePassword());
-        request.setAuth_info(authInfo);
         try {
             TGetTableMetaResponse response = FrontendServiceProxy.call(addr,
                     Config.thrift_rpc_timeout_ms,

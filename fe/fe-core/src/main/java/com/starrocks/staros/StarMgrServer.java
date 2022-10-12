@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.staros;
 
@@ -112,6 +112,7 @@ public class StarMgrServer {
         com.staros.util.Config.STARMGR_IP = FrontendOptions.getLocalHostAddress();
         com.staros.util.Config.STARMGR_RPC_PORT = port;
         com.staros.util.Config.S3_BUCKET = Config.starmgr_s3_bucket;
+        com.staros.util.Config.S3_REGION = Config.starmgr_s3_region;
         com.staros.util.Config.S3_ENDPOINT = Config.starmgr_s3_endpoint;
         com.staros.util.Config.S3_AK = Config.starmgr_s3_ak;
         com.staros.util.Config.S3_SK = Config.starmgr_s3_sk;

@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -27,13 +26,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.CorrelatedPredicateRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 public class ExistentialApply2OuterJoinRule extends TransformationRule {
     public ExistentialApply2OuterJoinRule() {
@@ -45,7 +43,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
     public boolean check(OptExpression input, OptimizerContext context) {
         LogicalApplyOperator apply = (LogicalApplyOperator) input.getOp();
         return !apply.isUseSemiAnti() && apply.isExistential()
-                && !Utils.containsCorrelationSubquery(input.getGroupExpression());
+                && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 
     @Override
@@ -127,7 +125,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
                                                            ExistsPredicateOperator epo, OptimizerContext context) {
         if (null == apply.getCorrelationConjuncts()) {
             // If the correlation predicate doesn't appear in here,
-            // it's should not be a situation that we currently support.
+            // it should not be a situation that we currently support.
             throw new SemanticException("Not support none correlation predicate correlation subquery");
         }
 
@@ -233,47 +231,51 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
                                                    List<ColumnRefOperator> correlationColumnRefs,
                                                    boolean isNot) {
         // check correlation filter
-        if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicates, correlationColumnRefs)) {
+        if (!SubqueryUtils.checkAllIsBinaryEQ(correlationPredicates)) {
             // @Todo:
             // 1. require least a EQ predicate
             // 2. for other binary predicate rewrite rule
             //  a. outer-key < inner key -> outer-key < aggregate MAX(key)
             //  b. outer-key > inner key -> outer-key > aggregate MIN(key)
-            throw new SemanticException("Not support Non-EQ correlation predicate correlation subquery");
+            throw new SemanticException(SubqueryUtils.EXIST_NON_EQ_PREDICATE);
         }
 
         // extract join-key
-        Pair<List<ScalarOperator>, Map<ColumnRefOperator, ScalarOperator>> pair =
-                SubqueryUtils.rewritePredicateAndExtractColumnRefs(correlationPredicates,
-                        correlationColumnRefs, context);
+        CorrelatedPredicateRewriter rewriter = new CorrelatedPredicateRewriter(
+                correlationColumnRefs, context);
+        ScalarOperator newPredicate = SubqueryUtils.rewritePredicateAndExtractColumnRefs(
+                Utils.compoundAnd(correlationPredicates), rewriter);
+
+        Map<ColumnRefOperator, ScalarOperator> innerRefMap = rewriter.getColumnRefToExprMap();
 
         // rootOptExpression
         OptExpression rootOptExpression;
 
-        // aggregate
+        // aggregate, need add a countRows to indicate the further join match process result.
+        Map<ColumnRefOperator, CallOperator> aggregates = Maps.newHashMap();
+        CallOperator countRowsCallOp = SubqueryUtils.createCountRowsOperator();
+        ColumnRefOperator countRowsCol = context.getColumnRefFactory()
+                .create("countRows", countRowsCallOp.getType(), countRowsCallOp.isNullable());
+        aggregates.put(countRowsCol, countRowsCallOp);
         LogicalAggregationOperator aggregate =
-                new LogicalAggregationOperator(AggType.GLOBAL, new ArrayList<>(pair.second.keySet()),
-                        Maps.newHashMap());
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(innerRefMap.keySet()),
+                        aggregates);
 
         OptExpression aggregateOptExpression = OptExpression.create(aggregate);
         rootOptExpression = aggregateOptExpression;
 
-        // aggregate project
-        if (pair.second.entrySet().stream().anyMatch(d -> !(d.getValue().isColumnRef()))) {
-            Map<ColumnRefOperator, ScalarOperator> projectMap = Maps.newHashMap();
-            pair.second.entrySet().stream().filter(d -> !(d.getValue().isColumnRef()))
-                    .forEach(d -> projectMap.put(d.getKey(), d.getValue()));
-
-            // project add all output
-            Arrays.stream(input.getInputs().get(1).getOutputColumns().getColumnIds())
-                    .mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(d -> projectMap.put(d, d));
-
+        // aggregate project, agg -> project
+        if (SubqueryUtils.existNonColumnRef(innerRefMap.values())) {
+            // exists expression, need put it in project node
+            OptExpression rightChild = input.getInputs().get(1);
+            Map<ColumnRefOperator, ScalarOperator> projectMap = SubqueryUtils.generateChildOutColumns(
+                    rightChild, innerRefMap, context);
             OptExpression projectOptExpression = OptExpression.create(new LogicalProjectOperator(projectMap));
             rootOptExpression.getInputs().add(projectOptExpression);
             rootOptExpression = projectOptExpression;
         }
 
-        // filter(UnCorrelation)
+        // filter(UnCorrelation) agg -> project -> un-correlation filter
         if (null != apply.getPredicate()) {
             OptExpression filterOptExpression =
                     OptExpression.create(new LogicalFilterOperator(apply.getPredicate()), input.getInputs().get(1));
@@ -286,7 +288,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
 
         // left outer join
         LogicalJoinOperator joinOperator =
-                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, Utils.compoundAnd(pair.first));
+                new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, newPredicate);
         OptExpression joinOptExpression =
                 OptExpression.create(joinOperator, input.getInputs().get(0), aggregateOptExpression);
 
@@ -297,9 +299,7 @@ public class ExistentialApply2OuterJoinRule extends TransformationRule {
         Arrays.stream(input.getInputs().get(1).getOutputColumns().getColumnIds())
                 .mapToObj(context.getColumnRefFactory()::getColumnRef).forEach(d -> projectMap.put(d, d));
 
-        ScalarOperator nullPredicate = Utils.compoundAnd(
-                pair.second.keySet().stream().map(d -> new IsNullPredicateOperator(!isNot, d))
-                        .collect(Collectors.toList()));
+        ScalarOperator nullPredicate = new IsNullPredicateOperator(!isNot, countRowsCol);
         projectMap.put(apply.getOutput(), nullPredicate);
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(projectMap);
         OptExpression projectOptExpression = OptExpression.create(projectOperator, joinOptExpression);

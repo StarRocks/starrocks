@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 set(EXEC_FILES
         ./test_main.cpp
@@ -13,6 +13,7 @@ set(EXEC_FILES
         ./column/field_test.cpp
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
+        ./column/map_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
@@ -27,7 +28,6 @@ set(EXEC_FILES
         ./fs/fs_s3_test.cpp
         ./fs/fs_test.cpp
         ./fs/output_stream_wrapper_test.cpp
-        ./exec/es_query_builder_test.cpp
         ./exec/column_value_range_test.cpp
         ./exec/vectorized/agg_hash_map_test.cpp
         ./exec/vectorized/csv_scanner_test.cpp
@@ -40,17 +40,19 @@ set(EXEC_FILES
         ./exec/vectorized/file_scan_node_test.cpp
         ./exec/schema_columns_scanner_test.cpp
         ./exec/tablet_info_test.cpp
+        ./exec/vectorized/analytor_test.cpp
+        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/sorting_test.cpp
         ./exec/vectorized/chunks_sorter_test.cpp
         ./exec/vectorized/parquet_scanner_test.cpp
-        ./exec/vectorized/arrow_converter_test.cpp
         ./exec/vectorized/repeat_node_test.cpp
         ./exec/vectorized/analytor_test.cpp
-        ./exec/es_scan_reader_test.cpp
+        ./exec/es/es_query_builder_test.cpp
+        ./exec/es/es_scan_reader_test.cpp
+        ./exec/es/es_scroll_parser_test.cpp
         ./exec/vectorized/hdfs_scan_node_test.cpp
         ./exec/pipeline/pipeline_test_base.cpp
         ./exec/pipeline/pipeline_control_flow_test.cpp
-        ./exec/pipeline/pipeline_driver_queue_test.cpp
         ./exec/pipeline/query_context_manger_test.cpp
         ./exec/pipeline/query_context_test.cpp
         ./exec/pipeline/table_function_operator_test.cpp
@@ -86,6 +88,7 @@ set(EXEC_FILES
         ./exprs/vectorized/in_predicate_test.cpp
         ./exprs/vectorized/is_null_predicate_test.cpp
         ./exprs/vectorized/json_functions_test.cpp
+        ./exprs/vectorized/lambda_function_expr_test.cpp
         ./exprs/vectorized/like_test.cpp
         ./exprs/vectorized/math_functions_test.cpp
         ./exprs/vectorized/null_if_expr_test.cpp
@@ -112,6 +115,7 @@ set(EXEC_FILES
         ./formats/csv/datetime_converter_test.cpp
         ./formats/csv/decimalv2_converter_test.cpp
         ./formats/csv/float_converter_test.cpp
+        ./formats/csv/json_converter_test.cpp
         ./formats/csv/nullable_converter_test.cpp
         ./formats/csv/numeric_converter_test.cpp
         ./formats/json/binary_column_test.cpp
@@ -153,6 +157,7 @@ set(EXEC_FILES
         ./storage/primary_index_test.cpp
         ./storage/primary_key_encoder_test.cpp
         ./storage/tablet_mgr_test.cpp
+        ./storage/tablet_schema_helper.cpp
         ./storage/version_graph_test.cpp
         ./storage/lake/async_delta_writer_test.cpp
         ./storage/lake/compaction_policy_test.cpp
@@ -160,6 +165,7 @@ set(EXEC_FILES
         ./storage/lake/gc_test.cpp
         ./storage/lake/location_provider_test.cpp
         ./storage/lake/horizontal_compaction_task_test.cpp
+        ./storage/lake/schema_change_test.cpp
         ./storage/lake/tablet_manager_test.cpp
         ./storage/lake/tablet_reader_test.cpp
         ./storage/lake/tablet_writer_test.cpp
@@ -205,6 +211,7 @@ set(EXEC_FILES
         ./storage/conjunctive_predicates_test.cpp
         ./storage/convert_helper_test.cpp
         ./storage/merge_iterator_test.cpp
+	./storage/memtable_flush_executor_test.cpp
         ./storage/memtable_test.cpp
         ./storage/projection_iterator_test.cpp
         ./storage/push_handler_test.cpp
@@ -293,12 +300,17 @@ set(EXEC_FILES
         ./util/arrow/starrocks_column_to_arrow_test.cpp
         ./util/starrocks_metrics_test.cpp
         ./util/system_metrics_test.cpp
+        ./util/ratelimit_test.cpp
         ./gutil/sysinfo-test.cc
         ./service/lake_service_test.cpp
         )
 
 if ("${USE_STAROS}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./fs/fs_starlet_test.cpp)
+endif ()
+if ("${WITH_BLOCK_CACHE}" STREQUAL "ON")
+    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.
@@ -322,6 +334,11 @@ add_executable(starrocks_test ${EXEC_FILES})
 TARGET_LINK_LIBRARIES(starrocks_test ${TEST_LINK_LIBS})
 SET_TARGET_PROPERTIES(starrocks_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 
+
+add_executable(query_cache_test exec/query_cache/transform_operator.cpp exec/query_cache/query_cache_test.cpp)
+
+TARGET_LINK_LIBRARIES(query_cache_test ${TEST_LINK_LIBS})
+SET_TARGET_PROPERTIES(query_cache_test PROPERTIES COMPILE_FLAGS "-fno-access-control")
 # =================================================
 # bytes_test requires tcmalloc which conflicts with sanitizer.
 # Thus we need a standalone binary without sanitizer to test it.
@@ -359,7 +376,3 @@ ADD_BE_TEST(storage/task/engine_storage_migration_task_test)
 
 # you can simply add test case as single binary without adding `main`
 # ADD_BE_TEST(exec/vectorized/sorting_test)
-
-# =================================================
-# benchmark cases. But I think it makes non-sense, because it's compiled in ASAN mode.
-ADD_BE_BENCH(exec/vectorized/chunks_sorter_bench_test)

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -14,6 +14,7 @@ namespace starrocks {
 struct CompactionCandidate {
     TabletSharedPtr tablet;
     CompactionType type;
+    int64_t score = 0;
 
     CompactionCandidate() : tablet(nullptr), type(INVALID_COMPACTION) {}
 
@@ -25,22 +26,26 @@ struct CompactionCandidate {
     CompactionCandidate(const CompactionCandidate& other) {
         tablet = other.tablet;
         type = other.type;
+        score = other.score;
     }
 
     CompactionCandidate& operator=(const CompactionCandidate& rhs) {
         tablet = rhs.tablet;
         type = rhs.type;
+        score = rhs.score;
         return *this;
     }
 
     CompactionCandidate(CompactionCandidate&& other) {
         tablet = std::move(other.tablet);
         type = other.type;
+        score = other.score;
     }
 
     CompactionCandidate& operator=(CompactionCandidate&& rhs) {
         tablet = std::move(rhs.tablet);
         type = rhs.type;
+        score = rhs.score;
         return *this;
     }
 
@@ -54,6 +59,7 @@ struct CompactionCandidate {
             ss << "nullptr tablet";
         }
         ss << ", type:" << type;
+        ss << ", score:" << score;
         return ss.str();
     }
 };
@@ -63,10 +69,8 @@ struct CompactionCandidate {
 // when compaction score and level are equal, use tablet id(to be unique) instead(ascending)
 struct CompactionCandidateComparator {
     bool operator()(const CompactionCandidate& left, const CompactionCandidate& right) const {
-        int64_t left_score = static_cast<int64_t>(left.tablet->compaction_score(left.type) * 100);
-        int64_t right_score = static_cast<int64_t>(right.tablet->compaction_score(right.type) * 100);
-        return left_score > right_score || (left_score == right_score && left.type > right.type) ||
-               (left_score == right_score && left.type == right.type &&
+        return left.score > right.score || (left.score == right.score && left.type > right.type) ||
+               (left.score == right.score && left.type == right.type &&
                 left.tablet->tablet_id() < right.tablet->tablet_id());
     }
 };

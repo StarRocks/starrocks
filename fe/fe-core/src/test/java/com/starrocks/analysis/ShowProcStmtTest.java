@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowProcStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -22,7 +23,6 @@ public class ShowProcStmtTest {
     public void testShowProc() {
         ShowProcStmt stmt = new ShowProcStmt("/dbs");
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW PROC '/dbs'", stmt.toSql());
         Assert.assertEquals("/dbs", stmt.getPath());
     }
 

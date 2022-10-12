@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -82,7 +82,8 @@ public class PartitionPruneRuleTest {
         ColumnRefOperator column1 = columnRefFactory.create("dealDate", ScalarType.DATE, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
-
+        Map<Column, ColumnRefOperator> scanMetaColMap = Maps.newHashMap();
+        scanMetaColMap.put(new Column("dealDate", Type.DATE, false), column1);
         BinaryPredicateOperator binaryPredicateOperator1 =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 6, 1, 0, 0, 0)));
@@ -91,7 +92,7 @@ public class PartitionPruneRuleTest {
                         ConstantOperator.createDate(LocalDateTime.of(2020, 12, 1, 0, 0, 0)));
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, scanMetaColMap, null, -1, predicate);
         operator.setPredicate(null);
 
         new Expectations() {
@@ -191,7 +192,9 @@ public class PartitionPruneRuleTest {
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column1, new Column("dealDate", Type.DATE, false));
         scanColumnMap.put(column2, new Column("main_brand_id", Type.INT, false));
-
+        Map<Column, ColumnRefOperator> scanMetaColMap = Maps.newHashMap();
+        scanMetaColMap.put(new Column("dealDate", Type.DATE, false), column1);
+        scanMetaColMap.put(new Column("main_brand_id", Type.INT, false), column2);
         BinaryPredicateOperator binaryPredicateOperator1 =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.GE, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2020, 8, 1, 0, 0, 0)));
@@ -208,7 +211,7 @@ public class PartitionPruneRuleTest {
                 Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2, binaryPredicateOperator3,
                         binaryPredicateOperator4);
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, scanMetaColMap, null, -1, predicate);
 
         new Expectations() {
             {

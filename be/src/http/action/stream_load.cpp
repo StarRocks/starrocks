@@ -209,6 +209,8 @@ int StreamLoadAction::on_header(HttpRequest* req) {
 
     LOG(INFO) << "new income streaming load request." << ctx->brief() << ", db=" << ctx->db << ", tbl=" << ctx->table;
 
+    VLOG(1) << "streaming load request: " << req->debug_string();
+
     auto st = _on_header(req, ctx);
     if (!st.ok()) {
         ctx->status = st;

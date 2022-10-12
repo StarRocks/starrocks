@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "chunks_sorter_topn.h"
 
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/vectorized/sorting/merge.h"
-#include "exec/vectorized/sorting/sort_helper.h"
 #include "exec/vectorized/sorting/sort_permute.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "exprs/expr.h"
@@ -247,12 +246,12 @@ Status ChunksSorterTopn::_filter_and_sort_data(RuntimeState* state, std::pair<Pe
 
         if (_merged_segment.chunk->num_rows() >= rows_to_sort) {
             SCOPED_TIMER(_sort_filter_timer);
-            RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, rows_to_sort, filter_array, _sort_order_flag,
-                                                             _null_first_flag, smaller_num, include_num));
+            RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, rows_to_sort, filter_array, _sort_desc,
+                                                             smaller_num, include_num));
         } else {
             SCOPED_TIMER(_sort_filter_timer);
-            RETURN_IF_ERROR(_merged_segment.get_filter_array(segments, 1, filter_array, _sort_order_flag,
-                                                             _null_first_flag, smaller_num, include_num));
+            RETURN_IF_ERROR(
+                    _merged_segment.get_filter_array(segments, 1, filter_array, _sort_desc, smaller_num, include_num));
         }
 
         size_t filtered_rows = 0;
@@ -301,8 +300,8 @@ Status ChunksSorterTopn::_partial_sort_col_wise(RuntimeState* state, std::pair<P
         vertical_chunks.push_back(segment.order_by_columns);
     }
     auto do_sort = [&](Permutation& perm, size_t limit) {
-        return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_order_flag, _null_first_flag, perm,
-                                    limit, _topn_type == TTopNType::RANK);
+        return sort_vertical_chunks(state->cancelled_ref(), vertical_chunks, _sort_desc, perm, limit,
+                                    _topn_type == TTopNType::RANK);
     };
 
     size_t first_size = std::min(permutations.first.size(), rows_to_sort);
@@ -371,9 +370,8 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
 
     Permutation merged_perm;
     merged_perm.reserve(rows_to_keep);
-    SortDescs sort_desc(_sort_order_flag, _null_first_flag);
 
-    RETURN_IF_ERROR(merge_sorted_chunks_two_way(sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
+    RETURN_IF_ERROR(merge_sorted_chunks_two_way(_sort_desc, {left_chunk, left_columns}, {right_chunk, right_columns},
                                                 &merged_perm));
     CHECK_GE(merged_perm.size(), rows_to_keep);
     merged_perm.resize(rows_to_keep);

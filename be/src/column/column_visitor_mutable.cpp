@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/column_visitor_mutable.h"
 
@@ -10,6 +10,7 @@ namespace starrocks {
 VISIT_IMPL(vectorized::NullableColumn)
 VISIT_IMPL(vectorized::ConstColumn)
 VISIT_IMPL(vectorized::ArrayColumn)
+VISIT_IMPL(vectorized::MapColumn)
 VISIT_IMPL(vectorized::BinaryColumn)
 VISIT_IMPL(vectorized::LargeBinaryColumn)
 VISIT_IMPL(vectorized::Int8Column)

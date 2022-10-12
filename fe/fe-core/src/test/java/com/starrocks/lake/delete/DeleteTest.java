@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake.delete;
 
@@ -8,10 +8,9 @@ import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
@@ -36,9 +35,11 @@ import com.starrocks.load.DeleteJob;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.persist.EditLog;
 import com.starrocks.qe.QueryStateException;
-import com.starrocks.rpc.LakeServiceClient;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStorageMedium;
@@ -47,6 +48,8 @@ import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
@@ -62,16 +65,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 public class DeleteTest {
-    private long dbId = 1L;
-    private long tableId = 2L;
-    private long partitionId = 3L;
-    private long indexId = 4L;
-    private long tablet1Id = 10L;
-    private long tablet2Id = 11L;
-    private long backendId = 20L;
-    private String dbName = "db1";
-    private String tableName = "t1";
-    private String partitionName = "p1";
+    private final long dbId = 1L;
+    private final long tableId = 2L;
+    private final long partitionId = 3L;
+    private final long indexId = 4L;
+    private final long tablet1Id = 10L;
+    private final long tablet2Id = 11L;
+    private final long backendId = 20L;
+    private final String dbName = "db1";
+    private final String tableName = "t1";
+    private final String partitionName = "p1";
 
     @Mocked
     private GlobalStateMgr globalStateMgr;
@@ -82,7 +85,7 @@ public class DeleteTest {
     @Mocked
     private SystemInfoService systemInfoService;
     @Mocked
-    private LakeServiceClient client;
+    private LakeService lakeService;
 
     private Database db;
     private Auth auth;
@@ -95,7 +98,8 @@ public class DeleteTest {
         Column k1 = new Column("k1", Type.INT, true, null, "", "");
         columns.add(k1);
         columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
-        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+        columns.add(new Column("v", Type.BIGINT, false, null, "0", ""));
+        columns.add(new Column("v1", Type.ARRAY_BIGINT, false, null, "0", ""));
 
         // Tablet
         Tablet tablet1 = new LakeTablet(tablet1Id);
@@ -114,7 +118,7 @@ public class DeleteTest {
         Partition partition = new Partition(partitionId, partitionName, index, distributionInfo);
 
         // Lake table
-        LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        LakeTable table = new LakeTable(tableId, tableName, columns, KeysType.DUP_KEYS, partitionInfo, distributionInfo);
         Deencapsulation.setField(table, "baseIndexId", indexId);
         table.addPartition(partition);
         table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
@@ -124,12 +128,7 @@ public class DeleteTest {
         return db;
     }
 
-    @Before
-    public void setUp() {
-        deleteHandler = new DeleteHandler();
-        auth = AccessTestUtil.fetchAdminAccess();
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(false);
-        db = createDb();
+    public void setUpExpectation() {
         Backend backend = new Backend(backendId, "127.0.0.1", 1234);
 
         new Expectations() {
@@ -152,14 +151,29 @@ public class DeleteTest {
         };
     }
 
+    @Before
+    public void setUp() {
+        deleteHandler = new DeleteHandler();
+        auth = AccessTestUtil.fetchAdminAccess();
+        analyzer = AccessTestUtil.fetchAdminAnalyzer();
+        db = createDb();
+    }
+
     @Test
     public void testNormal() throws UserException, RpcException {
+        setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
 
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
         new Expectations() {
             {
-                client.deleteData((DeleteDataRequest) any);
+                lakeService.deleteData((DeleteDataRequest) any);
                 result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
@@ -219,10 +233,17 @@ public class DeleteTest {
     }
 
     @Test(expected = DdlException.class)
-    public void testBeDeleteFail() throws RpcException, DdlException, QueryStateException {
+    public void testBeDeleteFail() throws UserException {
+        setUpExpectation();
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
         new Expectations() {
             {
-                client.deleteData((DeleteDataRequest) any);
+                lakeService.deleteData((DeleteDataRequest) any);
                 result = new Future<DeleteDataResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
@@ -268,5 +289,46 @@ public class DeleteTest {
         }
 
         deleteHandler.process(deleteStmt);
+    }
+
+    public void setUpExpectationWithoutExec() {
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+
+                globalStateMgr.getDb(anyString);
+                result = db;
+
+                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                result = globalTransactionMgr;
+
+            }
+        };
+    }
+
+    @Test
+    public void testBeDeleteArrayType() throws UserException {
+        setUpExpectationWithoutExec();
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+
+        // Not supported type
+        BinaryPredicate binaryPredicate = new BinaryPredicate(BinaryPredicate.Operator.GT, new SlotRef(null, "v1"),
+                new StringLiteral("[]"));
+        DeleteStmt deleteStmt = new DeleteStmt(new TableName(dbName, tableName),
+                new PartitionNames(false, Lists.newArrayList(partitionName)), binaryPredicate);
+
+        deleteStmt.analyze(analyzer);
+        try {
+            deleteHandler.process(deleteStmt);
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("Type[ARRAY<bigint(20)>] not supported"));
+        }
     }
 }

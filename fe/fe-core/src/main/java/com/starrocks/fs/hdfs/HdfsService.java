@@ -53,18 +53,14 @@ public class HdfsService {
         fileSystemManager.getTProperties(path, loadProperties, tProperties);
     }
 
-    public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses)
-            throws UserException {
+    public void listPath(TBrokerListPathRequest request, List<TBrokerFileStatus> fileStatuses, boolean skipDir, 
+            boolean fileNameOnly) throws UserException {
         LOG.info("received a list path request, request detail: " + request);
-        boolean fileNameOnly = false;
-        if (request.isSetFileNameOnly()) {
-            fileNameOnly = request.isFileNameOnly();
-        }
         List<TBrokerFileStatus> allFileStatuses = fileSystemManager.listPath(request.path, fileNameOnly,
                 request.properties);
 
         for (TBrokerFileStatus tBrokerFileStatus : allFileStatuses) {
-            if (tBrokerFileStatus.isDir) {
+            if (skipDir && tBrokerFileStatus.isDir) {
                 continue;
             }
             fileStatuses.add(tBrokerFileStatus);

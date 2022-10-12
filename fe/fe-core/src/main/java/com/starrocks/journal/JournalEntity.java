@@ -22,19 +22,16 @@
 package com.starrocks.journal;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.alter.AlterJob;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.backup.BackupJob;
+import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.Repository;
-import com.starrocks.backup.RestoreJob;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSearchDesc;
-import com.starrocks.catalog.MaterializedViewPartitionVersionInfo;
 import com.starrocks.catalog.MetaVersion;
 import com.starrocks.catalog.Resource;
 import com.starrocks.cluster.Cluster;
@@ -54,7 +51,10 @@ import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AddPartitionsInfo;
+import com.starrocks.persist.AddPartitionsInfoV2;
+import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
+import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -65,6 +65,7 @@ import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.ConsistencyCheckInfo;
 import com.starrocks.persist.CreateInsertOverwriteJobLog;
 import com.starrocks.persist.CreateTableInfo;
+import com.starrocks.persist.CreateUserInfo;
 import com.starrocks.persist.DatabaseInfo;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.DropComputeNodeLog;
@@ -90,6 +91,7 @@ import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
 import com.starrocks.persist.ReplicaPersistInfo;
 import com.starrocks.persist.ResourceGroupOpEntry;
+import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.persist.SetReplicaStatusOperationLog;
 import com.starrocks.persist.ShardInfo;
@@ -97,6 +99,7 @@ import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.persist.TableInfo;
 import com.starrocks.persist.TablePropertyInfo;
 import com.starrocks.persist.TruncateTableInfo;
+import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
@@ -198,11 +201,6 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
-            case OperationType.OP_ADD_MATERIALIZED_VIEW_PARTITION_VERSION_INFO:
-            case OperationType.OP_REMOVE_MATERIALIZED_VIEW_PARTITION_VERSION_INFO:
-                data = MaterializedViewPartitionVersionInfo.read(in);
-                isRead = true;
-                break;
             case OperationType.OP_DROP_TABLE:
             case OperationType.OP_DROP_ROLLUP: {
                 data = new DropInfo();
@@ -231,6 +229,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ADD_PARTITIONS_V2: {
+                data = AddPartitionsInfoV2.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_DROP_PARTITION: {
                 data = DropPartitionInfo.read(in);
                 isRead = true;
@@ -252,12 +255,6 @@ public class JournalEntity implements Writable {
             case OperationType.OP_RECOVER_PARTITION: {
                 data = new RecoverInfo();
                 ((RecoverInfo) data).readFields(in);
-                isRead = true;
-                break;
-            }
-            case OperationType.OP_START_DECOMMISSION_BACKEND:
-            case OperationType.OP_FINISH_DECOMMISSION_BACKEND: {
-                data = AlterJob.read(in);
                 isRead = true;
                 break;
             }
@@ -288,12 +285,12 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             case OperationType.OP_BACKUP_JOB: {
-                data = BackupJob.read(in);
+                data = AbstractJob.read(in);
                 isRead = true;
                 break;
             }
             case OperationType.OP_RESTORE_JOB: {
-                data = RestoreJob.read(in);
+                data = AbstractJob.read(in);
                 isRead = true;
                 break;
             }
@@ -374,7 +371,9 @@ public class JournalEntity implements Writable {
             case OperationType.OP_REVOKE_PRIV:
             case OperationType.OP_SET_PASSWORD:
             case OperationType.OP_CREATE_ROLE:
-            case OperationType.OP_DROP_ROLE: {
+            case OperationType.OP_DROP_ROLE:
+            case OperationType.OP_GRANT_ROLE:
+            case OperationType.OP_REVOKE_ROLE: {
                 data = PrivInfo.read(in);
                 isRead = true;
                 break;
@@ -604,6 +603,11 @@ public class JournalEntity implements Writable {
                 isRead = true;
                 break;
             }
+            case OperationType.OP_ALTER_LOAD_JOB: {
+                data = AlterLoadJobOperationLog.read(in);
+                isRead = true;
+                break;
+            }
             case OperationType.OP_GLOBAL_VARIABLE_V2: {
                 data = GlobalVarPersistInfo.read(in);
                 isRead = true;
@@ -701,6 +705,32 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_STARMGR: {
                 data = StarMgrJournal.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_CREATE_USER_V2: {
+                data = CreateUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_ALTER_USER_V2: {
+                data = AlterUserInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_USER_V2: {
+                data = UserIdentity.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_UPDATE_USER_PRIVILEGE_V2: {
+                data = UserPrivilegeCollectionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_DROP_ROLE_V2:
+            case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
+                data = RolePrivilegeCollectionInfo.read(in);
                 isRead = true;
                 break;
             }

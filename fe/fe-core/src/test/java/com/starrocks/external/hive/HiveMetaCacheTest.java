@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
@@ -24,6 +24,8 @@ import java.io.FileOutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
+
+import static com.starrocks.external.Utils.createPartitionKey;
 
 public class HiveMetaCacheTest {
     private List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
@@ -56,20 +58,20 @@ public class HiveMetaCacheTest {
 
         Assert.assertEquals(3, partitionKeys.size());
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
 
         partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(3, partitionKeys.size());
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
 
         Assert.assertEquals(1, clientMethodGetPartitionKeysCalledTimes);
     }
@@ -80,15 +82,15 @@ public class HiveMetaCacheTest {
         HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10));
 
         HivePartition partition = metaCache.getPartition(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(1, partition.getFiles().size());
-        Assert.assertEquals(HdfsFileFormat.PARQUET, partition.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, partition.getFormat());
         Assert.assertEquals(partitionPath, partition.getFullPath());
 
         partition = metaCache.getPartition(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(1, partition.getFiles().size());
-        Assert.assertEquals(HdfsFileFormat.PARQUET, partition.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.PARQUET, partition.getFormat());
         Assert.assertEquals(partitionPath, partition.getFullPath());
 
         Assert.assertEquals(1, clientMethodGetPartitionCalledTimes);
@@ -116,12 +118,12 @@ public class HiveMetaCacheTest {
         HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10));
 
         HivePartitionStats partitionStats = metaCache.getPartitionStats(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(10000L, partitionStats.getNumRows());
         Assert.assertEquals(10000L, partitionStats.getTotalFileBytes());
 
         partitionStats = metaCache.getPartitionStats(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(10000L, partitionStats.getNumRows());
         Assert.assertEquals(10000L, partitionStats.getTotalFileBytes());
 
@@ -135,17 +137,17 @@ public class HiveMetaCacheTest {
         ImmutableMap<PartitionKey, Long> partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(3, partitionKeys.size());
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
 
         HivePartitionKeysKey newPartitionKeysKey =
                 new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
         List<String> partValues = Lists.newArrayList("11", "22", "33");
-        PartitionKey newPartitionKey = Utils.createPartitionKey(partValues, partColumns);
-        HivePartitionKey newHivePartitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
+        PartitionKey newPartitionKey = createPartitionKey(partValues, partColumns);
+        HivePartitionName newHivePartitionKey = new HivePartitionName("db", "tbl", Table.TableType.HIVE, partValues);
         metaCache.addPartitionKeyByEvent(newPartitionKeysKey, newPartitionKey, newHivePartitionKey);
         partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(4, partitionKeys.size());
@@ -158,7 +160,7 @@ public class HiveMetaCacheTest {
         HiveMetaClient metaClient = new MockedHiveMetaClient();
         HiveMetaCache metaCache = new HiveMetaCache(metaClient, Executors.newFixedThreadPool(10), "resource");
         HivePartitionStats partitionStats = metaCache.getPartitionStats(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertEquals(10000L, partitionStats.getNumRows());
         Assert.assertEquals(10000L, partitionStats.getTotalFileBytes());
 
@@ -177,7 +179,7 @@ public class HiveMetaCacheTest {
         Map<String, String> params = Maps.newHashMap();
         params.put("numRows", "5");
         List<String> partValues = Lists.newArrayList("1", "2", "3");
-        HivePartitionKey partitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
+        HivePartitionName partitionKey = new HivePartitionName("db", "tbl", Table.TableType.HIVE, partValues);
         StorageDescriptor sd = new StorageDescriptor();
         sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat");
         SerDeInfo serDeInfo = new SerDeInfo();
@@ -187,12 +189,12 @@ public class HiveMetaCacheTest {
         metaCache.alterPartitionByEvent(partitionKey, sd, params);
 
         partitionStats = metaCache.getPartitionStats(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         HivePartition partition = metaCache.getPartition(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         Assert.assertTrue(metaCache.partitionExistInCache(partitionKey));
         Assert.assertEquals(5, partitionStats.getNumRows());
-        Assert.assertSame(partition.getFormat(), HdfsFileFormat.TEXT);
+        Assert.assertSame(partition.getFormat(), RemoteFileInputFormat.TEXT);
         long totalSize = partition.getFiles().stream().mapToLong(HdfsFileDesc::getLength).sum();
         Assert.assertEquals(partitionStats.getTotalFileBytes(), totalSize);
         file.delete();
@@ -206,17 +208,17 @@ public class HiveMetaCacheTest {
         ImmutableMap<PartitionKey, Long> partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(3, partitionKeys.size());
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns)));
         Assert.assertTrue(
-                partitionKeys.containsKey(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
+                partitionKeys.containsKey(createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns)));
 
         HivePartitionKeysKey dropPartitionKeysKey =
                 new HivePartitionKeysKey("db", "tbl", Table.TableType.HIVE, partColumns);
         List<String> partValues = Lists.newArrayList("1", "2", "3");
-        PartitionKey dropPartitionKey = Utils.createPartitionKey(partValues, partColumns);
-        HivePartitionKey dropHivePartitionKey = new HivePartitionKey("db", "tbl", Table.TableType.HIVE, partValues);
+        PartitionKey dropPartitionKey = createPartitionKey(partValues, partColumns);
+        HivePartitionName dropHivePartitionKey = new HivePartitionName("db", "tbl", Table.TableType.HIVE, partValues);
         metaCache.dropPartitionKeyByEvent(dropPartitionKeysKey, dropPartitionKey, dropHivePartitionKey);
         partitionKeys = metaCache.getPartitionKeys(hmsTable);
         Assert.assertEquals(2, partitionKeys.size());
@@ -231,11 +233,11 @@ public class HiveMetaCacheTest {
 
         metaCache.getPartitionKeys(hmsTable);
         metaCache.getPartition(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         metaCache.getTableStats("db", "tbl");
 
         metaCache.getPartitionStats(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
 
         Assert.assertEquals(1, clientMethodGetPartitionKeysCalledTimes);
         Assert.assertEquals(1, clientMethodGetPartitionCalledTimes);
@@ -246,11 +248,11 @@ public class HiveMetaCacheTest {
 
         metaCache.getPartitionKeys(hmsTable);
         metaCache.getPartition(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
         metaCache.getTableStats("db", "tbl");
 
         metaCache.getPartitionStats(hmsTable,
-                Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
+                createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns));
 
         Assert.assertEquals(2, clientMethodGetPartitionKeysCalledTimes);
         Assert.assertEquals(2, clientMethodGetPartitionCalledTimes);
@@ -263,7 +265,7 @@ public class HiveMetaCacheTest {
             super("");
         }
 
-        public CurrentNotificationEventId getCurrentNotificationEventId() throws DdlException {
+        public CurrentNotificationEventId getCurrentNotificationEventId() {
             return new CurrentNotificationEventId(1L);
         }
 
@@ -274,9 +276,9 @@ public class HiveMetaCacheTest {
             clientMethodGetPartitionKeysCalledTimes++;
             try {
                 Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
-                partitionKeys.put(Utils.createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns), 0L);
-                partitionKeys.put(Utils.createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns), 1L);
-                partitionKeys.put(Utils.createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns), 2L);
+                partitionKeys.put(createPartitionKey(Lists.newArrayList("1", "2", "3"), partColumns), 0L);
+                partitionKeys.put(createPartitionKey(Lists.newArrayList("1", "2", "4"), partColumns), 1L);
+                partitionKeys.put(createPartitionKey(Lists.newArrayList("1", "2", "5"), partColumns), 2L);
                 return partitionKeys;
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
@@ -287,11 +289,14 @@ public class HiveMetaCacheTest {
         public HivePartition getPartition(String dbName, String tableName, List<String> partValues)
                 throws DdlException {
             clientMethodGetPartitionCalledTimes++;
-            return new HivePartition(HdfsFileFormat.PARQUET,
+            return new HivePartition(RemoteFileInputFormat.PARQUET,
                     ImmutableList.of(new HdfsFileDesc("file1",
                             "",
                             10000L,
-                            ImmutableList.of())),
+                            ImmutableList.of(),
+                            ImmutableList.of(),
+                            false,
+                            null)),
                     partitionPath);
         }
 

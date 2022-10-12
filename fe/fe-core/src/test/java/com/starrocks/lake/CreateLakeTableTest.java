@@ -1,22 +1,23 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
+
 
 import com.google.common.collect.Lists;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -53,15 +54,13 @@ public class CreateLakeTableTest {
     }
 
     private void checkLakeTable(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table.isLakeTable());
     }
 
     private LakeTable getLakeTable(String dbName, String tableName) {
-        String fullDbName = ClusterNamespace.getFullName(dbName);
-        Database db = GlobalStateMgr.getCurrentState().getDb(fullDbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
         Table table = db.getTable(tableName);
         Assert.assertTrue(table.isLakeTable());
         return (LakeTable) table;
@@ -149,9 +148,10 @@ public class CreateLakeTableTest {
             Assert.assertEquals(3600, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partitionId = lakeTable.getPartition("single_partition_duplicate_key_cache").getId();
-            StorageInfo partitionStorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partitionId);
-            Assert.assertTrue(partitionStorageInfo.isEnableStorageCache());
-            Assert.assertEquals(3600, partitionStorageInfo.getStorageCacheTtlS());
+            StorageCacheInfo partitionStorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partitionId);
+            Assert.assertTrue(partitionStorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(3600, partitionStorageCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(false, partitionStorageCacheInfo.isAllowAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -161,7 +161,8 @@ public class CreateLakeTableTest {
                         "(partition p1 values less than (\"2022-03-01\"),\n" +
                         " partition p2 values less than (\"2022-04-01\"))\n" +
                         "distributed by hash(key2) buckets 2\n" +
-                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200');"));
+                        "properties('enable_storage_cache' = 'true', 'storage_cache_ttl' = '7200'," +
+                        "'allow_async_write_back' = 'true');"));
         {
             LakeTable lakeTable = getLakeTable("lake_test", "multi_partition_aggregate_key_cache");
             // check table property
@@ -170,13 +171,14 @@ public class CreateLakeTableTest {
             Assert.assertEquals(7200, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageInfo partition1StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition1Id);
-            Assert.assertTrue(partition1StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(7200, partition1StorageInfo.getStorageCacheTtlS());
+            StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
+            Assert.assertTrue(partition1StorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
-            Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(7200, partition2StorageInfo.getStorageCacheTtlS());
+            StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
+            Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(7200, partition2StorageCacheInfo.getStorageCacheTtlS());
+            Assert.assertEquals(true, partition2StorageCacheInfo.isAllowAsyncWriteBack());
         }
 
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -195,14 +197,14 @@ public class CreateLakeTableTest {
             Assert.assertEquals(0, storageInfo.getStorageCacheTtlS());
             // check partition property
             long partition1Id = lakeTable.getPartition("p1").getId();
-            StorageInfo partition1StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition1Id);
-            Assert.assertFalse(partition1StorageInfo.isEnableStorageCache());
-            Assert.assertEquals(0, partition1StorageInfo.getStorageCacheTtlS());
+            StorageCacheInfo partition1StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition1Id);
+            Assert.assertFalse(partition1StorageCacheInfo.isEnableStorageCache());
+            Assert.assertEquals(0, partition1StorageCacheInfo.getStorageCacheTtlS());
             long partition2Id = lakeTable.getPartition("p2").getId();
-            StorageInfo partition2StorageInfo = lakeTable.getPartitionInfo().getStorageInfo(partition2Id);
-            Assert.assertTrue(partition2StorageInfo.isEnableStorageCache());
+            StorageCacheInfo partition2StorageCacheInfo = lakeTable.getPartitionInfo().getStorageCacheInfo(partition2Id);
+            Assert.assertTrue(partition2StorageCacheInfo.isEnableStorageCache());
             Assert.assertEquals(Config.tablet_sched_storage_cooldown_second,
-                    partition2StorageInfo.getStorageCacheTtlS());
+                    partition2StorageCacheInfo.getStorageCacheTtlS());
         }
     }
 
@@ -213,5 +215,14 @@ public class CreateLakeTableTest {
                 () -> createTable(
                         "create table lake_test.single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                                 "engine = starrocks primary key (key1) distributed by hash(key1) buckets 3"));
+
+        // storage_cache disabled but allow_async_write_back = true
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "storage allow_async_write_back can't be enabled when cache is disabled",
+                () -> createTable(
+                        "create table lake_test.single_partition_invalid_cache_property (key1 int, key2 varchar(10))\n" +
+                        "engine = starrocks distributed by hash(key1) buckets 3\n" +
+                        " properties('enable_storage_cache' = 'false', 'storage_cache_ttl' = '0'," +
+                        "'allow_async_write_back' = 'true');"));
     }
 }

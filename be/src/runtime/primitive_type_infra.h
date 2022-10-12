@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -66,6 +66,7 @@ namespace starrocks {
     M(DECIMAL32)                        \
     M(DECIMAL64)                        \
     M(DECIMAL128)                       \
+    M(FUNCTION)                         \
     M(JSON)
 
 #define _TYPE_DISPATCH_CASE(type) \

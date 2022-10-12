@@ -1,11 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/async_delta_writer.h"
 
-#include <fmt/format.h>
 #include <gtest/gtest.h>
 
-#include <algorithm>
 #include <random>
 
 #include "column/chunk.h"
@@ -15,10 +13,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gutil/strings/util.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/txn_log.h"
@@ -61,7 +59,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -79,7 +76,7 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
@@ -87,7 +84,9 @@ protected:
     void SetUp() override {
         (void)ExecEnv::GetInstance()->lake_tablet_manager()->TEST_set_location_provider(_location_provider.get());
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -137,8 +136,8 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
     // Call open() multiple times
@@ -215,13 +214,12 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    auto path0 = fmt::format("{}/{}", kTestGroupPath, txnlog->op_write().rowset().segments(0));
+    auto path0 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, path0, 0, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -310,13 +308,12 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
     ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(kNumThreads * kChunksPerThread * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
-    ASSERT_EQ(0, txnlog->op_write().rowset().del_vectors_size());
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    auto path0 = fmt::format("{}/{}", kTestGroupPath, txnlog->op_write().rowset().segments(0));
+    auto path0 = _location_provider->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
 
-    ASSIGN_OR_ABORT(auto seg0, Segment::open(_mem_tracker.get(), fs, path0, 0, _tablet_schema.get()));
+    ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, path0, 0, _tablet_schema.get()));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -372,8 +369,8 @@ TEST_F(AsyncDeltaWriterTest, test_write_after_close) {
 
     // Segment file should not exist
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSERT_OK(fs->iterate_dir(kTestGroupPath, [&](std::string_view name) {
-        EXPECT_TRUE(HasPrefixString(name, "tbl_"));
+    ASSERT_OK(fs->iterate_dir(join_path(kTestGroupPath, kMetadataDirectoryName), [&](std::string_view name) {
+        EXPECT_TRUE(is_tablet_metadata(name)) << name;
         return true;
     }));
 }

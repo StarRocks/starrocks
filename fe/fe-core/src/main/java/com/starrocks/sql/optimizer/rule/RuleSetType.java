@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.rule;
 
 public enum RuleSetType {
@@ -8,7 +8,9 @@ public enum RuleSetType {
     PRUNE_COLUMNS,
     PARTITION_PRUNE,
     PUSH_DOWN_PREDICATE,
-    SUBQUERY_REWRITE,
+    SUBQUERY_REWRITE_COMMON,
+    SUBQUERY_REWRITE_TO_WINDOW,
+    SUBQUERY_REWRITE_TO_JOIN,
     PUSH_DOWN_SUBQUERY,
     PRUNE_ASSERT_ROW,
     MULTI_DISTINCT_REWRITE,
@@ -17,5 +19,4 @@ public enum RuleSetType {
     PRUNE_PROJECT,
     COLLECT_CTE,
     INLINE_CTE,
-    INLINE_ONE_CTE,
 }

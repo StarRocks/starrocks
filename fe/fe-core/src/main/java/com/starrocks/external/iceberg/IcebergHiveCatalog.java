@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.iceberg;
 
@@ -38,16 +38,16 @@ import static com.starrocks.external.iceberg.IcebergUtil.convertToSRDatabase;
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
 
-    private static final ConcurrentHashMap<String, IcebergHiveCatalog> metastoreUriToCatalog =
+    private static final ConcurrentHashMap<String, IcebergHiveCatalog> METASTORE_URI_TO_CATALOG =
             new ConcurrentHashMap<>();
 
     public static synchronized IcebergHiveCatalog getInstance(String uri, Map<String, String> properties) {
-        if (!metastoreUriToCatalog.containsKey(uri)) {
+        if (!METASTORE_URI_TO_CATALOG.containsKey(uri)) {
             properties.put(CatalogProperties.URI, uri);
-            metastoreUriToCatalog.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
+            METASTORE_URI_TO_CATALOG.put(uri, (IcebergHiveCatalog) CatalogLoader.hive(String.format("hive-%s", uri),
                     new Configuration(), properties).loadCatalog());
         }
-        return metastoreUriToCatalog.get(uri);
+        return METASTORE_URI_TO_CATALOG.get(uri);
     }
 
     private String name;

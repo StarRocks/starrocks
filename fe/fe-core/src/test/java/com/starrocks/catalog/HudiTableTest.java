@@ -31,6 +31,7 @@ import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.avro.Schema;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.SerDeInfo;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
@@ -80,18 +81,38 @@ public class HudiTableTest {
         hudiResource.setProperties(resourceProperties);
 
         List<Schema.Field> hudiFields = new ArrayList<>();
+        hudiFields.add(new Schema.Field("_hoodie_commit_time",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING)), "", null));
+        hudiFields.add(new Schema.Field("_hoodie_commit_seqno",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING)), "", null));
+        hudiFields.add(new Schema.Field("_hoodie_record_key",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING)), "", null));
+        hudiFields.add(new Schema.Field("_hoodie_partition_path",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING)), "", null));
+        hudiFields.add(new Schema.Field("_hoodie_file_name",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.STRING)), "", null));
         hudiFields.add(new Schema.Field("col1",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG)), "", null));
         hudiFields.add(new Schema.Field("col2",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         Schema hudiSchema = Schema.createRecord(hudiFields);
 
-        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "BIGINT", ""));
-        List<FieldSchema> unPartKeys = Lists.newArrayList(new FieldSchema("col2", "INT", ""));
+        List<FieldSchema> partKeys = Lists.newArrayList(new FieldSchema("col1", "bigint", ""));
+        List<FieldSchema> unPartKeys = Lists.newArrayList();
+        unPartKeys.add(new FieldSchema("_hoodie_commit_time", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_commit_seqno", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_record_key", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_partition_path", "string", ""));
+        unPartKeys.add(new FieldSchema("_hoodie_file_name", "string", ""));
+        unPartKeys.add(new FieldSchema("col2", "int", ""));
         String hdfsPath = "hdfs://127.0.0.1:10000/hudi";
         StorageDescriptor sd = new StorageDescriptor();
         sd.setCols(unPartKeys);
         sd.setLocation(hdfsPath);
+        sd.setInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat");
+        SerDeInfo sdInfo = new SerDeInfo();
+        sdInfo.setSerializationLib("org.apache.hadoop.hive.ql.io.parquet.serde.ParquetHiveSerDe");
+        sd.setSerdeInfo(sdInfo);
         Table msTable = new Table();
         msTable.setPartitionKeys(partKeys);
         msTable.setSd(sd);
@@ -106,14 +127,8 @@ public class HudiTableTest {
                 result = globalStateMgr;
                 minTimes = 0;
 
-                globalStateMgr.getResourceMgr();
-                result = resourceMgr;
-
                 resourceMgr.getResource("hudi0");
                 result = hudiResource;
-
-                globalStateMgr.getHiveRepository();
-                result = hiveRepository;
 
                 hiveRepository.getTable(resourceName, hudiDb, hudiTable);
                 result = msTable;
@@ -133,7 +148,7 @@ public class HudiTableTest {
         }
 
         Assert.assertEquals(hudiTable, table.getTable());
-        Assert.assertEquals(hudiDb, table.getDb());
+        Assert.assertEquals(hudiDb, table.getDbName());
         Assert.assertEquals(hdfsPath, table.getHudiBasePath());
         Assert.assertEquals(Lists.newArrayList(new Column("col1", Type.BIGINT, true)), table.getPartitionColumns());
     }
@@ -169,15 +184,15 @@ public class HudiTableTest {
 
     @Test
     public void testInputFormat() {
-        Assert.assertEquals(HudiTable.HoodieTableType.COW,
+        Assert.assertEquals(HudiTable.HudiTableType.COW,
                 HudiTable.fromInputFormat("org.apache.hudi.hadoop.HoodieParquetInputFormat"));
-        Assert.assertEquals(HudiTable.HoodieTableType.COW,
+        Assert.assertEquals(HudiTable.HudiTableType.COW,
                 HudiTable.fromInputFormat("com.uber.hoodie.hadoop.HoodieInputFormat"));
-        Assert.assertEquals(HudiTable.HoodieTableType.MOR,
+        Assert.assertEquals(HudiTable.HudiTableType.MOR,
                 HudiTable.fromInputFormat("org.apache.hudi.hadoop.realtime.HoodieParquetRealtimeInputFormat"));
-        Assert.assertEquals(HudiTable.HoodieTableType.MOR,
+        Assert.assertEquals(HudiTable.HudiTableType.MOR,
                 HudiTable.fromInputFormat("com.uber.hoodie.hadoop.realtime.HoodieRealtimeInputFormat"));
-        Assert.assertEquals(HudiTable.HoodieTableType.UNKNOWN,
+        Assert.assertEquals(HudiTable.HudiTableType.UNKNOWN,
                 HudiTable.fromInputFormat("org.apache.hadoop.hive.ql.io.HiveInputFormat"));
     }
 
@@ -196,11 +211,14 @@ public class HudiTableTest {
         Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
                 Schema.createArray(Schema.create(Schema.Type.INT))),
                 new ArrayType(ScalarType.createType(PrimitiveType.INT)));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createFixed("FIXED", "FIXED", "F",1)),
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createFixed("FIXED", "FIXED", "F", 1)),
                 ScalarType.createType(PrimitiveType.VARCHAR));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createUnion(Schema.create(Schema.Type.INT)))
-                ,ScalarType.createType(PrimitiveType.INT));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(Schema.createMap(Schema.create(Schema.Type.INT)))
-                ,ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createUnion(Schema.create(Schema.Type.INT))),
+                ScalarType.createType(PrimitiveType.INT));
+        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(
+                Schema.createMap(Schema.create(Schema.Type.INT))),
+                ScalarType.createType(PrimitiveType.UNKNOWN_TYPE));
     }
 }

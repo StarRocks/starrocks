@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 #include <memory>
@@ -74,9 +74,11 @@ public:
     // only used for AGG streaming
     void batch_update_state(FunctionContext* ctx, jobject udaf, jobject update, jobject* input, int cols);
 
-    // batch call evalute
+    // batch call evalute by callstub
     jobject batch_call(BatchEvaluateStub* stub, jobject* input, int cols, int rows);
-    // batch call no-args function
+    // batch call method by reflect
+    jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, jobject* input, int cols, int rows);
+    // batch call no-args function by reflect
     jobject batch_call(FunctionContext* ctx, jobject caller, jobject method, int rows);
     // batch call int()
     // callers should be Object[]
@@ -88,9 +90,14 @@ public:
     // jcolumn: Integer[]/String[]
     void get_result_from_boxed_array(FunctionContext* ctx, int type, Column* col, jobject jcolumn, int rows);
 
+    Status get_result_from_boxed_array(int type, Column* col, jobject jcolumn, int rows);
+
     // convert int handle to jobject
     // return a local ref
     jobject convert_handle_to_jobject(FunctionContext* ctx, int state);
+
+    // convert handle list to jobject array (Object[])
+    jobject convert_handles_to_jobjects(FunctionContext* ctx, jobject state_ids);
 
     // List methods
     jobject list_get(jobject obj, int idx);
@@ -123,7 +130,6 @@ public:
 private:
     JVMFunctionHelper() { _init(); };
     void _init();
-    void _add_class_path(const std::string& path);
     // pack input array to java object array
     jobjectArray _build_object_array(jclass clazz, jobject* arr, int sz);
 
@@ -195,6 +201,13 @@ private:
         LOG(WARNING) << "Exception: " << msg;                                      \
         ctx->set_error(msg.c_str());                                               \
         env->ExceptionClear();                                                     \
+    }
+
+#define RETURN_ERROR_IF_JNI_EXCEPTION(env)                                                     \
+    if (auto e = env->ExceptionOccurred()) {                                                   \
+        LOCAL_REF_GUARD(e);                                                                    \
+        std::string msg = JVMFunctionHelper::getInstance().dumpExceptionString(e);             \
+        return Status::InternalError(JVMFunctionHelper::getInstance().dumpExceptionString(e)); \
     }
 
 // Used for UDAF serialization and deserialization,
@@ -338,12 +351,15 @@ private:
 class UDAFStateList {
 public:
     static inline const char* clazz_name = "com.starrocks.udf.FunctionStates";
-    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& add);
+    UDAFStateList(JavaGlobalRef&& handle, JavaGlobalRef&& get, JavaGlobalRef&& batch_get, JavaGlobalRef&& add);
 
     jobject handle() { return _handle.handle(); }
 
     // get state with index state
     jobject get_state(FunctionContext* ctx, JNIEnv* env, int state);
+
+    // batch get states
+    jobject get_state(FunctionContext* ctx, JNIEnv* env, jobject state_ids);
 
     // add a state to StateList
     int add_state(FunctionContext* ctx, JNIEnv* env, jobject state);
@@ -351,8 +367,10 @@ public:
 private:
     JavaGlobalRef _handle;
     JavaGlobalRef _get_method;
+    JavaGlobalRef _batch_get_method;
     JavaGlobalRef _add_method;
     jmethodID _get_method_id;
+    jmethodID _batch_get_method_id;
     jmethodID _add_method_id;
 };
 
@@ -488,5 +506,8 @@ struct JavaUDAFContext {
 
     std::unique_ptr<UDAFFunction> _func;
 };
+
+// Check whether java runtime can work
+Status detect_java_runtime();
 
 } // namespace starrocks::vectorized

@@ -28,6 +28,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -38,17 +39,24 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.RangeUtils;
+import com.starrocks.lake.StorageCacheInfo;
 import com.starrocks.persist.RecoverInfo;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TStorageMedium;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.DataInput;
 import java.io.DataInputStream;
 import java.io.DataOutput;
 import java.io.DataOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -69,12 +77,12 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     // The erase operation will be locked, so one batch can not be too many.
     private static final int MAX_ERASE_OPERATIONS_PER_CYCLE = 500;
 
-    private Map<Long, RecycleDatabaseInfo> idToDatabase;
+    private final Map<Long, RecycleDatabaseInfo> idToDatabase;
     // The first Long type is DdId, the second Long is TableId
-    private com.google.common.collect.Table<Long, Long, RecycleTableInfo> idToTableInfo;
+    private final com.google.common.collect.Table<Long, Long, RecycleTableInfo> idToTableInfo;
     // The first Long type is DdId, the second String is TableName
-    private com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
-    private Map<Long, RecyclePartitionInfo> idToPartition;
+    private final com.google.common.collect.Table<Long, String, RecycleTableInfo> nameToTableInfo;
+    private final Map<Long, RecyclePartitionInfo> idToPartition;
 
     protected Map<Long, Long> idToRecycleTime;
 
@@ -161,10 +169,13 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 .collect(Collectors.toList());
     }
 
-    public synchronized boolean recyclePartition(long dbId, long tableId, Partition partition,
-                                                 Range<PartitionKey> range, DataProperty dataProperty,
+    public synchronized boolean recyclePartition(long dbId, long tableId,
+                                                 Partition partition, Range<PartitionKey> range,
+                                                 DataProperty dataProperty,
                                                  short replicationNum,
-                                                 boolean isInMemory) {
+                                                 boolean isInMemory,
+                                                 StorageCacheInfo storageCacheInfo,
+                                                 boolean isLakeTable) {
         if (idToPartition.containsKey(partition.getId())) {
             LOG.error("partition[{}-{}] already in recycle bin.", partition.getId(), partition.getName());
             return false;
@@ -174,9 +185,16 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         erasePartitionWithSameName(dbId, tableId, partition.getName());
 
         // recycle partition
-        RecyclePartitionInfo partitionInfo = new RecyclePartitionInfo(dbId, tableId, partition,
-                range, dataProperty, replicationNum,
-                isInMemory);
+        RecyclePartitionInfo partitionInfo = null;
+        if (isLakeTable) {
+            // lake table
+            partitionInfo = new RecycleRangePartitionInfo(dbId, tableId, partition,
+                    range, dataProperty, replicationNum, isInMemory, storageCacheInfo);
+        } else {
+            partitionInfo = new RecyclePartitionInfoV1(dbId, tableId, partition,
+                    range, dataProperty, replicationNum, isInMemory);
+        }
+
         idToRecycleTime.put(partition.getId(), System.currentTimeMillis());
         idToPartition.put(partition.getId(), partitionInfo);
         LOG.info("recycle partition[{}-{}]", partition.getId(), partition.getName());
@@ -202,7 +220,11 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
     public synchronized Range<PartitionKey> getPartitionRange(long partitionId) {
         RecyclePartitionInfo partitionInfo = idToPartition.get(partitionId);
         if (partitionInfo != null) {
-            return partitionInfo.getRange();
+            if (partitionInfo instanceof RecyclePartitionInfoV1) {
+                return ((RecyclePartitionInfoV1) partitionInfo).getRange();
+            } else {
+                return ((RecycleRangePartitionInfo) partitionInfo).getRange();
+            }
         }
         return null;
     }
@@ -575,7 +597,12 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
 
         // check if range is invalid
-        Range<PartitionKey> recoverRange = recoverPartitionInfo.getRange();
+        Range<PartitionKey> recoverRange = null;
+        if (recoverPartitionInfo instanceof RecyclePartitionInfoV1) {
+            recoverRange = ((RecyclePartitionInfoV1) recoverPartitionInfo).getRange();
+        } else {
+            recoverRange = ((RecycleRangePartitionInfo) recoverPartitionInfo).getRange();
+        }
         RangePartitionInfo partitionInfo = (RangePartitionInfo) table.getPartitionInfo();
         if (partitionInfo.getAnyIntersectRange(recoverRange, false) != null) {
             throw new DdlException("Can not recover partition[" + partitionName + "]. Range conflict.");
@@ -592,6 +619,10 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         partitionInfo.setDataProperty(partitionId, recoverPartitionInfo.getDataProperty());
         partitionInfo.setReplicationNum(partitionId, recoverPartitionInfo.getReplicationNum());
         partitionInfo.setIsInMemory(partitionId, recoverPartitionInfo.isInMemory());
+        if (table.isLakeTable()) {
+            partitionInfo.setStorageCacheInfo(partitionId,
+                    ((RecyclePartitionInfoV2) recoverPartitionInfo).getStorageCacheInfo());
+        }
 
         // remove from recycle bin
         idToPartition.remove(partitionId);
@@ -617,10 +648,19 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
             table.addPartition(partitionInfo.getPartition());
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
-            rangePartitionInfo.setRange(partitionId, false, partitionInfo.getRange());
+            if (partitionInfo instanceof RecyclePartitionInfoV1) {
+                rangePartitionInfo.setRange(partitionId, false, ((RecyclePartitionInfoV1) partitionInfo).getRange());
+            } else {
+                rangePartitionInfo.setRange(partitionId, false, ((RecycleRangePartitionInfo) partitionInfo).getRange());
+            }
             rangePartitionInfo.setDataProperty(partitionId, partitionInfo.getDataProperty());
             rangePartitionInfo.setReplicationNum(partitionId, partitionInfo.getReplicationNum());
             rangePartitionInfo.setIsInMemory(partitionId, partitionInfo.isInMemory());
+
+            if (table.isLakeTable()) {
+                rangePartitionInfo.setStorageCacheInfo(partitionId,
+                        ((RecyclePartitionInfoV2) partitionInfo).getStorageCacheInfo());
+            }
 
             iterator.remove();
             idToRecycleTime.remove(partitionId);
@@ -720,7 +760,13 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
                 }
             } // end for indices
         }
+    }
 
+    public void removeInvalidateReference() {
+        if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+            // privilege object can be invalidated after gc
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().removeInvalidObject();
+        }
     }
 
     @Override
@@ -736,6 +782,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             postProcessEraseTable(recycleTableInfos);
             Thread.sleep(100);
             eraseDatabase(currentTimeMs);
+            removeInvalidateReference();
         } catch (InterruptedException e) {
             LOG.warn(e);
         }
@@ -808,8 +855,20 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         count = in.readInt();
         for (int i = 0; i < count; i++) {
             long id = in.readLong();
-            RecyclePartitionInfo partitionInfo = new RecyclePartitionInfo();
-            partitionInfo.readFields(in);
+            long dbId = in.readLong();
+            RecyclePartitionInfo partitionInfo;
+            // dbId is used to distinguish if it is lake table. We write a -1 in it.
+            // If this dbId < 0, then the table is a lake table, so use RecyclePartitionInfoV2 to read it
+            // else, it is an olap table, just read it as usual, but because dbId has been read, set it into partitionInfo
+            // and read the remain part
+            if (dbId < 0) {
+                partitionInfo = RecyclePartitionInfoV2.read(in);
+            } else {
+                RecyclePartitionInfoV1 v1 = new RecyclePartitionInfoV1();
+                v1.readFields(in);
+                v1.setDbId(dbId);
+                partitionInfo = v1;
+            }
             idToPartition.put(id, partitionInfo);
         }
 
@@ -864,7 +923,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
     }
 
-    public class RecycleTableInfo implements Writable {
+    private class RecycleTableInfo implements Writable {
         private long dbId;
         private Table table;
 
@@ -897,26 +956,29 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
     }
 
-    public class RecyclePartitionInfo implements Writable {
-        private long dbId;
-        private long tableId;
-        private Partition partition;
-        private Range<PartitionKey> range;
-        private DataProperty dataProperty;
-        private short replicationNum;
-        private boolean isInMemory;
+    private abstract static class RecyclePartitionInfo implements Writable {
+        @SerializedName(value = "dbId")
+        protected long dbId;
+        @SerializedName(value = "tableId")
+        protected long tableId;
+        @SerializedName(value = "partition")
+        protected Partition partition;
+        @SerializedName(value = "dataProperty")
+        protected DataProperty dataProperty;
+        @SerializedName(value = "replicationNum")
+        protected short replicationNum;
+        @SerializedName(value = "isInMemory")
+        protected boolean isInMemory;
 
-        public RecyclePartitionInfo() {
-            // for persist
+        protected RecyclePartitionInfo() {
         }
 
-        public RecyclePartitionInfo(long dbId, long tableId, Partition partition,
-                                    Range<PartitionKey> range, DataProperty dataProperty, short replicationNum,
-                                    boolean isInMemory) {
+        protected RecyclePartitionInfo(long dbId, long tableId, Partition partition,
+                                       DataProperty dataProperty, short replicationNum,
+                                       boolean isInMemory) {
             this.dbId = dbId;
             this.tableId = tableId;
             this.partition = partition;
-            this.range = range;
             this.dataProperty = dataProperty;
             this.replicationNum = replicationNum;
             this.isInMemory = isInMemory;
@@ -934,10 +996,6 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             return partition;
         }
 
-        public Range<PartitionKey> getRange() {
-            return range;
-        }
-
         public DataProperty getDataProperty() {
             return dataProperty;
         }
@@ -948,6 +1006,29 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
 
         public boolean isInMemory() {
             return isInMemory;
+        }
+
+        public void setDbId(long dbId) {
+            this.dbId = dbId;
+        }
+    }
+
+    // only for RangePartition
+    public static class RecyclePartitionInfoV1 extends RecyclePartitionInfo {
+        private Range<PartitionKey> range;
+
+        public RecyclePartitionInfoV1() {
+            super();
+        }
+
+        public RecyclePartitionInfoV1(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
+                                      DataProperty dataProperty, short replicationNum, boolean isInMemory) {
+            super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+            this.range = range;
+        }
+
+        public Range<PartitionKey> getRange() {
+            return range;
         }
 
         @Override
@@ -962,7 +1043,7 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
         }
 
         public void readFields(DataInput in) throws IOException {
-            dbId = in.readLong();
+            // dbId has been read in CatalogRecycleBin.readFields()
             tableId = in.readLong();
             partition = Partition.read(in);
             range = RangeUtils.readRange(in);
@@ -971,6 +1052,79 @@ public class CatalogRecycleBin extends LeaderDaemon implements Writable {
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_72) {
                 isInMemory = in.readBoolean();
             }
+        }
+    }
+
+    public static class RecyclePartitionInfoV2 extends RecyclePartitionInfo {
+        @SerializedName(value = "storageCacheInfo")
+        private StorageCacheInfo storageCacheInfo;
+
+        public RecyclePartitionInfoV2(long dbId, long tableId, Partition partition,
+                                      DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                      StorageCacheInfo storageCacheInfo) {
+            super(dbId, tableId, partition, dataProperty, replicationNum, isInMemory);
+            this.storageCacheInfo = storageCacheInfo;
+        }
+
+        public StorageCacheInfo getStorageCacheInfo() {
+            return storageCacheInfo;
+        }
+
+        public static RecyclePartitionInfoV2 read(DataInput in) throws IOException {
+            String json = Text.readString(in);
+            return GsonUtils.GSON.fromJson(json, RecyclePartitionInfoV2.class);
+        }
+
+        @Override
+        public void write(DataOutput out) throws IOException {
+            out.writeLong(-1L);
+            String json = GsonUtils.GSON.toJson(this);
+            Text.writeString(out, json);
+        }
+    }
+
+    public static class RecycleRangePartitionInfo extends RecyclePartitionInfoV2 implements GsonPreProcessable,
+            GsonPostProcessable {
+
+        private Range<PartitionKey> range;
+        // because Range<PartitionKey> and PartitionKey can not be serialized by gson
+        // ATTN: call preSerialize before serialization and postDeserialized after deserialization
+        @SerializedName(value = "serializedRange")
+        private byte[] serializedRange;
+
+        public RecycleRangePartitionInfo(long dbId, long tableId, Partition partition, Range<PartitionKey> range,
+                                      DataProperty dataProperty, short replicationNum, boolean isInMemory,
+                                      StorageCacheInfo storageCacheInfo) {
+            super(dbId, tableId, partition, dataProperty, replicationNum,
+                    isInMemory, storageCacheInfo);
+            this.range = range;
+        }
+
+        public Range<PartitionKey> getRange() {
+            return range;
+        }
+
+        private byte[] serializeRange(Range<PartitionKey> range) throws IOException {
+            ByteArrayOutputStream stream = new ByteArrayOutputStream();
+            DataOutputStream dos = new DataOutputStream(stream);
+            RangeUtils.writeRange(dos, range);
+            return stream.toByteArray();
+        }
+
+        private Range<PartitionKey> deserializeRange(byte[] serializedRange) throws IOException {
+            InputStream inputStream = new ByteArrayInputStream(serializedRange);
+            DataInput dataInput = new DataInputStream(inputStream);
+            return RangeUtils.readRange(dataInput);
+        }
+
+        @Override
+        public void gsonPreProcess() throws IOException {
+            serializedRange = serializeRange(range);
+        }
+
+        @Override
+        public void gsonPostProcess() throws IOException {
+            range = deserializeRange(serializedRange);
         }
     }
 

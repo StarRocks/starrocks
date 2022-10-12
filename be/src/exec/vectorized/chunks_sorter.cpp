@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/chunks_sorter.h"
 
@@ -16,9 +16,7 @@ namespace starrocks::vectorized {
 
 static void get_compare_results_colwise(size_t rows_to_sort, Columns& order_by_columns,
                                         std::vector<CompareVector>& compare_results_array,
-                                        std::vector<DataSegment>& data_segments,
-                                        const std::vector<int>& sort_order_flags,
-                                        const std::vector<int>& null_first_flags) {
+                                        std::vector<DataSegment>& data_segments, const SortDescs& sort_desc) {
     size_t dats_segment_size = data_segments.size();
 
     for (size_t i = 0; i < dats_segment_size; ++i) {
@@ -34,8 +32,7 @@ static void get_compare_results_colwise(size_t rows_to_sort, Columns& order_by_c
         for (size_t col_idx = 0; col_idx < order_by_column_size; col_idx++) {
             rhs_values.push_back(order_by_columns[col_idx]->get(rows_to_sort));
         }
-        compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_order_flags,
-                        null_first_flags);
+        compare_columns(segment.order_by_columns, compare_results_array[i], rhs_values, sort_desc);
     }
 }
 
@@ -48,8 +45,7 @@ void DataSegment::init(const std::vector<ExprContext*>* sort_exprs, const ChunkP
 }
 
 Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                                     std::vector<std::vector<uint8_t>>& filter_array,
-                                     const std::vector<int>& sort_order_flags, const std::vector<int>& null_first_flags,
+                                     std::vector<std::vector<uint8_t>>& filter_array, const SortDescs& sort_desc,
                                      uint32_t& smaller_num, uint32_t& include_num) {
     size_t dats_segment_size = data_segments.size();
     std::vector<CompareVector> compare_results_array(dats_segment_size);
@@ -57,7 +53,7 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
     // First compare the chunk with last row of this segment.
     {
         get_compare_results_colwise(rows_to_sort - 1, order_by_columns, compare_results_array, data_segments,
-                                    sort_order_flags, null_first_flags);
+                                    sort_desc);
     }
 
     // Since the first and the last of segment is the same value,
@@ -81,9 +77,6 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             }
         }
     } else {
-        std::vector<size_t> first_size_array;
-        first_size_array.resize(dats_segment_size);
-
         include_num = 0;
         filter_array.resize(dats_segment_size);
         for (size_t i = 0; i < dats_segment_size; ++i) {
@@ -91,16 +84,12 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
             size_t rows = segment.chunk->num_rows();
             filter_array[i].resize(rows);
 
-            size_t local_first_size = include_num;
             for (size_t j = 0; j < rows; ++j) {
                 if (compare_results_array[i][j] <= 0) {
                     filter_array[i][j] = DataSegment::INCLUDE_IN_SEGMENT;
                     ++include_num;
                 }
             }
-
-            // Obtain number of rows for second compare.
-            first_size_array[i] = include_num - local_first_size;
         }
 
         // Second compare with first row of this chunk, use rows from first compare.
@@ -112,8 +101,7 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
                     }
                 }
             }
-            get_compare_results_colwise(0, order_by_columns, compare_results_array, data_segments, sort_order_flags,
-                                        null_first_flags);
+            get_compare_results_colwise(0, order_by_columns, compare_results_array, data_segments, sort_desc);
         }
 
         smaller_num = 0;
@@ -137,24 +125,16 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
                            const std::string& sort_keys, const bool is_topn)
-        : _state(state), _sort_exprs(sort_exprs), _sort_keys(sort_keys), _is_topn(is_topn) {
+        : _state(state),
+          _sort_exprs(sort_exprs),
+          _sort_desc(*is_asc, *is_null_first),
+          _sort_keys(sort_keys),
+          _is_topn(is_topn) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
     DCHECK(is_null_first != nullptr);
     DCHECK_EQ(_sort_exprs->size(), is_asc->size());
     DCHECK_EQ(is_asc->size(), is_null_first->size());
-
-    size_t col_num = is_asc->size();
-    _sort_order_flag.resize(col_num);
-    _null_first_flag.resize(col_num);
-    for (size_t i = 0; i < is_asc->size(); ++i) {
-        _sort_order_flag[i] = is_asc->at(i) ? 1 : -1;
-        if (is_asc->at(i)) {
-            _null_first_flag[i] = is_null_first->at(i) ? -1 : 1;
-        } else {
-            _null_first_flag[i] = is_null_first->at(i) ? 1 : -1;
-        }
-    }
 }
 
 ChunksSorter::~ChunksSorter() {}

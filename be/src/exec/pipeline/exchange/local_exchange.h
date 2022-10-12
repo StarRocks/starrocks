@@ -1,12 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
+#include <memory>
 #include <utility>
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/exchange/local_exchange_memory_manager.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
+#include "exec/pipeline/exchange/shuffler.h"
 #include "exprs/expr_context.h"
 
 namespace starrocks {
@@ -89,11 +91,13 @@ class PartitionExchanger final : public LocalExchanger {
 
         vectorized::Columns _partitions_columns;
         std::vector<uint32_t> _hash_values;
+        std::vector<uint32_t> _shuffle_channel_id;
         // This array record the channel start point in _row_indexes
         // And the last item is the number of rows of the current shuffle chunk.
         // It will easy to get number of rows belong to one channel by doing
         // _partition_row_indexes_start_points[i + 1] - _partition_row_indexes_start_points[i]
         std::vector<size_t> _partition_row_indexes_start_points;
+        std::unique_ptr<Shuffler> _shuffler;
     };
 
 public:

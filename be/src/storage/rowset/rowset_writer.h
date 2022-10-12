@@ -22,12 +22,17 @@
 #pragma once
 
 #include "common/statusor.h"
+#include "gen_cpp/data.pb.h"
 #include "gen_cpp/types.pb.h"
 #include "gutil/macros.h"
 #include "runtime/global_dict/types_fwd_decl.h"
 #include "storage/column_mapping.h"
 #include "storage/rowset/rowset.h"
 #include "storage/rowset/rowset_writer_context.h"
+
+namespace butil {
+class IOBuf;
+}
 
 namespace starrocks {
 
@@ -87,7 +92,7 @@ public:
         return Status::NotSupported("RowsetWriter::add_columns");
     }
 
-    virtual Status flush_chunk(const vectorized::Chunk& chunk) {
+    virtual Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) {
         return Status::NotSupported("RowsetWriter::flush_chunk");
     }
 
@@ -116,6 +121,10 @@ public:
     // finish building and return pointer to the built rowset (guaranteed to be inited).
     // return nullptr when failed
     virtual StatusOr<RowsetSharedPtr> build() = 0;
+
+    virtual Status flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+        return Status::NotSupported("RowsetWriter::flush_segment");
+    }
 
     virtual Version version() = 0;
 

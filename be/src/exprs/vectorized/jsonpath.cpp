@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/jsonpath.h"
 
 #include <re2/re2.h>
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "column/column_viewer.h"

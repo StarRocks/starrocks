@@ -51,6 +51,10 @@ SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segme
 
 SegmentWriter::~SegmentWriter() {}
 
+std::string SegmentWriter::segment_path() const {
+    return _wfile->filename();
+}
+
 void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, const TabletColumn& column) {
     meta->set_column_id(column_id);
     meta->set_unique_id(column.unique_id());
@@ -60,8 +64,8 @@ void SegmentWriter::_init_column_meta(ColumnMetaPB* meta, uint32_t column_id, co
     // For column_writer, data_page_body includes two slices: `encoded values` + `nullmap`.
     // However, LZ4 doesn't support compressing multiple slices. In order to use LZ4, one solution is to
     // copy the contents of the slice `nullmap` into the slice `encoded values`, but the cost of copying is still not small.
-    // So here we use LZ4_FRAME, it can compression multiple slices conveniently.
-    meta->set_compression(LZ4_FRAME);
+    // Here we set the compression from _tablet_schema which given from CREATE TABLE statement.
+    meta->set_compression(_tablet_schema->compression_type());
     meta->set_is_nullable(column.is_nullable());
 
     // TODO(mofei) set the format_version from column
@@ -86,11 +90,6 @@ Status SegmentWriter::init() {
 Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has_key, SegmentFooterPB* footer) {
     DCHECK(_column_writers.empty());
     DCHECK(_column_indexes.empty());
-
-    if (_opts.storage_format_version != 1 && _opts.storage_format_version != 2) {
-        return Status::InvalidArgument(
-                strings::Substitute("Invalid storage_format_version $0", _opts.storage_format_version));
-    }
 
     // merge partial segment footer
     // in partial update, key columns and some value columns have been written in partial segment
@@ -119,8 +118,7 @@ Status SegmentWriter::init(const std::vector<uint32_t>& column_indexes, bool has
 
         const auto& column = _tablet_schema->column(column_index);
         ColumnWriterOptions opts;
-        opts.page_format = (_opts.storage_format_version == 1) ? 1 : 2;
-        opts.adaptive_page_format = (_opts.storage_format_version > 1);
+        opts.page_format = 2;
         opts.meta = _footer.add_columns();
 
         if (!_opts.referenced_column_ids.empty()) {
@@ -263,7 +261,7 @@ Status SegmentWriter::_write_short_key_index() {
 }
 
 Status SegmentWriter::_write_footer() {
-    _footer.set_version(_opts.storage_format_version);
+    _footer.set_version(2);
     _footer.set_num_rows(_num_rows);
 
     // Footer := SegmentFooterPB, FooterPBSize(4), FooterPBChecksum(4), MagicNumber(4)

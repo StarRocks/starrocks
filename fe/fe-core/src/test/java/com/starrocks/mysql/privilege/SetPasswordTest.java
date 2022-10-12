@@ -34,7 +34,6 @@ import com.starrocks.persist.PrivInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.system.SystemInfoService;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -80,19 +79,19 @@ public class SetPasswordTest {
 
     @Test
     public void test() throws DdlException {
-        UserIdentity userIdentity = new UserIdentity("default_cluster:cmy", "%");
+        UserIdentity userIdentity = new UserIdentity("cmy", "%");
         userIdentity.setIsAnalyzed();
         CreateUserStmt stmt = new CreateUserStmt(new UserDesc(userIdentity));
         auth.createUser(stmt);
 
         ConnectContext ctx = new ConnectContext(null);
         // set password for 'cmy'@'%'
-        UserIdentity currentUser1 = new UserIdentity("default_cluster:cmy", "%");
+        UserIdentity currentUser1 = new UserIdentity("cmy", "%");
         currentUser1.setIsAnalyzed();
         ctx.setCurrentUserIdentity(currentUser1);
         ctx.setThreadLocalInfo();
 
-        UserIdentity user1 = new UserIdentity("default_cluster:cmy", "%");
+        UserIdentity user1 = new UserIdentity("cmy", "%");
         user1.setIsAnalyzed();
         SetPassVar setPassVar = new SetPassVar(user1, null);
         try {
@@ -112,12 +111,12 @@ public class SetPasswordTest {
         }
 
         // create user cmy2@'192.168.1.1'
-        UserIdentity userIdentity2 = new UserIdentity("default_cluster:cmy2", "192.168.1.1");
+        UserIdentity userIdentity2 = new UserIdentity("cmy2", "192.168.1.1");
         userIdentity2.setIsAnalyzed();
         stmt = new CreateUserStmt(new UserDesc(userIdentity2));
         auth.createUser(stmt);
 
-        UserIdentity currentUser2 = new UserIdentity("default_cluster:cmy2", "192.168.1.1");
+        UserIdentity currentUser2 = new UserIdentity("cmy2", "192.168.1.1");
         currentUser2.setIsAnalyzed();
         ctx.setCurrentUserIdentity(currentUser2);
         ctx.setThreadLocalInfo();
@@ -132,7 +131,7 @@ public class SetPasswordTest {
         }
 
         // set password for cmy2@'192.168.1.1'
-        UserIdentity user2 = new UserIdentity("default_cluster:cmy2", "192.168.1.1");
+        UserIdentity user2 = new UserIdentity("cmy2", "192.168.1.1");
         user2.setIsAnalyzed();
         SetPassVar setPassVar4 = new SetPassVar(user2, null);
         try {

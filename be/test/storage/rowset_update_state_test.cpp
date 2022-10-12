@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/rowset_update_state.h"
 
@@ -6,13 +6,13 @@
 
 #include <functional>
 #include <iostream>
+#include <memory>
 
 #include "column/datum_tuple.h"
 #include "fs/fs_memory.h"
 #include "runtime/mem_pool.h"
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
-#include "storage/chunk_iterator.h"
 #include "storage/empty_iterator.h"
 #include "storage/olap_common.h"
 #include "storage/rowset/rowset_factory.h"
@@ -31,8 +31,8 @@ namespace starrocks {
 class RowsetUpdateStateTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _compaction_mem_tracker.reset(new MemTracker(-1));
-        _tablet_meta_mem_tracker = std::make_unique<MemTracker>();
+        _compaction_mem_tracker = std::make_unique<MemTracker>(-1);
+        _metadata_mem_tracker = std::make_unique<MemTracker>();
     }
 
     void TearDown() override {
@@ -44,7 +44,7 @@ public:
 
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                   vectorized::Column* one_delete = nullptr) {
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
         writer_context.tablet_id = tablet->tablet_id();
@@ -112,7 +112,7 @@ public:
                                           std::vector<int32_t>& column_indexes,
                                           std::shared_ptr<TabletSchema> partial_schema) {
         // create partial rowset
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
         writer_context.tablet_id = tablet->tablet_id();
@@ -147,7 +147,7 @@ public:
 protected:
     TabletSharedPtr _tablet;
     std::unique_ptr<MemTracker> _compaction_mem_tracker;
-    std::unique_ptr<MemTracker> _tablet_meta_mem_tracker;
+    std::unique_ptr<MemTracker> _metadata_mem_tracker;
 };
 
 static vectorized::ChunkIteratorPtr create_tablet_iterator(vectorized::TabletReader& reader,
@@ -272,7 +272,7 @@ TEST_F(RowsetUpdateStateTest, check_conflict) {
     }
 
     // create new rowset to make conflict
-    RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+    RowsetWriterContext writer_context;
     RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
     writer_context.rowset_id = rowset_id;
     writer_context.tablet_id = _tablet->tablet_id();

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/olap_scan_node.h"
 
@@ -340,13 +340,10 @@ Status OlapScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_r
     return Status::OK();
 }
 
-void OlapScanNode::enable_shared_scan(bool enable) {
-    _enable_shared_scan = enable;
-}
-
 StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_queue(
         const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-        bool enable_tablet_internal_parallel, size_t num_total_scan_ranges) {
+        bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+        size_t num_total_scan_ranges) {
     pipeline::Morsels morsels;
     for (const auto& scan_range : scan_ranges) {
         morsels.emplace_back(std::make_unique<pipeline::ScanMorsel>(node_id, scan_range));
@@ -364,8 +361,9 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
 
     int64_t scan_dop;
     int64_t splitted_scan_rows;
-    ASSIGN_OR_RETURN(auto could, _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
-                                                                 &scan_dop, &splitted_scan_rows));
+    ASSIGN_OR_RETURN(auto could,
+                     _could_tablet_internal_parallel(scan_ranges, pipeline_dop, num_total_scan_ranges,
+                                                     tablet_internal_parallel_mode, &scan_dop, &splitted_scan_rows));
     if (!could) {
         return std::make_unique<pipeline::FixedMorselQueue>(std::move(morsels));
     }
@@ -379,11 +377,13 @@ StatusOr<pipeline::MorselQueuePtr> OlapScanNode::convert_scan_range_to_morsel_qu
     return std::make_unique<pipeline::LogicalSplitMorselQueue>(std::move(morsels), scan_dop, splitted_scan_rows);
 }
 
-StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,
-                                                             int32_t pipeline_dop, size_t num_total_scan_ranges,
-                                                             int64_t* scan_dop, int64_t* splitted_scan_rows) const {
+StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(
+        const std::vector<TScanRangeParams>& scan_ranges, int32_t pipeline_dop, size_t num_total_scan_ranges,
+        TTabletInternalParallelMode::type tablet_internal_parallel_mode, int64_t* scan_dop,
+        int64_t* splitted_scan_rows) const {
+    bool force_split = tablet_internal_parallel_mode == TTabletInternalParallelMode::type::FORCE_SPLIT;
     // The enough number of tablets shouldn't use tablet internal parallel.
-    if (num_total_scan_ranges >= pipeline_dop) {
+    if (!force_split && num_total_scan_ranges >= pipeline_dop) {
         return false;
     }
 
@@ -402,6 +402,10 @@ StatusOr<bool> OlapScanNode::_could_tablet_internal_parallel(const std::vector<T
     *scan_dop = num_table_rows / *splitted_scan_rows;
     *scan_dop = std::max<int64_t>(1, std::min<int64_t>(*scan_dop, pipeline_dop));
 
+    if (force_split) {
+        return true;
+    }
+
     bool could = *scan_dop >= pipeline_dop || *scan_dop >= config::tablet_internal_parallel_min_scan_dop;
     return could;
 }
@@ -411,8 +415,8 @@ StatusOr<bool> OlapScanNode::_could_split_tablet_physically(const std::vector<TS
     ASSIGN_OR_RETURN(TabletSharedPtr first_tablet, get_tablet(&(scan_ranges[0].scan_range.internal_scan_range)));
     KeysType keys_type = first_tablet->tablet_schema().keys_type();
     const auto skip_aggr = thrift_olap_scan_node().is_preaggregation;
-    bool is_keys_type_matched =
-            keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr);
+    bool is_keys_type_matched = keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+                                ((keys_type == UNIQUE_KEYS || keys_type == AGG_KEYS) && skip_aggr);
     return is_keys_type_matched;
 }
 
@@ -476,6 +480,8 @@ void OlapScanNode::_init_counter(RuntimeState* state) {
     _bi_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BitmapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _bf_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "BloomFilterFilterRows", TUnit::UNIT, "SegmentInit");
     _seg_zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "SegmentZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
+    _seg_rt_filtered_counter =
+            ADD_CHILD_COUNTER(_scan_profile, "SegmentRuntimeZoneMapFilterRows", TUnit::UNIT, "SegmentInit");
     _zm_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ZoneMapIndexFilterRows", TUnit::UNIT, "SegmentInit");
     _sk_filtered_counter = ADD_CHILD_COUNTER(_scan_profile, "ShortKeyFilterRows", TUnit::UNIT, "SegmentInit");
 
@@ -758,7 +764,9 @@ void OlapScanNode::_close_pending_scanners() {
 
 pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuilderContext* context) {
     // Set the dop according to requested parallelism and number of morsels
-    size_t dop = context->dop_of_source_operator(id());
+    auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
+    size_t dop = morsel_queue_factory->size();
+    bool shared_morsel_queue = morsel_queue_factory->is_shared();
 
     size_t max_buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     size_t default_buffer_capacity = std::min<size_t>(max_buffer_capacity, estimated_max_concurrent_chunks());
@@ -766,15 +774,15 @@ pipeline::OpFactories OlapScanNode::decompose_to_pipeline(pipeline::PipelineBuil
     pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
             max_buffer_capacity, default_buffer_capacity, mem_limit, runtime_state()->chunk_size());
 
-    auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(this, dop, _enable_shared_scan,
-                                                                               std::move(buffer_limiter));
+    auto scan_ctx_factory = std::make_shared<pipeline::OlapScanContextFactory>(
+            this, dop, shared_morsel_queue, _enable_shared_scan, std::move(buffer_limiter));
 
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
 
     // scan_prepare_op.
     auto scan_prepare_op = std::make_shared<pipeline::OlapScanPrepareOperatorFactory>(context->next_operator_id(), id(),
                                                                                       this, scan_ctx_factory);
-    scan_prepare_op->set_degree_of_parallelism(_enable_shared_scan ? 1 : dop);
+    scan_prepare_op->set_degree_of_parallelism(shared_morsel_queue ? 1 : dop);
     this->init_runtime_filter_for_operator(scan_prepare_op.get(), context, rc_rf_probe_collector);
 
     auto scan_prepare_pipeline = pipeline::OpFactories{

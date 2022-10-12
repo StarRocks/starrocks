@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -80,6 +80,8 @@ public:
 
     virtual bool is_array() const { return false; }
 
+    virtual bool is_map() const { return false; }
+
     virtual bool low_cardinality() const { return false; }
 
     virtual const uint8_t* raw_data() const = 0;
@@ -150,6 +152,20 @@ public:
 
     virtual void append(const Column& src) { append(src, 0, src.size()); }
 
+    // replicate a column to align with an array's offset, used for captured columns in lambda functions
+    // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
+    // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
+    // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
+    virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
+        auto dest = this->clone_empty();
+        auto dest_size = offsets.size() - 1;
+        DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
+        dest->reserve(offsets.back());
+        for (int i = 0; i < dest_size; ++i) {
+            dest->append_value_multiple_times(*this, i, offsets[i + 1] - offsets[i]);
+        }
+        return dest;
+    }
     // Update elements to default value which hit by the filter
     virtual void fill_default(const Filter& filter) = 0;
 
@@ -183,7 +199,7 @@ public:
 
     // Append multiple `null` values into this column.
     // Return false if this is a non-nullable column, i.e, if `is_nullable` return false.
-    [[nodiscard]] virtual bool append_nulls(size_t count) = 0;
+    virtual bool append_nulls(size_t count) = 0;
 
     // Append multiple strings into this column.
     // Return false if the column is not a binary column.
@@ -198,6 +214,10 @@ public:
     // next one's, the implementation can take advantage of this feature, e.g, copy the whole
     // memory at once.
     [[nodiscard]] virtual bool append_continuous_strings(const Buffer<Slice>& strs) { return append_strings(strs); }
+
+    [[nodiscard]] virtual bool append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
+        return false;
+    }
 
     // Copy |length| bytes from |buff| into this column and cast them as integers.
     // The count of copied integers depends on |length| and the size of column value:

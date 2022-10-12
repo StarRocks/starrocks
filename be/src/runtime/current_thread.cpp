@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "runtime/current_thread.h"
 
@@ -8,7 +8,7 @@
 namespace starrocks {
 
 CurrentThread::~CurrentThread() {
-    StorageEngine* storage_engine = ExecEnv::GetInstance()->storage_engine();
+    StorageEngine* storage_engine = StorageEngine::instance();
     if (UNLIKELY(storage_engine != nullptr && storage_engine->bg_worker_stopped())) {
         tls_is_thread_status_init = false;
         return;

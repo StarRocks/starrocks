@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -221,14 +221,42 @@ public:
      * Called by time_slice
      * Floor to the corresponding period
      */
-    DEFINE_VECTORIZED_FN(time_slice_second);
-    DEFINE_VECTORIZED_FN(time_slice_minute);
-    DEFINE_VECTORIZED_FN(time_slice_hour);
-    DEFINE_VECTORIZED_FN(time_slice_day);
-    DEFINE_VECTORIZED_FN(time_slice_month);
-    DEFINE_VECTORIZED_FN(time_slice_year);
-    DEFINE_VECTORIZED_FN(time_slice_week);
-    DEFINE_VECTORIZED_FN(time_slice_quarter);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_second);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_minute);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_hour);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_day);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_month);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_year);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_week);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_start_quarter);
+
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_second);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_minute);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_hour);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_day);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_month);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_year);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_week);
+    DEFINE_VECTORIZED_FN(time_slice_datetime_end_quarter);
+
+    DEFINE_VECTORIZED_FN(time_slice_date_start_second);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_minute);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_hour);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_day);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_month);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_year);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_week);
+    DEFINE_VECTORIZED_FN(time_slice_date_start_quarter);
+
+    DEFINE_VECTORIZED_FN(time_slice_date_end_second);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_minute);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_hour);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_day);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_month);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_year);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_week);
+    DEFINE_VECTORIZED_FN(time_slice_date_end_quarter);
+
     // time_slice for sql.
     DEFINE_VECTORIZED_FN(time_slice);
 

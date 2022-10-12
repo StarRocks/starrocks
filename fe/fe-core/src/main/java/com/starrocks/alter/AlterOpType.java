@@ -30,6 +30,7 @@ public enum AlterOpType {
     // partition
     ADD_PARTITION,
     DROP_PARTITION,
+    TRUNCATE_PARTITION,
     REPLACE_PARTITION,
     MODIFY_PARTITION,
     // rename

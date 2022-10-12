@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/array_column.h"
 
@@ -66,7 +66,12 @@ void ArrayColumn::resize(size_t n) {
 }
 
 void ArrayColumn::assign(size_t n, size_t idx) {
-    DCHECK(false) << "array column shouldn't call assign";
+    DCHECK_LE(idx, this->size()) << "Range error when assign arrayColumn.";
+    auto desc = this->clone_empty();
+    auto datum = get(idx); // just reference
+    desc->append_value_multiple_times(&datum, n);
+    swap_column(*desc);
+    desc->reset_column();
 }
 
 void ArrayColumn::append_datum(const Datum& datum) {
@@ -99,6 +104,7 @@ void ArrayColumn::append_selective(const Column& src, const uint32_t* indexes, u
     }
 }
 
+// TODO(fzh): directly copy elements for un-nested arrays
 void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     for (uint32_t i = 0; i < size; i++) {
         append(src, index, 1);
@@ -505,6 +511,49 @@ StatusOr<ColumnPtr> ArrayColumn::upgrade_if_overflow() {
 
 StatusOr<ColumnPtr> ArrayColumn::downgrade() {
     return downgrade_helper_func(&_elements);
+}
+
+bool ArrayColumn::empty_null_array(NullColumnPtr null_map) {
+    DCHECK(null_map->size() == this->size());
+    bool need_empty = false;
+    auto size = this->size();
+    // TODO: optimize it using SIMD
+    for (auto i = 0; i < size && !need_empty; ++i) {
+        if (null_map->get_data()[i] && _offsets->get_data()[i + 1] != _offsets->get_data()[i]) {
+            need_empty = true;
+        }
+    }
+    // TODO: copy too much may result in worse performance.
+    if (need_empty) {
+        auto new_array_column = clone_empty();
+        int count = 0;
+        int null_count = 0;
+        for (size_t i = 0; i < size; ++i) {
+            if (null_map->get_data()[i]) {
+                ++null_count;
+                if (count > 0) {
+                    new_array_column->append(*this, i - count, count);
+                    count = 0;
+                }
+            } else {
+                ++count;
+                if (null_count > 0) {
+                    new_array_column->append_default(null_count);
+                    null_count = 0;
+                }
+            }
+        }
+        if (count > 0) {
+            new_array_column->append(*this, size - count, count);
+            count = 0;
+        }
+        if (null_count > 0) {
+            new_array_column->append_default(null_count);
+            null_count = 0;
+        }
+        swap_column(*new_array_column.get());
+    }
+    return need_empty;
 }
 
 } // namespace starrocks::vectorized

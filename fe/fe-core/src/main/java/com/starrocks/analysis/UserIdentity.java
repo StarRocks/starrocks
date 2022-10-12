@@ -32,6 +32,8 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.thrift.TUserIdentity;
 
 import java.io.DataInput;
@@ -44,9 +46,13 @@ import java.io.IOException;
 // cmy@%
 // cmy@192.168.%
 // cmy@[domain.name]
-public class UserIdentity implements Writable {
+public class UserIdentity implements Writable, GsonPostProcessable, GsonPreProcessable {
+    // change user to default_cluster:user for write
+    // and change default_cluster:user to user after read
     @SerializedName("user")
-    private String user;
+    private String userForJsonPersist;
+
+    private String realUser;
     @SerializedName("host")
     private String host;
     @SerializedName("isDomain")
@@ -68,13 +74,13 @@ public class UserIdentity implements Writable {
     }
 
     public UserIdentity(String user, String host) {
-        this.user = Strings.emptyToNull(user);
+        this.realUser = Strings.emptyToNull(user);
         this.host = Strings.emptyToNull(host);
         this.isDomain = false;
     }
 
     public UserIdentity(String user, String host, boolean isDomain) {
-        this.user = Strings.emptyToNull(user);
+        this.realUser = Strings.emptyToNull(user);
         this.host = Strings.emptyToNull(host);
         this.isDomain = isDomain;
     }
@@ -100,7 +106,7 @@ public class UserIdentity implements Writable {
 
     public String getQualifiedUser() {
         Preconditions.checkState(isAnalyzed);
-        return user;
+        return realUser;
     }
 
     public String getHost() {
@@ -119,14 +125,11 @@ public class UserIdentity implements Writable {
         if (isAnalyzed) {
             return;
         }
-        if (Strings.isNullOrEmpty(user)) {
+        if (Strings.isNullOrEmpty(realUser)) {
             throw new AnalysisException("Does not support anonymous user");
         }
 
-        FeNameFormat.checkUserName(user);
-        if (!user.equals(Auth.ROOT_USER)) {
-            user = ClusterNamespace.getFullName(user);
-        }
+        FeNameFormat.checkUserName(realUser);
 
         // reuse createMysqlPattern to validate host pattern
         PatternMatcher.createMysqlPattern(host, CaseSensibility.HOST.getCaseSensibility());
@@ -168,7 +171,7 @@ public class UserIdentity implements Writable {
         Preconditions.checkState(isAnalyzed);
         TUserIdentity tUserIdent = new TUserIdentity();
         tUserIdent.setHost(host);
-        tUserIdent.setUsername(user);
+        tUserIdent.setUsername(realUser);
         tUserIdent.setIs_domain(isDomain);
         return tUserIdent;
     }
@@ -185,13 +188,13 @@ public class UserIdentity implements Writable {
             return false;
         }
         UserIdentity other = (UserIdentity) obj;
-        return user.equals(other.getQualifiedUser()) && host.equals(other.getHost()) && this.isDomain == other.isDomain;
+        return realUser.equals(other.getQualifiedUser()) && host.equals(other.getHost()) && this.isDomain == other.isDomain;
     }
 
     @Override
     public int hashCode() {
         int result = 17;
-        result = 31 * result + user.hashCode();
+        result = 31 * result + realUser.hashCode();
         result = 31 * result + host.hashCode();
         result = 31 * result + Boolean.valueOf(isDomain).hashCode();
         return result;
@@ -201,8 +204,8 @@ public class UserIdentity implements Writable {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("'");
-        if (!Strings.isNullOrEmpty(user)) {
-            sb.append(user);
+        if (!Strings.isNullOrEmpty(realUser)) {
+            sb.append(realUser);
         }
         sb.append("'@");
         if (!Strings.isNullOrEmpty(host)) {
@@ -220,15 +223,25 @@ public class UserIdentity implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
         Preconditions.checkState(isAnalyzed);
-        Text.writeString(out, user);
+        Text.writeString(out, ClusterNamespace.getFullName(realUser));
         Text.writeString(out, host);
         out.writeBoolean(isDomain);
     }
 
     public void readFields(DataInput in) throws IOException {
-        user = Text.readString(in);
+        realUser = ClusterNamespace.getNameFromFullName(Text.readString(in));
         host = Text.readString(in);
         isDomain = in.readBoolean();
         isAnalyzed = true;
+    }
+
+    @Override
+    public void gsonPostProcess() throws IOException {
+        realUser = ClusterNamespace.getNameFromFullName(userForJsonPersist);
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        userForJsonPersist = ClusterNamespace.getFullName(realUser);
     }
 }

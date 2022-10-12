@@ -1,11 +1,13 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "exec/pipeline/query_context.h"
 
 #include <memory>
 
+#include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/stl_util.h"
+#include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
 #include "runtime/exec_env.h"
@@ -13,6 +15,11 @@
 #include "util/thread.h"
 
 namespace starrocks::pipeline {
+
+using apache::thrift::TException;
+using apache::thrift::TProcessor;
+using apache::thrift::transport::TTransportException;
+
 QueryContext::QueryContext()
         : _fragment_mgr(new FragmentContextManager()),
           _total_fragments(0),
@@ -91,7 +98,6 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
     Status st = Status::OK();
     if (wg != nullptr) {
         std::call_once(_init_query_once, [this, &st, wg]() {
-            this->set_init_wg_cpu_cost(wg->total_cpu_cost());
             this->init_query_begin_time();
             st = wg->try_incr_num_queries();
         });
@@ -292,6 +298,186 @@ void QueryContextManager::clear() {
     }
     _second_chance_maps.clear();
     _context_maps.clear();
+}
+
+void QueryContextManager::report_fragments_with_same_host(
+        const std::vector<std::shared_ptr<FragmentContext>>& need_report_fragment_context, std::vector<bool>& reported,
+        const TNetworkAddress& last_coord_addr, std::vector<TReportExecStatusParams>& report_exec_status_params_vector,
+        std::vector<int32_t>& cur_batch_report_indexes) {
+    for (int i = 0; i < need_report_fragment_context.size(); i++) {
+        if (reported[i] == false) {
+            FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
+
+            if (fragment_ctx->num_drivers() == 0) {
+                reported[i] = true;
+                continue;
+            }
+
+            Status fragment_ctx_status = fragment_ctx->final_status();
+            if (!fragment_ctx_status.ok()) {
+                reported[i] = true;
+                continue;
+            }
+
+            Status fe_connection_status;
+            auto fe_addr = fragment_ctx->fe_addr();
+            auto fragment_id = fragment_ctx->fragment_instance_id();
+            auto* runtime_state = fragment_ctx->runtime_state();
+            DCHECK(runtime_state != nullptr);
+
+            if (fe_addr == last_coord_addr) {
+                TReportExecStatusParams params;
+
+                params.protocol_version = FrontendServiceVersion::V1;
+                params.__set_query_id(fragment_ctx->query_id());
+                params.__set_backend_num(runtime_state->be_number());
+                params.__set_fragment_instance_id(fragment_id);
+                fragment_ctx_status.set_t_status(&params);
+                params.__set_done(false);
+
+                if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                    runtime_state->update_report_load_status(&params);
+                }
+
+                auto backend_id = get_backend_id();
+                if (backend_id.has_value()) {
+                    params.__set_backend_id(backend_id.value());
+                }
+
+                report_exec_status_params_vector.push_back(params);
+                cur_batch_report_indexes.push_back(i);
+                reported[i] = true;
+            }
+        }
+    }
+}
+
+void QueryContextManager::report_fragments(
+        const std::vector<PipeLineReportTaskKey>& pipeline_need_report_query_fragment_ids) {
+    std::vector<std::shared_ptr<FragmentContext>> need_report_fragment_context;
+    std::vector<std::shared_ptr<QueryContext>> need_report_query_ctx;
+
+    std::vector<PipeLineReportTaskKey> fragment_context_non_exist;
+
+    for (const auto& key : pipeline_need_report_query_fragment_ids) {
+        TUniqueId query_id = key.query_id;
+        TUniqueId fragment_instance_id = key.fragment_instance_id;
+        auto query_ctx = get(query_id);
+        if (!query_ctx) {
+            fragment_context_non_exist.push_back(key);
+            continue;
+        }
+        need_report_query_ctx.push_back(query_ctx);
+        auto fragment_ctx = query_ctx->fragment_mgr()->get(fragment_instance_id);
+        if (!fragment_ctx) {
+            fragment_context_non_exist.push_back(key);
+            continue;
+        }
+        need_report_fragment_context.push_back(fragment_ctx);
+    }
+
+    std::vector<bool> reported(need_report_fragment_context.size(), false);
+    for (int i = 0; i < need_report_fragment_context.size(); i++) {
+        if (reported[i] == false) {
+            reported[i] = true;
+
+            FragmentContext* fragment_ctx = need_report_fragment_context[i].get();
+
+            if (fragment_ctx->num_drivers() == 0) {
+                continue;
+            }
+
+            Status fragment_ctx_status = fragment_ctx->final_status();
+            if (!fragment_ctx_status.ok()) {
+                continue;
+            }
+
+            Status fe_connection_status;
+            auto fe_addr = fragment_ctx->fe_addr();
+            auto exec_env = fragment_ctx->runtime_state()->exec_env();
+            auto fragment_id = fragment_ctx->fragment_instance_id();
+            auto* runtime_state = fragment_ctx->runtime_state();
+            DCHECK(runtime_state != nullptr);
+
+            FrontendServiceConnection fe_connection(exec_env->frontend_client_cache(), fe_addr, &fe_connection_status);
+            if (!fe_connection_status.ok()) {
+                std::stringstream ss;
+                ss << "couldn't get a client for " << fe_addr;
+                LOG(WARNING) << ss.str();
+                exec_env->frontend_client_cache()->close_connections(fe_addr);
+                continue;
+            }
+
+            std::vector<TReportExecStatusParams> report_exec_status_params_vector;
+
+            TReportExecStatusParams params;
+
+            params.protocol_version = FrontendServiceVersion::V1;
+            params.__set_query_id(fragment_ctx->query_id());
+            params.__set_backend_num(runtime_state->be_number());
+            params.__set_fragment_instance_id(fragment_id);
+            fragment_ctx_status.set_t_status(&params);
+            params.__set_done(false);
+
+            if (runtime_state->query_options().query_type == TQueryType::LOAD) {
+                runtime_state->update_report_load_status(&params);
+            }
+
+            auto backend_id = get_backend_id();
+            if (backend_id.has_value()) {
+                params.__set_backend_id(backend_id.value());
+            }
+
+            report_exec_status_params_vector.push_back(params);
+
+            std::vector<int32_t> cur_batch_report_indexes;
+            cur_batch_report_indexes.push_back(i);
+
+            report_fragments_with_same_host(need_report_fragment_context, reported, fe_addr,
+                                            report_exec_status_params_vector, cur_batch_report_indexes);
+
+            TBatchReportExecStatusParams report_batch;
+            report_batch.__set_params_list(report_exec_status_params_vector);
+
+            TBatchReportExecStatusResult res;
+            Status rpc_status;
+
+            VLOG_ROW << "debug: reportExecStatus params is " << apache::thrift::ThriftDebugString(params).c_str();
+
+            try {
+                try {
+                    fe_connection->batchReportExecStatus(res, report_batch);
+                } catch (TTransportException& e) {
+                    LOG(WARNING) << "Retrying ReportExecStatus: " << e.what();
+                    rpc_status = fe_connection.reopen();
+                    if (!rpc_status.ok()) {
+                        continue;
+                    }
+                    fe_connection->batchReportExecStatus(res, report_batch);
+                }
+
+            } catch (TException& e) {
+                std::stringstream msg;
+                msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
+                LOG(WARNING) << msg.str();
+            }
+
+            const std::vector<TStatus>& status_list = res.status_list;
+            for (int j = 0; j < status_list.size(); j++) {
+                Status rpc_status = Status(status_list[j]);
+                if (!rpc_status.ok()) {
+                    int32_t index = cur_batch_report_indexes[j];
+                    FragmentContext* fragment_ctx = need_report_fragment_context[index].get();
+                    fragment_ctx->cancel(rpc_status);
+                }
+            }
+        }
+    }
+
+    for (const auto& key : fragment_context_non_exist) {
+        starrocks::ExecEnv::GetInstance()->profile_report_worker()->unregister_pipeline_load(key.query_id,
+                                                                                             key.fragment_instance_id);
+    }
 }
 
 } // namespace starrocks::pipeline

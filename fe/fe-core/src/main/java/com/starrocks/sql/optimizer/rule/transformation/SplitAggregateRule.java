@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -51,10 +51,10 @@ public class SplitAggregateRule extends TransformationRule {
         super(RuleType.TF_SPLIT_AGGREGATE, Pattern.create(OperatorType.LOGICAL_AGGR, OperatorType.PATTERN_LEAF));
     }
 
-    private static final SplitAggregateRule instance = new SplitAggregateRule();
+    private static final SplitAggregateRule INSTANCE = new SplitAggregateRule();
 
     public static SplitAggregateRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
@@ -485,6 +485,16 @@ public class SplitAggregateRule extends TransformationRule {
         return Lists.newArrayList(globalOptExpression);
     }
 
+    // For Multi args aggregation functions, if they have const args,
+    // We should also pass the const args to merge phase aggregator for performance.
+    // For example, for intersect_count(user_id, dt, '20191111'),
+    // We should pass '20191111' to update and merge phase aggregator in BE both.
+    private static void appendConstantColumns(List<ScalarOperator> arguments, CallOperator aggregation) {
+        if (aggregation.getChildren().size() > 1) {
+            aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
+        }
+    }
+
     private Map<ColumnRefOperator, CallOperator> createNormalAgg(AggType aggType,
                                                                  Map<ColumnRefOperator, CallOperator> aggregationMap) {
         Map<ColumnRefOperator, CallOperator> newAggregationMap = Maps.newHashMap();
@@ -499,13 +509,7 @@ public class SplitAggregateRule extends TransformationRule {
                 List<ScalarOperator> arguments =
                         Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
                                 column.isNullable()));
-                // For Multi args aggregation functions, if they have const args,
-                // We should also pass the const args to merge phase aggregator for performance.
-                // For example, for intersect_count(user_id, dt, '20191111'),
-                // We should pass '20191111' to update and merge phase aggregator in BE both.
-                if (aggregation.getChildren().size() > 1) {
-                    aggregation.getChildren().stream().filter(ScalarOperator::isConstantRef).forEach(arguments::add);
-                }
+                appendConstantColumns(arguments, aggregation);
                 callOperator = new CallOperator(
                         aggregation.getFnName(),
                         aggregation.getType(),
@@ -541,19 +545,22 @@ public class SplitAggregateRule extends TransformationRule {
             CallOperator callOperator;
             if (!aggregation.isDistinct()) {
                 Type intermediateType = getIntermediateType(aggregation);
+                List<ScalarOperator> arguments =
+                        Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
+                                aggregation.isNullable()));
+                appendConstantColumns(arguments, aggregation);
+
                 if (aggType.isGlobal()) {
                     callOperator = new CallOperator(
                             aggregation.getFnName(),
                             aggregation.getType(),
-                            Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
-                                    aggregation.isNullable())),
+                            arguments,
                             aggregation.getFunction());
                 } else {
                     callOperator = new CallOperator(
                             aggregation.getFnName(),
                             intermediateType,
-                            Lists.newArrayList(new ColumnRefOperator(column.getId(), intermediateType, column.getName(),
-                                    aggregation.isNullable())),
+                            arguments,
                             aggregation.getFunction());
                 }
             } else {
@@ -635,12 +642,15 @@ public class SplitAggregateRule extends TransformationRule {
             Type intermediateType = getIntermediateType(aggregation);
             CallOperator callOperator;
             if (!type.isLocal()) {
+                List<ScalarOperator> arguments =
+                        Lists.newArrayList(new ColumnRefOperator(column.getId(), aggregation.getType(), column.getName(),
+                                aggregation.isNullable()));
+                appendConstantColumns(arguments, aggregation);
+
                 callOperator = new CallOperator(
                         aggregation.getFnName(),
                         aggregation.getType(),
-                        Lists.newArrayList(
-                                new ColumnRefOperator(column.getId(), aggregation.getType(), column.getName(),
-                                        aggregation.isNullable())),
+                        arguments,
                         aggregation.getFunction());
             } else {
                 callOperator = new CallOperator(aggregation.getFnName(), intermediateType,

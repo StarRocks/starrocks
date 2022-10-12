@@ -21,7 +21,6 @@
 #include <utility>
 
 #include "common/logging.h"
-#include "gen_cpp/FileBrokerService_types.h"
 #include "gen_cpp/TFileBrokerService.h"
 #include "runtime/broker_mgr.h"
 #include "runtime/client_cache.h"

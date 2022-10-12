@@ -67,13 +67,15 @@ public:
     // Convert scan_ranges into node-specific scan restrictions.  This should be
     // called after prepare()
     virtual Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) = 0;
-    virtual StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
+    StatusOr<pipeline::MorselQueueFactoryPtr> convert_scan_range_to_morsel_queue_factory(
             const std::vector<TScanRangeParams>& scan_ranges,
             const std::map<int32_t, std::vector<TScanRangeParams>>& scan_ranges_per_driver_seq, int node_id,
-            int pipeline_dop, bool enable_tablet_internal_parallel);
+            int pipeline_dop, bool enable_tablet_internal_parallel,
+            TTabletInternalParallelMode::type tablet_internal_parallel_mode);
     virtual StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
-            bool enable_tablet_internal_parallel, size_t num_total_scan_ranges);
+            bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
+            size_t num_total_scan_ranges);
 
     // If this scan node accept empty scan ranges.
     virtual bool accept_empty_scan_ranges() const { return true; }
@@ -103,6 +105,10 @@ public:
 
     virtual int io_tasks_per_scan_operator() const { return MAX_IO_TASKS_PER_OP; }
 
+    // TODO: support more share_scan strategy
+    void enable_shared_scan(bool enable);
+    bool is_shared_scan_enabled() const;
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -117,6 +123,7 @@ protected:
     RuntimeProfile::ThreadCounters* _scanner_thread_counters;
     RuntimeProfile::Counter* _num_scanner_threads_started_counter;
     std::string _name;
+    bool _enable_shared_scan = false;
 };
 
 } // namespace starrocks

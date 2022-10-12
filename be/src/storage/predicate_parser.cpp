@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/predicate_parser.h"
 
@@ -17,6 +17,14 @@ namespace starrocks::vectorized {
 bool PredicateParser::can_pushdown(const ColumnPredicate* predicate) const {
     RETURN_IF(predicate->column_id() >= _schema.num_columns(), false);
     const TabletColumn& column = _schema.column(predicate->column_id());
+    return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
+           column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
+}
+
+bool PredicateParser::can_pushdown(const SlotDescriptor* slot_desc) const {
+    const size_t index = _schema.field_index(slot_desc->col_name());
+    CHECK(index <= _schema.num_columns());
+    const TabletColumn& column = _schema.column(index);
     return _schema.keys_type() == KeysType::PRIMARY_KEYS ||
            column.aggregation() == FieldAggregationMethod::OLAP_FIELD_AGGREGATION_NONE;
 }

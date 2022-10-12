@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/schema_scan_node.h"
 
@@ -6,8 +6,6 @@
 
 #include "column/column_helper.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
-#include "gen_cpp/PlanNodes_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
 #include "util/runtime_profile.h"

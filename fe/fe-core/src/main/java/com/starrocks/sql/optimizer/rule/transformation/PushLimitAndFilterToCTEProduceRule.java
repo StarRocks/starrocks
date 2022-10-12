@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -46,7 +46,7 @@ public class PushLimitAndFilterToCTEProduceRule extends TransformationRule {
         List<ScalarOperator> predicates =
                 cteContext.getConsumePredicates().getOrDefault(produce.getCteId(), Collections.emptyList());
 
-        int consumeNums = cteContext.getCTEConsumeNums(produce.getCteId());
+        int consumeNums = cteContext.getCTEConsumeNum(produce.getCteId());
 
         return consumeNums > 0 && (limits.size() == consumeNums || predicates.size() == consumeNums);
     }
@@ -60,7 +60,7 @@ public class PushLimitAndFilterToCTEProduceRule extends TransformationRule {
         List<ScalarOperator> predicates =
                 cteContext.getConsumePredicates().getOrDefault(produce.getCteId(), Collections.emptyList());
 
-        int consumeNums = cteContext.getCTEConsumeNums(produce.getCteId());
+        int consumeNums = cteContext.getCTEConsumeNum(produce.getCteId());
 
         OptExpression child = input.getInputs().get(0);
         if (consumeNums == predicates.size()) {

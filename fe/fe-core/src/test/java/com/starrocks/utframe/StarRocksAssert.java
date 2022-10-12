@@ -23,34 +23,33 @@ package com.starrocks.utframe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.analysis.AlterTableStmt;
-import com.starrocks.analysis.CreateDbStmt;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.CreateViewStmt;
 import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DropDbStmt;
-import com.starrocks.analysis.DropTableStmt;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.execution.DataDefinitionExecutorFactory;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Analyzer;
+import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.BackendCoreStat;
@@ -104,7 +103,7 @@ public class StarRocksAssert {
 
     public StarRocksAssert withRole(String roleName) throws Exception {
         CreateRoleStmt createRoleStmt =
-                (CreateRoleStmt) UtFrameUtils.parseAndAnalyzeStmt("create role " + roleName + ";", ctx);
+                (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser("create role " + roleName + ";", ctx);
         GlobalStateMgr.getCurrentState().getAuth().createRole(createRoleStmt);
         return this;
     }
@@ -124,12 +123,12 @@ public class StarRocksAssert {
     }
 
     public boolean databaseExist(String dbName) {
-        Database db = GlobalStateMgr.getCurrentState().getDb("default_cluster:" + dbName);
+        Database db = GlobalStateMgr.getCurrentState().getDb("" + dbName);
         return db != null;
     }
 
     public StarRocksAssert useDatabase(String dbName) {
-        ctx.setDatabase(ClusterNamespace.getFullName(dbName));
+        ctx.setDatabase(dbName);
         return this;
     }
 
@@ -139,7 +138,7 @@ public class StarRocksAssert {
     }
 
     public StarRocksAssert withResource(String sql) throws Exception {
-        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        CreateResourceStmt createResourceStmt = (CreateResourceStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (!GlobalStateMgr.getCurrentState().getResourceMgr().containsResource(createResourceStmt.getResourceName())) {
             GlobalStateMgr.getCurrentState().getResourceMgr().createResource(createResourceStmt);
         }
@@ -198,7 +197,7 @@ public class StarRocksAssert {
 
     // Add rollup
     public StarRocksAssert withRollup(String sql) throws Exception {
-        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseAndAnalyzeStmt(sql, ctx);
+        AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         GlobalStateMgr.getCurrentState().alterTable(alterTableStmt);
         checkAlterJob();
         return this;
@@ -214,14 +213,13 @@ public class StarRocksAssert {
     public void executeResourceGroupDdlSql(String sql) throws Exception {
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         BackendCoreStat.setNumOfHardwareCoresOfBe(1, 32);
-        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable().getSqlMode()).get(0);
+        StatementBase statement = com.starrocks.sql.parser.SqlParser.parse(sql, ctx.getSessionVariable()).get(0);
         Analyzer.analyze(statement, ctx);
 
         Assert.assertTrue(statement.getClass().getSimpleName().contains("ResourceGroupStmt"));
         ConnectContext connectCtx = new ConnectContext();
         connectCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        DataDefinitionExecutorFactory.execute((DdlStmt) statement, connectCtx);
-
+        DDLStmtExecutor.execute((DdlStmt) statement, connectCtx);
     }
 
     public List<List<String>> executeResourceGroupShowSql(String sql) throws Exception {
@@ -268,7 +266,8 @@ public class StarRocksAssert {
         }
 
         public void explainContains(String... keywords) throws Exception {
-            Assert.assertTrue(Stream.of(keywords).allMatch(explainQuery()::contains));
+            String plan = explainQuery();
+            Assert.assertTrue(plan, Stream.of(keywords).allMatch(plan::contains));
         }
 
         public void explainContains(String keywords, int count) throws Exception {
@@ -283,7 +282,8 @@ public class StarRocksAssert {
             return UtFrameUtils.getFragmentPlan(connectContext, sql);
         }
 
-        public void analysisError(String keywords) {
+        // Assert true only if analysisException.getMessage() contains all keywords.
+        public void analysisError(String... keywords) {
             try {
                 explainQuery();
             } catch (AnalysisException | StarRocksPlannerException analysisException) {

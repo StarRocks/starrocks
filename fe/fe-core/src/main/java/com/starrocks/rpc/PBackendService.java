@@ -1,38 +1,45 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
-
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.rpc;
 
-import com.baidu.brpc.protocol.BrpcMeta;
+import com.baidu.jprotobuf.pbrpc.ProtobufRPC;
 import com.starrocks.proto.PCancelPlanFragmentRequest;
 import com.starrocks.proto.PCancelPlanFragmentResult;
-import com.starrocks.proto.PExecBatchPlanFragmentsRequest;
 import com.starrocks.proto.PExecBatchPlanFragmentsResult;
-import com.starrocks.proto.PExecPlanFragmentRequest;
 import com.starrocks.proto.PExecPlanFragmentResult;
-import com.starrocks.proto.PFetchDataRequest;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
-import com.starrocks.proto.PTriggerProfileReportRequest;
+import com.starrocks.proto.PPulsarProxyRequest;
+import com.starrocks.proto.PPulsarProxyResult;
 import com.starrocks.proto.PTriggerProfileReportResult;
 
+import java.util.concurrent.Future;
+
 public interface PBackendService {
-    @BrpcMeta(serviceName = "PBackendService", methodName = "exec_plan_fragment")
-    PExecPlanFragmentResult execPlanFragment(PExecPlanFragmentRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_plan_fragment",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecPlanFragmentResult> execPlanFragmentAsync(PExecPlanFragmentRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "exec_batch_plan_fragments",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 60000)
+    Future<PExecBatchPlanFragmentsResult> execBatchPlanFragmentsAsync(PExecBatchPlanFragmentsRequest request);
 
-    @BrpcMeta(serviceName = "PBackendService", methodName = "exec_batch_plan_fragments")
-    PExecBatchPlanFragmentsResult execBatchPlanFragments(PExecBatchPlanFragmentsRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "cancel_plan_fragment",
+            onceTalkTimeout = 5000)
+    Future<PCancelPlanFragmentResult> cancelPlanFragmentAsync(PCancelPlanFragmentRequest request);
 
-    @BrpcMeta(serviceName = "PBackendService", methodName = "cancel_plan_fragment")
-    PCancelPlanFragmentResult cancelPlanFragment(PCancelPlanFragmentRequest request);
+    // we set timeout to 1 day, because now there is no way to give different timeout for each RPC call
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "fetch_data",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 86400000)
+    Future<PFetchDataResult> fetchDataAsync(PFetchDataRequest request);
 
-    @BrpcMeta(serviceName = "PBackendService", methodName = "fetch_data")
-    PFetchDataResult fetchData(PFetchDataRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "trigger_profile_report",
+            attachmentHandler = ThriftClientAttachmentHandler.class, onceTalkTimeout = 10000)
+    Future<PTriggerProfileReportResult> triggerProfileReport(PTriggerProfileReportRequest request);
 
-    @BrpcMeta(serviceName = "PBackendService", methodName = "trigger_profile_report")
-    PTriggerProfileReportResult triggerProfileReport(PTriggerProfileReportRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_info", onceTalkTimeout = 10000)
+    Future<PProxyResult> getInfo(PProxyRequest request);
 
-    @BrpcMeta(serviceName = "PBackendService", methodName = "get_info")
-    PProxyResult getInfo(PProxyRequest request);
+    @ProtobufRPC(serviceName = "PBackendService", methodName = "get_pulsar_info", onceTalkTimeout = 10000)
+    Future<PPulsarProxyResult> getPulsarInfo(PPulsarProxyRequest request);
 }
 

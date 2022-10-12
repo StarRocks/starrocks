@@ -25,10 +25,10 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ShowResultSetMetaData;
+import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.Arrays;
 import java.util.List;
@@ -56,14 +56,13 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                     .add("Message")
                     .build();
 
-    private final String dbName;
     private final Expr jobNameExpr;
 
     private String jobName;
     private String dbFullName;
 
     public ShowRoutineLoadTaskStmt(String dbName, Expr jobNameExpr) {
-        this.dbName = dbName;
+        this.dbFullName = dbName;
         this.jobNameExpr = jobNameExpr;
     }
 
@@ -75,15 +74,21 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
         return dbFullName;
     }
 
+    public void setDbFullName(String dbFullName) {
+        this.dbFullName = dbFullName;
+    }
+
+    @Deprecated
     @Override
     public void analyze(Analyzer analyzer) throws UserException {
         super.analyze(analyzer);
         checkDB(analyzer);
-        checkJobNameExpr(analyzer);
+        checkJobNameExpr();
     }
 
+    @Deprecated
     private void checkDB(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(dbName)) {
+        if (Strings.isNullOrEmpty(dbFullName)) {
             if (Strings.isNullOrEmpty(analyzer.getDefaultDb())) {
                 throw new AnalysisException("please designate a database in show stmt");
             }
@@ -91,7 +96,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
         }
     }
 
-    private void checkJobNameExpr(Analyzer analyzer) throws AnalysisException {
+    public void checkJobNameExpr() throws AnalysisException {
         if (jobNameExpr == null) {
             throw new AnalysisException("please designate a jobName in where expr such as JobName=\"ILoveStarRocks\"");
         }
@@ -127,7 +132,7 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
                 break CHECK;
             }
             StringLiteral stringLiteral = (StringLiteral) binaryPredicate.getChild(1);
-            jobName = stringLiteral.getValue().toLowerCase();
+            jobName = stringLiteral.getValue();
         }
 
         if (!valid) {
@@ -153,5 +158,15 @@ public class ShowRoutineLoadTaskStmt extends ShowStmt {
 
     public static List<String> getTitleNames() {
         return TITLE_NAMES;
+    }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowRoutineLoadTaskStatement(this, context);
+    }
+
+    @Override
+    public boolean isSupportNewPlanner() {
+        return true;
     }
 }

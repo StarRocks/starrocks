@@ -71,7 +71,6 @@ public class LabelName implements Writable {
             }
             dbName = analyzer.getDefaultDb();
         }
-        dbName = ClusterNamespace.getFullName(dbName);
         FeNameFormat.checkLabel(labelName);
     }
 
@@ -105,15 +104,16 @@ public class LabelName implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, dbName);
+        // compatible with old version
+        Text.writeString(out, ClusterNamespace.getFullName(dbName));
         Text.writeString(out, labelName);
     }
 
     public void readFields(DataInput in) throws IOException {
         if (GlobalStateMgr.getCurrentStateJournalVersion() < FeMetaVersion.VERSION_30) {
-            dbName = ClusterNamespace.getFullName(Text.readString(in));
-        } else {
             dbName = Text.readString(in);
+        } else {
+            dbName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         }
         labelName = Text.readString(in);
     }

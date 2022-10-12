@@ -33,7 +33,6 @@ import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
@@ -59,6 +58,7 @@ import com.starrocks.common.util.BrokerUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.MysqlScanNode;
@@ -68,12 +68,18 @@ import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.Coordinator;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentClient;
 import com.starrocks.thrift.TAgentResult;
 import com.starrocks.thrift.THdfsProperties;
+import com.starrocks.thrift.TInternalScanRange;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TStatusCode;
@@ -111,6 +117,9 @@ public class ExportJob implements Writable {
     private final AtomicInteger nextId = new AtomicInteger(0);
     // backedn_address => snapshot path
     private final List<Pair<TNetworkAddress, String>> snapshotPaths = Lists.newArrayList();
+    // backend id => backend lastStartTime 
+    private final Map<Long, Long> beLastStartTime = Maps.newHashMap();
+
     private long id;
     private UUID queryId;
     private long dbId;
@@ -210,11 +219,6 @@ public class ExportJob implements Writable {
         }
 
         this.sql = stmt.toSql();
-
-        // TODO Support snapshot of lake table
-        if (exportTable.isLakeTable()) {
-            this.state = JobState.EXPORTING;
-        }
     }
 
     private void genExecFragment(ExportStmt stmt) throws UserException {
@@ -365,7 +369,7 @@ public class ExportJob implements Writable {
         fragment.setSink(new ExportSink(exportTempPath, fileNamePrefix + taskIdx + "_", columnSeparator,
                 rowDelimiter, brokerDesc, hdfsProperties));
         try {
-            fragment.finalize(analyzer, false);
+            fragment.createDataSink(TResultSinkType.MYSQL_PROTOCAL);
         } catch (Exception e) {
             LOG.info("Fragment finalize failed. e=", e);
             throw new UserException("Fragment finalize failed");
@@ -396,13 +400,21 @@ public class ExportJob implements Writable {
             TUniqueId queryId = new TUniqueId(uuid.getMostSignificantBits() + i, uuid.getLeastSignificantBits());
             Coordinator coord = new Coordinator(
                     id, queryId, desc, Lists.newArrayList(fragment), Lists.newArrayList(scanNode),
-                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime());
+                    TimeUtils.DEFAULT_TIME_ZONE, stmt.getExportStartTime(), Maps.newHashMap());
             coord.setExecMemoryLimit(getMemLimit());
             this.coordList.add(coord);
             LOG.info("split export job to tasks. job id: {}, task idx: {}, task query id: {}",
                     id, i, DebugUtil.printId(queryId));
         }
         LOG.info("create {} coordintors for export job: {}", coordList.size(), id);
+    }
+
+    public void setBeStartTime(long beId, long lastStartTime) {
+        this.beLastStartTime.put(beId, lastStartTime);
+    }
+
+    public Map<Long, Long> getBeStartTimeMap() {
+        return this.beLastStartTime;
     }
 
     public long getId() {
@@ -578,6 +590,18 @@ public class ExportJob implements Writable {
         return true;
     }
 
+    public Status releaseSnapshots() {
+        switch (exportTable.getType()) {
+            case OLAP:
+            case MYSQL:
+                return releaseSnapshotPaths();
+            case LAKE:
+                return releaseMetadataLocks();
+            default:
+                return Status.OK;
+        }
+    }
+
     public Status releaseSnapshotPaths() {
         List<Pair<TNetworkAddress, String>> snapshotPaths = getSnapshotPaths();
         LOG.debug("snapshotPaths:{}", snapshotPaths);
@@ -604,6 +628,39 @@ public class ExportJob implements Writable {
         return Status.OK;
     }
 
+    public Status releaseMetadataLocks() {
+        for (TScanRangeLocations tablet : tabletLocations) {
+            TScanRange scanRange = tablet.getScan_range();
+            if (!scanRange.isSetInternal_scan_range()) {
+                continue;
+            }
+
+            TInternalScanRange internalScanRange = scanRange.getInternal_scan_range();
+            List<TScanRangeLocation> locations = tablet.getLocations();
+            for (TScanRangeLocation location : locations) {
+                TNetworkAddress address = location.getServer();
+                String host = address.getHostname();
+                int port = address.getPort();
+                Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackendWithBePort(host, port);
+                if (backend == null) {
+                    continue;
+                }
+                try {
+                    LakeService lakeService = BrpcProxy.getLakeService(host, port);
+                    UnlockTabletMetadataRequest request = new UnlockTabletMetadataRequest();
+                    request.tabletId = internalScanRange.getTablet_id();
+                    request.version = Long.parseLong(internalScanRange.getVersion());
+                    request.expireTime = (getCreateTimeMs() / 1000) + getTimeoutSecond();
+                    lakeService.unlockTabletMetadata(request);
+                } catch (Throwable e) {
+                    LOG.error("Fail to release metadata lock, job id {}, tablet id {}, version {}", id,
+                            tableId, internalScanRange.getVersion());
+                }
+            }
+        }
+        return Status.OK;
+    }
+
     public synchronized boolean isExportDone() {
         return state == JobState.FINISHED || state == JobState.CANCELLED;
     }
@@ -626,7 +683,7 @@ public class ExportJob implements Writable {
         }
 
         // release snapshot
-        releaseSnapshotPaths();
+        releaseSnapshots();
 
         // cancel all running coordinators
         for (Coordinator coord : coordList) {
@@ -648,7 +705,7 @@ public class ExportJob implements Writable {
         for (String exportedFile : exportedFiles) {
             try {
                 if (!brokerDesc.hasBroker()) {
-                    HdfsUtil.deletePath(exportTempPath, brokerDesc);
+                    HdfsUtil.deletePath(exportedFile, brokerDesc);
                 } else {
                     BrokerUtil.deletePath(exportedFile, brokerDesc);
                 }
@@ -666,7 +723,7 @@ public class ExportJob implements Writable {
         }
 
         // release snapshot
-        releaseSnapshotPaths();
+        releaseSnapshots();
 
         // try to remove exported temp files
         try {
@@ -817,6 +874,10 @@ public class ExportJob implements Writable {
 
     public boolean isReplayed() {
         return isReplayed;
+    }
+
+    public boolean exportLakeTable() {
+        return exportTable.isLakeTable();
     }
 
     public enum JobState {

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -39,6 +39,8 @@ public:
     StatusOr<int64_t> position() override;
 
     StatusOr<int64_t> get_size() override;
+
+    void set_size(int64_t size) override;
 
 private:
     std::shared_ptr<Aws::S3::S3Client> _s3client;

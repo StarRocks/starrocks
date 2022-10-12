@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.join;
 
@@ -25,7 +25,7 @@ public class MultiJoinNode {
     // other operator like a group by or a full outer join.
     private final LinkedHashSet<OptExpression> atoms;
     private final List<ScalarOperator> predicates;
-    private Map<ColumnRefOperator, ScalarOperator> expressionMap;
+    private final Map<ColumnRefOperator, ScalarOperator> expressionMap;
 
     public MultiJoinNode(LinkedHashSet<OptExpression> atoms, List<ScalarOperator> predicates,
                          Map<ColumnRefOperator, ScalarOperator> expressionMap) {

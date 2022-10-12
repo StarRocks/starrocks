@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "chunks_sorter_full_sort.h"
 
@@ -53,8 +53,8 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 
         DataSegment segment(_sort_exprs, _unsorted_chunk);
         _sort_permutation.resize(0);
-        RETURN_IF_ERROR(sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_order_flag,
-                                             _null_first_flag, &_sort_permutation));
+        RETURN_IF_ERROR(
+                sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, &_sort_permutation));
         ChunkPtr sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
         append_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
         RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
@@ -70,8 +70,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
 
-    SortDescs sort_desc(_sort_order_flag, _null_first_flag);
-    RETURN_IF_ERROR(merge_sorted_chunks(sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs, 0));
+    RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs, 0));
 
     return Status::OK();
 }

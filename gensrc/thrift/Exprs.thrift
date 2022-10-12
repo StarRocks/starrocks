@@ -61,6 +61,7 @@ enum TExprNodeType {
   DICT_EXPR,
   PLACEHOLDER_EXPR,
   CLONE_EXPR,
+  LAMBDA_FUNCTION_EXPR,
 }
 
 //enum TAggregationOp {

@@ -60,7 +60,7 @@ public class EsRestClient {
         mapper.configure(SerializationConfig.Feature.USE_ANNOTATIONS, false);
     }
 
-    private static final OkHttpClient networkClient = new OkHttpClient.Builder()
+    private static final OkHttpClient NETWORK_CLIENT = new OkHttpClient.Builder()
             .readTimeout(10, TimeUnit.SECONDS)
             .build();
 
@@ -172,7 +172,7 @@ public class EsRestClient {
         if (sslEnabled) {
             client = getOrCreateSSLClient();
         } else {
-            client = networkClient;
+            client = NETWORK_CLIENT;
         }
         for (int i = 0; i < retrySize; i++) {
             // maybe should add HTTP schema to the address

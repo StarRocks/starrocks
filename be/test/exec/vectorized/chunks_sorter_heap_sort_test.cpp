@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/chunks_sorter_heap_sort.h"
 
@@ -20,6 +20,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/primitive_type_infra.h"
 #include "runtime/types.h"
+#include "testutil/assert.h"
 #include "util/value_generator.h"
 
 namespace starrocks::vectorized {
@@ -162,6 +163,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(1024));
@@ -180,6 +183,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(1023));
@@ -201,6 +206,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_notnull_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[1])));
+            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, 1024);
             sorter.setup_runtime(_pool.add(new RuntimeProfile("")));
             sorter.update(nullptr, fake_chunks.next_chunk(1024));
@@ -232,6 +239,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             // limit 5
             int limit_sz = 5;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
@@ -255,6 +264,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             // limit 5
             int limit_sz = 10;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);
@@ -279,6 +290,8 @@ TEST_F(ChunksSorterHeapSortTest, single_column_order_by_nullable_test) {
         {
             std::vector<ExprContext*> sort_exprs;
             sort_exprs.push_back(_pool.add(new ExprContext(fake_chunks.slot_refs()[0])));
+            ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
+            ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
             // limit 5
             int limit_sz = 5;
             ChunksSorterHeapSort sorter(_runtime_state.get(), &sort_exprs, &is_asc, &null_first, "", 0, limit_sz);

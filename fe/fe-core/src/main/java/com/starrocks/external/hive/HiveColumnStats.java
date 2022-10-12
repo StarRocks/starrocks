@@ -1,7 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
+import com.google.common.base.Preconditions;
+import com.starrocks.external.ColumnTypeConverter;
+import org.apache.hadoop.hive.common.type.HiveDecimal;
 import org.apache.hadoop.hive.metastore.api.BooleanColumnStatsData;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
 import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
@@ -12,10 +15,18 @@ import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.math.BigInteger;
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import static java.lang.Double.NEGATIVE_INFINITY;
+import static java.lang.Double.POSITIVE_INFINITY;
+
 public class HiveColumnStats {
     private static final Logger LOG = LogManager.getLogger(HiveColumnStats.class);
 
-    private enum StatisticType {
+    public enum StatisticType {
         UNKNOWN,
         ESTIMATE
     }
@@ -28,7 +39,32 @@ public class HiveColumnStats {
     private double maxValue = Double.POSITIVE_INFINITY;
     private StatisticType type = StatisticType.UNKNOWN;
 
+    public static final HiveColumnStats UNKNOWN =
+            new HiveColumnStats(NEGATIVE_INFINITY, POSITIVE_INFINITY, -1, -1, -1, StatisticType.UNKNOWN);
+
     public HiveColumnStats() {
+    }
+
+    public HiveColumnStats(double minValue,
+                           double maxValue,
+                           long numNulls,
+                           double averageRowSize,
+                           long distinctValuesCount) {
+        this(minValue, maxValue, numNulls, averageRowSize, distinctValuesCount, StatisticType.ESTIMATE);
+    }
+
+    public HiveColumnStats(double minValue,
+                           double maxValue,
+                           long numNulls,
+                           double averageRowSize,
+                           long distinctValuesCount,
+                           StatisticType type) {
+        this.minValue = minValue;
+        this.maxValue = maxValue;
+        this.numNulls = numNulls;
+        this.avgSize = averageRowSize;
+        this.numDistinctValues = distinctValuesCount;
+        this.type = type;
     }
 
     public boolean isUnknown() {
@@ -37,8 +73,20 @@ public class HiveColumnStats {
 
     @Override
     public String toString() {
-        return String.format("avgSize: %.2f, numNulls: %d, numDistinctValues: %d, minValue: %.2f, maxValue: %.2f",
-                avgSize, numNulls, numDistinctValues, minValue, maxValue);
+        return String.format("avgSize: %.2f, numNulls: %d, numDistinctValues: %d, minValue: %.2f, maxValue: %.2f, " +
+                        "type: %s",
+                avgSize, numNulls, numDistinctValues, minValue, maxValue, type);
+    }
+
+    public static HiveColumnStats fromString(String columnStats) {
+        String[] columnStatsArray = columnStats.split(",");
+        Preconditions.checkState(columnStatsArray.length == 6);
+
+        List<String> columnStatsList = Arrays.stream(columnStatsArray).map(s -> s.substring(s.indexOf(":") + 2)).
+                collect(Collectors.toList());
+        return new HiveColumnStats(Double.parseDouble(columnStatsList.get(3)), Double.parseDouble(columnStatsList.get(4)),
+                Long.parseLong(columnStatsList.get(1)), Double.parseDouble(columnStatsList.get(0)),
+                Long.parseLong(columnStatsList.get(2)), StatisticType.valueOf(columnStatsList.get(5)));
     }
 
     public void addNumNulls(long v) {
@@ -83,7 +131,7 @@ public class HiveColumnStats {
     }
 
     public boolean init(String hiveType, ColumnStatisticsData statsData) {
-        hiveType = Utils.getTypeKeyword(hiveType);
+        hiveType = ColumnTypeConverter.getTypeKeyword(hiveType);
         boolean isValid = false;
         switch (hiveType.toUpperCase()) {
             case "BOOLEAN":
@@ -165,6 +213,14 @@ public class HiveColumnStats {
                     DecimalColumnStatsData decimalStats = statsData.getDecimalStats();
                     numNulls = decimalStats.getNumNulls();
                     numDistinctValues = decimalStats.getNumDVs();
+                    if (decimalStats.isSetHighValue()) {
+                        maxValue = HiveDecimal.create(new BigInteger(decimalStats.getHighValue().getUnscaled()),
+                                decimalStats.getHighValue().getScale()).doubleValue();
+                    }
+                    if (decimalStats.isSetLowValue()) {
+                        minValue = HiveDecimal.create(new BigInteger(decimalStats.getLowValue().getUnscaled()),
+                                decimalStats.getLowValue().getScale()).doubleValue();
+                    }
                 }
                 break;
             default:
@@ -221,5 +277,9 @@ public class HiveColumnStats {
 
     public void setMaxValue(double maxValue) {
         this.maxValue = maxValue;
+    }
+
+    public void setType(StatisticType type) {
+        this.type = type;
     }
 }

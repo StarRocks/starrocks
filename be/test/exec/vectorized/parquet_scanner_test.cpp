@@ -1,14 +1,17 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/parquet_scanner.h"
 
 #include <gtest/gtest.h>
+
+#include <memory>
 
 #include "column/chunk.h"
 #include "common/status.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "testutil//assert.h"
@@ -89,7 +92,8 @@ class ParquetScannerTest : public ::testing::Test {
             generate_desc_tuple(dst_slot_infos, &desc_tbl_builder);
         }
         DescriptorTbl* desc_tbl = nullptr;
-        DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        DescriptorTbl::create(_runtime_state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                              config::vector_chunk_size);
         return desc_tbl;
     }
 
@@ -215,6 +219,7 @@ class ParquetScannerTest : public ::testing::Test {
                 {"col_json_uint16", TypeDescriptor::create_json_type()},
                 {"col_json_uint32", TypeDescriptor::create_json_type()},
                 {"col_json_uint64", TypeDescriptor::create_json_type()},
+                {"col_json_timestamp", TypeDescriptor::create_json_type()},
 
                 {"col_json_float32", TypeDescriptor::create_json_type()},
                 {"col_json_float64", TypeDescriptor::create_json_type()},
@@ -224,6 +229,7 @@ class ParquetScannerTest : public ::testing::Test {
 
                 {"col_json_list", TypeDescriptor::create_json_type()},
                 {"col_json_map", TypeDescriptor::create_json_type()},
+                {"col_json_map_timestamp", TypeDescriptor::create_json_type()},
                 {"col_json_struct", TypeDescriptor::create_json_type()},
                 {"col_json_list_list", TypeDescriptor::create_json_type()},
                 {"col_json_list_struct", TypeDescriptor::create_json_type()},
@@ -342,10 +348,12 @@ class ParquetScannerTest : public ::testing::Test {
                                        773729, /*"/test_data/parquet_data/data_8191.parquet",*/
                                        772472, /*"/test_data/parquet_data/data_8192.parquet",*/
                                        775318 /*"/test_data/parquet_data/data_8193.parquet"*/};
+        _runtime_state = _obj_pool.add(new RuntimeState(TQueryGlobals()));
     }
 
 private:
     std::string test_exec_dir;
+    RuntimeState* _runtime_state;
     ObjectPool _obj_pool;
     std::vector<std::string> _file_names;
     std::vector<std::string> _nullable_file_names;
@@ -472,6 +480,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_uint16", {"1", "2", "3"}},
             {"col_json_int32", {"1", "2", "3"}},
             {"col_json_uint64", {"1", "2", "3"}},
+            {"col_json_timestamp", {"1659962123000", "1659962124000", "1659962125000"}},
 
             {"col_json_float32", {"1.100000023841858", "2.0999999046325684", "3.0999999046325684"}},
             {"col_json_float64", {"1.1", "2.1", "3.1"}},
@@ -480,6 +489,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_string", {"\"s1\"", "\"s2\"", "\"s3\""}},
             {"col_json_list", {"[1, 2]", "[3, 4]", "[5, 6]"}},
             {"col_json_map", {"{\"s1\": 1, \"s2\": 3}", "{\"s2\": 2}", "{\"s3\": 3}"}},
+            {"col_json_map_timestamp", {"{\"1659962123000\": 1}", "{\"1659962124000\": 2}", "{\"1659962125000\": 3}"}},
             {"col_json_struct",
              {R"({ "s0": 1, "s1": "string1" }                                                    )",
               R"( {"s0": 2, "s1": "string2"}                                                     )",

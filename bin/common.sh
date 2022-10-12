@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 # get jdk version, return version as an Integer.
 # 1.8 => 8, 13.0 => 13
@@ -52,12 +52,26 @@ export_mem_limit_from_conf() {
         fi
     done < $1
 
+    if [ -f /.dockerenv ]; then
+        mem_limit=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes | awk '{printf $1}')
+        if [ "$mem_limit" == "" ]; then
+            echo "can't get mem info from /sys/fs/cgroup/memory/memory.limit_in_bytes"
+            return 1
+        fi
+        mem_limit=`expr $mem_limit / 1024`
+    fi
+
     # read /proc/meminfo to fetch total memory of machine
     mem_total=$(cat /proc/meminfo |grep 'MemTotal' |awk -F : '{print $2}' |sed 's/^[ \t]*//g' | awk '{printf $1}')
     if [ "$mem_total" == "" ]; then
         echo "can't get mem info from /proc/meminfo"
         return 1
     fi
+
+    if [[ (-v mem_limit) && ($mem_limit -le $mem_total) ]]; then
+      mem_total=$mem_limit
+    fi
+
 
     if [ "$mem_limit_is_set" == "false" ]; then
         # if not set, the mem limit if 90% of total memory
@@ -106,3 +120,25 @@ export_mem_limit_from_conf() {
     export TCMALLOC_HEAP_LIMIT_MB=${mem}
     return 0
 }
+
+export_shared_envvars() {
+    # compatible with DORIS_HOME: DORIS_HOME still be using in config on the user side, so set DORIS_HOME to the meaningful value in case of wrong envs.
+    export DORIS_HOME="$STARROCKS_HOME"
+
+    # ===================================================================================
+    # initialization of environment variables before exporting env variables from be.conf
+    # For most cases, you should put default environment variables in this section.
+    #
+    # UDF_RUNTIME_DIR
+    # LOG_DIR
+    # PID_DIR
+    export UDF_RUNTIME_DIR=${STARROCKS_HOME}/lib/udf-runtime
+    export LOG_DIR=${STARROCKS_HOME}/log
+    export PID_DIR=`cd "$curdir"; pwd`
+
+    # https://github.com/aws/aws-cli/issues/5623
+    # https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-envvars.html
+    export AWS_EC2_METADATA_DISABLED=true
+    # ===================================================================================
+}
+

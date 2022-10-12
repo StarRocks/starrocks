@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.common;
 
 
@@ -54,6 +54,16 @@ public class SyncPartitionUtils {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
         Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
         return new PartitionDiff(adds, deletes);
+    }
+
+    public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
+                                                      Map<String, Range<PartitionKey>> mvRangeMap) {
+        Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
+        if (adds != null && !adds.isEmpty()) {
+            return true;
+        }
+        Map<String, Range<PartitionKey>> deletes = diffRange(mvRangeMap, baseRangeMap);
+        return deletes != null && !deletes.isEmpty();
     }
 
     public static PartitionDiff calcSyncRollupPartition(Map<String, Range<PartitionKey>> baseRangeMap,
@@ -147,31 +157,34 @@ public class SyncPartitionUtils {
     }
 
     public static void calcPotentialRefreshPartition(Set<String> needRefreshMvPartitionNames,
-                                                      Set<String> baseChangedPartitionNames,
-                                                      Map<String, Set<String>> baseToMvNameRef,
-                                                      Map<String, Set<String>> mvToBaseNameRef) {
-        int curNameCount = needRefreshMvPartitionNames.size();
-        int updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
-                needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
-        while (curNameCount != updatedCount) {
-            curNameCount = updatedCount;
-            updatedCount = SyncPartitionUtils.gatherPotentialRefreshPartitionNames(baseChangedPartitionNames,
-                    needRefreshMvPartitionNames, baseToMvNameRef, mvToBaseNameRef);
-        }
-    }
-    private static int gatherPotentialRefreshPartitionNames(Set<String> baseChangedPartitionNames,
-                                                     Set<String> needRefreshMvPartitionNames,
+                                                     Set<String> baseChangedPartitionNames,
                                                      Map<String, Set<String>> baseToMvNameRef,
                                                      Map<String, Set<String>> mvToBaseNameRef) {
+        gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                baseToMvNameRef, mvToBaseNameRef);
+    }
+
+    private static void gatherPotentialRefreshPartitionNames(Set<String> needRefreshMvPartitionNames,
+                                                             Set<String> baseChangedPartitionNames,
+                                                            Map<String, Set<String>> baseToMvNameRef,
+                                                            Map<String, Set<String>> mvToBaseNameRef) {
+        int curNameCount = needRefreshMvPartitionNames.size();
+        Set<String> newBaseChangedPartitionNames = Sets.newHashSet();
+        Set<String> newNeedRefreshMvPartitionNames = Sets.newHashSet();
         for (String needRefreshMvPartitionName : needRefreshMvPartitionNames) {
             Set<String> baseNames = mvToBaseNameRef.get(needRefreshMvPartitionName);
-            baseChangedPartitionNames.addAll(baseNames);
+            newBaseChangedPartitionNames.addAll(baseNames);
             for (String baseName : baseNames) {
                 Set<String> mvNames = baseToMvNameRef.get(baseName);
-                needRefreshMvPartitionNames.addAll(mvNames);
+                newNeedRefreshMvPartitionNames.addAll(mvNames);
             }
         }
-        return needRefreshMvPartitionNames.size();
+        baseChangedPartitionNames.addAll(newBaseChangedPartitionNames);
+        needRefreshMvPartitionNames.addAll(newNeedRefreshMvPartitionNames);
+        if (curNameCount != needRefreshMvPartitionNames.size()) {
+            gatherPotentialRefreshPartitionNames(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                    baseToMvNameRef, mvToBaseNameRef);
+        }
     }
 
     public static String getMVPartitionName(LocalDateTime lowerDateTime, LocalDateTime upperDateTime,
@@ -298,14 +311,12 @@ public class SyncPartitionUtils {
 
         for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeLinkMap.entrySet()) {
             boolean found = false;
-            Iterator<Range<PartitionKey>> dstIter = dstRangeLinkMap.values().iterator();
-            while (dstIter.hasNext()) {
-                Range<PartitionKey> dstRange = dstIter.next();
+            for (Map.Entry<String, Range<PartitionKey>> dstEntry : dstRangeLinkMap.entrySet()) {
+                Range<PartitionKey> dstRange = dstEntry.getValue();
                 int lowerCmp = srcEntry.getValue().lowerEndpoint().compareTo(dstRange.lowerEndpoint());
                 int upperCmp = srcEntry.getValue().upperEndpoint().compareTo(dstRange.upperEndpoint());
-                // must be same range
-                if (lowerCmp == 0 && upperCmp == 0) {
-                    dstIter.remove();
+                // both range and name should be the same
+                if (lowerCmp == 0 && upperCmp == 0 && srcEntry.getKey().equals(dstEntry.getKey())) {
                     found = true;
                     break;
                 }

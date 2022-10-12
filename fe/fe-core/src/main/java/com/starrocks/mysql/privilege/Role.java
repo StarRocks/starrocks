@@ -27,6 +27,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -55,6 +56,9 @@ public class Role implements Writable {
     private String roleName;
     private Map<TablePattern, PrivBitSet> tblPatternToPrivs = Maps.newConcurrentMap();
     private Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs = Maps.newConcurrentMap();
+
+    // newly added in 2.3
+    private Set<UserIdentity> impersonateUsers = Sets.newConcurrentHashSet();
     // users which this role
     private Set<UserIdentity> users = Sets.newConcurrentHashSet();
 
@@ -83,6 +87,11 @@ public class Role implements Writable {
         this.resourcePatternToPrivs.put(resourcePattern, resourcePrivs);
     }
 
+    public Role(String roleName, UserIdentity securedUser) {
+        this.roleName = roleName;
+        this.impersonateUsers.add(securedUser);
+    }
+
     public String getRoleName() {
         return roleName;
     }
@@ -97,6 +106,14 @@ public class Role implements Writable {
 
     public Set<UserIdentity> getUsers() {
         return users;
+    }
+
+    public Set<UserIdentity> getImpersonateUsers() {
+        return impersonateUsers;
+    }
+
+    public void setImpersonateUsers(Set<UserIdentity> impersonateUsers) {
+        this.impersonateUsers = impersonateUsers;
     }
 
     public void merge(Role other) {
@@ -117,6 +134,7 @@ public class Role implements Writable {
                 resourcePatternToPrivs.put(entry.getKey(), entry.getValue());
             }
         }
+        this.impersonateUsers.addAll(other.impersonateUsers);
     }
 
     public void addUser(UserIdentity userIdent) {
@@ -141,7 +159,7 @@ public class Role implements Writable {
 
     @Override
     public void write(DataOutput out) throws IOException {
-        Text.writeString(out, roleName);
+        Text.writeString(out, ClusterNamespace.getFullName(roleName));
         out.writeInt(tblPatternToPrivs.size());
         for (Map.Entry<TablePattern, PrivBitSet> entry : tblPatternToPrivs.entrySet()) {
             entry.getKey().write(out);
@@ -159,7 +177,7 @@ public class Role implements Writable {
     }
 
     public void readFields(DataInput in) throws IOException {
-        roleName = Text.readString(in);
+        roleName = ClusterNamespace.getNameFromFullName(Text.readString(in));
         int size = in.readInt();
         for (int i = 0; i < size; i++) {
             TablePattern tblPattern = TablePattern.read(in);
@@ -187,6 +205,7 @@ public class Role implements Writable {
         sb.append("role: ").append(roleName).append(", db table privs: ").append(tblPatternToPrivs);
         sb.append(", resource privs: ").append(resourcePatternToPrivs);
         sb.append(", users: ").append(users);
+        sb.append(", impersonate: ").append(impersonateUsers);
         return sb.toString();
     }
 }

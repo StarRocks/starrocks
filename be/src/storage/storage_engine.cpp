@@ -24,7 +24,6 @@
 #include <fmt/format.h>
 
 #include <algorithm>
-#include <csignal>
 #include <cstring>
 #include <filesystem>
 #include <memory>
@@ -46,8 +45,9 @@
 #include "storage/rowset/rowset_meta.h"
 #include "storage/rowset/rowset_meta_manager.h"
 #include "storage/rowset/unique_rowset_id_generator.h"
+#include "storage/segment_flush_executor.h"
+#include "storage/segment_replicate_executor.h"
 #include "storage/tablet_manager.h"
-#include "storage/tablet_meta.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/task/engine_task.h"
 #include "storage/update_manager.h"
@@ -63,6 +63,7 @@
 namespace starrocks {
 
 StorageEngine* StorageEngine::_s_instance = nullptr;
+StorageEngine* StorageEngine::_p_instance = nullptr;
 
 static Status _validate_options(const EngineOptions& options) {
     if (options.store_paths.empty()) {
@@ -84,13 +85,16 @@ StorageEngine::StorageEngine(const EngineOptions& options)
           _options(options),
           _available_storage_medium_type_count(0),
           _is_all_cluster_id_exist(true),
-
-          _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
-          _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
+          _tablet_manager(new TabletManager(config::tablet_map_shard_size)),
+          _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _update_manager(new UpdateManager(options.update_mem_tracker)),
           _compaction_manager(new CompactionManager()) {
+#ifdef BE_TEST
+    _p_instance = _s_instance;
+    _s_instance = this;
+#endif
     if (_s_instance == nullptr) {
         _s_instance = this;
     }
@@ -103,7 +107,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 StorageEngine::~StorageEngine() {
 #ifdef BE_TEST
     if (_s_instance == this) {
-        _s_instance = nullptr;
+        _s_instance = _p_instance;
     }
 #endif
 }
@@ -155,7 +159,6 @@ Status StorageEngine::_open() {
 
     RETURN_IF_ERROR_WITH_WARN(_check_file_descriptor_number(), "check fd number failed");
 
-    starrocks::ExecEnv::GetInstance()->set_storage_engine(this);
     RETURN_IF_ERROR_WITH_WARN(_update_manager->init(), "init update_manager failed");
 
     auto dirs = get_stores<false>();
@@ -176,6 +179,12 @@ Status StorageEngine::_open() {
 
     _memtable_flush_executor = std::make_unique<MemTableFlushExecutor>();
     RETURN_IF_ERROR_WITH_WARN(_memtable_flush_executor->init(dirs), "init MemTableFlushExecutor failed");
+
+    _segment_flush_executor = std::make_unique<SegmentFlushExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_segment_flush_executor->init(dirs), "init SegmentFlushExecutor failed");
+
+    _segment_replicate_executor = std::make_unique<SegmentReplicateExecutor>();
+    RETURN_IF_ERROR_WITH_WARN(_segment_replicate_executor->init(dirs), "init SegmentReplicateExecutor failed");
 
     return Status::OK();
 }
@@ -323,6 +332,19 @@ void StorageEngine::_start_disk_stat_monitor() {
     // tablet_worker_thread (see TaskWorkerPool) to make them report to FE ASAP.
     if (some_tablets_were_dropped) {
         trigger_report();
+    }
+
+    // Once sweep operation can lower the disk water level by removing data, so it doesn't make sense
+    // to wake up the sweeper thread multiple times in a short period of time. To avoid multiple
+    // disk scans, set an valid disk scan interval.
+    static time_t last_sweep_time = 0;
+    static const int32_t valid_sweep_interval = 30;
+    for (auto& it : _store_map) {
+        if (difftime(time(NULL), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
+            std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
+            _trash_sweeper_cv.notify_one();
+            last_sweep_time = time(NULL);
+        }
     }
 }
 
@@ -613,7 +635,8 @@ size_t StorageEngine::_compaction_check_one_round() {
     return tablets_num_checked;
 }
 
-Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
+Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir,
+                                                     std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -624,8 +647,8 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform cumulative compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION, data_dir);
+    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::CUMULATIVE_COMPACTION,
+                                                                                  data_dir, tablet_shards_range);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }
@@ -641,6 +664,7 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     if (!res.ok()) {
         if (!res.is_mem_limit_exceeded()) {
             best_tablet->set_last_cumu_compaction_failure_time(UnixMillis());
+            best_tablet->set_last_cumu_compaction_failure_status(res.code());
         }
         if (!res.is_not_found()) {
             StarRocksMetrics::instance()->cumulative_compaction_request_failed.increment(1);
@@ -651,10 +675,11 @@ Status StorageEngine::_perform_cumulative_compaction(DataDir* data_dir) {
     }
 
     best_tablet->set_last_cumu_compaction_failure_time(0);
+    best_tablet->set_last_cumu_compaction_failure_status(TStatusCode::OK);
     return Status::OK();
 }
 
-Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
+Status StorageEngine::_perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range) {
     scoped_refptr<Trace> trace(new Trace);
     MonotonicStopWatch watch;
     watch.start();
@@ -665,8 +690,8 @@ Status StorageEngine::_perform_base_compaction(DataDir* data_dir) {
     });
     ADOPT_TRACE(trace.get());
     TRACE("start to perform base compaction");
-    TabletSharedPtr best_tablet =
-            _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION, data_dir);
+    TabletSharedPtr best_tablet = _tablet_manager->find_best_tablet_to_compaction(CompactionType::BASE_COMPACTION,
+                                                                                  data_dir, tablet_shards_range);
     if (best_tablet == nullptr) {
         return Status::NotFound("there are no suitable tablets");
     }
@@ -734,6 +759,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
 }
 
 Status StorageEngine::_start_trash_sweep(double* usage) {
+    LOG(INFO) << "start to sweep trash";
     Status res = Status::OK();
 
     const int32_t snapshot_expire = config::snapshot_expire_time_sec;
@@ -784,12 +810,12 @@ Status StorageEngine::_start_trash_sweep(double* usage) {
     // clean unused rowset metas in KVStore
     _clean_unused_rowset_metas();
 
-    _do_manual_compact();
+    do_manual_compact(false);
 
     return res;
 }
 
-void StorageEngine::_do_manual_compact() {
+void StorageEngine::do_manual_compact(bool force_compact) {
     auto data_dirs = get_stores();
     for (auto data_dir : data_dirs) {
         uint64_t live_sst_files_size_before = 0;
@@ -797,7 +823,7 @@ void StorageEngine::_do_manual_compact() {
             LOG(WARNING) << "data dir " << data_dir->path() << " get_live_sst_files_size failed";
             continue;
         }
-        if (live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
+        if (force_compact || live_sst_files_size_before > config::meta_threshold_to_manual_compact) {
             Status s = data_dir->get_meta()->compact();
             if (!s.ok()) {
                 LOG(WARNING) << "data dir " << data_dir->path() << " manual compact meta failed: " << s;
@@ -819,8 +845,8 @@ void StorageEngine::_clean_unused_rowset_metas() {
     std::vector<RowsetMetaSharedPtr> invalid_rowset_metas;
     auto clean_rowset_func = [this, &invalid_rowset_metas](const TabletUid& tablet_uid, RowsetId rowset_id,
                                                            std::string_view meta_str) -> bool {
-        auto rowset_meta = std::make_shared<RowsetMeta>();
-        bool parsed = rowset_meta->init(meta_str);
+        bool parsed = false;
+        auto rowset_meta = std::make_shared<RowsetMeta>(meta_str, &parsed);
         if (!parsed) {
             LOG(WARNING) << "parse rowset meta string failed for rowset_id:" << rowset_id;
             // return false will break meta iterator, return true to skip this error

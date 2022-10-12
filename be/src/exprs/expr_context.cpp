@@ -22,7 +22,6 @@
 #include "exprs/expr_context.h"
 
 #include <fmt/format.h>
-#include <gperftools/profiler.h>
 
 #include <memory>
 #include <sstream>
@@ -35,8 +34,6 @@
 #include "runtime/mem_pool.h"
 #include "runtime/runtime_state.h"
 #include "udf/udf_internal.h"
-#include "util/debug_util.h"
-#include "util/stack_util.h"
 
 namespace starrocks {
 
@@ -112,12 +109,12 @@ int ExprContext::register_func(RuntimeState* state, const starrocks_udf::Functio
     return _fn_contexts.size() - 1;
 }
 
-Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
+Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(*new_ctx == nullptr);
 
-    *new_ctx = state->obj_pool()->add(new ExprContext(_root));
+    *new_ctx = pool->add(new ExprContext(_root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
@@ -131,12 +128,12 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     return _root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root) {
+Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx, Expr* root) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(*new_ctx == nullptr);
 
-    *new_ctx = state->obj_pool()->add(new ExprContext(root));
+    *new_ctx = pool->add(new ExprContext(root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
@@ -188,6 +185,9 @@ StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
 }
 
 StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
+    DCHECK(_prepared);
+    DCHECK(_opened);
+    DCHECK(!_closed);
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();

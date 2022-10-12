@@ -44,7 +44,7 @@ public:
     void push_largeint(__int128 data) { push_number(data); }
     void push_float(float data) { push_number(data); }
     void push_double(double data) { push_number(data); }
-    void push_string(const char* str, size_t length);
+    void push_string(const char* str, size_t length, char escape_char = '"');
     void push_string(const Slice& s) { push_string(s.data, s.size); }
 
     template <typename T>
@@ -54,6 +54,9 @@ public:
 
     void begin_push_array() { _enter_scope('['); }
     void finish_push_array() { _leave_scope(']'); }
+
+    void begin_push_map() { _enter_scope('{'); }
+    void finish_push_map() { _leave_scope('}'); }
 
     void separator(char c);
 
@@ -78,8 +81,8 @@ private:
 
     void _enter_scope(char c);
     void _leave_scope(char c);
-    size_t _length_after_escape(const char* str, size_t length);
-    char* _escape(char* dst, const char* src, size_t length);
+    size_t _length_after_escape(const char* str, size_t length, char escape_char = '"');
+    char* _escape(char* dst, const char* src, size_t length, char escape_char = '"');
     void _push_string_normal(const char* str, size_t lenght);
 
     raw::RawString _data;

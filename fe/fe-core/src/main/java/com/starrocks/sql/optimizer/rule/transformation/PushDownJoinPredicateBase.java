@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
@@ -21,6 +20,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarEquivalenceExtractor;
 import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
 import java.util.Set;
@@ -33,14 +33,14 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
 
     public static OptExpression pushDownPredicate(OptExpression root, List<ScalarOperator> leftPushDown,
                                                   List<ScalarOperator> rightPushDown) {
-        if (leftPushDown != null && !leftPushDown.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(leftPushDown)) {
             Set<ScalarOperator> set = Sets.newLinkedHashSet(leftPushDown);
             OptExpression newLeft = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(set)));
             newLeft.getInputs().add(root.getInputs().get(0));
             root.getInputs().set(0, newLeft);
         }
 
-        if (rightPushDown != null && !rightPushDown.isEmpty()) {
+        if (CollectionUtils.isNotEmpty(rightPushDown)) {
             Set<ScalarOperator> set = Sets.newLinkedHashSet(rightPushDown);
             OptExpression newRight = new OptExpression(new LogicalFilterOperator(Utils.compoundAnd(set)));
             newRight.getInputs().add(root.getInputs().get(1));
@@ -85,7 +85,7 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                     rightPushDown.add(predicate);
                 }
             }
-        } else if (join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+        } else if (join.getJoinType().isSemiAntiJoin()) {
             for (ScalarOperator predicate : conjunctList) {
                 ColumnRefSet usedColumns = predicate.getUsedColumns();
                 if (leftColumns.containsAll(usedColumns)) {
@@ -101,37 +101,37 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
                 }
             }
         }
-        conjunctList.removeAll(leftPushDown);
-        conjunctList.removeAll(rightPushDown);
 
-        ScalarOperator joinPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
+
+        // predicate can be removed from the original on condition should meet at least one rule below:
+        // 1. join type is not semi/anti
+        // 2. eqConjuncts is not empty
+        if (!join.getJoinType().isSemiAntiJoin() || CollectionUtils.isNotEmpty(eqConjuncts)) {
+            conjunctList.removeAll(leftPushDown);
+            conjunctList.removeAll(rightPushDown);
+        }
+
+        ScalarOperator joinEqPredicate = Utils.compoundAnd(Lists.newArrayList(eqConjuncts));
         ScalarOperator postJoinPredicate = Utils.compoundAnd(conjunctList);
 
         OptExpression root;
-        if (joinPredicate == null) {
-            if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                LogicalJoinOperator crossJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(JoinOperator.CROSS_JOIN)
-                        .setOnPredicate(null)
-                        .setPredicate(Utils.compoundAnd(postJoinPredicate, join.getPredicate()))
-                        .build();
-                root = OptExpression.create(crossJoin, input.getInputs());
-            } else {
-                throw new SemanticException("No equal on predicate in " + join.getJoinType() + " is not supported");
-            }
+        if (joinEqPredicate == null) {
+            JoinOperator joinType =
+                    (join.getOnPredicate() == null || join.getJoinType().isCrossJoin()) ?
+                            JoinOperator.CROSS_JOIN : join.getJoinType();
+            LogicalJoinOperator nestLoop = new LogicalJoinOperator.Builder().withOperator(join)
+                    .setJoinType(joinType)
+                    .setOnPredicate(postJoinPredicate)
+                    .build();
+            root = OptExpression.create(nestLoop, input.getInputs());
         } else {
-            LogicalJoinOperator newJoin;
-            if (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) {
-                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(JoinOperator.INNER_JOIN)
-                        .setOnPredicate(Utils.compoundAnd(joinPredicate, postJoinPredicate))
-                        .build();
-            } else {
-                newJoin = new LogicalJoinOperator.Builder().withOperator(join)
-                        .setJoinType(join.getJoinType())
-                        .setOnPredicate(Utils.compoundAnd(joinPredicate, postJoinPredicate))
-                        .build();
-            }
+            JoinOperator joinType = (join.getJoinType().isInnerJoin() || join.getJoinType().isCrossJoin()) ?
+                    JoinOperator.INNER_JOIN : join.getJoinType();
+            LogicalJoinOperator newJoin =
+                    new LogicalJoinOperator.Builder().withOperator(join)
+                            .setJoinType(joinType)
+                            .setOnPredicate(Utils.compoundAnd(joinEqPredicate, postJoinPredicate))
+                            .build();
             root = OptExpression.create(newJoin, input.getInputs());
         }
 

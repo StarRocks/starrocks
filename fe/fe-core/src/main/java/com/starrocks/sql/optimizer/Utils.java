@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -21,13 +21,11 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalHudiScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
@@ -159,41 +157,6 @@ public class Utils {
             GroupExpression expression = group.getFirstLogicalExpression();
             extractOperator(expression, list, lambda);
         }
-    }
-
-    // check the ApplyNode's children contains correlation subquery
-    public static boolean containsCorrelationSubquery(GroupExpression groupExpression) {
-        if (groupExpression.getOp().isLogical() && OperatorType.LOGICAL_APPLY
-                .equals(groupExpression.getOp().getOpType())) {
-            LogicalApplyOperator apply = (LogicalApplyOperator) groupExpression.getOp();
-
-            if (apply.getCorrelationColumnRefs().isEmpty()) {
-                return false;
-            }
-
-            // only check right child
-            return checkPredicateContainColumnRef(apply.getCorrelationColumnRefs(),
-                    groupExpression.getInputs().get(1).getFirstLogicalExpression());
-        }
-        return false;
-    }
-
-    // GroupExpression
-    private static boolean checkPredicateContainColumnRef(List<ColumnRefOperator> cro,
-                                                          GroupExpression groupExpression) {
-        LogicalOperator logicalOperator = (LogicalOperator) groupExpression.getOp();
-
-        if (containAnyColumnRefs(cro, logicalOperator.getPredicate())) {
-            return true;
-        }
-
-        for (Group group : groupExpression.getInputs()) {
-            if (checkPredicateContainColumnRef(cro, group.getFirstLogicalExpression())) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     public static boolean containAnyColumnRefs(List<ColumnRefOperator> refs, ScalarOperator operator) {
@@ -385,16 +348,19 @@ public class Utils {
                         GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, colNames);
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
-                HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
-                try {
-                    Map<String, HiveColumnStats> hiveColumnStatisticMap =
-                            hiveMetaStoreTable.getTableLevelColumnStats(colNames);
-                    return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
-                } catch (Exception e) {
-                    LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
-                            scanOperator.getTable().getName(), e);
-                    return true;
+                if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
+                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
+                    try {
+                        Map<String, HiveColumnStats> hiveColumnStatisticMap =
+                                hiveMetaStoreTable.getTableLevelColumnStats(colNames);
+                        return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
+                    } catch (Exception e) {
+                        LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
+                                scanOperator.getTable().getName(), e);
+                        return true;
+                    }
                 }
+                return true;
             } else if (operator instanceof LogicalIcebergScanOperator) {
                 IcebergTable table = (IcebergTable) scanOperator.getTable();
                 try {
@@ -563,5 +529,19 @@ public class Utils {
             return null;
         }
         return predicates;
+    }
+
+    public static <T extends ScalarOperator> List<T> collect(ScalarOperator root, Class<T> clazz) {
+        List<T> output = Lists.newArrayList();
+        collect(root, clazz, output);
+        return output;
+    }
+
+    private static <T extends ScalarOperator> void collect(ScalarOperator root, Class<T> clazz, List<T> output) {
+        if (clazz.isInstance(root)) {
+            output.add(clazz.cast(root));
+        }
+
+        root.getChildren().forEach(child -> collect(child, clazz, output));
     }
 }

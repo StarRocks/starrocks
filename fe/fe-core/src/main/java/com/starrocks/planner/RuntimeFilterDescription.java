@@ -1,8 +1,9 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.thrift.TNetworkAddress;
@@ -46,6 +47,9 @@ public class RuntimeFilterDescription {
     private boolean onlyLocal;
 
     private List<Integer> bucketSeqToInstance = Lists.newArrayList();
+    // partitionByExprs are used for computing partition ids in probe side when
+    // join's equal conjuncts size > 1.
+    private final Map<Integer, List<Expr>> nodeIdToParitionByExprs = Maps.newHashMap();
 
     public RuntimeFilterDescription(SessionVariable sv) {
         nodeIdToProbeExpr = new HashMap<>();
@@ -122,6 +126,23 @@ public class RuntimeFilterDescription {
 
     public void addProbeExpr(int nodeId, Expr expr) {
         nodeIdToProbeExpr.put(nodeId, expr);
+    }
+
+    public Map<Integer, Expr> getNodeIdToProbeExpr() {
+        return nodeIdToProbeExpr;
+    }
+
+    public void addPartitionByExprsIfNeeded(int nodeId, Expr probeExpr, List<Expr> partitionByExprs) {
+        if (partitionByExprs.size() == 0) {
+            return;
+        }
+        // If partition_by_exprs only have one and equals to probeExpr, not set partition_by_exprs:
+        //  - to keep compatible with old policies;
+        //  - to decrease expr evals for the same expr;
+        if (partitionByExprs.size() == 1 && partitionByExprs.get(0).equals(probeExpr)) {
+            return;
+        }
+        nodeIdToParitionByExprs.put(nodeId, partitionByExprs);
     }
 
     public void setHasRemoteTargets(boolean value) {
@@ -220,11 +241,34 @@ public class RuntimeFilterDescription {
         this.broadcastGRFDestinations = broadcastGRFDestinations;
     }
 
+    public List<TRuntimeFilterDestination> getBroadcastGRFDestinations() {
+        return broadcastGRFDestinations;
+    }
+
+    // Only use partition_by_exprs when the grf is remote and joinMode is partitioned.
+    private boolean isCanUsePartitionByExprs() {
+        return hasRemoteTargets && joinMode != JoinNode.DistributionMode.BROADCAST;
+    }
+
     public String toExplainString(int probeNodeId) {
         StringBuilder sb = new StringBuilder();
         sb.append("filter_id = ").append(filterId);
         if (probeNodeId >= 0) {
             sb.append(", probe_expr = (").append(nodeIdToProbeExpr.get(probeNodeId).toSql()).append(")");
+            if (isCanUsePartitionByExprs() && nodeIdToParitionByExprs.containsKey(probeNodeId) &&
+                    !nodeIdToParitionByExprs.get(probeNodeId).isEmpty()) {
+                sb.append(", partition_exprs = (");
+                List<Expr> partitionByExprs = nodeIdToParitionByExprs.get(probeNodeId);
+                for (int i = 0; i < partitionByExprs.size(); i++) {
+                    Expr partitionByExpr = partitionByExprs.get(i);
+                    if (i != partitionByExprs.size() - 1) {
+                        sb.append(partitionByExpr.toSql() + ",");
+                    } else {
+                        sb.append(partitionByExpr.toSql());
+                    }
+                }
+                sb.append(")");
+            }
         } else {
             sb.append(", build_expr = (").append(buildExpr.toSql()).append(")");
             sb.append(", remote = ").append(hasRemoteTargets);
@@ -273,7 +317,14 @@ public class RuntimeFilterDescription {
         } else if (joinMode.equals(JoinNode.DistributionMode.REPLICATED)) {
             t.setBuild_join_mode(TRuntimeFilterBuildJoinMode.REPLICATED);
         }
-
+        if (isCanUsePartitionByExprs()) {
+            for (Map.Entry<Integer, List<Expr>> entry : nodeIdToParitionByExprs.entrySet()) {
+                if (entry.getValue() != null && !entry.getValue().isEmpty()) {
+                    t.putToPlan_node_id_to_partition_by_exprs(entry.getKey(),
+                            Expr.treesToThrift(entry.getValue()));
+                }
+            }
+        }
         return t;
     }
 

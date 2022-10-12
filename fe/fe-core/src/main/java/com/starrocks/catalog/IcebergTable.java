@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
@@ -22,6 +23,7 @@ import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -98,6 +100,11 @@ public class IcebergTable extends Table {
 
     public String getResourceName() {
         return resourceName;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        return Joiner.on(":").join(table, ((BaseTable) getIcebergTable()).operations().current().uuid());
     }
 
     public IcebergCatalogType getCatalogType() {

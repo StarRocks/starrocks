@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 curdir=`dirname "$0"`
 curdir=`cd "$curdir"; pwd`

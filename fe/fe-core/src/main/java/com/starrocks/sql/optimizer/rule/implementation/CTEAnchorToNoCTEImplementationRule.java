@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.implementation;
 
@@ -17,6 +17,12 @@ public class CTEAnchorToNoCTEImplementationRule extends ImplementationRule {
     public CTEAnchorToNoCTEImplementationRule() {
         super(RuleType.IMP_CTE_ANCHOR_TO_NO_CTE,
                 Pattern.create(OperatorType.LOGICAL_CTE_ANCHOR, OperatorType.PATTERN_MULTI_LEAF));
+    }
+
+    @Override
+    public boolean check(OptExpression input, OptimizerContext context) {
+        LogicalCTEAnchorOperator anchor = (LogicalCTEAnchorOperator) input.getOp();
+        return !context.getCteContext().isForceCTE(anchor.getCteId());
     }
 
     @Override

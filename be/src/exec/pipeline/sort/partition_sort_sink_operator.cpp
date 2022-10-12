@@ -1,10 +1,7 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/sort/partition_sort_sink_operator.h"
 
-#include "column/chunk.h"
-#include "column/column_helper.h"
-#include "exec/pipeline/sort/sort_context.h"
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/chunks_sorter_full_sort.h"
 #include "exec/vectorized/chunks_sorter_heap_sort.h"

@@ -23,7 +23,6 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SetNamesVar;
 import com.starrocks.analysis.SetPassVar;
 import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -34,7 +33,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -89,7 +87,7 @@ public class SetExecutorTest {
         vars.add(new SetVar("query_timeout", new IntLiteral(10L)));
 
         SetStmt stmt = new SetStmt(vars);
-        stmt.analyze();
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
 
         executor.execute();
@@ -99,7 +97,7 @@ public class SetExecutorTest {
     public void testSetSessionAndGlobal(@Mocked EditLog editLog) throws Exception {
         new Expectations(editLog) {
             {
-                editLog.logGlobalVariableV2((GlobalVarPersistInfo)any);
+                editLog.logGlobalVariableV2((GlobalVarPersistInfo) any);
                 minTimes = 1;
             }
         };

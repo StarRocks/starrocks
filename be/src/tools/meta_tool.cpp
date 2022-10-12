@@ -29,6 +29,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
+#include "gen_cpp/lake_types.pb.h"
 #include "gen_cpp/olap_file.pb.h"
 #include "gen_cpp/segment.pb.h"
 #include "gutil/strings/numbers.h"
@@ -72,7 +73,7 @@ const std::string HEADER_PREFIX = "tabletmeta_";
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "get_meta",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, "
-              "show_meta, check_table_meta_consistency");
+              "show_meta, check_table_meta_consistency, print_lake_metadata, print_lake_txn_log");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -99,13 +100,17 @@ std::string get_usage(const std::string& progname) {
     ss << "./meta_tool --operation=delete_rowset_meta "
           "--root_path=/path/to/storage/path --tablet_uid=tablet_uid "
           "--rowset_id=rowset_id\n";
+    ss << "./meta_tool --operation=delete_persistent_index_meta "
+          "--root_path=/path/to/storage/path --tablet_id=tabletid\n";
     ss << "./meta_tool --operation=compact_meta --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=get_meta_stats --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=ls --root_path=/path/to/storage/path\n";
     ss << "./meta_tool --operation=show_meta --pb_meta_path=path\n";
     ss << "./meta_tool --operation=show_segment_footer --file=/path/to/segment/file\n";
     ss << "./meta_tool --operation=check_table_meta_consistency --root_path=/path/to/storage/path "
-          "--table_id=tableid";
+          "--table_id=tableid\n";
+    ss << "cat 0001000000001394_0000000000000004.meta | ./meta_tool --operation=print_lake_metadata\n";
+    ss << "cat 0001000000001391_0000000000000001.log | ./meta_tool --operation=print_lake_txn_log\n";
     return ss.str();
 }
 
@@ -189,6 +194,18 @@ void delete_rowset_meta(DataDir* data_dir) {
         return;
     }
     std::cout << "delete rowset meta successfully" << std::endl;
+}
+
+void delete_persistent_index_meta(DataDir* data_dir) {
+    std::string key = "tpi_";
+    starrocks::put_fixed64_le(&key, BigEndian::FromHost64(FLAGS_tablet_id));
+    Status st = data_dir->get_meta()->remove(starrocks::META_COLUMN_FAMILY_INDEX, key);
+    if (st.ok()) {
+        std::cout << "delete tablet persistent index meta success, tablet_id: " << FLAGS_tablet_id << std::endl;
+    } else {
+        std::cout << "delete tablet persistent index meta failed, tablet_id: " << FLAGS_tablet_id
+                  << ", status: " << st.to_string() << std::endl;
+    }
 }
 
 void compact_meta(DataDir* data_dir) {
@@ -442,8 +459,6 @@ void show_segment_footer(const std::string& file_name) {
 // This function will check the consistency of tablet meta and segment_footer
 // #issue 5415
 void check_meta_consistency(DataDir* data_dir) {
-    std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>();
-    starrocks::GlobalTabletSchemaMap::Instance()->set_mem_tracker(mem_tracker.get());
     std::vector<int64_t> tablet_ids;
     int64_t table_id = FLAGS_table_id;
     auto check_meta_func = [data_dir, &tablet_ids, table_id](int64_t tablet_id, int32_t schema_hash,
@@ -545,11 +560,47 @@ int meta_tool_main(int argc, char** argv) {
             return -1;
         }
         show_segment_footer(FLAGS_file);
+    } else if (FLAGS_operation == "print_lake_metadata") {
+        starrocks::lake::TabletMetadataPB metadata;
+        if (!metadata.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse tablet metadata\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(metadata, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
+    } else if (FLAGS_operation == "print_lake_txn_log") {
+        starrocks::lake::TxnLogPB txn_log;
+        if (!txn_log.ParseFromIstream(&std::cin)) {
+            std::cerr << "Fail to parse txn log\n";
+            return -1;
+        }
+        json2pb::Pb2JsonOptions options;
+        options.pretty_json = true;
+        std::string json;
+        std::string error;
+        if (!json2pb::ProtoMessageToJson(txn_log, &json, options, &error)) {
+            std::cerr << "Fail to convert protobuf to json: " << error << '\n';
+            return -1;
+        }
+        std::cout << json << '\n';
     } else {
         // operations that need root path should be written here
-        std::set<std::string> valid_operations = {
-                "get_meta",     "load_meta",      "delete_meta", "delete_rowset_meta",
-                "compact_meta", "get_meta_stats", "ls",          "check_table_meta_consistency"};
+        std::set<std::string> valid_operations = {"get_meta",
+                                                  "load_meta",
+                                                  "delete_meta",
+                                                  "delete_rowset_meta",
+                                                  "delete_persistent_index_meta",
+                                                  "compact_meta",
+                                                  "get_meta_stats",
+                                                  "ls",
+                                                  "check_table_meta_consistency"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation:" << FLAGS_operation << std::endl;
             return -1;
@@ -576,6 +627,8 @@ int meta_tool_main(int argc, char** argv) {
             delete_meta(data_dir.get());
         } else if (FLAGS_operation == "delete_rowset_meta") {
             delete_rowset_meta(data_dir.get());
+        } else if (FLAGS_operation == "delete_persistent_index_meta") {
+            delete_persistent_index_meta(data_dir.get());
         } else if (FLAGS_operation == "compact_meta") {
             compact_meta(data_dir.get());
         } else if (FLAGS_operation == "get_meta_stats") {

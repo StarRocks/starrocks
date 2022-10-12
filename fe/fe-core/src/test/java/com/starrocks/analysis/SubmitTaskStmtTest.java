@@ -1,9 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowResultSet;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -49,7 +55,7 @@ public class SubmitTaskStmtTest {
         String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, ctx);
 
-        Assert.assertEquals(submitTaskStmt.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt.getDbName(), "test");
         Assert.assertNull(submitTaskStmt.getTaskName());
         Assert.assertEquals(submitTaskStmt.getProperties().size(), 0);
 
@@ -57,7 +63,7 @@ public class SubmitTaskStmtTest {
                 "create table temp as select count(*) as cnt from tbl1";
 
         SubmitTaskStmt submitTaskStmt2 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL2, ctx);
-        Assert.assertEquals(submitTaskStmt2.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt2.getDbName(), "test");
         Assert.assertNull(submitTaskStmt2.getTaskName());
         Assert.assertEquals(submitTaskStmt2.getProperties().size(), 1);
         Map<String, String> properties = submitTaskStmt2.getProperties();
@@ -69,16 +75,27 @@ public class SubmitTaskStmtTest {
         String submitSQL3 = "submit task task_name as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt3 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL3, ctx);
 
-        Assert.assertEquals(submitTaskStmt3.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt3.getDbName(), "test");
         Assert.assertEquals(submitTaskStmt3.getTaskName(), "task_name");
         Assert.assertEquals(submitTaskStmt3.getProperties().size(), 0);
 
         String submitSQL4 = "submit task test.task_name as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt4 = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL4, ctx);
 
-        Assert.assertEquals(submitTaskStmt4.getDbName(), "default_cluster:test");
+        Assert.assertEquals(submitTaskStmt4.getDbName(), "test");
         Assert.assertEquals(submitTaskStmt4.getTaskName(), "task_name");
         Assert.assertEquals(submitTaskStmt4.getProperties().size(), 0);
     }
 
+    @Test
+    public void SubmitStmtShouldShow() throws Exception {
+        AnalyzeTestUtil.init();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String submitSQL = "SUBMIT TASK test1 AS CREATE TABLE t1 AS SELECT SLEEP(5);";
+        StatementBase submitStmt = AnalyzeTestUtil.analyzeSuccess(submitSQL);
+        Assert.assertTrue(submitStmt instanceof SubmitTaskStmt);
+        SubmitTaskStmt statement = (SubmitTaskStmt) submitStmt;
+        ShowResultSet showResult = DDLStmtExecutor.execute(statement, ctx);
+        Assert.assertNotNull(showResult);
+    }
 }

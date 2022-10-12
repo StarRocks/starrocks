@@ -33,6 +33,7 @@ set(RUNTIME_FILES
     client_cache.cpp
     local_pass_through_buffer.cpp
     data_stream_mgr.cpp
+    sender_queue.cpp
     data_stream_sender.cpp
     multi_cast_data_stream_sink.cpp
     datetime_value.cpp
@@ -78,14 +79,15 @@ set(RUNTIME_FILES
     result_queue_mgr.cpp
     memory_scratch_sink.cpp
     external_scan_context_mgr.cpp
-    file_result_writer.cpp
     mysql_result_writer.cpp
+    file_result_writer.cpp
+    statistic_result_writer.cpp
+    variable_result_writer.cpp
     memory/system_allocator.cpp
     memory/chunk_allocator.cpp
     chunk_cursor.cpp
     sorted_chunks_merger.cpp
     time_types.cpp
-    statistic_result_writer.cpp
     hdfs/hdfs_fs_cache.cpp
     runtime_filter_worker.cpp
     global_dict/decoder.cpp
@@ -95,6 +97,8 @@ set(RUNTIME_FILES
     current_thread.cpp
     runtime_filter_cache.cpp
     lake_tablets_channel.cpp
+    lake_snapshot_loader.cpp
+    profile_report_worker.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}

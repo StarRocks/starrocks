@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/hash_joiner.h"
 
@@ -11,7 +11,6 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/expr.h"
 #include "exprs/vectorized/column_ref.h"
-#include "exprs/vectorized/in_const_predicate.hpp"
 #include "exprs/vectorized/runtime_filter_bank.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"

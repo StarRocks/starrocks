@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -44,6 +44,11 @@ public class LogicalSchemaScanOperator extends LogicalScanOperator {
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalSchemaScan(this, context);
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return false;
     }
 
     public static class Builder

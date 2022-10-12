@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/tablet_reader.h"
 
@@ -114,6 +114,7 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.tablet_schema = &_tablet->tablet_schema();
     rs_opts.global_dictmaps = params.global_dictmaps;
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
+    rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;

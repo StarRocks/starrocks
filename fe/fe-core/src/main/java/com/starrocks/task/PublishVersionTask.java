@@ -31,6 +31,7 @@ import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TPublishVersionRequest;
 import com.starrocks.thrift.TTabletVersionPair;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.transaction.TransactionState;
 import io.opentelemetry.api.trace.Span;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -48,17 +49,19 @@ public class PublishVersionTask extends AgentTask {
     private List<Long> errorTablets;
     private Set<Long> errorReplicas;
     private long commitTimestamp;
+    private TransactionState txnState = null;
     private Span span;
 
     public PublishVersionTask(long backendId, long transactionId, long dbId, long commitTimestamp,
                               List<TPartitionVersionInfo> partitionVersionInfos, String traceParent, Span txnSpan,
-                              long createTime) {
+                              long createTime, TransactionState state) {
         super(null, backendId, TTaskType.PUBLISH_VERSION, dbId, -1L, -1L, -1L, -1L, transactionId, createTime, traceParent);
         this.transactionId = transactionId;
         this.partitionVersionInfos = partitionVersionInfos;
         this.errorTablets = new ArrayList<Long>();
         this.isFinished = false;
         this.commitTimestamp = commitTimestamp;
+        this.txnState = state;
         if (txnSpan != null) {
             span = TraceManager.startSpan("publish_version_task", txnSpan);
             span.setAttribute("backend_id", backendId);
@@ -78,6 +81,10 @@ public class PublishVersionTask extends AgentTask {
 
     public long getTransactionId() {
         return transactionId;
+    }
+
+    public TransactionState getTxnState() {
+        return txnState;
     }
 
     public List<TPartitionVersionInfo> getPartitionVersionInfos() {

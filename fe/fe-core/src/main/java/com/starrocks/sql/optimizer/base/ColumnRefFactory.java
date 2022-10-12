@@ -1,15 +1,15 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.base;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class ColumnRefFactory {
     private int nextId = 1;
@@ -28,6 +29,10 @@ public class ColumnRefFactory {
     private final List<ColumnRefOperator> columnRefs = Lists.newArrayList();
     private final Map<Integer, Integer> columnToRelationIds = Maps.newHashMap();
     private final Map<ColumnRefOperator, Column> columnRefToColumns = Maps.newHashMap();
+
+    public Map<ColumnRefOperator, Column> getColumnRefToColumns() {
+        return columnRefToColumns;
+    }
 
     public ColumnRefOperator create(Expr expression, Type type, boolean nullable) {
         String nameHint = "expr";
@@ -73,7 +78,15 @@ public class ColumnRefFactory {
         return columnRefs.get(id - 1);
     }
 
-    public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column, Table table) {
+    public Set<ColumnRefOperator> getColumnRefs(ColumnRefSet columnRefSet) {
+        Set<ColumnRefOperator> columnRefOperators = Sets.newHashSet();
+        for (int idx : columnRefSet.getColumnIds()) {
+            columnRefOperators.add(getColumnRef(idx));
+        }
+        return columnRefOperators;
+    }
+
+    public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column) {
         columnRefToColumns.put(columnRef, column);
     }
 

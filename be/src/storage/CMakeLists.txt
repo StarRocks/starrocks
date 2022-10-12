@@ -36,6 +36,8 @@ add_library(Storage STATIC
     del_vector.cpp
     key_coder.cpp
     memtable_flush_executor.cpp
+    segment_flush_executor.cpp
+    segment_replicate_executor.cpp
     metadata_util.cpp
     kv_store.cpp
     olap_common.cpp
@@ -99,11 +101,11 @@ add_library(Storage STATIC
     rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
-    rowset/rowset_writer_adapter.cpp
     rowset/segment_chunk_iterator_adapter.cpp
     rowset/segment_iterator.cpp
     rowset/segment_options.cpp
     rowset/rowid_range_option.cpp
+    rowset/rowset_meta.cpp
     task/engine_batch_load_task.cpp
     task/engine_checksum_task.cpp
     task/engine_clone_task.cpp
@@ -131,6 +133,7 @@ add_library(Storage STATIC
     push_handler.cpp
     row_source_mask.cpp
     schema_change.cpp
+    schema_change_utils.cpp
     tablet_reader.cpp
     tablet_reader_params.cpp
     meta_reader.cpp
@@ -157,17 +160,19 @@ add_library(Storage STATIC
     compaction_task_factory.cpp
     base_and_cumulative_compaction_policy.cpp
     cluster_id_mgr.cpp
+    push_utils.cpp
     lake/async_delta_writer.cpp
     lake/compaction_policy.cpp
     lake/horizontal_compaction_task.cpp
     lake/delta_writer.cpp
-    lake/fixed_location_provider.cpp
     lake/gc.cpp
     lake/general_tablet_writer.cpp
     lake/rowset.cpp
+    lake/schema_change.cpp
     lake/starlet_location_provider.cpp
     lake/tablet.cpp
     lake/tablet_manager.cpp
     lake/tablet_reader.cpp
     lake/metadata_iterator.cpp
+    lake/spark_load.cpp
 )

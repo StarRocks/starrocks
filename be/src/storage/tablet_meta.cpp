@@ -36,32 +36,29 @@
 
 namespace starrocks {
 
-Status TabletMeta::create(MemTracker* mem_tracker, const TCreateTabletReq& request, const TabletUid& tablet_uid,
-                          uint64_t shard_id, uint32_t next_unique_id,
+Status TabletMeta::create(const TCreateTabletReq& request, const TabletUid& tablet_uid, uint64_t shard_id,
+                          uint32_t next_unique_id,
                           const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
                           TabletMetaSharedPtr* tablet_meta) {
-    *tablet_meta = std::shared_ptr<TabletMeta>(
-            new TabletMeta(request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash,
-                           shard_id, request.tablet_schema, next_unique_id,
-                           request.__isset.enable_persistent_index ? request.enable_persistent_index : false,
-                           col_ordinal_to_unique_id, tablet_uid,
-                           request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK),
-            DeleterWithMemTracker<TabletMeta>(mem_tracker));
-    mem_tracker->consume((*tablet_meta)->mem_usage());
+    *tablet_meta = std::make_shared<TabletMeta>(
+            request.table_id, request.partition_id, request.tablet_id, request.tablet_schema.schema_hash, shard_id,
+            request.tablet_schema, next_unique_id,
+            request.__isset.enable_persistent_index ? request.enable_persistent_index : false, col_ordinal_to_unique_id,
+            tablet_uid, request.__isset.tablet_type ? request.tablet_type : TTabletType::TABLET_TYPE_DISK,
+            request.__isset.compression_type ? request.compression_type : TCompressionType::LZ4_FRAME);
     return Status::OK();
 }
 
-TabletMetaSharedPtr TabletMeta::create(MemTracker* mem_tracker) {
-    auto tablet_meta = std::shared_ptr<TabletMeta>(new TabletMeta(), DeleterWithMemTracker<TabletMeta>(mem_tracker));
-    mem_tracker->consume(tablet_meta->mem_usage());
-    return tablet_meta;
+TabletMetaSharedPtr TabletMeta::create() {
+    return std::make_shared<TabletMeta>();
 }
 
 TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id, int32_t schema_hash,
                        uint64_t shard_id, const TTabletSchema& tablet_schema, uint32_t next_unique_id,
                        bool enable_persistent_index,
                        const std::unordered_map<uint32_t, uint32_t>& col_ordinal_to_unique_id,
-                       const TabletUid& tablet_uid, TTabletType::type tabletType)
+                       const TabletUid& tablet_uid, TTabletType::type tabletType,
+                       TCompressionType::type compression_type)
         : _tablet_uid(0, 0) {
     TabletMetaPB tablet_meta_pb;
     tablet_meta_pb.set_table_id(table_id);
@@ -79,9 +76,18 @@ TabletMeta::TabletMeta(int64_t table_id, int64_t partition_id, int64_t tablet_id
     tablet_meta_pb.set_in_restore_mode(false);
 
     TabletSchemaPB* schema = tablet_meta_pb.mutable_schema();
-    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema);
+    convert_t_schema_to_pb_schema(tablet_schema, next_unique_id, col_ordinal_to_unique_id, schema, compression_type);
 
     init_from_pb(&tablet_meta_pb);
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+}
+
+TabletMeta::TabletMeta() : _tablet_uid(0, 0) {
+    MEM_TRACKER_SAFE_CONSUME(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+}
+
+TabletMeta::~TabletMeta() {
+    MEM_TRACKER_SAFE_RELEASE(ExecEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
 }
 
 Status TabletMeta::create_from_file(const string& file_path) {
@@ -225,16 +231,14 @@ void TabletMeta::init_from_pb(TabletMetaPB* ptablet_meta_pb) {
 
     // init _rs_metas
     for (auto& it : tablet_meta_pb.rs_metas()) {
-        RowsetMetaSharedPtr rs_meta(new RowsetMeta());
-        rs_meta->init_from_pb(it);
+        auto rs_meta = std::make_shared<RowsetMeta>(it);
         if (rs_meta->has_delete_predicate()) {
             add_delete_predicate(rs_meta->delete_predicate(), rs_meta->version().first);
         }
         _rs_metas.push_back(std::move(rs_meta));
     }
     for (auto& it : tablet_meta_pb.inc_rs_metas()) {
-        RowsetMetaSharedPtr rs_meta(new RowsetMeta());
-        rs_meta->init_from_pb(it);
+        auto rs_meta = std::make_shared<RowsetMeta>(it);
         _inc_rs_metas.push_back(std::move(rs_meta));
     }
 

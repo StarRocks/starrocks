@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.text;
 
@@ -47,5 +47,16 @@ public class TextFileFormatDesc {
         desc.collection_delim = collectionDelim;
         desc.mapkey_delim = mapkeyDelim;
         return desc;
+    }
+
+    @Override
+    public String toString() {
+        final StringBuffer sb = new StringBuffer("TextFileFormatDesc{");
+        sb.append("fieldDelim='").append(fieldDelim).append('\'');
+        sb.append(", lineDelim='").append(lineDelim).append('\'');
+        sb.append(", collectionDelim='").append(collectionDelim).append('\'');
+        sb.append(", mapkeyDelim='").append(mapkeyDelim).append('\'');
+        sb.append('}');
+        return sb.toString();
     }
 }

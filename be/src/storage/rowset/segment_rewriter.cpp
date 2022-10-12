@@ -50,7 +50,6 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& 
     }
 
     SegmentWriterOptions opts;
-    opts.storage_format_version = config::storage_format_version;
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 
@@ -85,7 +84,6 @@ Status SegmentRewriter::rewrite(const std::string& src_path, const TabletSchema&
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(fopts, src_path));
 
     SegmentWriterOptions opts;
-    opts.storage_format_version = config::storage_format_version;
     SegmentWriter writer(std::move(wfile), segment_id, &tschema, opts);
     RETURN_IF_ERROR(writer.init(column_ids, false, &footer));
 

@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.load;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
@@ -13,6 +12,7 @@ import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mocked;
@@ -47,17 +47,19 @@ public class InsertOverwriteJobRunnerTest {
                         "CREATE TABLE insert_overwrite_test.t2(k1 int, k2 int, k3 int)" +
                                 " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
         starRocksAssert
-                .withTable("create table insert_overwrite_test.t3(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                .withTable("create table insert_overwrite_test.t3(c1 int, c2 int, c3 int) " +
+                        "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');")
-                .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
+                .withTable("create table insert_overwrite_test.t4(c1 int, c2 int, c3 int) " +
+                        "DUPLICATE KEY(c1, c2) PARTITION BY RANGE(c1) "
                         + "(PARTITION p1 VALUES [('-2147483648'), ('10')), PARTITION p2 VALUES [('10'), ('20')))"
                         + " DISTRIBUTED BY HASH(`c2`) BUCKETS 2 PROPERTIES('replication_num'='1');");
     }
 
     @Test
     public void testReplayInsertOverwrite() {
-        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:insert_overwrite_test");
+        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
@@ -97,13 +99,12 @@ public class InsertOverwriteJobRunnerTest {
         String sql = "insert overwrite t1 select * from t2";
         InsertStmt insertStmt = (InsertStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StmtExecutor executor = new StmtExecutor(connectContext, insertStmt);
-        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:insert_overwrite_test");
+        Database database = GlobalStateMgr.getCurrentState().getDb("insert_overwrite_test");
         Table table = database.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;
         InsertOverwriteJob insertOverwriteJob = new InsertOverwriteJob(100L, insertStmt, database.getId(), olapTable.getId());
-        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob,
-                connectContext, executor, database, olapTable);
+        InsertOverwriteJobRunner runner = new InsertOverwriteJobRunner(insertOverwriteJob, connectContext, executor);
         Assert.assertFalse(runner.isFinished());
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "types/timestamp_value.h"
 
@@ -743,61 +743,6 @@ void TimestampValue::from_timestamp(int year, int month, int day, int hour, int 
 void TimestampValue::to_timestamp(int* year, int* month, int* day, int* hour, int* minute, int* second,
                                   int* usec) const {
     timestamp::to_datetime(_timestamp, year, month, day, hour, minute, second, usec);
-}
-
-void TimestampValue::floor_to_second_period(int period) {
-    int64_t seconds = timestamp::to_julian(_timestamp);
-    seconds -= date::AD_EPOCH_JULIAN;
-    seconds *= SECS_PER_DAY;
-    seconds += timestamp::to_time(_timestamp) / USECS_PER_SEC;
-    seconds -= seconds % period;
-
-    JulianDate day = seconds / SECS_PER_DAY + date::AD_EPOCH_JULIAN;
-    Timestamp s = seconds % SECS_PER_DAY;
-    _timestamp = timestamp::from_julian_and_time(day, s * USECS_PER_SEC);
-}
-
-void TimestampValue::floor_to_minute_period(int period) {
-    TimestampValue::floor_to_second_period(period * 60);
-}
-
-void TimestampValue::floor_to_hour_period(int period) {
-    TimestampValue::floor_to_second_period(period * 60 * 60);
-}
-
-void TimestampValue::floor_to_day_period(int period) {
-    int64_t days = timestamp::to_julian(_timestamp);
-    days -= date::AD_EPOCH_JULIAN;
-    days -= days % period;
-    days += date::AD_EPOCH_JULIAN;
-    _timestamp = timestamp::from_julian_and_time(days, 0);
-}
-
-void TimestampValue::floor_to_month_period(int period) {
-    int year, month, day;
-    date::to_date_with_cache(timestamp::to_julian(_timestamp), &year, &month, &day);
-
-    int months = (year - 1) * 12 + month;
-    months -= (months - 1) % period;
-    year = months / 12 + 1;
-    month = months - months / 12 * 12;
-    _timestamp = timestamp::from_datetime(year, month, 1, 0, 0, 0, 0);
-}
-
-void TimestampValue::floor_to_year_period(int period) {
-    int year, month, day;
-    date::to_date_with_cache(timestamp::to_julian(_timestamp), &year, &month, &day);
-
-    year -= (year - 1) % period;
-    _timestamp = timestamp::from_datetime(year, 1, 1, 0, 0, 0, 0);
-}
-
-void TimestampValue::floor_to_week_period(int period) {
-    TimestampValue::floor_to_day_period(period * 7);
-}
-
-void TimestampValue::floor_to_quarter_period(int period) {
-    TimestampValue::floor_to_month_period(period * 3);
 }
 
 void TimestampValue::trunc_to_second() {

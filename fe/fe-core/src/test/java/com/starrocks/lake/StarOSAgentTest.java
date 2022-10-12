@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake;
 
@@ -8,6 +8,7 @@ import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
 import com.staros.proto.AllocateStorageInfo;
+import com.staros.proto.CreateShardInfo;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
@@ -64,12 +65,12 @@ public class StarOSAgentTest {
 
                 client.bootstrapService("starrocks", SERVICE_NAME);
                 minTimes = 0;
-                result = 1;
+                result = "1";
             }
         };
 
         starosAgent.registerAndBootstrapService();
-        Assert.assertEquals(1, (long) Deencapsulation.getField(starosAgent, "serviceId"));
+        Assert.assertEquals("1", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
@@ -83,12 +84,12 @@ public class StarOSAgentTest {
 
                 client.bootstrapService("starrocks", SERVICE_NAME);
                 minTimes = 0;
-                result = 3;
+                result = "3";
             }
         };
 
         starosAgent.registerAndBootstrapService();
-        Assert.assertEquals(3, (long) Deencapsulation.getField(starosAgent, "serviceId"));
+        Assert.assertEquals("3", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
@@ -100,42 +101,42 @@ public class StarOSAgentTest {
                 result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "service already exists!");
 
-                client.getServiceInfo(SERVICE_NAME).getServiceId();
+                client.getServiceInfoByName(SERVICE_NAME).getServiceId();
                 minTimes = 0;
-                result = 4;
+                result = "4";
             }
         };
 
         starosAgent.registerAndBootstrapService();
-        Assert.assertEquals(4, (long) Deencapsulation.getField(starosAgent, "serviceId"));
+        Assert.assertEquals("4", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
     public void testGetServiceId() throws Exception {
         new Expectations() {
             {
-                client.getServiceInfo(SERVICE_NAME).getServiceId();
+                client.getServiceInfoByName(SERVICE_NAME).getServiceId();
                 minTimes = 0;
-                result = 2;
+                result = "2";
             }
         };
 
         starosAgent.getServiceId();
-        Assert.assertEquals(2, (long) Deencapsulation.getField(starosAgent, "serviceId"));
+        Assert.assertEquals("2", Deencapsulation.getField(starosAgent, "serviceId"));
     }
 
     @Test
     public void testGetServiceStorageUri() throws StarClientException, DdlException {
         new Expectations() {
             {
-                client.allocateStorage(1L, (AllocateStorageInfo) any);
+                client.allocateStorage("1", (AllocateStorageInfo) any);
                 minTimes = 0;
                 result = ShardStorageInfo.newBuilder().setObjectStorageInfo(
                         ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build()).build();
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals("s3://bucket/1/",
                 starosAgent.getServiceShardStorageInfo().getObjectStorageInfo().getObjectUri());
     }
@@ -144,18 +145,18 @@ public class StarOSAgentTest {
     public void testAddAndRemoveWorker() throws Exception {
         new Expectations() {
             {
-                client.addWorker(1L, "127.0.0.1:8090");
+                client.addWorker("1", "127.0.0.1:8090");
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker(1L, 10);
+                client.removeWorker("1", 10);
                 minTimes = 0;
                 result = null;
             }
         };
 
         String workerHost = "127.0.0.1:8090";
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(10, starosAgent.getWorkerId(workerHost));
 
@@ -167,30 +168,30 @@ public class StarOSAgentTest {
     public void testAddWorkerException() throws Exception {
         new Expectations() {
             {
-                client.addWorker(1L, "127.0.0.1:8090");
+                client.addWorker("1", "127.0.0.1:8090");
                 minTimes = 0;
                 result = new StarClientException(StatusCode.ALREADY_EXIST, "worker already exists");
 
-                client.getWorkerInfo(1L, "127.0.0.1:8090").getWorkerId();
+                client.getWorkerInfo("1", "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
                 result = 6;
             }
         };
 
         String workerHost = "127.0.0.1:8090";
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         starosAgent.addWorker(5, workerHost);
         Assert.assertEquals(6, starosAgent.getWorkerId(workerHost));
         Assert.assertEquals(6, starosAgent.getWorkerIdByBackendId(5));
 
         new Expectations() {
             {
-                client.addWorker(1, "127.0.0.1:8091");
+                client.addWorker("1", "127.0.0.1:8091");
                 minTimes = 0;
                 result = new StarClientException(StatusCode.ALREADY_EXIST,
                         "worker already exists");
 
-                client.getWorkerInfo(1, "127.0.0.1:8091").getWorkerId();
+                client.getWorkerInfo("1", "127.0.0.1:8091").getWorkerId();
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC,
                         "network error");
@@ -205,24 +206,24 @@ public class StarOSAgentTest {
     public void testRemoveWorkerException() throws Exception {
         new Expectations() {
             {
-                client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
+                client.getWorkerInfo("1", "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to get worker id from starMgr.",
                 () -> starosAgent.removeWorker("127.0.0.1:8090"));
 
         new Expectations() {
             {
-                client.getWorkerInfo(1, "127.0.0.1:8090").getWorkerId();
+                client.getWorkerInfo("1", "127.0.0.1:8090").getWorkerId();
                 minTimes = 0;
                 result = 10;
 
-                client.removeWorker(1, 10);
+                client.removeWorker("1", 10);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
@@ -235,16 +236,18 @@ public class StarOSAgentTest {
 
     @Test
     public void testCreateShards() throws StarClientException, DdlException {
-        new Expectations() {
-            {
-                client.createShard(1L, 2, 1, null, null);
-                minTimes = 0;
-                result = Lists.newArrayList(ShardInfo.newBuilder().setShardId(10L).build(),
-                        ShardInfo.newBuilder().setShardId(11L).build());
+        ShardInfo shard1 = ShardInfo.newBuilder().setShardId(10L).build();
+        ShardInfo shard2 = ShardInfo.newBuilder().setShardId(11L).build();
+        List<ShardInfo> shards = Lists.newArrayList(shard1, shard2);
+        new MockUp<StarClient>() {
+            @Mock
+            public List<ShardInfo> createShard(String serviceId, List<CreateShardInfo> createShardInfos)
+                    throws StarClientException {
+                return shards;
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null));
     }
 
@@ -255,13 +258,13 @@ public class StarOSAgentTest {
         shardIds.add(2L);
         new Expectations() {
             {
-                client.deleteShard(1L, shardIds);
+                client.deleteShard("1", shardIds);
                 minTimes = 0;
                 result = new StarClientException(StatusCode.GRPC, "network error");
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Failed to delete shards.",
                 () -> starosAgent.deleteShards(shardIds));
@@ -309,13 +312,13 @@ public class StarOSAgentTest {
 
         new Expectations() {
             {
-                client.getShardInfo(1L, Lists.newArrayList(10L));
+                client.getShardInfo("1", Lists.newArrayList(10L));
                 minTimes = 0;
                 result = shards;
             }
         };
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         Map<Long, Long> workerToBackend = Maps.newHashMap();
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
@@ -330,7 +333,7 @@ public class StarOSAgentTest {
         workerToBackend.put(3L, 10003L);
         Deencapsulation.setField(starosAgent, "workerToBackend", workerToBackend);
 
-        Deencapsulation.setField(starosAgent, "serviceId", 1L);
+        Deencapsulation.setField(starosAgent, "serviceId", "1");
         Assert.assertEquals(10001L, starosAgent.getPrimaryBackendIdByShard(10L));
         Assert.assertEquals(Sets.newHashSet(10001L, 10002L, 10003L), starosAgent.getBackendIdsByShard(10L));
     }

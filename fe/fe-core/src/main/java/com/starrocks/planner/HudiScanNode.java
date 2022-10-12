@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.planner;
 
@@ -29,8 +29,12 @@ public class HudiScanNode extends ScanNode {
         this.hudiTable = (HudiTable) desc.getTable();
     }
 
-    public HDFSScanNodePredicates getPredictsExpr() {
+    public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
+    }
+
+    public HudiTable getHudiTable() {
+        return hudiTable;
     }
 
     @Override
@@ -67,6 +71,10 @@ public class HudiScanNode extends ScanNode {
             output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
                     getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
         }
+        if (!scanNodePredicates.getMinMaxConjuncts().isEmpty()) {
+            output.append(prefix).append("MIN/MAX PREDICATES: ").append(
+                    getExplainString(scanNodePredicates.getMinMaxConjuncts())).append("\n");
+        }
 
         output.append(prefix).append(
                 String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
@@ -74,38 +82,6 @@ public class HudiScanNode extends ScanNode {
         output.append("\n");
 
         output.append(prefix).append(String.format("cardinality=%s", cardinality));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));
-        output.append("\n");
-
-        output.append(prefix).append(String.format("numNodes=%s", numNodes));
-        output.append("\n");
-
-        return output.toString();
-    }
-
-    @Override
-    protected String getNodeVerboseExplain(String prefix) {
-        StringBuilder output = new StringBuilder();
-
-        output.append(prefix).append("TABLE: ").append(hudiTable.getName()).append("\n");
-
-        if (null != sortColumn) {
-            output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
-        }
-        if (!scanNodePredicates.getPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getPartitionConjuncts())).append("\n");
-        }
-        if (!scanNodePredicates.getNonPartitionConjuncts().isEmpty()) {
-            output.append(prefix).append("NON-PARTITION PREDICATES: ").append(
-                    getExplainString(scanNodePredicates.getNonPartitionConjuncts())).append("\n");
-        }
-
-        output.append(prefix).append(
-                String.format("partitions=%s/%s", scanNodePredicates.getSelectedPartitionIds().size(),
-                        scanNodePredicates.getIdToPartitionKey().size()));
         output.append("\n");
 
         output.append(prefix).append(String.format("avgRowSize=%s", avgRowSize));

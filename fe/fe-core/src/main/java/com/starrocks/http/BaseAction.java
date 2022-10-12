@@ -25,11 +25,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.SystemInfoService;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFuture;
@@ -254,14 +252,21 @@ public abstract class BaseAction implements IAction {
         public String fullUserName;
         public String remoteIp;
         public String password;
-        public String cluster;
 
         @Override
         public String toString() {
             StringBuilder sb = new StringBuilder();
             sb.append("user: ").append(fullUserName).append(", remote ip: ").append(remoteIp);
-            sb.append(", password: ").append(password).append(", cluster: ").append(cluster);
+            sb.append(", password: ").append(password);
             return sb.toString();
+        }
+
+        public static ActionAuthorizationInfo of(String fullUserName, String password, String remoteIp) {
+            ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
+            authInfo.fullUserName = fullUserName;
+            authInfo.remoteIp = remoteIp;
+            authInfo.password = password;
+            return authInfo;
         }
     }
 
@@ -289,7 +294,7 @@ public abstract class BaseAction implements IAction {
     }
 
     // return currentUserIdentity from StarRocks auth
-    protected UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
+    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws UnauthorizedException {
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!GlobalStateMgr.getCurrentState().getAuth().checkPlainPassword(authInfo.fullUserName,
@@ -337,12 +342,8 @@ public abstract class BaseAction implements IAction {
             int index = authString.indexOf(":");
             authInfo.fullUserName = authString.substring(0, index);
             final String[] elements = authInfo.fullUserName.split("@");
-            if (elements != null && elements.length < 2) {
-                authInfo.fullUserName = ClusterNamespace.getFullName(authInfo.fullUserName);
-                authInfo.cluster = SystemInfoService.DEFAULT_CLUSTER;
-            } else if (elements != null && elements.length == 2) {
-                authInfo.fullUserName = ClusterNamespace.getFullName(elements[0]);
-                authInfo.cluster = elements[1];
+            if (elements.length == 2) {
+                authInfo.fullUserName = elements[0];
             }
             authInfo.password = authString.substring(index + 1);
             authInfo.remoteIp = request.getHostString();
@@ -358,6 +359,23 @@ public abstract class BaseAction implements IAction {
             }
         }
         return true;
+    }
+
+    // Refer to {@link #parseAuthInfo(BaseRequest, ActionAuthorizationInfo)}
+    public static ActionAuthorizationInfo parseAuthInfo(String fullUserName, String password, String host) {
+        ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
+        final String[] elements = fullUserName.split("@");
+        if (elements.length == 2) {
+            authInfo.fullUserName = elements[0];
+        } else {
+            authInfo.fullUserName = fullUserName;
+        }
+        authInfo.password = password;
+        authInfo.remoteIp = host;
+
+        LOG.debug("Parse result for the input [{} {} {}]: {}", fullUserName, password, host, authInfo);
+
+        return authInfo;
     }
 
     protected int checkIntParam(String strParam) {

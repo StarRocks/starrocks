@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.server;
 
@@ -50,7 +50,7 @@ public class LocalMetaStoreTest {
 
     @Test
     public void testGetNewPartitionsFromPartitions() throws DdlException {
-        Database db = connectContext.getGlobalStateMgr().getDb("default_cluster:test");
+        Database db = connectContext.getGlobalStateMgr().getDb("test");
         Table table = db.getTable("t1");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable olapTable = (OlapTable) table;

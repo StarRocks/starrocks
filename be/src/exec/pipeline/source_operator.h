@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -43,6 +43,7 @@ public:
     // - The scan operator, which has been assigned tablets with the specific bucket sequences.
     // - The exchange source operator, partitioned by HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED.
     virtual bool need_local_shuffle() const { return true; }
+    virtual void set_need_local_shuffle(bool need){};
     virtual TPartitionType::type partition_type() const { return TPartitionType::type::HASH_PARTITIONED; }
 
 protected:

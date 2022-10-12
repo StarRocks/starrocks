@@ -24,12 +24,13 @@
 #include <sys/file.h>
 #include <unistd.h>
 
+#include "block_cache/block_cache.h"
+
 #if defined(LEAK_SANITIZER)
 #include <sanitizer/lsan_interface.h>
 #endif
 
 #include <curl/curl.h>
-#include <gperftools/profiler.h>
 #include <thrift/TOutput.h>
 
 #include "agent/heartbeat_server.h"
@@ -39,7 +40,6 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
-#include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -50,11 +50,8 @@
 #include "storage/storage_engine.h"
 #include "util/debug_util.h"
 #include "util/logging.h"
-#include "util/network_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/thrift_server.h"
-#include "util/thrift_util.h"
 #include "util/uid_util.h"
 
 DECLARE_bool(s2debug);
@@ -149,6 +146,11 @@ int main(int argc, char** argv) {
         return -1;
     }
 
+#if defined(ENABLE_STATUS_FAILED)
+    // read range of source code for inject errors.
+    starrocks::Status::access_directory_of_inject();
+#endif
+
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
     // Aggressive decommit is required so that unused pages in the TCMalloc page heap are
     // not backed by physical pages and do not contribute towards memory consumption.
@@ -165,7 +167,31 @@ int main(int argc, char** argv) {
     }
 #endif
 
+#ifdef WITH_BLOCK_CACHE
+    if (starrocks::config::block_cache_enable) {
+        starrocks::BlockCache* cache = starrocks::BlockCache::instance();
+        starrocks::CacheOptions cache_options;
+        cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
+        std::vector<starrocks::StorePath> paths;
+        auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
+        if (!parse_res.ok()) {
+            LOG(FATAL) << "parse config block cache disk path failed, path="
+                       << starrocks::config::block_cache_disk_path;
+            exit(-1);
+        }
+        for (auto& p : paths) {
+            cache_options.disk_spaces.push_back(
+                    {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+        }
+        cache_options.block_size = starrocks::config::block_cache_block_size;
+        cache->init(cache_options);
+    }
+#endif
+
     Aws::SDKOptions aws_sdk_options;
+    if (starrocks::config::aws_sdk_logging_trace_enabled) {
+        aws_sdk_options.loggingOptions.logLevel = Aws::Utils::Logging::LogLevel::Trace;
+    }
     Aws::InitAPI(aws_sdk_options);
 
     std::vector<starrocks::StorePath> paths;
@@ -223,8 +249,6 @@ int main(int argc, char** argv) {
     starrocks::EngineOptions options;
     options.store_paths = paths;
     options.backend_uid = starrocks::UniqueId::gen_uid();
-    options.tablet_meta_mem_tracker = exec_env->tablet_meta_mem_tracker();
-    options.schema_change_mem_tracker = exec_env->schema_change_mem_tracker();
     options.compaction_mem_tracker = exec_env->compaction_mem_tracker();
     options.update_mem_tracker = exec_env->update_mem_tracker();
     options.conf_path = string(getenv("STARROCKS_HOME")) + "/conf/";
@@ -246,7 +270,6 @@ int main(int argc, char** argv) {
 
     // Init exec env.
     EXIT_IF_ERROR(starrocks::ExecEnv::init(exec_env, paths));
-    exec_env->set_storage_engine(engine);
     engine->set_heartbeat_flags(exec_env->heartbeat_flags());
 
     // Start all background threads of storage engine.
@@ -291,7 +314,6 @@ int main(int argc, char** argv) {
 
     engine->stop();
     delete engine;
-    exec_env->set_storage_engine(nullptr);
     starrocks::ExecEnv::destroy(exec_env);
 
     return 0;

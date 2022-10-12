@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/json_functions.h"
 
 #include <re2/re2.h>
 
 #include <algorithm>
-#include <boost/algorithm/string.hpp>
 #include <boost/tokenizer.hpp>
 
 #include "column/column_builder.h"
@@ -15,11 +14,11 @@
 #include "exprs/vectorized/jsonpath.h"
 #include "glog/logging.h"
 #include "gutil/strings/escaping.h"
-#include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "udf/udf.h"
 #include "util/json.h"
-#include "velocypack/vpack.h"
+#include "velocypack/Builder.h"
+#include "velocypack/Iterator.h"
 
 namespace starrocks::vectorized {
 
@@ -116,6 +115,18 @@ Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
 
 Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const std::vector<SimpleJsonPath>& jsonpath,
                                           simdjson::ondemand::value* value) noexcept {
+#define HANDLE_SIMDJSON_ERROR(err, msg)                                                                            \
+    do {                                                                                                           \
+        const simdjson::error_code& _err = err;                                                                    \
+        const std::string& _msg = msg;                                                                             \
+        if (UNLIKELY(_err)) {                                                                                      \
+            if (_err == simdjson::NO_SUCH_FIELD || _err == simdjson::INDEX_OUT_OF_BOUNDS) {                        \
+                return Status::NotFound(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg));     \
+            }                                                                                                      \
+            return Status::DataQualityError(fmt::format("err: {}, msg: {}", simdjson::error_message(_err), _msg)); \
+        }                                                                                                          \
+    } while (false);
+
     if (jsonpath.size() <= 1) {
         // The first elem of json path should be '$'.
         // A valid json path's size is >= 2.
@@ -135,47 +146,24 @@ Status JsonFunctions::extract_from_object(simdjson::ondemand::object& obj, const
 
         // Since the simdjson::ondemand::object cannot be converted to simdjson::ondemand::value,
         // we have to do some special treatment for the second elem of json path.
+        // If the key is not found in json object, simdjson::NO_SUCH_FIELD would be returned.
         if (i == 1) {
-            auto err = obj.find_field_unordered(col).get(tvalue);
-            if (err) {
-                return Status::NotFound(
-                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(obj.find_field_unordered(col).get(tvalue),
+                                  fmt::format("unable to find field: {}", col));
         } else {
-            auto err = tvalue.find_field_unordered(col).get(tvalue);
-            if (err) {
-                return Status::NotFound(
-                        fmt::format("failed to access field: {}, err: {}", col, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(tvalue.find_field_unordered(col).get(tvalue),
+                                  fmt::format("unable to find field: {}", col));
         }
 
         if (index != -1) {
             // try to access tvalue as array.
+            // If the index is beyond the length of array, simdjson::INDEX_OUT_OF_BOUNDS would be returned.
             simdjson::ondemand::array arr;
-            auto err = tvalue.get_array().get(arr);
-            if (err) {
-                return Status::InvalidArgument(fmt::format("failed to access field as array, field: {}, err: {}", col,
-                                                           simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(tvalue.get_array().get(arr),
+                                  fmt::format("failed to access field as array, field: {}", col));
 
-            size_t sz;
-            err = arr.count_elements().get(sz);
-            if (err) {
-                return Status::InvalidArgument(
-                        fmt::format("failed to get array size, field: {}, err: {}", col, simdjson::error_message(err)));
-            }
-
-            if (index >= sz) {
-                return Status::NotFound(
-                        fmt::format("index beyond array size, field: {}, index: {}, array size: {}", col, index, sz));
-            }
-
-            err = arr.at(index).get(tvalue);
-            if (err) {
-                return Status::InvalidArgument(
-                        fmt::format("failed to access array, field: {}, index: {}, array size: {}, err: {}", col, index,
-                                    sz, simdjson::error_message(err)));
-            }
+            HANDLE_SIMDJSON_ERROR(arr.at(index).get(tvalue),
+                                  fmt::format("failed to access array field: {}, index: {}", col, index));
         }
     }
 
@@ -225,18 +213,15 @@ ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns
 }
 
 ColumnPtr JsonFunctions::get_native_json_int(FunctionContext* context, const Columns& columns) {
-    auto jsons = json_query(context, columns);
-    return _json_int(context, Columns{jsons});
+    return _json_query_impl<TYPE_INT>(context, columns);
 }
 
 ColumnPtr JsonFunctions::get_native_json_double(FunctionContext* context, const Columns& columns) {
-    auto jsons = json_query(context, columns);
-    return _json_double(context, Columns{jsons});
+    return _json_query_impl<TYPE_DOUBLE>(context, columns);
 }
 
 ColumnPtr JsonFunctions::get_native_json_string(FunctionContext* context, const Columns& columns) {
-    auto jsons = json_query(context, columns);
-    return json_string(context, Columns{jsons});
+    return _json_query_impl<TYPE_VARCHAR>(context, columns);
 }
 
 ColumnPtr JsonFunctions::parse_json(FunctionContext* context, const Columns& columns) {
@@ -422,12 +407,50 @@ Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* con
 }
 
 ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& columns) {
+    return _json_query_impl<TYPE_JSON>(context, columns);
+}
+
+// Convert the JSON Slice to a PrimitiveType through ColumnBuilder
+template <PrimitiveType ResultType>
+static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnBuilder<ResultType>& result) {
+    if (slice.isNone()) {
+        result.append_null();
+    } else if constexpr (ResultType == TYPE_JSON) {
+        JsonValue value(slice);
+        result.append(std::move(value));
+    } else if constexpr (ResultType == TYPE_VARCHAR || ResultType == TYPE_CHAR) {
+        if (LIKELY(slice.isType(vpack::ValueType::String))) {
+            vpack::ValueLength len;
+            const char* str = slice.getStringUnchecked(len);
+            result.append(Slice(str, len));
+        } else {
+            vpack::Options options = vpack::Options::Defaults;
+            options.singleLinePrettyPrint = true;
+            std::string str = slice.toJson(&options);
+
+            result.append(Slice(str));
+        }
+    } else if constexpr (ResultType == TYPE_INT) {
+        double num = slice.getNumber<int64_t>();
+        result.append(num);
+    } else if constexpr (ResultType == TYPE_DOUBLE) {
+        double num = slice.getNumber<double>();
+        result.append(num);
+    } else {
+        CHECK(false) << "unsupported";
+    }
+    return Status::OK();
+}
+
+template <PrimitiveType ResultType>
+ColumnPtr JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
     auto num_rows = columns[0]->size();
     auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
     auto path_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
-    ColumnBuilder<TYPE_JSON> result(num_rows);
+    ColumnBuilder<ResultType> result(num_rows);
 
     JsonPath stored_path;
+    vpack::Builder builder;
     for (int row = 0; row < num_rows; ++row) {
         if (json_viewer.is_null(row) || path_viewer.is_null(row)) {
             result.append_null();
@@ -443,13 +466,12 @@ ColumnPtr JsonFunctions::json_query(FunctionContext* context, const Columns& col
             continue;
         }
 
-        vpack::Builder builder;
+        builder.clear();
         vpack::Slice slice = JsonPath::extract(json_value, *jsonpath.value(), &builder);
-        if (slice.isNone()) {
+        Status st = _convert_json_slice<ResultType>(slice, result);
+        if (!st.ok()) {
             result.append_null();
-        } else {
-            JsonValue value(slice);
-            result.append(std::move(value));
+            continue;
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));
@@ -588,6 +610,102 @@ ColumnPtr JsonFunctions::json_object(FunctionContext* context, const Columns& co
             result.append(std::move(json));
         } else {
             result.append_null();
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::json_length(FunctionContext* context, const Columns& columns) {
+    DCHECK_GT(columns.size(), 0);
+    size_t rows = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(rows);
+    ColumnViewer<TYPE_JSON> json_column(columns[0]);
+
+    std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
+    if (columns.size() >= 2) {
+        path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
+    }
+
+    JsonPath stored_path;
+    for (size_t row = 0; row < rows; row++) {
+        if (json_column.is_null(row)) {
+            result.append_null();
+            continue;
+        }
+
+        JsonValue* json = json_column.value(row);
+        vpack::Slice target_slice;
+        vpack::Builder builder;
+        if (!path_viewer || path_viewer->value(row).empty()) {
+            target_slice = json->to_vslice();
+        } else {
+            Slice path_str = path_viewer->value(row);
+            auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
+            if (UNLIKELY(!jsonpath.ok())) {
+                result.append_null();
+                continue;
+            }
+
+            target_slice = JsonPath::extract(json, *jsonpath.value(), &builder);
+        }
+
+        if (target_slice.isObject() || target_slice.isArray()) {
+            result.append(target_slice.length());
+        } else if (target_slice.isNone()) {
+            result.append(0);
+        } else {
+            result.append(1);
+        }
+    }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+ColumnPtr JsonFunctions::json_keys(FunctionContext* context, const Columns& columns) {
+    auto rows = columns[0]->size();
+    auto json_viewer = ColumnViewer<TYPE_JSON>(columns[0]);
+    ColumnBuilder<TYPE_JSON> result(rows);
+
+    std::unique_ptr<ColumnViewer<TYPE_VARCHAR>> path_viewer;
+    JsonPath stored_path;
+    if (columns.size() >= 2) {
+        path_viewer = std::make_unique<ColumnViewer<TYPE_VARCHAR>>(columns[1]);
+    }
+
+    for (size_t row = 0; row < rows; row++) {
+        if (json_viewer.is_null(row) || json_viewer.value(row) == nullptr) {
+            result.append_null();
+            continue;
+        }
+
+        JsonValue* json_value = json_viewer.value(row);
+        vpack::Slice vslice;
+        vpack::Builder extract_builder;
+        if (!path_viewer || path_viewer->value(row).empty()) {
+            vslice = json_value->to_vslice();
+        } else {
+            Slice path_str = path_viewer->value(row);
+            auto jsonpath = get_prepared_or_parse(context, path_str, &stored_path);
+            if (UNLIKELY(!jsonpath.ok())) {
+                result.append_null();
+                continue;
+            }
+
+            vslice = JsonPath::extract(json_value, *jsonpath.value(), &extract_builder);
+        }
+
+        if (!vslice.isObject()) {
+            result.append_null();
+        } else {
+            vpack::Builder builder;
+            {
+                vpack::ArrayBuilder ab(&builder);
+                for (const auto& iter : vpack::ObjectIterator(vslice)) {
+                    std::string key = iter.key.copyString();
+                    ab->add(vpack::Value(key));
+                }
+            }
+            vpack::Slice json_array = builder.slice();
+            result.append(JsonValue(json_array));
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));

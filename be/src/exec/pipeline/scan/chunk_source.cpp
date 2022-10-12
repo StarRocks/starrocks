@@ -1,24 +1,21 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/chunk_source.h"
 
-#include "column/column_helper.h"
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-#include "storage/chunk_helper.h"
 
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         BalancedChunkBuffer& chunk_buffer, workgroup::ScanExecutorType executor_type)
+                         BalancedChunkBuffer& chunk_buffer)
         : _scan_operator_seq(scan_operator_id),
           _runtime_profile(runtime_profile),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
-          _chunk_token(nullptr),
-          _executor_type(executor_type) {}
+          _chunk_token(nullptr) {}
 
 Status ChunkSource::prepare(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
@@ -49,51 +46,55 @@ void ChunkSource::unpin_chunk_token() {
     _chunk_token.reset(nullptr);
 }
 
-std::pair<Status, size_t> ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
-                                                                         const workgroup::WorkGroupPtr& running_wg,
-                                                                         int worker_id) {
+Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_t batch_size,
+                                                      const workgroup::WorkGroup* running_wg) {
     using namespace vectorized;
 
     if (!_status.ok()) {
-        return std::make_pair(_status, 0);
+        return _status;
     }
 
-    int64_t time_spent = 0;
-    size_t num_read_chunks = 0;
+    int64_t time_spent_ns = 0;
+    auto [tablet_id, version] = _morsel->get_lane_owner_and_version();
     for (size_t i = 0; i < batch_size && !state->is_cancelled(); ++i) {
         {
-            SCOPED_RAW_TIMER(&time_spent);
+            SCOPED_RAW_TIMER(&time_spent_ns);
 
             if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
-                return std::make_pair(_status, num_read_chunks);
+                return _status;
             }
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
+            // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
+            // in the chunk.
+            if (chunk == nullptr) {
+                chunk = std::make_shared<vectorized::Chunk>();
+            }
             if (!_status.ok()) {
                 // end of file is normal case, need process chunk
                 if (_status.is_end_of_file()) {
-                    ++num_read_chunks;
+                    chunk->owner_info().set_owner_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
                 }
                 break;
             }
 
-            ++num_read_chunks;
+            chunk->owner_info().set_owner_id(tablet_id, false);
             _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
         }
 
-        if (time_spent >= YIELD_MAX_TIME_SPENT) {
+        if (time_spent_ns >= YIELD_MAX_TIME_SPENT) {
             break;
         }
 
-        if (running_wg != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
-            workgroup::WorkGroupManager::instance()->should_yield_scan_worker(_executor_type, worker_id, running_wg)) {
+        if (running_wg != nullptr && time_spent_ns >= YIELD_PREEMPT_MAX_TIME_SPENT &&
+            _scan_sched_entity(running_wg)->in_queue()->should_yield(running_wg, time_spent_ns)) {
             break;
         }
     }
 
-    return std::make_pair(_status, num_read_chunks);
+    return _status;
 }
 
 using namespace vectorized;

@@ -147,14 +147,14 @@ bool valid_datetime(const std::string& value_str);
 bool valid_bool(const std::string& value_str);
 
 // Util used to get string name of thrift enum item
-#define EnumToString(enum_type, index, out)                                                         \
-    do {                                                                                            \
-        std::map<int, const char*>::const_iterator it = _##enum_type##_VALUES_TO_NAMES.find(index); \
-        if (it == _##enum_type##_VALUES_TO_NAMES.end()) {                                           \
-            out = "NULL";                                                                           \
-        } else {                                                                                    \
-            out = it->second;                                                                       \
-        }                                                                                           \
+#define EnumToString(enum_type, index, out)                   \
+    do {                                                      \
+        auto it = _##enum_type##_VALUES_TO_NAMES.find(index); \
+        if (it == _##enum_type##_VALUES_TO_NAMES.end()) {     \
+            out = "NULL";                                     \
+        } else {                                              \
+            out = it->second;                                 \
+        }                                                     \
     } while (0)
 
 } // namespace starrocks

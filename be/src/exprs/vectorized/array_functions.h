@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -162,6 +162,8 @@ public:
 
     DEFINE_VECTORIZED_FN(array_contains_any);
     DEFINE_VECTORIZED_FN(array_contains_all);
+    DEFINE_VECTORIZED_FN(array_map);
+    DEFINE_VECTORIZED_FN(array_filter);
 
     enum ArithmeticType { SUM, AVG, MIN, MAX };
 

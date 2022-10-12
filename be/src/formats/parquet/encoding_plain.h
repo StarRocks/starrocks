@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -44,7 +44,7 @@ public:
     Status append(const uint8_t* vals, size_t count) override {
         const Slice* slices = (const Slice*)vals;
         for (int i = 0; i < count; ++i) {
-            put_fixed32_le(&_buffer, slices[i].size);
+            put_fixed32_le(&_buffer, static_cast<uint32_t>(slices[i].size));
             _buffer.append(slices[i].data, slices[i].size);
         }
         return Status::OK();
@@ -247,7 +247,7 @@ private:
     }
 
     void unpack_round_up_num_values(int bit_width, std::size_t num_values) {
-        auto round_up_num_values = BitUtil::round_up_numi32(num_values) << 5;
+        auto round_up_num_values = BitUtil::round_up_numi32(static_cast<uint32_t>(num_values)) << 5;
         if (_decoded_values_buffer == nullptr || _decoded_buffer_size < round_up_num_values) {
             _decoded_values_buffer = std::make_unique<uint8_t[]>(round_up_num_values);
             _decoded_buffer_size = round_up_num_values;
@@ -331,14 +331,8 @@ public:
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
         }
-        std::vector<Slice> slices;
-        slices.resize(count);
-        for (int i = 0; i < count; ++i) {
-            slices[i] = Slice(_data.data + _offset, _type_length);
-            _offset += _type_length;
-        }
-
-        dst->append_continuous_strings(slices);
+        dst->append_continuous_fixed_length_strings(_data.data + _offset, count, _type_length);
+        _offset += count * _type_length;
         return Status::OK();
     }
 

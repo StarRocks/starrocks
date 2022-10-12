@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/file_scan_node.h"
 
@@ -12,7 +12,6 @@
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
 #include "fs/fs.h"
-#include "fs/fs_broker.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/defer_op.h"
@@ -228,10 +227,18 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         }
         ChunkPtr temp_chunk = std::move(res.value());
 
+        size_t before_rows = temp_chunk->num_rows();
+
+        const TQueryOptions& query_options = runtime_state()->query_options();
+        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
+            size_t before_size = temp_chunk->bytes_usage();
+            runtime_state()->update_num_rows_load_from_source(before_rows);
+            runtime_state()->update_num_bytes_load_from_source(before_size);
+        }
+
         // eval conjuncts
-        size_t before = temp_chunk->num_rows();
         RETURN_IF_ERROR(eval_conjuncts(conjunct_ctxs, temp_chunk.get()));
-        counter->num_rows_unselected += (before - temp_chunk->num_rows());
+        counter->num_rows_unselected += (before_rows - temp_chunk->num_rows());
 
         // Row batch has been filled, push this to the queue
         if (temp_chunk->num_rows() > 0) {
@@ -274,7 +281,7 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
     DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
+    auto status = Expr::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
 
     if (!status.ok()) {
         LOG(WARNING) << "Clone conjuncts failed.";

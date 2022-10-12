@@ -207,6 +207,7 @@ public class HDFSBrokerServiceImpl implements TFileBrokerService.Iface {
         try {
             TBrokerFD fd = fileSystemManager.openWriter(request.clientId, request.path, request.properties);
             response.setFd(fd);
+            logger.info("finish a open writer request. fd: " + fd + ", request: " + request);
             response.setOpStatus(generateOKStatus());
         } catch (BrokerException e) {
             logger.warn("failed to open writer: " + request.path, e);

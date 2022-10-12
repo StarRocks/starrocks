@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/memtable.h"
 
@@ -11,6 +11,7 @@
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable_rowset_writer_sink.h"
 #include "storage/olap_common.h"
@@ -53,9 +54,7 @@ static shared_ptr<TabletSchema> create_tablet_schema(const string& desc, int nke
     tspb.set_keys_type(key_type);
     tspb.set_next_column_unique_id(cid);
     tspb.set_num_short_key_columns(nkey);
-    shared_ptr<TabletSchema> ts(new TabletSchema());
-    ts->init_from_pb(tspb);
-    return ts;
+    return std::make_shared<TabletSchema>(tspb);
 }
 
 static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
@@ -103,7 +102,8 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
     return ret;
 }
 
-static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(const string& desc, ObjectPool& pool) {
+static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState* state, const string& desc,
+                                                                   ObjectPool& pool) {
     TDescriptorTableBuilder dtb;
     TTupleDescriptorBuilder tuple_builder;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
@@ -142,7 +142,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(const string&
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
-    DescriptorTbl::create(&pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 
@@ -189,8 +189,8 @@ public:
         fs::create_directories(_root_path);
         _mem_tracker.reset(new MemTracker(-1, "root"));
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
-        _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        _slots = create_tuple_desc_slots(&_runtime_state, slot_desc, _obj_pool);
+        RowsetWriterContext writer_context;
         RowsetId rowset_id;
         rowset_id.init(rand() % 1000000000);
         writer_context.rowset_id = rowset_id;
@@ -214,7 +214,7 @@ public:
     }
 
     std::string _root_path;
-
+    RuntimeState _runtime_state;
     ObjectPool _obj_pool;
     unique_ptr<MemTracker> _mem_tracker;
     shared_ptr<TabletSchema> _schema;

@@ -28,6 +28,7 @@
 #include "common/status.h"
 #include "fs/fs.h"
 #include "gutil/strings/split.h"
+#include "gutil/strings/substitute.h"
 #include "util/path_util.h"
 
 namespace starrocks {
@@ -83,9 +84,8 @@ Status parse_root_path(const string& root_path, StorePath* path) {
         string value;
         std::pair<string, string> pair = strings::Split(tmp_vec[i], strings::delimiter::Limit(":", 1));
         if (pair.second.empty()) {
-            // deprecated
-            // format_1: <value> only supports setting capacity
-            property = CAPACITY_UC;
+            LOG(WARNING) << "invalid property of store path, " << tmp_vec[i];
+            return Status::InvalidArgument(strings::Substitute("invalid property of store path, $0", tmp_vec[i]));
         } else {
             // format_2
             property = to_upper(pair.first);

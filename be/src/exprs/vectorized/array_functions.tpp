@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/array_column.h"
 #include "column/column_builder.h"
@@ -16,6 +16,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_largeint<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
@@ -113,6 +114,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_arithmetic<PT> || pt_is_decimalv2<PT>) {
             return _array_difference(columns);
         } else {
@@ -360,7 +362,10 @@ class ArrayConcat {
 public:
     using CppType = RunTimeCppType<PT>;
 
-    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) { return _array_concat(columns); }
+    static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+        return _array_concat(columns);
+    }
 
 private:
     static void collect_array_columns_and_null_columns(const Columns& columns, std::vector<ArrayColumn*>* src_columns,
@@ -390,8 +395,6 @@ private:
         if (columns.size() == 1) {
             return columns[0];
         }
-
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         size_t chunk_size = columns[0]->size();
         bool is_nullable = false;
@@ -455,6 +458,7 @@ public:
     using CppType = RunTimeCppType<PT>;
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
         if constexpr (pt_is_largeint<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
@@ -469,8 +473,6 @@ public:
 private:
     template <typename HashSet>
     static ColumnPtr _array_overlap(const Columns& columns) {
-        RETURN_IF_COLUMNS_ONLY_NULL(columns);
-
         size_t chunk_size = columns[0]->size();
         auto result_column = BooleanColumn::create(chunk_size, 0);
 
@@ -717,12 +719,9 @@ public:
 
     static ColumnPtr process(FunctionContext* ctx, const Columns& columns) {
         DCHECK_EQ(columns.size(), 1);
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         size_t chunk_size = columns[0]->size();
-
-        if (columns[0]->only_null()) {
-            return ColumnHelper::create_const_null_column(chunk_size);
-        }
 
         // TODO: For fixed-length types, you can operate directly on the original column without using sort index,
         //  which will be optimized later
@@ -946,9 +945,7 @@ public:
         DCHECK_GE(columns.size(), 2);
         size_t chunk_size = columns[0]->size();
 
-        if (std::any_of(columns.begin(), columns.end(), [](const auto& col) { return col->only_null(); })) {
-            return ColumnHelper::create_const_null_column(chunk_size);
-        }
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
         ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
         if (columns.size() <= 2) {
@@ -1033,4 +1030,88 @@ private:
         return res.build_nullable_column();
     }
 };
+
+class ArrayFilter {
+public:
+    static ColumnPtr process([[maybe_unused]] FunctionContext* ctx, const Columns& columns) {
+        return _array_filter(columns);
+    }
+
+private:
+    static ColumnPtr _array_filter(const Columns& columns) {
+        RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+        size_t chunk_size = columns[0]->size();
+        ColumnPtr src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[0]);
+        ColumnPtr dest_column = src_column->clone_empty();
+        ColumnPtr bool_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, columns[1]);
+
+        if (src_column->is_nullable()) {
+            const auto* src_nullable_column = down_cast<const NullableColumn*>(src_column.get());
+            const auto& src_data_column = src_nullable_column->data_column();
+            const auto& src_null_column = src_nullable_column->null_column();
+
+            auto* dest_nullable_column = down_cast<NullableColumn*>(dest_column.get());
+            auto* dest_null_column = dest_nullable_column->mutable_null_column();
+            auto* dest_data_column = dest_nullable_column->mutable_data_column();
+
+            if (src_column->has_null()) {
+                dest_null_column->get_data() = src_null_column->get_data();
+            } else {
+                dest_null_column->get_data().resize(chunk_size, 0);
+            }
+            dest_nullable_column->set_has_null(src_nullable_column->has_null());
+
+            _filter_array_items(down_cast<ArrayColumn*>(src_data_column.get()), bool_column,
+                                down_cast<ArrayColumn*>(dest_data_column), dest_null_column);
+        } else {
+            _filter_array_items(down_cast<ArrayColumn*>(src_column.get()), bool_column,
+                                down_cast<ArrayColumn*>(dest_column.get()), nullptr);
+        }
+        return dest_column;
+    }
+
+private:
+    static void _filter_array_items(const ArrayColumn* src_column, const ColumnPtr raw_filter, ArrayColumn* dest_column,
+                                    NullColumn* dest_null_map) {
+        ArrayColumn* filter;
+        NullColumn* filter_null_map = nullptr;
+        auto& dest_offsets = dest_column->offsets_column()->get_data();
+
+        if (raw_filter->is_nullable()) {
+            auto nullable_column = down_cast<NullableColumn*>(raw_filter.get());
+            filter = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            filter_null_map = nullable_column->null_column().get();
+        } else {
+            filter = down_cast<ArrayColumn*>(raw_filter.get());
+        }
+        std::vector<uint32_t> indexes;
+        // only keep the elements whose filter is not null and not 0.
+        for (size_t i = 0; i < src_column->size(); ++i) {
+            if (dest_null_map == nullptr || !dest_null_map->get_data()[i]) {         // dest_null_map[i] is not null
+                if (filter_null_map == nullptr || !filter_null_map->get_data()[i]) { // filter_null_map[i] is not null
+                    size_t elem_size = 0;
+                    size_t filter_elem_id = filter->offsets().get_data()[i];
+                    size_t filter_elem_limit = filter->offsets().get_data()[i + 1];
+                    for (size_t src_elem_id = src_column->offsets().get_data()[i];
+                         src_elem_id < src_column->offsets().get_data()[i + 1]; ++filter_elem_id, ++src_elem_id) {
+                        // only keep the valid elements
+                        if (filter_elem_id < filter_elem_limit && !filter->elements().is_null(filter_elem_id) &&
+                            filter->elements().get(filter_elem_id).get_int8() != 0) {
+                            indexes.emplace_back(src_elem_id);
+                            ++elem_size;
+                        }
+                    }
+                    dest_offsets.emplace_back(dest_offsets.back() + elem_size);
+                } else { // filter_null_map[i] is null, empty the array by design[, alternatively keep all elements]
+                    dest_offsets.emplace_back(dest_offsets.back());
+                }
+            } else { // dest_null_map[i] is null
+                dest_offsets.emplace_back(dest_offsets.back());
+            }
+        }
+        dest_column->elements_column()->append_selective(src_column->elements(), indexes);
+    }
+};
+
 } // namespace starrocks::vectorized

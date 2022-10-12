@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -104,7 +104,8 @@ public class PushDownPredicateRankingWindowRule extends TransformationRule {
                 filters.stream().filter(op -> op instanceof BinaryPredicateOperator)
                         .map(ScalarOperator::<BinaryPredicateOperator>cast)
                         .filter(op -> Objects.equals(BinaryPredicateOperator.BinaryType.LE, op.getBinaryType()) ||
-                                Objects.equals(BinaryPredicateOperator.BinaryType.LT, op.getBinaryType()))
+                                Objects.equals(BinaryPredicateOperator.BinaryType.LT, op.getBinaryType()) ||
+                                Objects.equals(BinaryPredicateOperator.BinaryType.EQ, op.getBinaryType()))
                         .filter(op -> Objects.equals(windowCol, op.getChild(0)))
                         .filter(op -> op.getChild(1) instanceof ConstantOperator)
                         .collect(Collectors.toList());

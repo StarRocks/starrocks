@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -52,7 +52,7 @@ public:
     }
 
     bool need_local_shuffle() const override { return _need_local_shuffle; }
-    void set_need_local_shuffle(bool need_local_shuffle) { _need_local_shuffle = need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) override { _need_local_shuffle = need_local_shuffle; }
 
 private:
     AggregatorFactoryPtr _aggregator_factory = nullptr;

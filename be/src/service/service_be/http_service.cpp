@@ -24,6 +24,7 @@
 #include "fs/fs_util.h"
 #include "gutil/stl_util.h"
 #include "http/action/checksum_action.h"
+#include "http/action/compact_rocksdb_meta_action.h"
 #include "http/action/compaction_action.h"
 #include "http/action/health_action.h"
 #include "http/action/meta_action.h"
@@ -40,7 +41,6 @@
 #include "http/download_action.h"
 #include "http/ev_http_server.h"
 #include "http/http_method.h"
-#include "http/monitor_action.h"
 #include "http/web_page_handler.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
@@ -207,6 +207,10 @@ Status HttpServiceBE::start() {
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/runtime_filter_cache/{action}",
                                       runtime_filter_cache_action);
     _http_handlers.emplace_back(runtime_filter_cache_action);
+
+    CompactRocksDbMetaAction* compact_rocksdb_meta_action = new CompactRocksDbMetaAction(_env);
+    _ev_http_server->register_handler(HttpMethod::POST, "/api/compact_rocksdb_meta", compact_rocksdb_meta_action);
+    _http_handlers.emplace_back(compact_rocksdb_meta_action);
 
     RETURN_IF_ERROR(_ev_http_server->start());
     return Status::OK();

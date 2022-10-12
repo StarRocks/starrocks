@@ -23,11 +23,6 @@
 
 #include <fcntl.h>
 #include <sys/stat.h>
-#include <sys/types.h>
-
-#include <algorithm>
-
-#include "util/runtime_profile.h"
 
 namespace starrocks {
 

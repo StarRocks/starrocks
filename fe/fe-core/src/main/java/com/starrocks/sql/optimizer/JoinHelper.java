@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -118,6 +118,15 @@ public class JoinHelper {
         return eqConjuncts;
     }
 
+    /**
+     * Conditions should contain:
+     * 1. binary predicate operator is EQ or EQ_FOR_NULL type
+     * 2. operands in each side of operator should totally belong to each side of join's input
+     * @param leftColumns
+     * @param rightColumns
+     * @param predicate
+     * @return
+     */
     private static boolean isEqualBinaryPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
                                                  ScalarOperator predicate) {
         if (predicate instanceof BinaryPredicateOperator) {
@@ -146,5 +155,4 @@ public class JoinHelper {
         return type.isCrossJoin() || JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN.equals(type) ||
                 (type.isInnerJoin() && equalOnPredicate.isEmpty()) || "BROADCAST".equalsIgnoreCase(hint);
     }
-
 }

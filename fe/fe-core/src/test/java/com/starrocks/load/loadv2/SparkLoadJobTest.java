@@ -24,10 +24,8 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.DataDescription;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.ResourceDesc;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -47,6 +45,8 @@ import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.lake.LakeTable;
+import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
@@ -54,6 +54,8 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.ResourceDesc;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -174,7 +176,7 @@ public class SparkLoadJobTest {
         try {
             Assert.assertTrue(resource.getSparkConfigs().isEmpty());
             resourceDesc.analyze();
-            BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt);
+            BulkLoadJob bulkLoadJob = BulkLoadJob.fromLoadStmt(loadStmt, null);
             SparkLoadJob sparkLoadJob = (SparkLoadJob) bulkLoadJob;
             // check member
             Assert.assertEquals(dbId, bulkLoadJob.dbId);
@@ -419,6 +421,91 @@ public class SparkLoadJobTest {
         Assert.assertEquals(99, job.progress);
         Set<Long> fullTablets = Deencapsulation.getField(job, "fullTablets");
         Assert.assertTrue(fullTablets.contains(tabletId));
+    }
+
+    @Test
+    public void testUpdateEtlStatusFinishedAndCommitTransactionForLake(
+            @Mocked GlobalStateMgr globalStateMgr, @Injectable String originStmt,
+            @Mocked SparkEtlJobHandler handler, @Mocked AgentTaskExecutor executor,
+            @Injectable Database db, @Injectable LakeTable table, @Injectable Partition partition,
+            @Injectable MaterializedIndex index, @Injectable LakeTablet tablet, @Injectable Replica replica,
+            @Injectable GlobalTransactionMgr transactionMgr) throws Exception {
+        EtlStatus status = new EtlStatus();
+        status.setState(TEtlState.FINISHED);
+        status.getCounters().put("dpp.norm.ALL", "9");
+        status.getCounters().put("dpp.abnorm.ALL", "1");
+        Map<String, Long> filePathToSize = Maps.newHashMap();
+        String filePath =
+                String.format("hdfs://127.0.0.1:10000/starrocks/jobs/1/label6/9/V1.label6.%d.%d.%d.0.%d.parquet",
+                        tableId, partitionId, indexId, schemaHash);
+        long fileSize = 6L;
+        filePathToSize.put(filePath, fileSize);
+        PartitionInfo partitionInfo = new RangePartitionInfo();
+        partitionInfo.addPartition(partitionId, null, (short) 1, false);
+
+        List<Replica> allQueryableReplicas = Lists.newArrayList();
+        allQueryableReplicas.add(replica);
+
+        new Expectations() {
+            {
+                handler.getEtlJobStatus((SparkLoadAppHandle) any, appId, anyLong, etlOutputPath,
+                        (SparkResource) any, (BrokerDesc) any);
+                result = status;
+                handler.getEtlFilePaths(etlOutputPath, (BrokerDesc) any);
+                result = filePathToSize;
+                globalStateMgr.getDb(dbId);
+                result = db;
+                db.getTable(tableId);
+                result = table;
+                table.getPartition(partitionId);
+                result = partition;
+                table.getPartitionInfo();
+                result = partitionInfo;
+                table.getSchemaByIndexId(Long.valueOf(12));
+                result = Lists.newArrayList(new Column("k1", Type.VARCHAR));
+                partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                result = Lists.newArrayList(index);
+                index.getId();
+                result = indexId;
+                index.getTablets();
+                result = Lists.newArrayList(tablet);
+                tablet.getId();
+                result = tabletId;
+                ((LakeTablet) tablet).getPrimaryBackendId();
+                result = backendId;
+                AgentTaskExecutor.submit((AgentBatchTask) any);
+                GlobalStateMgr.getCurrentGlobalTransactionMgr();
+                result = transactionMgr;
+            }
+        };
+
+        SparkLoadJob job = getEtlStateJob(originStmt);
+        job.updateEtlStatus();
+
+        // check update etl finished
+        Assert.assertEquals(JobState.LOADING, job.getState());
+        Assert.assertEquals(0, job.progress);
+        Map<String, Pair<String, Long>> tabletMetaToFileInfo = Deencapsulation.getField(job, "tabletMetaToFileInfo");
+        Assert.assertEquals(1, tabletMetaToFileInfo.size());
+        String tabletMetaStr = EtlJobConfig.getTabletMetaStr(filePath);
+        Assert.assertTrue(tabletMetaToFileInfo.containsKey(tabletMetaStr));
+        Pair<String, Long> fileInfo = tabletMetaToFileInfo.get(tabletMetaStr);
+        Assert.assertEquals(filePath, fileInfo.first);
+        Assert.assertEquals(fileSize, (long) fileInfo.second);
+        Map<Long, Map<Long, PushTask>> tabletToSentReplicaPushTask
+                = Deencapsulation.getField(job, "tabletToSentReplicaPushTask");
+        Assert.assertTrue(tabletToSentReplicaPushTask.containsKey(tabletId));
+        Assert.assertTrue(tabletToSentReplicaPushTask.get(tabletId).containsKey(tabletId));
+        Map<Long, Set<Long>> tableToLoadPartitions = Deencapsulation.getField(job, "tableToLoadPartitions");
+        Assert.assertTrue(tableToLoadPartitions.containsKey(tableId));
+        Assert.assertTrue(tableToLoadPartitions.get(tableId).contains(partitionId));
+        Map<Long, Integer> indexToSchemaHash = Deencapsulation.getField(job, "indexToSchemaHash");
+        Assert.assertTrue(indexToSchemaHash.containsKey(indexId));
+        Assert.assertEquals(schemaHash, (long) indexToSchemaHash.get(indexId));
+
+        // finish push task
+        job.addFinishedReplica(tableId, tabletId, backendId);
+        job.updateLoadingStatus();
     }
 
     @Test

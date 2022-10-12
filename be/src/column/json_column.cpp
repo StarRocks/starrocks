@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/json_column.h"
 
@@ -34,7 +34,7 @@ void JsonColumn::put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx
     if (!json_str.ok()) {
         buf->push_null();
     } else {
-        buf->push_string(json_str->data(), json_str->size());
+        buf->push_string(json_str->data(), json_str->size(), '\'');
     }
 }
 

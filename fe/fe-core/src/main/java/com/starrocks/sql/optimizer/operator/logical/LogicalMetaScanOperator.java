@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator.logical;
 
@@ -71,6 +71,11 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), aggColumnIdToNames);
+    }
+
+    @Override
+    public boolean canUsePipeLine() {
+        return false;
     }
 
     public static class Builder

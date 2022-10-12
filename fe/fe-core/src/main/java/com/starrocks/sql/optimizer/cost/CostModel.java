@@ -1,11 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatsConstants;
 
@@ -63,6 +62,13 @@ public class CostModel {
         return costEstimate.getCpuCost() * cpuCostWeight +
                 costEstimate.getMemoryCost() * memoryCostWeight +
                 costEstimate.getNetworkCost() * networkCostWeight;
+    }
+
+    public static int getParallelExecInstanceNum(int leftMostScanTabletsNum) {
+        if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
+            return 1;
+        }
+        return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(), leftMostScanTabletsNum);
     }
 
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
@@ -167,18 +173,6 @@ public class CostModel {
             return aggStage == 1 || aggStage == 0;
         }
 
-        public boolean isDistinctAggFun(CallOperator aggOperator, PhysicalHashAggregateOperator node) {
-            if (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_COUNT) ||
-                    aggOperator.getFnName().equalsIgnoreCase(FunctionSet.MULTI_DISTINCT_SUM)) {
-                return true;
-            }
-            // only one stage agg node has not rewrite distinct function here
-            return node.getType().isGlobal() && !node.isSplit() &&
-                    (aggOperator.getFnName().equalsIgnoreCase(FunctionSet.COUNT) ||
-                            aggOperator.getFnName().equalsIgnoreCase(FunctionSet.SUM)) &&
-                    aggOperator.isDistinct();
-        }
-
         @Override
         public CostEstimate visitPhysicalHashAggregate(PhysicalHashAggregateOperator node, ExpressionContext context) {
             if (!needGenerateOneStageAggNode(context) && !node.isSplit() && node.getType().isGlobal()) {
@@ -208,7 +202,8 @@ public class CostModel {
                     result = CostEstimate.ofCpu(statistics.getOutputSize(outputColumns));
                     break;
                 case BROADCAST:
-                    int parallelExecInstanceNum = Math.max(1, getParallelExecInstanceNum(context));
+                    int parallelExecInstanceNum = getParallelExecInstanceNum(
+                            context.getRootProperty().getLeftMostScanTabletsNum());
                     // beNum is the number of right table should broadcast, now use alive backends
                     int aliveBackendNumber = ctx.getAliveBackendNumber();
                     int beNum = Math.max(1, aliveBackendNumber);
@@ -222,6 +217,17 @@ public class CostModel {
                     }
                     break;
                 case SHUFFLE:
+                    // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
+                    // which contains two steps:
+                    // 1. Ignore the network cost for ExchangeNode when estimating cost model.
+                    // 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
+                    boolean ignoreNetworkCost = sessionVariable.isEnableLocalShuffleAgg()
+                            && sessionVariable.isEnablePipelineEngine()
+                            && GlobalStateMgr.getCurrentSystemInfo().isSingleBackendAndComputeNode();
+                    double networkCost = ignoreNetworkCost ? 0 : Math.max(statistics.getOutputSize(outputColumns), 1);
+
+                    result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0, networkCost);
+                    break;
                 case GATHER:
                     result = CostEstimate.of(statistics.getOutputSize(outputColumns), 0,
                             Math.max(statistics.getOutputSize(outputColumns), 1));
@@ -232,11 +238,6 @@ public class CostModel {
                             ErrorType.UNSUPPORTED);
             }
             return result;
-        }
-
-        private int getParallelExecInstanceNum(ExpressionContext context) {
-            return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(),
-                    context.getRootProperty().getLeftMostScanTabletsNum());
         }
 
         @Override
@@ -257,16 +258,12 @@ public class CostModel {
                             rightStatistics.getUsedColumns(),
                             Utils.extractConjuncts(join.getOnPredicate()));
 
-            if (join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()) {
-                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
-                        rightStatistics.getOutputSize(context.getChildOutputColumns(1))
-                                * StatsConstants.CROSS_JOIN_COST_PENALTY, 0);
-            } else {
-                return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                                + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
-                        rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
-            }
+            Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
+                    "should be handled by nestloopjoin");
+
+            return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
+                            + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                    rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
         }
 
         @Override
@@ -305,8 +302,19 @@ public class CostModel {
 
             double leftSize = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
             double rightSize = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-            return CostEstimate.of(leftSize * rightSize,
-                    rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2, 0);
+            double cpuCost = leftSize * rightSize + StatsConstants.CROSS_JOIN_COST_PENALTY;
+            double memCost = rightSize * StatsConstants.CROSS_JOIN_COST_PENALTY * 2;
+
+            // Right cross join could not be parallelized, so apply more punishment
+            if (join.getJoinType().isRightJoin()) {
+                cpuCost += StatsConstants.CROSS_JOIN_RIGHT_COST_PENALTY;
+                memCost += rightSize;
+            }
+            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+                cpuCost += leftSize;
+            }
+
+            return CostEstimate.of(cpuCost, memCost, 0);
         }
 
         @Override
@@ -329,14 +337,16 @@ public class CostModel {
 
         @Override
         public CostEstimate visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
-            return CostEstimate.zero();
+            // memory cost
+            Statistics cteStatistics = context.getChildStatistics(0);
+            double ratio = ConnectContext.get().getSessionVariable().getCboCTERuseRatio();
+            double produceSize = cteStatistics.getOutputSize(context.getChildOutputColumns(0));
+            return CostEstimate.of(produceSize * node.getConsumeNum() * 0.5, produceSize * (1 + ratio), 0);
         }
 
         @Override
         public CostEstimate visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-            Statistics statistics = context.getStatistics();
-            Preconditions.checkNotNull(statistics);
-            return CostEstimate.of(statistics.getComputeSize(), 0, statistics.getComputeSize());
+            return CostEstimate.zero();
         }
 
         @Override

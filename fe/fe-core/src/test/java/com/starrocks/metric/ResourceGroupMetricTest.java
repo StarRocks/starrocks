@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.metric;
 
@@ -50,39 +50,39 @@ public class ResourceGroupMetricTest {
 
         Assert.assertEquals(2, metricsResourceGroup.size());
         Assert.assertEquals(2, metricsResourceGroupErr.size());
-        Assert.assertEquals(2*6, metricsResourceGroupLatency.size());
+        Assert.assertEquals(2 * 6, metricsResourceGroupLatency.size());
 
-        for(Metric resourceGroupMetric : metricsResourceGroup){
-            LongCounterMetric metric = (LongCounterMetric)resourceGroupMetric;
-            if(wg1.getName().equals(metric.getLabels().get(0).getValue())){
+        for (Metric resourceGroupMetric : metricsResourceGroup) {
+            LongCounterMetric metric = (LongCounterMetric) resourceGroupMetric;
+            if (wg1.getName().equals(metric.getLabels().get(0).getValue())) {
                 Assert.assertEquals(Long.valueOf(1L), metric.getValue());
-            }else if(wg2.getName().equals(metric.getLabels().get(0).getValue())){
+            } else if (wg2.getName().equals(metric.getLabels().get(0).getValue())) {
                 Assert.assertEquals(Long.valueOf(1L), metric.getValue());
-            }else {
+            } else {
                 Assert.fail();
             }
         }
 
-        for(Metric resourceGroupMetric : metricsResourceGroupErr){
-            LongCounterMetric metric = (LongCounterMetric)resourceGroupMetric;
-            if(wg1.getName().equals(metric.getLabels().get(0).getValue())){
+        for (Metric resourceGroupMetric : metricsResourceGroupErr) {
+            LongCounterMetric metric = (LongCounterMetric) resourceGroupMetric;
+            if (wg1.getName().equals(metric.getLabels().get(0).getValue())) {
                 Assert.assertEquals(Long.valueOf(1L), metric.getValue());
-            }else if(wg2.getName().equals(metric.getLabels().get(0).getValue())){
+            } else if (wg2.getName().equals(metric.getLabels().get(0).getValue())) {
                 Assert.assertEquals(Long.valueOf(1L), metric.getValue());
-            }else {
+            } else {
                 Assert.fail();
             }
         }
 
         ResourceGroupMetricMgr.visitQueryLatency();
 
-        for(Metric resourceGroupMetric : metricsResourceGroupLatency){
-            GaugeMetricImpl<Double> metric = (GaugeMetricImpl<Double>)resourceGroupMetric;
-            if(wg1.getName().equals(metric.getLabels().get(1).getValue())){
+        for (Metric resourceGroupMetric : metricsResourceGroupLatency) {
+            GaugeMetricImpl<Double> metric = (GaugeMetricImpl<Double>) resourceGroupMetric;
+            if (wg1.getName().equals(metric.getLabels().get(1).getValue())) {
                 Assert.assertEquals(Double.valueOf(10d), Double.valueOf(String.valueOf(metric.getValue())));
-            }else if(wg2.getName().equals(metric.getLabels().get(1).getValue())){
+            } else if (wg2.getName().equals(metric.getLabels().get(1).getValue())) {
                 Assert.assertEquals(Double.valueOf(10d), Double.valueOf(String.valueOf(metric.getValue())));
-            }else {
+            } else {
                 Assert.fail();
             }
         }

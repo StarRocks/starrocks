@@ -27,6 +27,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.load.loadv2.JobState;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.ShowLoadStmt;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -43,28 +44,26 @@ public class ShowLoadStmtTest {
     @Test
     public void testNormal() throws Exception {
         AnalyzeTestUtil.getStarRocksAssert().useDatabase("test");
-        ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD");
-        Assert.assertEquals("SHOW LOAD FROM `default_cluster:test`", stmt.toString());
-        stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
-        Assert.assertEquals("SHOW LOAD FROM `test`", stmt.toString());
+        ShowLoadStmt stmt = (ShowLoadStmt) analyzeSuccess("SHOW LOAD FROM test");
         ShowResultSetMetaData metaData = stmt.getMetaData();
         Assert.assertNotNull(metaData);
-        Assert.assertEquals(15, metaData.getColumnCount());
+        Assert.assertEquals(16, metaData.getColumnCount());
         Assert.assertEquals("JobId", metaData.getColumn(0).getName());
         Assert.assertEquals("Label", metaData.getColumn(1).getName());
         Assert.assertEquals("State", metaData.getColumn(2).getName());
         Assert.assertEquals("Progress", metaData.getColumn(3).getName());
         Assert.assertEquals("Type", metaData.getColumn(4).getName());
-        Assert.assertEquals("EtlInfo", metaData.getColumn(5).getName());
-        Assert.assertEquals("TaskInfo", metaData.getColumn(6).getName());
-        Assert.assertEquals("ErrorMsg", metaData.getColumn(7).getName());
-        Assert.assertEquals("CreateTime", metaData.getColumn(8).getName());
-        Assert.assertEquals("EtlStartTime", metaData.getColumn(9).getName());
-        Assert.assertEquals("EtlFinishTime", metaData.getColumn(10).getName());
-        Assert.assertEquals("LoadStartTime", metaData.getColumn(11).getName());
-        Assert.assertEquals("LoadFinishTime", metaData.getColumn(12).getName());
-        Assert.assertEquals("URL", metaData.getColumn(13).getName());
-        Assert.assertEquals("JobDetails", metaData.getColumn(14).getName());
+        Assert.assertEquals("Priority", metaData.getColumn(5).getName());
+        Assert.assertEquals("EtlInfo", metaData.getColumn(6).getName());
+        Assert.assertEquals("TaskInfo", metaData.getColumn(7).getName());
+        Assert.assertEquals("ErrorMsg", metaData.getColumn(8).getName());
+        Assert.assertEquals("CreateTime", metaData.getColumn(9).getName());
+        Assert.assertEquals("EtlStartTime", metaData.getColumn(10).getName());
+        Assert.assertEquals("EtlFinishTime", metaData.getColumn(11).getName());
+        Assert.assertEquals("LoadStartTime", metaData.getColumn(12).getName());
+        Assert.assertEquals("LoadFinishTime", metaData.getColumn(13).getName());
+        Assert.assertEquals("URL", metaData.getColumn(14).getName());
+        Assert.assertEquals("JobDetails", metaData.getColumn(15).getName());
     }
 
     @Test

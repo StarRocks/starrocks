@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #ifdef USE_STAROS
 
@@ -23,10 +23,7 @@ std::ostream& operator<<(std::ostream& os, const staros::starlet::ShardInfo& sha
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
     LOG(INFO) << "Adding " << shard;
-    auto ret = _shards.try_emplace(shard.id, ShardInfoDetails(shard));
-    if (!ret.second) {
-        return absl::AlreadyExistsError(fmt::format("Shard id '{}' already exists!", shard.id));
-    }
+    _shards.try_emplace(shard.id, ShardInfoDetails(shard));
     return absl::OkStatus();
 }
 
@@ -149,6 +146,9 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             // use shard id as cache identifier
             localconf[fslib::kCacheFsIdentifier] = absl::StrFormat("%d", info.id);
             localconf[fslib::kCacheFsTtlSecs] = absl::StrFormat("%ld", cache_setting.cache_entry_ttl_sec);
+            if (cache_setting.allow_async_write_back) {
+                localconf[fslib::kCacheFsAsyncWriteBack] = "true";
+            }
 
             // set environ variable to cachefs directory
             setenv(fslib::kFslibCacheDir.c_str(), cache_dir.c_str(), 0 /*overwrite*/);

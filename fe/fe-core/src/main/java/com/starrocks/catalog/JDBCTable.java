@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -30,6 +30,8 @@ public class JDBCTable extends Table {
 
     private String resourceName;
     private String jdbcTable;
+    private Map<String, String> properties;
+    private String dbName;
 
     public JDBCTable() {
         super(TableType.JDBC);
@@ -37,6 +39,13 @@ public class JDBCTable extends Table {
 
     public JDBCTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.JDBC, schema);
+        validate(properties);
+    }
+
+    public JDBCTable(long id, String name, List<Column> schema, String dbName,
+                     Map<String, String> properties) throws DdlException {
+        super(id, name, TableType.JDBC, schema);
+        this.dbName = dbName;
         validate(properties);
     }
 
@@ -53,14 +62,24 @@ public class JDBCTable extends Table {
             throw new DdlException("Please set properties of jdbc table, they are: table and resource");
         }
 
+        resourceName = properties.get(RESOURCE);
+        if (Strings.isNullOrEmpty(resourceName)) {
+            if (Strings.isNullOrEmpty(properties.get(JDBCResource.URI)) ||
+                    Strings.isNullOrEmpty(properties.get(JDBCResource.USER)) ||
+                    Strings.isNullOrEmpty(properties.get(JDBCResource.PASSWORD)) ||
+                    Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_URL)) ||
+                    Strings.isNullOrEmpty(properties.get(JDBCResource.CHECK_SUM)) ||
+                    Strings.isNullOrEmpty(properties.get(JDBCResource.DRIVER_CLASS))) {
+                throw new DdlException("all catalog properties must be set");
+            }
+            jdbcTable = name;
+            this.properties = properties;
+            return;
+        }
+
         jdbcTable = properties.get(TABLE);
         if (Strings.isNullOrEmpty(jdbcTable)) {
             throw new DdlException("property " + TABLE + " must be set");
-        }
-
-        resourceName = properties.get(RESOURCE);
-        if (Strings.isNullOrEmpty(resourceName)) {
-            throw new DdlException("property " + RESOURCE + " must be set");
         }
 
         Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
@@ -74,18 +93,37 @@ public class JDBCTable extends Table {
 
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
-        JDBCResource resource =
-                (JDBCResource) (GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName));
         TJDBCTable tJDBCTable = new TJDBCTable();
-        tJDBCTable.setJdbc_driver_name(resource.getName());
-        tJDBCTable.setJdbc_driver_url(resource.getProperty(JDBCResource.DRIVER_URL));
-        tJDBCTable.setJdbc_driver_checksum(resource.getProperty(JDBCResource.CHECK_SUM));
-        tJDBCTable.setJdbc_driver_class(resource.getProperty(JDBCResource.DRIVER_CLASS));
+        if (!Strings.isNullOrEmpty(resourceName)) {
+            JDBCResource resource =
+                    (JDBCResource) (GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName));
+            tJDBCTable.setJdbc_driver_name(resource.getName());
+            tJDBCTable.setJdbc_driver_url(resource.getProperty(JDBCResource.DRIVER_URL));
+            tJDBCTable.setJdbc_driver_checksum(resource.getProperty(JDBCResource.CHECK_SUM));
+            tJDBCTable.setJdbc_driver_class(resource.getProperty(JDBCResource.DRIVER_CLASS));
 
-        tJDBCTable.setJdbc_url(resource.getProperty(JDBCResource.URI));
-        tJDBCTable.setJdbc_table(jdbcTable);
-        tJDBCTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
-        tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
+            tJDBCTable.setJdbc_url(resource.getProperty(JDBCResource.URI));
+            tJDBCTable.setJdbc_table(jdbcTable);
+            tJDBCTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
+            tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
+        } else {
+            String uri = properties.get(JDBCResource.URI);
+            String driverName = uri.replace("//", "").replace("/", "_");
+            tJDBCTable.setJdbc_driver_name(driverName);
+            tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
+            tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
+            tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
+
+            if (dbName.isEmpty()) {
+                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI));
+            } else {
+                tJDBCTable.setJdbc_url(properties.get(JDBCResource.URI) + "/" + dbName);
+            }
+            tJDBCTable.setJdbc_table(jdbcTable);
+            tJDBCTable.setJdbc_user(properties.get(JDBCResource.USER));
+            tJDBCTable.setJdbc_passwd(properties.get(JDBCResource.PASSWORD));
+        }
+
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.JDBC_TABLE,
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setJdbcTable(tJDBCTable);

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.plan;
 
@@ -99,10 +99,33 @@ public class FilterUnusedColumnTest extends PlanTestBase {
 
     @Test
     public void testFilterAggTable() throws Exception {
-        String sql = "select timestamp\n" +
-                "               from metrics_detail where value is NULL limit 10;";
-        String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        boolean prevEnable = connectContext.getSessionVariable().isAbleFilterUnusedColumnsInScanStage();
+
+        try {
+            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(true);
+
+            // Key columns cannot be pruned in the non-skip-aggr scan stage.
+            String sql = "select timestamp from metrics_detail where tags_id > 1";
+            String plan = getThriftPlan(sql);
+            System.out.println(plan);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+
+            sql = "select max(value) from metrics_detail where tags_id > 1";
+            plan = getThriftPlan(sql);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+
+            // Key columns can be pruned in the skip-aggr scan stage.
+            sql = "select sum(value) from metrics_detail where tags_id > 1";
+            plan = getThriftPlan(sql);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[tags_id]"));
+
+            // Value columns cannot be pruned in the non-skip-aggr scan stage.
+            sql = "select timestamp from metrics_detail where value is NULL limit 10;";
+            plan = getThriftPlan(sql);
+            Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        } finally {
+            connectContext.getSessionVariable().setEnableGlobalRuntimeFilter(prevEnable);
+        }
     }
 
     @Test

@@ -1,6 +1,9 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
 package com.starrocks.connector.hudi;
 
 import com.google.common.collect.Lists;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.HiveMetaStoreThriftClient;
@@ -54,7 +57,7 @@ public class HudiMetadataTest {
         try {
             Assert.assertNull(metadata.listTableNames(db2));
         } catch (Exception e) {
-            Assert.assertTrue(e instanceof DdlException);
+            Assert.assertTrue(e instanceof UncheckedExecutionException);
         }
     }
 

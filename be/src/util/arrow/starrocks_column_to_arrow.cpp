@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 #include "util/arrow/starrocks_column_to_arrow.h"
 
 #include "column/column_helper.h"
@@ -7,7 +7,6 @@
 #include "exec/vectorized/arrow_type_traits.h"
 #include "exprs/expr.h"
 #include "runtime/large_int_value.h"
-#include "types/hll.h"
 #include "util/raw_container.h"
 
 namespace starrocks::vectorized {

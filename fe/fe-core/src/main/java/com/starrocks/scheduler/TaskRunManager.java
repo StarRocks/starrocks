@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.scheduler;
 
@@ -51,7 +51,8 @@ public class TaskRunManager {
 
         int validPendingCount = 0;
         for (Long taskId : pendingTaskRunMap.keySet()) {
-            if (!pendingTaskRunMap.get(taskId).isEmpty()) {
+            PriorityBlockingQueue<TaskRun> taskRuns = pendingTaskRunMap.get(taskId);
+            if (taskRuns != null && !taskRuns.isEmpty()) {
                 validPendingCount++;
             }
         }

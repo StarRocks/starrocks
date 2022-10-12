@@ -35,8 +35,8 @@ import com.starrocks.lake.proto.TabletStatRequest;
 import com.starrocks.lake.proto.TabletStatRequest.TabletInfo;
 import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.TabletStatResponse.TabletStat;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
@@ -49,7 +49,6 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
 /*
@@ -237,15 +236,11 @@ public class TabletStatMgr extends LeaderDaemon {
                 if (backend == null) {
                     continue;
                 }
-                TNetworkAddress address = new TNetworkAddress();
-                address.setHostname(backend.getHost());
-                address.setPort(backend.getBrpcPort());
-
-                LakeServiceClient client = new LakeServiceClient(address);
                 TabletStatRequest request = new TabletStatRequest();
                 request.tabletInfos = entry.getValue();
 
-                Future<TabletStatResponse> responseFuture = client.getTabletStats(request);
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                Future<TabletStatResponse> responseFuture = lakeService.getTabletStats(request);
                 responseList.add(responseFuture);
             }
 
@@ -257,7 +252,7 @@ public class TabletStatMgr extends LeaderDaemon {
                     }
                 }
             }
-        } catch (RpcException | ExecutionException | InterruptedException e) {
+        } catch (Throwable e) {
             LOG.warn("failed to get lake tablet stats. table id: {}", table.getId(), e);
             return;
         }

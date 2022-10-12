@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 - present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -63,9 +63,9 @@ struct SortedRun {
     // Clone this SortedRun, could be the entire chunk or slice of chunk
     ChunkUniquePtr clone_slice() const;
 
-    // Steal part of chunk from the start, avoid copy if possible
+    // Steal part of chunk, skip the first `skipped_rows` rows and take the next `size` rows, avoid copy if possible
     // After steal out, this run will not reference the chunk anymore
-    ChunkPtr steal_chunk(size_t size);
+    ChunkPtr steal_chunk(size_t size, size_t skipped_rows = 0);
 
     int compare_row(const SortDescs& desc, const SortedRun& rhs, size_t lhs_row, size_t rhs_row) const;
 };

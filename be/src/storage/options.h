@@ -33,8 +33,8 @@ namespace starrocks {
 class MemTracker;
 
 struct StorePath {
-    StorePath() {}
-    StorePath(std::string path_) : path(std::move(path_)), storage_medium(TStorageMedium::HDD) {}
+    StorePath() = default;
+    explicit StorePath(std::string path_) : path(std::move(path_)), storage_medium(TStorageMedium::HDD) {}
     std::string path;
     TStorageMedium::type storage_medium{TStorageMedium::HDD};
 };
@@ -49,9 +49,7 @@ struct EngineOptions {
     std::vector<StorePath> store_paths;
     // BE's UUID. It will be reset every time BE restarts.
     UniqueId backend_uid{0, 0};
-    MemTracker* tablet_meta_mem_tracker = nullptr;
     MemTracker* compaction_mem_tracker = nullptr;
-    MemTracker* schema_change_mem_tracker = nullptr;
     MemTracker* update_mem_tracker = nullptr;
     // config path to store cluster_id, used by DummyStorageEngine
     std::string conf_path;

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -6,8 +6,8 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.ColocateTableIndex;
-import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.base.CTEProperty;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -52,33 +53,40 @@ import java.util.stream.Collectors;
 // The output property of the node is calculated according to the attributes of the child node and itself.
 // Currently join node enforces a valid property for the child node that cannot meet the requirements.
 public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertySet, ExpressionContext> {
-    private PhysicalPropertySet requirements;
-    // children output property
-    private List<PhysicalPropertySet> childrenOutputProperties;
+    private final GroupExpression groupExpression;
 
-    public PhysicalPropertySet getOutputProperty(
-            PhysicalPropertySet requirements,
-            GroupExpression groupExpression,
-            List<PhysicalPropertySet> childrenOutputProperties) {
+    private final PhysicalPropertySet requirements;
+    // children output property
+    private final List<PhysicalPropertySet> childrenOutputProperties;
+
+    public OutputPropertyDeriver(GroupExpression groupExpression, PhysicalPropertySet requirements,
+                                 List<PhysicalPropertySet> childrenOutputProperties) {
+        this.groupExpression = groupExpression;
         this.requirements = requirements;
         // children best group expression
         this.childrenOutputProperties = childrenOutputProperties;
+    }
 
+    public PhysicalPropertySet getOutputProperty() {
         return groupExpression.getOp().accept(this, new ExpressionContext(groupExpression));
     }
 
-    public Pair<PhysicalPropertySet, Double> getOutputPropertyWithCost(
-            PhysicalPropertySet requirements,
-            GroupExpression groupExpression,
-            List<PhysicalPropertySet> childrenOutputProperties,
-            double curTotalCost) {
-        PhysicalPropertySet outputProperty = getOutputProperty(requirements, groupExpression, childrenOutputProperties);
-        return Pair.create(outputProperty, curTotalCost);
+    @NotNull
+    private PhysicalPropertySet mergeCTEProperty(PhysicalPropertySet output) {
+        // set cte property
+        CTEProperty outputCte = new CTEProperty();
+        outputCte.merge(output.getCteProperty());
+        for (PhysicalPropertySet childrenOutputProperty : childrenOutputProperties) {
+            outputCte.merge(childrenOutputProperty.getCteProperty());
+        }
+        output = output.copy();
+        output.setCteProperty(outputCte);
+        return output;
     }
 
     @Override
     public PhysicalPropertySet visitOperator(Operator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return mergeCTEProperty(PhysicalPropertySet.EMPTY);
     }
 
     private PhysicalPropertySet computeColocateJoinOutputProperty(HashDistributionSpec leftScanDistributionSpec,
@@ -139,20 +147,20 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalHashJoin(PhysicalHashJoinOperator node, ExpressionContext context) {
-        return visitPhysicalJoin(node, context);
+        return mergeCTEProperty(visitPhysicalJoin(node, context));
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalMergeJoin(PhysicalMergeJoinOperator node, ExpressionContext context) {
-        return visitPhysicalJoin(node, context);
+        return mergeCTEProperty(visitPhysicalJoin(node, context));
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalNestLoopJoin(PhysicalNestLoopJoinOperator node, ExpressionContext context) {
-        return childrenOutputProperties.get(0);
+        return mergeCTEProperty(childrenOutputProperties.get(0));
     }
 
-    public PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
+    private PhysicalPropertySet visitPhysicalJoin(PhysicalJoinOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
         PhysicalPropertySet leftChildOutputProperty = childrenOutputProperties.get(0);
         PhysicalPropertySet rightChildOutputProperty = childrenOutputProperties.get(1);
@@ -311,7 +319,7 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
         } else {
             outputProperty = PhysicalPropertySet.EMPTY;
         }
-        return outputProperty;
+        return mergeCTEProperty(outputProperty);
     }
 
     @Override
@@ -331,7 +339,8 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
             // Use child distribution
             distributionProperty = childrenOutputProperties.get(0).getDistributionProperty();
         }
-        return new PhysicalPropertySet(distributionProperty, sortProperty);
+        return new PhysicalPropertySet(distributionProperty, sortProperty,
+                childrenOutputProperties.get(0).getCteProperty());
     }
 
     @Override
@@ -355,13 +364,19 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     @Override
     public PhysicalPropertySet visitPhysicalAssertOneRow(PhysicalAssertOneRowOperator node, ExpressionContext context) {
         DistributionSpec gather = DistributionSpec.createGatherDistributionSpec();
-        return createPropertySetByDistribution(gather);
+        DistributionProperty distributionProperty = new DistributionProperty(gather);
+        return new PhysicalPropertySet(distributionProperty, SortProperty.EMPTY,
+                childrenOutputProperties.get(0).getCteProperty());
+
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEAnchor(PhysicalCTEAnchorOperator node, ExpressionContext context) {
         Preconditions.checkState(childrenOutputProperties.size() == 2);
-        return childrenOutputProperties.get(1);
+        PhysicalPropertySet output = childrenOutputProperties.get(1).copy();
+        CTEProperty cteProperty = childrenOutputProperties.get(1).getCteProperty().removeCTE(node.getCteId());
+        output.setCteProperty(cteProperty);
+        return output;
     }
 
     @Override
@@ -372,12 +387,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
 
     @Override
     public PhysicalPropertySet visitPhysicalCTEConsume(PhysicalCTEConsumeOperator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return new PhysicalPropertySet(DistributionProperty.EMPTY, SortProperty.EMPTY,
+                new CTEProperty(node.getCteId()));
     }
 
     @Override
     public PhysicalPropertySet visitPhysicalNoCTE(PhysicalNoCTEOperator node, ExpressionContext context) {
-        return PhysicalPropertySet.EMPTY;
+        return childrenOutputProperties.get(0);
     }
 
     @Override

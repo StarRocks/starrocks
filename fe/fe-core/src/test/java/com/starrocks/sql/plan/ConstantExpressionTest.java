@@ -210,7 +210,7 @@ public class ConstantExpressionTest extends PlanTestBase {
 
     @Test
     public void testConstantInPredicate() throws Exception {
-        connectContext.setDatabase("default_cluster:test");
+        connectContext.setDatabase("test");
         // for constant NOT IN PREDICATE
         testFragmentPlanContains("select 1 not in (1, 2);", "FALSE");
 

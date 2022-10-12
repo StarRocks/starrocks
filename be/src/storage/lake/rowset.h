@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -25,10 +25,12 @@ public:
 
     [[nodiscard]] uint32_t id() const { return metadata().id(); }
 
+    [[nodiscard]] int index() const { return _index; }
+
     [[nodiscard]] const RowsetMetadata& metadata() const { return *_rowset_metadata; }
 
 private:
-    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments);
+    [[nodiscard]] Status load_segments(std::vector<SegmentPtr>* segments, bool fill_cache);
 
     // _tablet is owned by TabletReader
     Tablet* _tablet;

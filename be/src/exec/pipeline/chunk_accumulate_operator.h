@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -27,6 +27,8 @@ public:
 
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
+
+    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
 
 private:
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75;          // 0.75 * chunk_size

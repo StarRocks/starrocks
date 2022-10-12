@@ -47,9 +47,9 @@ under the License.
         <spark.version>2.4.6</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
-        <hadoop.version>3.3.2</hadoop.version>
+        <hadoop.version>3.3.3</hadoop.version>
         <skip.plugin>false</skip.plugin>
-        <hudi.version>0.10.0</hudi.version>
+        <hudi.version>0.10.1</hudi.version>
         <hive-apache.version>3.1.2-13</hive-apache.version>
         <dlf-metastore-client.version>0.2.14</dlf-metastore-client.version>
         <sonar.organization>starrocks</sonar.organization>
@@ -265,39 +265,10 @@ under the License.
                 <version>0.11-a-czt02-cdh</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.javassist/javassist -->
-            <dependency>
-                <groupId>org.javassist</groupId>
-                <artifactId>javassist</artifactId>
-                <version>3.18.2-GA</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/javax.servlet/javax.servlet-api -->
-            <dependency>
-                <groupId>javax.servlet</groupId>
-                <artifactId>javax.servlet-api</artifactId>
-                <version>3.0.1</version>
-                <scope>provided</scope>
-            </dependency>
-
             <dependency>
                 <groupId>com.sleepycat</groupId>
                 <artifactId>je</artifactId>
                 <version>7.3.7</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty -->
-            <dependency>
-                <groupId>org.mortbay.jetty</groupId>
-                <artifactId>jetty</artifactId>
-                <version>6.1.26</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.mortbay.jetty/jetty-util -->
-            <dependency>
-                <groupId>org.mortbay.jetty</groupId>
-                <artifactId>jetty-util</artifactId>
-                <version>6.1.26</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/de.jflex/jflex -->
@@ -392,13 +363,6 @@ under the License.
                 <version>${log4j.version}</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/io.dropwizard.metrics/metrics-core -->
-            <dependency>
-                <groupId>io.dropwizard.metrics</groupId>
-                <artifactId>metrics-core</artifactId>
-                <version>4.0.2</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/io.netty/netty-all -->
             <dependency>
                 <groupId>io.netty</groupId>
@@ -406,47 +370,11 @@ under the License.
                 <version>4.1.61.Final</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.objenesis/objenesis -->
-            <dependency>
-                <groupId>org.objenesis</groupId>
-                <artifactId>objenesis</artifactId>
-                <version>2.1</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
                 <version>3.16.1</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/com.squareup/protoparser -->
-            <dependency>
-                <groupId>com.squareup</groupId>
-                <artifactId>protoparser</artifactId>
-                <version>3.1.5</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.xerial.snappy/snappy-java -->
-            <dependency>
-                <groupId>org.xerial.snappy</groupId>
-                <artifactId>snappy-java</artifactId>
-                <version>1.1.7.2</version>
-            </dependency>
-
-            <!-- for k8s client-->
-            <!-- https://mvnrepository.com/artifact/dk.brics.automaton/automaton -->
-            <dependency>
-                <groupId>dk.brics.automaton</groupId>
-                <artifactId>automaton</artifactId>
-                <version>1.11-8</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/com.github.mifmif/generex -->
-            <dependency>
-                <groupId>com.github.mifmif</groupId>
-                <artifactId>generex</artifactId>
-                <version>1.0.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
@@ -461,13 +389,6 @@ under the License.
                 <groupId>com.squareup.okio</groupId>
                 <artifactId>okio</artifactId>
                 <version>2.10.0</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.yaml/snakeyaml -->
-            <dependency>
-                <groupId>org.yaml</groupId>
-                <artifactId>snakeyaml</artifactId>
-                <version>1.26</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/javax.validation/validation-api -->
@@ -647,26 +568,6 @@ under the License.
                 <version>4.0.2</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/org.apache.zookeeper/zookeeper -->
-            <dependency>
-                <groupId>org.apache.zookeeper</groupId>
-                <artifactId>zookeeper</artifactId>
-                <version>3.4.14</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.apache.tomcat.embed/tomcat-embed-core -->
-            <dependency>
-                <groupId>org.apache.tomcat.embed</groupId>
-                <artifactId>tomcat-embed-core</artifactId>
-                <version>${tomcat.version}</version>
-            </dependency>
-
-            <!-- https://mvnrepository.com/artifact/org.apache.tomcat/tomcat-annotations-api -->
-            <dependency>
-                <groupId>org.apache.tomcat</groupId>
-                <artifactId>tomcat-annotations-api</artifactId>
-                <version>${tomcat.version}</version>
-            </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.github.ben-manes.caffeine/caffeine -->
             <dependency>
@@ -689,18 +590,18 @@ under the License.
                 <version>${hadoop.version}</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
-            <dependency>
-                <groupId>com.fasterxml.uuid</groupId>
-                <artifactId>java-uuid-generator</artifactId>
-                <version>4.0</version>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
                 <version>${hadoop.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
+            <dependency>
+                <groupId>com.fasterxml.uuid</groupId>
+                <artifactId>java-uuid-generator</artifactId>
+                <version>4.0</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-common -->
@@ -730,6 +631,22 @@ under the License.
                 <groupId>mysql</groupId>
                 <artifactId>mysql-connector-java</artifactId>
                 <version>8.0.28</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.postgresql/postgresql -->
+            <dependency>
+                <groupId>org.postgresql</groupId>
+                <artifactId>postgresql</artifactId>
+                <version>42.4.1</version>
+                <scope>test</scope>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
+            <dependency>
+                <groupId>com.mockrunner</groupId>
+                <artifactId>mockrunner-jdbc</artifactId>
+                <version>1.0.1</version>
+                <scope>test</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-dbcp2 -->

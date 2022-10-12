@@ -17,7 +17,6 @@
 
 package com.starrocks.analysis;
 
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.ast.AstVisitor;
@@ -59,7 +58,6 @@ public class StopRoutineLoadStmt extends DdlStmt {
     public String toSql() {
         String dbName = labelName.getDbName();
         String routineName = labelName.getLabelName();
-        dbName = ClusterNamespace.getNameFromFullName(dbName);
         return "STOP ROUTINE LOAD FOR " + dbName + "." + routineName;
     }
 

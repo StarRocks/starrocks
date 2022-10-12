@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.mv;
 
@@ -49,6 +49,14 @@ import java.util.stream.Collectors;
  * Select best materialized view for olap scan node
  */
 public class MaterializedViewRule extends Rule {
+    // For Materialized View key columns, which could hit the following functions
+    private static final ImmutableList<String> KEY_COLUMN_FUNCTION_NAMES = ImmutableList.of(
+            FunctionSet.MAX,
+            FunctionSet.MIN,
+            FunctionSet.APPROX_COUNT_DISTINCT,
+            FunctionSet.MULTI_DISTINCT_COUNT
+    );
+
     public MaterializedViewRule() {
         super(RuleType.TF_MATERIALIZED_VIEW, Pattern.create(OperatorType.PATTERN));
     }
@@ -631,20 +639,12 @@ public class MaterializedViewRule extends Rule {
         return result;
     }
 
-    // For Materialized View key columns, which could hit the following functions
-    private static final ImmutableList<String> keyColumnFunctionNames = ImmutableList.of(
-            FunctionSet.MAX,
-            FunctionSet.MIN,
-            FunctionSet.APPROX_COUNT_DISTINCT,
-            FunctionSet.MULTI_DISTINCT_COUNT
-    );
-
     private void keyColumnsToExprList(Map<String, Integer> columnToIds, MaterializedIndexMeta mvMeta,
                                       List<CallOperator> result) {
         for (Column column : mvMeta.getSchema()) {
             if (!column.isAggregated()) {
                 ColumnRefOperator columnRef = factory.getColumnRef(columnToIds.get(column.getName()));
-                for (String function : keyColumnFunctionNames) {
+                for (String function : KEY_COLUMN_FUNCTION_NAMES) {
                     CallOperator fn = new CallOperator(function,
                             column.getType(),
                             Lists.newArrayList(columnRef));
@@ -677,7 +677,7 @@ public class MaterializedViewRule extends Rule {
         if (candidateIndexMeta.getKeysType() == KeysType.AGG_KEYS && !queryExprList.stream()
                 .filter(queryExpr -> {
                     String fnName = queryExpr.getFnName();
-                    return !(fnName.equals(FunctionSet.COUNT) && fnName.equals(FunctionSet.SUM))
+                    return !(fnName.equals(FunctionSet.COUNT) || fnName.equals(FunctionSet.SUM))
                             || !keyColumns.containsAll(queryExpr.getUsedColumns());
                 }).findAny().isPresent()) {
             return false;
@@ -699,7 +699,7 @@ public class MaterializedViewRule extends Rule {
         return true;
     }
 
-    private static final ImmutableSetMultimap<String, String> columnAggTypeMatchFnName;
+    private static final ImmutableSetMultimap<String, String> COLUMN_AGG_TYPE_MATCH_FN_NAME;
 
     static {
         ImmutableSetMultimap.Builder<String, String> builder = ImmutableSetMultimap.builder();
@@ -717,7 +717,7 @@ public class MaterializedViewRule extends Rule {
         builder.put(FunctionSet.HLL_UNION, FunctionSet.APPROX_COUNT_DISTINCT);
         builder.put(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_UNION);
         builder.put(FunctionSet.PERCENTILE_UNION, FunctionSet.PERCENTILE_APPROX);
-        columnAggTypeMatchFnName = builder.build();
+        COLUMN_AGG_TYPE_MATCH_FN_NAME = builder.build();
     }
 
     public boolean isMVMatchAggFunctions(Long indexId, CallOperator queryFn, CallOperator mvColumnFn,
@@ -728,7 +728,7 @@ public class MaterializedViewRule extends Rule {
             queryFnName = FunctionSet.MULTI_DISTINCT_COUNT;
         }
 
-        if (!columnAggTypeMatchFnName.get(mvColumnFn.getFnName())
+        if (!COLUMN_AGG_TYPE_MATCH_FN_NAME.get(mvColumnFn.getFnName())
                 .contains(queryFnName)) {
             return false;
         }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "io/s3_output_stream.h"
 
@@ -90,9 +90,6 @@ Status S3OutputStream::create_multipart_upload() {
 Status S3OutputStream::singlepart_upload() {
     VLOG(12) << "Uploading s3://" << _bucket << "/" << _object << " via singlepart upload";
     DCHECK(_upload_id.empty());
-    if (_buffer.empty()) {
-        return Status::OK();
-    }
     Aws::S3::Model::PutObjectRequest req;
     req.SetBucket(_bucket);
     req.SetKey(_object);
@@ -100,8 +97,10 @@ Status S3OutputStream::singlepart_upload() {
     req.SetBody(std::make_shared<Aws::StringStream>(_buffer));
     Aws::S3::Model::PutObjectOutcome outcome = _client->PutObject(req);
     if (!outcome.IsSuccess()) {
-        return Status::IOError(
-                fmt::format("S3: Fail to put object {}/{}: {}", _bucket, _object, outcome.GetError().GetMessage()));
+        std::string error_msg =
+                fmt::format("S3: Fail to put object {}/{}, msg: {}", _bucket, _object, outcome.GetError().GetMessage());
+        LOG(WARNING) << error_msg;
+        return Status::IOError(error_msg);
     }
     return Status::OK();
 }
@@ -148,8 +147,10 @@ Status S3OutputStream::complete_multipart_upload() {
     if (outcome.IsSuccess()) {
         return Status::OK();
     }
-    return Status::IOError(fmt::format("S3: Fail to complete multipart upload for object {}/{}: {}", _bucket, _object,
-                                       outcome.GetError().GetMessage()));
+    std::string error_msg = fmt::format("S3: Fail to complete multipart upload for object {}/{}, msg: {}", _bucket,
+                                        _object, outcome.GetError().GetMessage());
+    LOG(WARNING) << error_msg;
+    return Status::IOError(error_msg);
 }
 
 } // namespace starrocks::io

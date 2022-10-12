@@ -1,7 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.google.common.base.Objects;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -60,5 +61,22 @@ public class ScanOperatorPredicates {
 
     public Map<ColumnRefOperator, Column> getMinMaxColumnRefMap() {
         return minMaxColumnRefMap;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        ScanOperatorPredicates targetPredicts = (ScanOperatorPredicates) o;
+        return Objects.equal(getSelectedPartitionIds(), targetPredicts.getSelectedPartitionIds()) &&
+                Objects.equal(getIdToPartitionKey(), targetPredicts.getIdToPartitionKey()) &&
+                Objects.equal(getNoEvalPartitionConjuncts(), targetPredicts.getNoEvalPartitionConjuncts()) &&
+                Objects.equal(getPartitionConjuncts(), targetPredicts.getPartitionConjuncts()) &&
+                Objects.equal(getMinMaxConjuncts(), targetPredicts.getMinMaxConjuncts()) &&
+                Objects.equal(getMinMaxColumnRefMap(), targetPredicts.getMinMaxColumnRefMap());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hashCode(idToPartitionKey, selectedPartitionIds, partitionConjuncts,
+                noEvalPartitionConjuncts, nonPartitionConjuncts, minMaxConjuncts, minMaxColumnRefMap);
     }
 }

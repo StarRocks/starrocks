@@ -1,88 +1,125 @@
-# Broker Load
+# Load data from HDFS or cloud storage
 
-StarRocks supports importing data from external storage systems such as HDFS, Amazon S3, etc. The supported file formats are CSV, ORC File, Parquet, etc. The data volume is in the range of tens to hundreds of GB.
+StarRocks provides the loading method MySQL-based Broker Load to help you load dozens to hundreds of gigabytes of data from HDFS or cloud storage into StarRocks.
 
-In broker load, StarRocks reads data from the corresponding data sources (e.g. HDFS, S3) through the deployed broker program, and uses its own computing resources to pre-process and import the data. This is an **asynchronous** import method that the user needs to create the import job via the MySQL protocol and view the import result by command.
+Broker Load runs in asynchronous loading mode. After you submit a load job, StarRocks asynchronously runs the job. You need to use the [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md) statement or the `curl` command to check the result of the job.
 
-This section introduces broker load basics, examples, best practices, and frequently asked questions.
+Broker Load supports loading one or more data files at a time. Additionally, Broker Load supports data transformation at data loading. For more information, see [Transform data at loading](../loading/Etl_in_loading.md).
 
-## Terminology Explanation
+## Background information
 
-* Broker: Broker is a standalone stateless process that encapsulates the file system interface and provides StarRocks with the ability to read files from remote storage systems.
+Broker Load requires a broker to set up a connection between your StarRocks cluster and your storage system. A broker is an independent, stateless service that is integrated with a file-system interface. With a broker, StarRocks can access and read data files that are stored in your storage system, and can use its own computing resources to pre-process and load the data of these data files.
 
-* Plan: Import execution plan. BE executes an import execution plan to import data into the StarRocks system.
+## Supported data file formats
 
-## Fundamentals
+Broker Load supports the following data file formats:
 
-After the user submits the import job, the FE generates and distributes the corresponding plan to multiple BEs based on the data volume. Each BE executes a part of the import job. Once all the BEs finish importing, the FE will determine whether the import is successful or not.
+- CSV
 
-The following diagram shows the main flow of broker load.
+- Parquet
 
-![brokerload](../assets/4.2.2-1.png)
+- ORC
 
-## Supported Remote File Systems
+## Supported storage systems
 
-* HDFS
-* Amazon S3
-* Alibaba Cloud OSS
-* Tencent COS
+Broker Load supports the following storage systems:
 
-## Import Example
+- HDFS
 
-### Broker build
+- Amazon S3
 
-Broker Load needs a broker to access the remote storage, so a broker needs to be built first.
+- Google GCS
 
-You can refer to the manual deployment ([Deploy Broker](../quick_start/Deploy.md)).
+## Prerequisites
 
-### Create import job
+Brokers are deployed in your StarRocks cluster.
 
-**Syntax:**
+You can use the [SHOW BROKER](../sql-reference/sql-statements/Administration/SHOW%20BROKER.md) statement to check for brokers that are deployed in your StarRocks cluster. If no brokers are deployed, you must deploy brokers by following the instructions provided in [Deploy a broker](../quick_start/Deploy.md#deploy-broker).
 
-~~~SQL
-LOAD LABEL db_name.label_name 
-    (data_desc, ...)
-WITH BROKER broker_name broker_properties
-    [PROPERTIES (key1=value1, ... )]
+In this topic, assume that a group of brokers collectively named 'mybroker' are deployed in your StarRocks cluster.
 
-data_desc:
-    DATA INFILE ('file_path', ...)
-    [NEGATIVE]
-    INTO TABLE tbl_name
-    [PARTITION (p1, p2)]
-    [COLUMNS TERMINATED BY column_separator ]
-    [FORMAT AS file_type]
-    [(col1, ...)]
-    [COLUMNS FROM PATH AS (colx, ...)]
-    [SET (k1=f1(xx), k2=f2(xx))]
-    [WHERE predicate]
+## Principles
 
-broker_properties: 
-    (key2=value2, ...)
-~~~
+After you submit a load job to an FE, the FE generates a query plan, splits the query plan into portions based on the number of BEs and the size of the data file you want to load, and then assigns each portion of the query plan to a specific BE. During the load, each BE pulls the data of the data file by using the broker, pre-processes the data, and then loads the data into your StarRocks cluster. After all BEs finish their portions of the query plan, the FE determines whether the load job is successful.
+
+The following figure shows the workflow of a Broker Load job.
+
+![Workflow of Broker Load](../assets/4.3-1.png)
+
+## Basic operations
+
+### Create a load job
+
+This topic uses CSV as an example to describe how to load data. For information about how to load data in other file formats and about the syntax and parameter descriptions for Broker Load, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
+
+#### Data examples
+
+1. In your StarRocks database `test_db`, create StarRocks tables.
+
+   a. Create a table named `table1` that uses the Primary Key model. The table consists of three columns: `id`, `name`, and `score`, of which `id` is the primary key.
+
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table1`
+   (
+       `id` int(11) NOT NULL COMMENT "user ID",
+       `name` varchar(65533) NULL DEFAULT "" COMMENT "user name",
+       `score` int(11) NOT NULL DEFAULT "0" COMMENT "user score"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
+
+   b. Create a table named `table2` that uses the Primary Key model. The table consists of two columns: `id` and `city`, of which `id` is the primary key.
+
+   ```SQL
+   MySQL [test_db]> CREATE TABLE `table2`
+   (
+       `id` int(11) NOT NULL COMMENT "city ID",
+       `city` varchar(65533) NULL DEFAULT "" COMMENT "city name"
+   )
+   ENGINE=OLAP
+   PRIMARY KEY(`id`)
+   DISTRIBUTED BY HASH(`id`) BUCKETS 10;
+   ```
+
+2. In your local file system, create CSV files.
+
+   a. Create a CSV file named `file1.csv`. The file consists of three columns, which represent user ID, user name, and user score in sequence.
+
+   ```Plain
+   1,Lily,23
+   2,Rose,23
+   3,Alice,24
+   4,Julia,25
+   ```
+
+   b. Create a CSV file named `file2.csv`. The file consists of two columns, which represent city ID and city name in sequence.
+
+   ```Plain
+   200,'Beijing'
+   ```
+
+3. Upload `file1.csv` and `file2.csv` to the `/user/starrocks/` path of your HDFS cluster, to the `/input/` folder of your Amazon S3 bucket `bucket_s3`, and to the `/input/` folder of your Google CGS bucket `bucket_gcs`.
 
 #### Load data from HDFS
 
-~~~sql
-LOAD LABEL db1.label1
-(
-    DATA INFILE("hdfs://abc.com:8888/user/palo/test/ml/file1")
-    INTO TABLE tbl1
-    COLUMNS TERMINATED BY ","
-    (tmp_c1, tmp_c2)
-    SET
-    (
-        id=tmp_c2,
-        name=tmp_c1
-    ),
+Execute the following statement to load `file1.csv` and `file2.csv` from the `/user/starrocks` path of your HDFS cluster into `table1` and `table2`, respectively:
 
-    DATA INFILE("hdfs://abc.com:8888/user/palo/test/ml/file2")
-    INTO TABLE tbl2
+```SQL
+LOAD LABEL test_db.label1
+(
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file1.csv")
+    INTO TABLE table1
     COLUMNS TERMINATED BY ","
-    (col1, col2)
-    where col1 > 1
+    (id, city)
+
+    DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
+    INTO TABLE table2
+    COLUMNS TERMINATED BY ","
+    (id, name, score)
 )
-WITH BROKER 'broker'
+WITH BROKER "mybroker"
 (
     "username" = "hdfs_username",
     "password" = "hdfs_password"
@@ -91,337 +128,162 @@ PROPERTIES
 (
     "timeout" = "3600"
 );
-~~~
+```
 
-#### Load data in CSV format from Amazon S3
+#### Load data from Amazon S3
 
-~~~sql
-LOAD LABEL example_db.label14
+Execute the following statement to load `file1.csv` and `file2.csv` from the `/input/` folder of your Amazon S3 bucket `bucket_s3` into `table1` and `table2`, respectively:
+
+```SQL
+LOAD LABEL test_db.label2
 (
-DATA INFILE("s3a://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
+    DATA INFILE("s3a://bucket_s3/input/file1.csv")
+    INTO TABLE table1
+    (id, city)
+    
+    DATA INFILE("s3a://bucket_s3/input/file2.csv")
+    INTO TABLE table2
+    (id, name, score)
 )
-WITH BROKER my_broker
+WITH BROKER "mybroker"
 (
-    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
     "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
     "fs.s3a.endpoint" = "s3-ap-northeast-1.amazonaws.com"
 )
-~~~
+```
 
-#### Load data from Alibaba Cloud
+> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
-~~~SQL
-LOAD LABEL example_db.label12
+#### Load data from Google GCS
+
+Execute the following statement to load `file1.csv` and `file2.csv` from the `/input/` folder of your Google GCS bucket `bucket_gcs` into `table1` and `table2`, respectively:
+
+```SQL
+LOAD LABEL test_db.label3
 (
-    DATA INFILE("oss://my_bucket/input/file.csv")
-    INTO TABLE `my_table`
-    (k1, k2, k3)
+    DATA INFILE("s3a://bucket_gcs/input/file1.csv")
+    INTO TABLE table1
+    (id, city)
+    
+    DATA INFILE("s3a://bucket_gcs/input/file2.csv")
+    INTO TABLE table2
+    (id, name, score)
 )
-WITH BROKER my_broker
+WITH BROKER "mybroker"
 (
-    "fs.oss.accessKeyId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.oss.accessKeySecret" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.oss.endpoint" = "oss-cn-zhangjiakou-internal.aliyuncs.com"
+    "fs.s3a.access.key" = "xxxxxxxxxxxxxxxxxxxx",
+    "fs.s3a.secret.key" = "yyyyyyyyyyyyyyyyyyyy",
+    "fs.s3a.endpoint" = "storage.googleapis.com"
 )
-~~~
+```
 
-#### Load data in CSV format from Tencent Cloud COS
+> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
-~~~sql
-LOAD LABEL example_db.label13
-(
-DATA INFILE("cosn://my_bucket/input/file.csv")
-INTO TABLE `my_table`
-(k1, k2, k3)
-)
-WITH BROKER my_broker
-(
-    "fs.cosn.userinfo.secretId" = "xxxxxxxxxxxxxxxxxxxxxxxxxx",
-    "fs.cosn.userinfo.secretKey" = "yyyyyyyyyyyyyyyyyyyy",
-    "fs.cosn.bucket.endpoint_suffix" = "cos.ap-beijing.myqcloud.com"
-)
-~~~
+### Query data
 
-Here we introduce the parameters shown in the command.
+After the load of data from your HDFS cluster, Amazon S3 bucket, or Google GCS bucket is complete, you can use the SELECT statement to query the data of the StarRocks tables to verify that the load is successful.
+
+1. Execute the following statement to query the data of `table1`:
+
+   ```SQL
+   MySQL [test_db]> SELECT * FROM table1;
+   +------+-------+-------+
+   | id   | name  | score |
+   +------+-------+-------+
+   |    1 | Lily  |    23 |
+   |    2 | Rose  |    23 |
+   |    3 | Alice |    24 |
+   |    4 | Julia |    25 |
+   +------+-------+-------+
+   4 rows in set (0.00 sec)
+   ```
+
+1. Execute the following statement to query the data of `table2`:
+
+   ```SQL
+   MySQL [test_db]> SELECT * FROM table2;
+   +------+--------+
+   | id   | city   |
+   +------+--------+
+   | 200  | Beijing|
+   +------+--------+
+   4 rows in set (0.01 sec)
+   ```
+
+### View a load job
+
+Broker Load allows you to view a lob job by using the SHOW LOAD statement or the `curl` command.
+
+#### Use SHOW LOAD
+
+For more information, see [SHOW LOAD](../sql-reference/sql-statements/data-manipulation/SHOW%20LOAD.md).
+
+#### Use curl
+
+The syntax is as follows:
+
+```Bash
+curl --location-trusted -u root: \
+    'http://<fe_host>:<fe_http_port>/api/<database_name>/_load_info?label=<label_name>'
+```
+
+For example, you can run the following command to view the information about a load job, whose label is `label1`, in the `test_db` database:
+
+```Bash
+curl --location-trusted -u root: \
+    'http://<fe_host>:<fe_http_port>/api/test_db/_load_info?label=label1'
+```
+
+The `curl` command returns the information about the load job as a JSON object `jobInfo`:
+
+```JSON
+{"jobInfo":{"dbName":"default_cluster:test_db","tblNames":["table1_simple"],"label":"label1","state":"FINISHED","failMsg":"","trackingUrl":""},"status":"OK","msg":"Success"}%
+```
+
+The following table describes the parameters in `jobInfo`.
+
+| **Parameter** | **Description**                                              |
+| ------------- | ------------------------------------------------------------ |
+| dbName        | The name of the database into which data is loaded           |
+| tblNames      | The name of the table into which data is loaded.             |
+| label         | The label of the load job.                                   |
+| state         | The status of the load job. Valid values:<ul><li>`PENDING`: The load job is in queue waiting to be scheduled.</li><li>`LOADING`: The load job is running.</li><li>`FINISHED`: The load job succeeded.</li><li>`CANCELLED`: The load job failed.</li></ul>For more information, see the "Asynchronous loading" section in [Overview of data loading](../loading/Loading_intro.md). |
+| failMsg       | The reason why the load job failed. If the `state` value for the load job is `PENDING`, `LOADING`, or `FINISHED`, `NULL` is returned for the `failMsg` parameter. If the `state` value for the load job is `CANCELLED`, the value returned for the `failMsg` parameter consists of two parts: `type` and `msg`.<ul><li>The `type` part can be any of the following values:</li><ul><li>`USER_CANCEL`: The load job was manually canceled.</li><li>`ETL_SUBMIT_FAIL`: The load job failed to be submitted.</li><li>`ETL-QUALITY-UNSATISFIED`: The load job failed because the percentage of unqualified data exceeds the value of the `max-filter-ratio` parameter.</li><li>`LOAD-RUN-FAIL`: The load job failed in the `LOADING` stage.</li><li>`TIMEOUT`: The load job failed to finish within the specified timeout period.</li><li>`UNKNOWN`: The load job failed due to an unknown error.</li></ul><li>The `msg` part provides the detailed cause of the load failure.</li></ul> |
+| trackingUrl   | The URL that is used to access the unqualified data detected in the load job. You can use the `curl` or `wget` command to access the URL and obtain the unqualified data. If no unqualified data is detected, `NULL` is returned for the `trackingUrl` parameter. |
+| status        | The status of the HTTP request for the load job. Valid values: `OK` and `Fail`. |
+| msg           | The error information of the HTTP request for the load job.  |
+
+### Cancel a load job
+
+When a load job is not in the **CANCELLED** or **FINISHED** stage, you can use the [CANCEL LOAD](../sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md) statement to cancel the job.
+
+For example, you can execute the following statement to cancel a load job, whose label is `label1`, in the database `test_db`:
+
+```SQL
+CANCEL LOAD
+FROM test_db
+WHERE LABEL = "label";
+```
+
+## Job splitting and concurrent running
+
+A Broker Load job can be split into one or more tasks that concurrently run. The tasks within a load job are run within a single transaction. They must all succeed or fail. StarRocks splits each load job based on how you declare `data_desc` in the `LOAD` statement:
+
+- If you declare multiple `data_desc` parameters, each of which specifies a distinct table, a task is generated to load the data of each table.
+
+- If you declare multiple `data_desc` parameters, each of which specifies a distinct partition for the same table, a task is generated to load the data of each partition.
+
+Additionally, each task can be further split into one or more instances, which are evenly distributed to and concurrently run on the BEs of your StarRocks cluster. StarRocks splits each task based on the following [FE configurations](../administration/Configuration.md#fe-configuration-items):
+
+- `min_bytes_per_broker_scanner`: the minimum amount of data processed by each instance. The default amount is 64 MB.
+
+- `max_broker_concurrency`: the maximum number of concurrent instances allowed in each task. The default maximum number is 100.
+
+- `load_parallel_instance_num`: the number of concurrent instances allowed in each load job on an individual BE. The default number is 1.
   
-**Label:**
+  You can use the following formula to calculate the number of instances in an individual task:
 
-The label of the import job. Each import job has **a unique label inside the database**. A label is a user-defined name in the import command. It allows the user to view the execution of the corresponding import job and it can be used to prevent the same data from being imported repeatedly. When the status of the import job is `FINISHED`, the corresponding label cannot be used again. When the status of the import job is `CANCELLED`, **the Label can be used again**.
+  **Number of instances in an individual task = min(Amount of data to be loaded by an individual task/`min_bytes_per_broker_scanner`,`max_broker_concurrency`,`load_parallel_instance_num` x Number of BEs)**
 
-**Data Description Parameters:**
-
-Data description parameters refer to the parameters of the `data_desc` section in the statement. The `data_desc` statement declares the information including data source address, ETL function, target table, and partition involved in this import job. Detailed description of data description parameters are as follows:
-
-* Multi-Table Import
-
-Broker load supports multiple tables involved in one import job, which can be achieved by declaring multiple tables with multiple `data_desc`. Each `data-desc` shows the address of a data source belonging to **that table**. Multiple file-paths can be declared for importing the same table. Broker load guarantees the atomicity of imports.
-
-* file_path
-
-The file path can be specified to a single file or to all files in a directory using `*`. Intermediate directories can also be matched with wildcards.
-
-The wildcards that can be used are ```? * [] {} ^```, [wildcard usage rules reference](https://hadoop.apache.org/docs/stable/api/org/apache/hadoop/fs/FileSystem.html#globStatus-org.apache.hadoop.fs.Path-).
-
-For example:
-Users can match all files in all partitions under `tablename` by `hdfs://hdfs_host:hdfs_port/user/data/tablename/*/*` .
-Users can match all files in all `April` partitions under `tablename`by `hdfs://hdfs_host:hdfs_port/user/data/tablename/dt=202104*/*`.
-
-* negative
-
-`Data_desc` also allows you to reverse the imported data. This function is applicable when the aggregated columns in the data table are all of the `SUM` type. If you want to undo a batch of imported data, you can import the same batch of data with the `negative` parameter. StarRocks will automatically invert the data on the aggregated columns, and yet remove the imported data.
-
-* partition
-
-     `data_desc` allows you to specify the partition of the table to where data is imported. If the data to be imported does not belong to the specified partition, it will not be imported and considered as "wrong data". For data that you do not want to import nor to record as "wrong data", you can use `where predicate` to filter it.
-
-* column separator
-
-Specify the column separator in the import file. The default is `t`.
-
-If it is an invisible character, you need to add `x` as a prefix and use hexadecimal to represent the separator. For example, the separator `x01` of the hive file is specified as `\x01`.
-
-* file type
-
-Specify the type of the imported file (e.g. parquet, orc, csv). The default is csv.
-
-The parquet type can also be recognized by the file suffix **.parquet** or **.parq**.
-
-* COLUMNS FROM PATH AS
-
-Extracts the partition fields in the file path.
-
-Example: If the imported file is `/path/col_name=col_value/dt=20210101/file1`, and `col_name/dt` is a column in the table, set the following statement to import `col_value` and `20210101` into the columns `col_name` and `dt` respectively.
-
-~~~SQL
-...
-(col1, col2)
-COLUMNS FROM PATH AS (col_name, dt)
-~~~
-
-* set column mapping
-
-The `SET` statement in `data_desc` is responsible for setting a column’s **conversion function**, which supports all equivalent functions. This statement is needed if the columns of the original data do not correspond to the columns in the table.
-
-* where predicate
-
-The `WHERE` statement in `data_desc` is responsible for filtering the data that has been transformed. The filtered data is not counted in the tolerance rate. If multiple conditions about the same table are declared in multiple `data-desc`, they are merged with `AND`.
-
-**Import job parameters:**
-
-Import job parameters are parameters that belong to the `opt_properties` section, and are applied to the entire import job. See the following for parameter details.
-
-* timeout
-
-The timeout value (in seconds) for importing jobs. You can set the timeout value for each import in `opt_properties`. The import job will be `CANCELLED` if it is not completed within the set time limit. The default import timeout for broker load is 4 hours.
-
-> Note: Normally, users do not need to set this parameter unless the import cannot be completed within the default time.
-
-The recommended timeout value is calculated as follows.
-
-`Timeout value > ((Total file size (MB) * Number of tables to be imported and related Roll up tables) / (10 * Number of import concurrency))`
-
-`number of import concurrency` is described in the import system configuration at the end of the document. `10` indicates the current default speed limit for BE import (i.e. 10MB/s).
-
-For example, for a 1GB data to be imported to a table which contains 2 rollup tables, with an import concurrency of 3, the minimum value of timeout is (1 \* 1024 \* 3 ) / (10 \* 3) = 102 seconds.
-
-Since each StarRocks cluster has its unique machine environment and different concurrent query tasks, the slowest import speed of a StarRocks cluster needs to be speculated by the user based on the historical import job speed.
-
-* max_filter_ratio
-
-The maximum fault tolerance rate of the import job with a default value of 0 and a range of 0 to 1. When the error rate of the import job exceeds this value, the job will fail.
-
-Users can set this value greater than 0 to ensure data import despite erroneous rows.
-
-The calculation formula is
-
-`max_filter_ratio = (dpp.abnorm.ALL / (dpp.abnorm.ALL + dpp.norm.ALL ) )`
-
-`dpp.abnorm.ALL` is the number of rows with unqualified data quality, such as type mismatch, column mismatch, length mismatch, etc.
-
-`dpp.norm.ALL` is the number of rows with correct data during the import. Users can use the `SHOW LOAD` command to check the correct amount of data for the import job.
-
-Number of rows in the original file = dpp.abnorm.ALL + dpp.norm.ALL
-
-* exec_mem_limit
-
-Import memory limit (in bytes), with a default value of 2GB.
-
-* strict_mode
-
-The `strict_mode` of broker load can be turned on by setting      "strict_mode" = "true". The default is off.
-
-Strict mode means to strictly filter column type conversion during import. The strict filtering policy is as follows.
-
-1.For column type conversion, the wrong data will be filtered out under strict mode. Here the wrong data refers to data which is not null originally but turned into null after being converted.
-
-However, this policy does not apply to the following scenarios     :
-
-1. For an imported column **generated by a conversion function**, strict mode has no effect on it.
-2. An imported column containing a range restriction can be converted to a target type regardless of its range restriction. The strict mode will have no effect on it. For example, if the data type of the target column is `decimal(1,0)`, but the original data being imported is `10`, the import can satisfy the type conversion but not the range restriction. In this case, strict mode has no effect on the import.
-
-### Checking import job status
-
-Broker load is asynchronous, and users can specify labels in the `SHOW LOAD` command to check execution status. It should be noted that the `SHOW LOAD` command can only be used to view load jobs being asynchronously imported. Synchronous load jobs, such as stream load, cannot be viewed with the `SHOW LOAD` command.
-
-Example:
-
-~~~sql
-mysql> show load where label = 'label1'\G
-*************************** 1. row ***************************
-         JobId: 76391
-         Label: label1
-         State: FINISHED
-      Progress: ETL:N/A; LOAD:100%
-          Type: BROKER
-       EtlInfo: unselected.rows=4; dpp.abnorm.ALL=15; dpp.norm.ALL=28133376
-      TaskInfo: cluster:N/A; timeout(s):10800; max_filter_ratio:5.0E-5
-      ErrorMsg: N/A
-    CreateTime: 2019-07-27 11:46:42
-  EtlStartTime: 2019-07-27 11:46:44
- EtlFinishTime: 2019-07-27 11:46:44
- LoadStartTime: 2019-07-27 11:46:44
-LoadFinishTime: 2019-07-27 11:50:16
-           URL: http://192.168.1.1:8040/api/_load_error_log?file=__shard_4/error_log_insert_stmt_4bb00753932c491a-a6da6e2725415317_4bb00753932c491a_a6da6e2725415317
-    JobDetails: {"Unfinished backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"ScannedRows":2390016,"TaskNumber":1,"All backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"FileNumber":1,"FileSize":1073741824}
-~~~
-
-The following describes the parameters returned by the `SHOW LOAD` command.
-
-* JobId: The unique ID of the imported job. The JobId is different for each imported job and is automatically generated by the system. Unlike labels, JobId **will never be the same**, while labels can be reused after the import job fails.
-* Label: Identifier of the imported job.
-* State: The current state of the import job. The two main states of an import –-`PENDING` and `LOADING`-- occur during the broker load. `PENDING` indicates the import job is waiting to be executed, while `LOADING` indicates the job is being executed.
-* There are two final stages of an import job –`CANCELLED` and `FINISHED`; both indicate the import job is completed. `CANCELLED` indicates an import failure, while `FINISHED` indicates an import success.
-* Progress: The progress description of the import job. There are two types of progress –`ETL` and `LOAD`, both of which      correspond to the two phases of the import process. `ETL` is fixed to `N/A` since the broker load does not have this stage presently, while the progress range of `load` is 0~100%. `Load progress = (the number of tables currently completed import / the total number of tables designed for this import job) * 100%`
-* The load progress will be 99% after all data have been imported and changed to 100% after the import takes effect.
-
-> Note: The import progress is not linear, so if the progress does not change for a period of time, it does not mean that the import is not executing.
-
-* Type: The type of the imported job. Type for broker load takes the value `BROKER`.
-* EtlInfo: Contains parameters of the imported data volume, such as `unselected.rows`, `dpp.norm.ALL` and `dpp.abnorm.ALL`. The first parameter can be used to determine how many rows are filtered by the `where` condition, and the last two parameters verify that the error rate of the current import job does not exceed      `max-filter-ratio`. The sum of the three parameters is the total number of rows in the original data volume.
-* TaskInfo: Mainly shows parameters of the current import job, that is, the parameters specified by the user when creating the Broker Load import job. Those include cluster, timeout and max-filter-ratio.
-* ErrorMsg: If the status of the import job is `CANCELLED`, the reason for failure is displayed by ErrorMsg. Each ErrorMsg includes type and msg. N/A is displayed if the import job is successful.
-  
-The meaning of the values of **type** :
-
-* USER-CANCEL: The job that is cancelled by the user.
-* ETL-RUN-FAIL: The job that failed in the ETL phase.
-* ETL-QUALITY-UNSATISFIED: Data quality failed, i.e. the error data rate exceeded max-filter-ratio.
-* LOAD-RUN-FAIL: The job that failed in the LOADING phase.
-* TIMEOUT: The job that failed to complete within the timeout period.
-* UNKNOWN: Unknown import error.
-
-* CreateTime/EtlStartTime/EtlFinishTime/LoadStartTime/LoadFinishTime: This value represents the import creation time, ETL phase start time, ETL phase completion time, Loading phase start time and the entire import job completion time.
-* Broker Load import has no ETL phase, so its `EtlStartTime`, `EtlFinishTime`, `LoadStartTime` are set to the same value.
-* If the import job stays at `CreateTime` for a long time and `LoadStartTime` is N/A, the import job is currently heavily stacked and the user should reduce the frequency of import commits.
-
-`LoadFinishTime - CreateTime = time consumed by the entire import task`
-
-`LoadFinishTime - LoadStartTime = execution time of the entire Broker load import job = time consumed by the entire import job - wait time of the import job`.
-
-* URL: Sample error data for the import job, which can be obtained by accessing the URL address. When no error data exists for this import, the URL field is N/A.
-* JobDetails: Shows the detailed status of the job, including the number of imported files, the total size (bytes), the number of subtasks, the number of raw rows processed, the BE node Id of running subtasks, and the BE node id of incomplete jobs.
-
-`{"Unfinished backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"ScannedRows":2390016,"TaskNumber":1,"All backends":{"9c3441027ff948a0-8287923329a2b6a7":[10002]},"FileNumber":1,"FileSize":1073741824}`
-
-The original number of rows processed is updated every 5 seconds. This number of rows is only used to show the current progress, and does not represent the actual number of rows processed in total. The total number of rows processed is displayed in EtlInfo.
-
-### Cancel import job
-
-When the status of the broker load job is not `CANCELLED` or `FINISHED`, it can be cancelled manually by the user. To cancel, specify the label of the import job.
-
-## Related Configuration
-
-### Parallelism
-
-A job can be split into one or more subtasks, and the subtasks are executed in parallel. The splitting is determined by the DataDescription in the `LOAD` statement. For example,
-
-1. When multiple `DataDescriptions` correspond to the import of multiple different tables, each will be split into one subtask.
-2. When multiple `DataDescriptions` correspond to the import of different partitions of the same table, each will also be split into one subtask.
-
-Each task is also split into one or more instances, which are then equally distributed to BEs for parallel execution. The splitting =is determined by the following FE configuration.
-``min_bytes_per_broker_scanner``: The minimum amount of data to be processed by a single instance, with a default value of 64MB.
-``max_broker_concurrency``: The maximum number of concurrent instances for a single job, with a default value of 100.
-``load_parallel_instance_num``: The number of concurrent instances on a single BE, with a default value of 1.
-`Total number of instances = min(total import file size / minimum amount of data handled by a single instance, maximum number of concurrent instances for a single job, number of concurrent instances on a single BE * number of BEs)`
-
-In general, a job has only one `DataDescription` and will be split into only one task. The task will be split into instances equal to the number of BEs and then assigned to those BEs for parallel execution.
-
-## Frequently Asked Questions
-
-* Q: Error reported for data quality issue: `ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel`.
-
-    A: Please refer to Import Overview/FAQ`.
-
-* Q: Import error: `failed to send batch` or `TabletWriter add batch with unknown id`.
-
-    A: Modify `query_timeout` and `streaming_load_rpc_max_alive_time_sec` appropriately. Please refer to Import Overview/Common System Configuration/BE Configuration      .
-
-* Q：Import error: `LOAD-RUN-FAIL; msg:Invalid Column Name:xxx`
-
-A：If the data is in parquet or ORC format, keep the column name in the file header consistent with the one in the StarRocks table, for example:
-    ~~~sql
-    (tmp_c1,tmp_c2)
-    SET
-    (
-       id=tmp_c2,
-       name=tmp_c1
-    )
-    ~~~
-
-This means the column with (tmp_c1, tmp_c2) as column name in parquet or ORC file is mapped to (id, name) column in the StarRocks table. If `SET` is not declared, the columns are imported in order.
-
-> Note: If you use ORC files generated directly from some versions of Hive, the table header in the ORC file is not Hive meta data but `(_col0, _col1, _col2, ...)`, which may lead to `Invalid Column Name error`. In that case, use `set` for mapping.
-
-* Q：Other errors.
-  
-  A: For other issues such as jobs that take a long time to complete, you can go to `log/be.INFO` in BE and search for `kafka error` for specific reasons.
-
-* Q: How to configure Hadoop HA
-  
-  A: The following configuration is used to access an HDFS cluster deployed in HA mode.
-
-    `dfs.nameservices`: Customized name of the HDFS service, e.g. `dfs.nameservices` = `my_ha`.
-
-    `dfs.ha.namenodes.xxx`: Customized name of the namenode as the `xxx`, multiple names can be separated by commas, e.g. "dfs.ha.namenodes.my_ha" = "my_nn".
-
-`dfs.namenode.rpc-address.xxx.nn`: The rpc address for the namenode where nn indicates the name of the configured namenode in `dfs.ha.namenodes.xxx`. e.g. "dfs.namenode.rpc-address.my_ha.my_nn" = "host:port".
-
-`dfs.client.failover.proxy.provider`: The provider of the client to connect to the namenode with a default value of `org.apache.hadoop.hdfs.server.namenode.ha. ConfiguredFailoverProxyProvider`.
-
-For example:
-
- ~~~sql
- (
-    "dfs.nameservices" = "my-ha",
-    "dfs.ha.namenodes.my-ha" = "my-namenode1, my-namenode2",
-    "dfs.namenode.rpc-address.my-ha.my-namenode1" = "nn1-host:rpc_port",
-    "dfs.namenode.rpc-address.my-ha.my-namenode2" = "nn2-host:rpc_port",
-    "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-)
-
- ~~~
-
-HA mode can be combined with the previous two authentication methods for cluster access. For example, accessing HA HDFS through simple authentication:
-
-~~~sql
-(
-    "username"="user",
-    "password"="passwd",
-    "dfs.nameservices" = "my-ha",
-    "dfs.ha.namenodes.my-ha" = "my_namenode1, my_namenode2",
-    "dfs.namenode.rpc-address.my-ha.my-namenode1" = "nn1-host:rpc_port",
-    "dfs.namenode.rpc-address.my-ha.my-namenode2" = "nn2-host:rpc_port",
-    "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
-)
-
-~~~
-
-HDFS cluster configuration can be written in the `hdfs-site.xml file`. When using the Broker process to read information of an HDFS cluster, fill in the file path name and authentication information of the cluster.
-
-* Q: How to configure Hadoop ViewFS (federation)
-
-  A: Copy the ViewFS related configuration `core-site.xml` and `hdfs-site.xml` to `broker/conf`.
-
-If there is a custom FileSystem, copy the relevant jar to      `broker/lib`.
+In most cases, only one `data_desc` is declared for each load job, each load job is split into only one task, and the task is split into the same number of instances as the number of BEs.

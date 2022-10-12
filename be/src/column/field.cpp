@@ -1,8 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/field.h"
-
-#include <utility>
 
 #include "column/datum.h"
 #include "storage/chunk_helper.h"

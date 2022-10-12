@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/tablet_manager.h"
 
@@ -11,6 +11,7 @@ DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 DIAGNOSTIC_POP
 
 #include "agent/agent_server.h"
+#include "agent/master_info.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -73,8 +74,17 @@ std::string TabletManager::txn_log_location(int64_t tablet_id, int64_t txn_id) c
     return _location_provider->txn_log_location(tablet_id, txn_id);
 }
 
+std::string TabletManager::txn_vlog_location(int64_t tablet_id, int64_t version) const {
+    return _location_provider->txn_vlog_location(tablet_id, version);
+}
+
 std::string TabletManager::segment_location(int64_t tablet_id, std::string_view segment_name) const {
     return _location_provider->segment_location(tablet_id, segment_name);
+}
+
+std::string TabletManager::tablet_metadata_lock_location(int64_t tablet_id, int64_t version,
+                                                         int64_t expire_time) const {
+    return _location_provider->tablet_metadata_lock_location(tablet_id, version, expire_time);
 }
 
 std::string TabletManager::tablet_schema_cache_key(int64_t tablet_id) {
@@ -158,15 +168,42 @@ Status TabletManager::create_tablet(const TCreateTabletReq& req) {
     tablet_metadata_pb.set_next_rowset_id(1);
     tablet_metadata_pb.set_cumulative_point(0);
 
-    // schema
-    std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
-    uint32_t next_unique_id = req.tablet_schema.columns.size();
-    for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
-        col_idx_to_unique_id[col_idx] = col_idx;
+    if (req.__isset.base_tablet_id && req.base_tablet_id > 0) {
+        struct Finder {
+            std::string_view name;
+            bool operator()(const TabletColumn& c) const { return c.name() == name; }
+        };
+        ASSIGN_OR_RETURN(auto base_tablet, get_tablet(req.base_tablet_id));
+        ASSIGN_OR_RETURN(auto base_schema, base_tablet.get_schema());
+        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+        TTabletSchema mutable_new_schema = req.tablet_schema;
+        uint32_t next_unique_id = base_schema->next_column_unique_id();
+        const auto& old_columns = base_schema->columns();
+        auto& new_columns = mutable_new_schema.columns;
+        for (uint32_t i = 0, sz = new_columns.size(); i < sz; ++i) {
+            auto it = std::find_if(old_columns.begin(), old_columns.end(), Finder{new_columns[i].column_name});
+            if (it != old_columns.end() && it->has_default_value()) {
+                new_columns[i].__set_default_value(it->default_value());
+                col_idx_to_unique_id[i] = it->unique_id();
+            } else if (it != old_columns.end()) {
+                col_idx_to_unique_id[i] = it->unique_id();
+            } else {
+                col_idx_to_unique_id[i] = next_unique_id++;
+            }
+        }
+        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+                mutable_new_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
+    } else {
+        std::unordered_map<uint32_t, uint32_t> col_idx_to_unique_id;
+        uint32_t next_unique_id = req.tablet_schema.columns.size();
+        for (uint32_t col_idx = 0; col_idx < next_unique_id; ++col_idx) {
+            col_idx_to_unique_id[col_idx] = col_idx;
+        }
+        RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(
+                req.tablet_schema, next_unique_id, col_idx_to_unique_id, tablet_metadata_pb.mutable_schema(),
+                req.__isset.compression_type ? req.compression_type : TCompressionType::LZ4_FRAME));
     }
-    RETURN_IF_ERROR(starrocks::convert_t_schema_to_pb_schema(req.tablet_schema, next_unique_id, col_idx_to_unique_id,
-                                                             tablet_metadata_pb.mutable_schema()));
-
     return put_tablet_metadata(tablet_metadata_pb);
 }
 
@@ -174,20 +211,27 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return Tablet(this, tablet_id);
 }
 
-Status TabletManager::drop_tablet(int64_t tablet_id) {
+Status TabletManager::delete_tablet(int64_t tablet_id) {
     std::vector<std::string> objects;
     // TODO: construct prefix in LocationProvider or a common place
-    const auto tablet_metadata_prefix = fmt::format("tbl_{:016X}_", tablet_id);
-    const auto txnlog_prefix = fmt::format("txn_{:016X}_", tablet_id);
-    auto root_path = _location_provider->root_location(tablet_id);
+    const auto tablet_prefix = fmt::format("{:016X}_", tablet_id);
+    auto root_path = _location_provider->metadata_root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_path));
     auto scan_cb = [&](std::string_view name) {
-        if (HasPrefixString(name, tablet_metadata_prefix) || HasPrefixString(name, txnlog_prefix)) {
+        if (HasPrefixString(name, tablet_prefix)) {
             objects.emplace_back(join_path(root_path, name));
         }
         return true;
     };
-    RETURN_IF_ERROR(fs->iterate_dir(root_path, scan_cb));
+    auto st = fs->iterate_dir(root_path, scan_cb);
+    if (!st.ok() && !st.is_not_found()) {
+        return st;
+    }
+
+    root_path = _location_provider->txn_log_root_location(tablet_id);
+    // It's ok to ignore the error here.
+    (void)fs->iterate_dir(root_path, scan_cb);
+
     for (const auto& obj : objects) {
         erase_metacache(obj);
         (void)fs->delete_file(obj);
@@ -262,12 +306,10 @@ StatusOr<TabletMetadataIter> TabletManager::list_tablet_metadata(int64_t tablet_
     // TODO: construct prefix in LocationProvider
     std::string prefix;
     if (filter_tablet) {
-        prefix = fmt::format("tbl_{:016X}_", tablet_id);
-    } else {
-        prefix = "tbl_";
+        prefix = fmt::format("{:016X}_", tablet_id);
     }
 
-    auto root = _location_provider->root_location(tablet_id);
+    auto root = _location_provider->metadata_root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
@@ -315,6 +357,10 @@ StatusOr<TxnLogPtr> TabletManager::get_txn_log(int64_t tablet_id, int64_t txn_id
     return get_txn_log(txn_log_location(tablet_id, txn_id));
 }
 
+StatusOr<TxnLogPtr> TabletManager::get_txn_vlog(int64_t tablet_id, int64_t version) {
+    return get_txn_log(txn_vlog_location(tablet_id, version), false);
+}
+
 Status TabletManager::put_txn_log(TxnLogPtr log) {
     if (UNLIKELY(!log->has_tablet_id())) {
         return Status::InvalidArgument("txn log does not have tablet id");
@@ -342,7 +388,21 @@ Status TabletManager::put_txn_log(const TxnLog& log) {
 Status TabletManager::delete_txn_log(int64_t tablet_id, int64_t txn_id) {
     auto location = txn_log_location(tablet_id, txn_id);
     erase_metacache(location);
-    return fs::delete_file(location);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
+Status TabletManager::delete_txn_vlog(int64_t tablet_id, int64_t version) {
+    auto location = txn_vlog_location(tablet_id, version);
+    erase_metacache(location);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
+}
+
+Status TabletManager::delete_segment(int64_t tablet_id, std::string_view segment_name) {
+    erase_metacache(segment_name);
+    auto st = fs::delete_file(segment_location(tablet_id, segment_name));
+    return st.is_not_found() ? Status::OK() : st;
 }
 
 StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_tablet) {
@@ -350,12 +410,10 @@ StatusOr<TxnLogIter> TabletManager::list_txn_log(int64_t tablet_id, bool filter_
     // TODO: construct prefix in LocationProvider
     std::string prefix;
     if (filter_tablet) {
-        prefix = fmt::format("txn_{:016X}_", tablet_id);
-    } else {
-        prefix = "txn_";
+        prefix = fmt::format("{:016X}_", tablet_id);
     }
 
-    auto root = _location_provider->root_location(tablet_id);
+    auto root = _location_provider->txn_log_root_location(tablet_id);
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root));
     auto scan_cb = [&](std::string_view name) {
         if (HasPrefixString(name, prefix)) {
@@ -490,6 +548,23 @@ static Status apply_compaction_log(const TxnLogPB_OpCompaction& op_compaction, T
     return Status::OK();
 }
 
+static Status apply_schema_change_log(const TxnLogPB_OpSchemaChange& op_schema_change, TabletMetadata* metadata) {
+    for (const auto& rowset : op_schema_change.rowsets()) {
+        if (rowset.num_rows() > 0 || rowset.has_delete_predicate()) {
+            auto new_rowset = metadata->add_rowsets();
+            new_rowset->CopyFrom(rowset);
+            new_rowset->set_id(metadata->next_rowset_id());
+            if (new_rowset->num_rows() > 0) {
+                metadata->set_next_rowset_id(metadata->next_rowset_id() + new_rowset->segments_size());
+            } else {
+                // delete
+                metadata->set_next_rowset_id(metadata->next_rowset_id() + 1);
+            }
+        }
+    }
+    return Status::OK();
+}
+
 Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     if (log.has_op_write()) {
         RETURN_IF_ERROR(apply_write_log(log.op_write(), metadata));
@@ -500,7 +575,7 @@ Status apply_txn_log(const TxnLog& log, TabletMetadata* metadata) {
     }
 
     if (log.has_op_schema_change()) {
-        return Status::NotSupported("does not support apply schema change log yet");
+        RETURN_IF_ERROR(apply_schema_change_log(log.op_schema_change(), metadata));
     }
     return Status::OK();
 }
@@ -525,22 +600,52 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
     new_metadata->set_version(new_version);
 
     // Apply txn logs
+    int64_t alter_version = -1;
     for (int i = 0; i < txns_size; i++) {
-        auto txnid = txns[i];
-        auto txnlog = tablet->get_txn_log(txnid);
-        if (txnlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
+        auto txn_id = txns[i];
+        auto txn_log_st = tablet->get_txn_log(txn_id);
+        if (txn_log_st.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
             // txn log does not exist but the new version metadata has been generated, maybe
             // this is a duplicated publish version request.
             return Status::OK();
-        } else if (!txnlog.ok()) {
-            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txnid) << ": " << txnlog.status();
-            return txnlog.status();
+        } else if (!txn_log_st.ok()) {
+            LOG(WARNING) << "Fail to get " << tablet->txn_log_location(txn_id) << ": " << txn_log_st.status();
+            return txn_log_st.status();
         }
 
-        auto st = apply_txn_log(**txnlog, new_metadata.get());
+        auto& txn_log = txn_log_st.value();
+        if (txn_log->has_op_schema_change()) {
+            alter_version = txn_log->op_schema_change().alter_version();
+        }
+
+        auto st = apply_txn_log(*txn_log, new_metadata.get());
         if (!st.ok()) {
-            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txnid) << ": " << st;
+            LOG(WARNING) << "Fail to apply " << tablet->txn_log_location(txn_id) << ": " << st;
             return st;
+        }
+    }
+
+    // Apply vtxn logs for schema change
+    // Should firstly apply schema change txn log, then apply txn version logs,
+    // because the rowsets in txn log are older.
+    if (alter_version != -1 && alter_version + 1 < new_version) {
+        DCHECK(base_version == 1 && txns_size == 1);
+        for (int64_t v = alter_version + 1; v < new_version; ++v) {
+            auto txn_vlog = tablet->get_txn_vlog(v);
+            if (txn_vlog.status().is_not_found() && tablet->get_metadata(new_version).ok()) {
+                // txn version log does not exist but the new version metadata has been generated, maybe
+                // this is a duplicated publish version request.
+                return Status::OK();
+            } else if (!txn_vlog.ok()) {
+                LOG(WARNING) << "Fail to get " << tablet->txn_vlog_location(v) << ": " << txn_vlog.status();
+                return txn_vlog.status();
+            }
+
+            auto st = apply_txn_log(**txn_vlog, new_metadata.get());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to apply " << tablet->txn_vlog_location(v) << ": " << st;
+                return st;
+            }
         }
     }
 
@@ -556,6 +661,13 @@ Status publish(Tablet* tablet, int64_t base_version, int64_t new_version, const 
         auto st = tablet->delete_txn_log(txn_id);
         LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_log_location(txn_id) << ": " << st;
     }
+    // Delete vtxn logs
+    if (alter_version != -1 && alter_version + 1 < new_version) {
+        for (int64_t v = alter_version + 1; v < new_version; ++v) {
+            auto st = tablet->delete_txn_vlog(v);
+            LOG_IF(WARNING, !st.ok()) << "Fail to delete " << tablet->txn_vlog_location(v) << ": " << st;
+        }
+    }
     return Status::OK();
 }
 
@@ -565,6 +677,76 @@ StatusOr<CompactionTaskPtr> TabletManager::compact(int64_t tablet_id, int64_t ve
     ASSIGN_OR_RETURN(auto compaction_policy, CompactionPolicy::create_compaction_policy(tablet_ptr));
     ASSIGN_OR_RETURN(auto input_rowsets, compaction_policy->pick_rowsets(version));
     return std::make_shared<HorizontalCompactionTask>(txn_id, version, std::move(tablet_ptr), std::move(input_rowsets));
+}
+
+void TabletManager::abort_txn(int64_t tablet_id, const int64_t* txns, int txns_size) {
+    // TODO: batch deletion
+    for (int i = 0; i < txns_size; i++) {
+        auto txn_id = txns[i];
+        auto txn_log_or = get_txn_log(tablet_id, txn_id);
+        if (!txn_log_or.ok()) {
+            LOG_IF(WARNING, !txn_log_or.status().is_not_found())
+                    << "Fail to get txn log " << txn_log_location(tablet_id, txn_id) << ": " << txn_log_or.status();
+            continue;
+        }
+
+        TxnLogPtr txn_log = std::move(txn_log_or).value();
+        if (txn_log->has_op_write()) {
+            for (const auto& segment : txn_log->op_write().rowset().segments()) {
+                auto st = delete_segment(tablet_id, segment);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+        }
+        if (txn_log->has_op_compaction()) {
+            for (const auto& segment : txn_log->op_compaction().output_rowset().segments()) {
+                auto st = delete_segment(tablet_id, segment);
+                LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+            }
+        }
+        if (txn_log->has_op_schema_change() && !txn_log->op_schema_change().linked_segment()) {
+            for (const auto& rowset : txn_log->op_schema_change().rowsets()) {
+                for (const auto& segment : rowset.segments()) {
+                    auto st = delete_segment(tablet_id, segment);
+                    LOG_IF(WARNING, !st.ok() && !st.is_not_found()) << "Fail to delete " << segment << ": " << st;
+                }
+            }
+        }
+        auto st = delete_txn_log(tablet_id, txn_id);
+        LOG_IF(WARNING, !st.ok() && !st.is_not_found())
+                << "Fail to delete " << txn_log_location(tablet_id, txn_id) << ": " << st;
+    }
+}
+
+Status TabletManager::publish_log_version(int64_t tablet_id, int64_t txn_id, int64 log_version) {
+    auto txn_log_path = txn_log_location(tablet_id, txn_id);
+    auto txn_vlog_path = txn_vlog_location(tablet_id, log_version);
+    // TODO: use rename() API if supported by the underlying filesystem.
+    auto st = fs::copy_file(txn_log_path, txn_vlog_path);
+    if (st.is_not_found()) {
+        return fs::path_exist(txn_vlog_path) ? Status::OK() : st;
+    } else if (!st.ok()) {
+        return st;
+    } else {
+        (void)fs::delete_file(txn_log_path);
+        return Status::OK();
+    }
+}
+
+Status TabletManager::put_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
+    auto options = WritableFileOptions{.sync_on_close = true, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
+    auto tablet_metadata_lock_path = tablet_metadata_lock_location(tablet_id, version, expire_time);
+    ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(options, tablet_metadata_lock_path));
+    auto tablet_metadata_lock = std::make_unique<TabletMetadataLockPB>();
+    RETURN_IF_ERROR(wf->append(tablet_metadata_lock->SerializeAsString()));
+    RETURN_IF_ERROR(wf->close());
+
+    return Status::OK();
+}
+
+Status TabletManager::delete_tablet_metadata_lock(int64_t tablet_id, int64_t version, int64_t expire_time) {
+    auto location = tablet_metadata_lock_location(tablet_id, version, expire_time);
+    auto st = fs::delete_file(location);
+    return st.is_not_found() ? Status::OK() : st;
 }
 
 void TabletManager::start_gc() {
@@ -591,11 +773,12 @@ void* metadata_gc_trigger(void* arg) {
         auto st = lp->list_root_locations(&roots);
 
         LOG_IF(ERROR, !st.ok()) << st;
+        auto master_info = get_master_info();
 
         for (const auto& root : roots) {
             // TODO: limit GC concurrency
             st = thread_pool->submit_func([=]() {
-                auto r = metadata_gc(root, tablet_mgr);
+                auto r = metadata_gc(root, tablet_mgr, master_info.min_active_txn_id);
                 LOG_IF(WARNING, !r.ok()) << "Fail to do metadata gc in " << root << ": " << r;
             });
             if (!st.ok()) {

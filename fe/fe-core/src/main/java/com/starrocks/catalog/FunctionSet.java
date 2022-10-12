@@ -117,6 +117,7 @@ public class FunctionSet {
     public static final String TO_BASE64 = "to_base64";
     public static final String MD5 = "md5";
     public static final String MD5_SUM = "md5sum";
+    public static final String MD5_SUM_NUMERIC = "md5sum_numeric";
     public static final String SHA2 = "sha2";
     public static final String SM3 = "sm3";
 
@@ -196,16 +197,18 @@ public class FunctionSet {
     public static final String CURRENT_VERSION = "current_version";
     public static final String LAST_QUERY_ID = "last_query_id";
     public static final String UUID = "uuid";
+    public static final String UUID_NUMERIC = "uuid_numeric";
     public static final String SLEEP = "sleep";
     public static final String ISNULL = "isnull";
     public static final String ASSERT_TRUE = "assert_true";
-
+    public static final String HOST_NAME = "host_name";
     // Aggregate functions:
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
     public static final String HLL_UNION_AGG = "hll_union_agg";
     public static final String MAX = "max";
+    public static final String MAX_BY = "max_by";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
     public static final String PERCENTILE_CONT = "percentile_cont";
@@ -225,6 +228,7 @@ public class FunctionSet {
     public static final String STDDEV_VAL = "stddev_val";
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
+    public static final String HLL_RAW = "hll_raw";
     public static final String NDV = "ndv";
     public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
@@ -233,6 +237,7 @@ public class FunctionSet {
     public static final String WINDOW_FUNNEL = "window_funnel";
     public static final String DISTINCT_PC = "distinct_pc";
     public static final String DISTINCT_PCSA = "distinct_pcsa";
+    public static final String HISTOGRAM = "histogram";
 
     // Bitmap functions:
     public static final String BITMAP_AND = "bitmap_and";
@@ -277,6 +282,7 @@ public class FunctionSet {
     public static final String ARRAY_SORT = "array_sort";
     public static final String ARRAY_SUM = "array_sum";
     public static final String ARRAY_REMOVE = "array_remove";
+    public static final String ARRAY_FILTER = "array_filter";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -370,6 +376,10 @@ public class FunctionSet {
     public static final String DEFAULT_VALUE = "default_value";
     public static final String REPLACE_VALUE = "replace_value";
 
+    // high-order functions related lambda functions
+    public static final String ARRAY_MAP = "array_map";
+    public static final String TRANSFORM = "transform";
+
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
             new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
@@ -420,6 +430,8 @@ public class FunctionSet {
                     .add(Type.DECIMAL32)
                     .add(Type.DECIMAL64)
                     .add(Type.DECIMAL128)
+                    .add(Type.CHAR)
+                    .add(Type.VARCHAR)
                     .build();
     /**
      * Use for vectorized engine, but we can't use vectorized function directly, because we
@@ -461,6 +473,7 @@ public class FunctionSet {
                     .add(FunctionSet.NOW)
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
+                    .add(FunctionSet.MD5_SUM_NUMERIC)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =
@@ -487,6 +500,18 @@ public class FunctionSet {
             .add(FunctionSet.LAST_VALUE)
             .add(FunctionSet.FIRST_VALUE_REWRITE)
             .build();
+
+    public static final Set<String> varianceFunctions = ImmutableSet.<String>builder()
+            .add(FunctionSet.VAR_POP)
+            .add(FunctionSet.VAR_SAMP)
+            .add(FunctionSet.VARIANCE)
+            .add(FunctionSet.VARIANCE_POP)
+            .add(FunctionSet.VARIANCE_SAMP)
+            .add(FunctionSet.STD)
+            .add(FunctionSet.STDDEV)
+            .add(FunctionSet.STDDEV_POP)
+            .add(FunctionSet.STDDEV_SAMP)
+            .add(FunctionSet.STDDEV_VAL).build();
 
     public FunctionSet() {
         vectorizedFunctions = Maps.newHashMap();
@@ -672,6 +697,9 @@ public class FunctionSet {
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
 
         for (Type t : Type.getSupportedTypes()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
             if (t.isNull()) {
                 continue; // NULL is handled through type promotion.
             }
@@ -734,7 +762,15 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
-
+                    
+            // max_by        
+            for (Type t1 : Type.getSupportedTypes()) {
+                if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
+                    continue;
+                }
+                addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARCHAR, true, true, false));
+            }    
+            
             // NDV
             // ndv return string
             addBuiltin(AggregateFunction.createBuiltin(NDV,
@@ -749,6 +785,10 @@ public class FunctionSet {
             //alias of ndv, compute approx count distinct use HyperLogLog
             addBuiltin(AggregateFunction.createBuiltin(APPROX_COUNT_DISTINCT,
                     Lists.newArrayList(t), Type.BIGINT, Type.VARCHAR,
+                    true, false, true));
+
+            addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
+                    Lists.newArrayList(t), Type.HLL, Type.VARCHAR,
                     true, false, true));
 
             // BITMAP_UNION_INT
@@ -1008,7 +1048,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType()) {
+            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(
@@ -1038,8 +1078,8 @@ public class FunctionSet {
         }
 
         for (Type t : HISTOGRAM_TYPE) {
-            addBuiltin(AggregateFunction.createBuiltin("histogram",
-                    Lists.newArrayList(t, Type.INT, Type.DOUBLE, Type.INT), Type.VARCHAR, Type.VARCHAR,
+            addBuiltin(AggregateFunction.createBuiltin(HISTOGRAM,
+                    Lists.newArrayList(t, Type.INT, Type.DOUBLE), Type.VARCHAR, Type.VARCHAR,
                     false, false, false));
         }
     }
@@ -1126,6 +1166,8 @@ public class FunctionSet {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
                     return null;
                 }
+            } else if (declType.matchesType(realType) || Type.canCastTo(realType, declType)) { // non-pseudo types
+                continue;
             } else {
                 LOGGER.warn("has unhandled pseudo type '{}'", declType);
                 return null;

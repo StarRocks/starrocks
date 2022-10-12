@@ -38,12 +38,10 @@
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
 #include "storage/data_dir.h"
-#include "storage/olap_define.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta.h"
-#include "storage/utils.h"
 #include "util/json_util.h"
 
 namespace starrocks {
@@ -115,7 +113,7 @@ Status RestoreTabletAction::_reload_tablet(const std::string& key, const std::st
     clone_req.__set_tablet_id(tablet_id);
     clone_req.__set_schema_hash(schema_hash);
     Status res = Status::OK();
-    res = _exec_env->storage_engine()->load_header(shard_path, clone_req, /*restore=*/true, _is_primary_key);
+    res = StorageEngine::instance()->load_header(shard_path, clone_req, /*restore=*/true, _is_primary_key);
     if (!res.ok()) {
         LOG(WARNING) << "load header failed. status: " << res << ", signature: " << tablet_id;
         // remove tablet data path in data path

@@ -23,8 +23,10 @@
 
 #include <atomic>
 #include <memory>
+#include <unordered_map>
 
 #include "common/status.h"
+#include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/options.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -61,6 +63,7 @@ class SmallFileMgr;
 class PluginMgr;
 class RuntimeFilterWorker;
 class RuntimeFilterCache;
+class ProfileReportWorker;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -125,7 +128,18 @@ public:
     MemTracker* process_mem_tracker() { return _mem_tracker; }
     MemTracker* query_pool_mem_tracker() { return _query_pool_mem_tracker; }
     MemTracker* load_mem_tracker() { return _load_mem_tracker; }
-    MemTracker* tablet_meta_mem_tracker() { return _tablet_meta_mem_tracker; }
+    MemTracker* metadata_mem_tracker() { return _metadata_mem_tracker; }
+    MemTracker* tablet_metadata_mem_tracker() { return _tablet_metadata_mem_tracker; }
+    MemTracker* rowset_metadata_mem_tracker() { return _rowset_metadata_mem_tracker; }
+    MemTracker* segment_metadata_mem_tracker() { return _segment_metadata_mem_tracker; }
+    MemTracker* column_metadata_mem_tracker() { return _column_metadata_mem_tracker; }
+    MemTracker* tablet_schema_mem_tracker() { return _tablet_schema_mem_tracker; }
+    MemTracker* column_zonemap_index_mem_tracker() { return _column_zonemap_index_mem_tracker; }
+    MemTracker* ordinal_index_mem_tracker() { return _ordinal_index_mem_tracker; }
+    MemTracker* bitmap_index_mem_tracker() { return _bitmap_index_mem_tracker; }
+    MemTracker* bloom_filter_index_mem_tracker() { return _bloom_filter_index_mem_tracker; }
+    MemTracker* segment_zonemap_mem_tracker() { return _segment_zonemap_mem_tracker; }
+    MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker; }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker; }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker; }
     MemTracker* column_pool_mem_tracker() { return _column_pool_mem_tracker; }
@@ -148,6 +162,7 @@ public:
 
     PriorityThreadPool* udf_call_pool() { return _udf_call_pool; }
     PriorityThreadPool* pipeline_prepare_pool() { return _pipeline_prepare_pool; }
+    PriorityThreadPool* pipeline_sink_io_pool() { return _pipeline_sink_io_pool; }
     FragmentMgr* fragment_mgr() { return _fragment_mgr; }
     starrocks::pipeline::DriverExecutor* driver_executor() { return _driver_executor; }
     starrocks::pipeline::DriverExecutor* wg_driver_executor() { return _wg_driver_executor; }
@@ -163,8 +178,6 @@ public:
 
     const std::vector<StorePath>& store_paths() const { return _store_paths; }
     void set_store_paths(const std::vector<StorePath>& paths) { _store_paths = paths; }
-    StorageEngine* storage_engine() { return _storage_engine; }
-    void set_storage_engine(StorageEngine* storage_engine);
 
     StreamLoadExecutor* stream_load_executor() { return _stream_load_executor; }
     RoutineLoadTaskExecutor* routine_load_task_executor() { return _routine_load_task_executor; }
@@ -174,6 +187,9 @@ public:
     Status init_mem_tracker();
 
     RuntimeFilterCache* runtime_filter_cache() { return _runtime_filter_cache; }
+
+    ProfileReportWorker* profile_report_worker() { return _profile_report_worker; }
+
     void add_rf_event(const RfTracePoint& pt);
 
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
@@ -189,6 +205,10 @@ public:
     lake::LocationProvider* lake_location_provider() const { return _lake_location_provider; }
 
     AgentServer* agent_server() const { return _agent_server; }
+
+    int64_t get_storage_page_cache_size();
+
+    query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
 private:
     Status _init(const std::vector<StorePath>& store_paths);
@@ -215,8 +235,23 @@ private:
     // Limit the memory used by load
     MemTracker* _load_mem_tracker = nullptr;
 
-    // The memory for tablet meta
-    MemTracker* _tablet_meta_mem_tracker = nullptr;
+    // metadata l0
+    MemTracker* _metadata_mem_tracker = nullptr;
+
+    // metadata l1
+    MemTracker* _tablet_metadata_mem_tracker = nullptr;
+    MemTracker* _rowset_metadata_mem_tracker = nullptr;
+    MemTracker* _segment_metadata_mem_tracker = nullptr;
+    MemTracker* _column_metadata_mem_tracker = nullptr;
+
+    // metadata l2
+    MemTracker* _tablet_schema_mem_tracker = nullptr;
+    MemTracker* _segment_zonemap_mem_tracker = nullptr;
+    MemTracker* _short_key_index_mem_tracker = nullptr;
+    MemTracker* _column_zonemap_index_mem_tracker = nullptr;
+    MemTracker* _ordinal_index_mem_tracker = nullptr;
+    MemTracker* _bitmap_index_mem_tracker = nullptr;
+    MemTracker* _bloom_filter_index_mem_tracker = nullptr;
 
     // The memory used for compaction
     MemTracker* _compaction_mem_tracker = nullptr;
@@ -249,12 +284,13 @@ private:
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
+    PriorityThreadPool* _pipeline_sink_io_pool = nullptr;
     FragmentMgr* _fragment_mgr = nullptr;
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     pipeline::DriverExecutor* _driver_executor = nullptr;
     pipeline::DriverExecutor* _wg_driver_executor = nullptr;
-    pipeline::DriverLimiter* _driver_limiter;
-    int64_t _max_executor_threads; // Max thread number of executor
+    pipeline::DriverLimiter* _driver_limiter = nullptr;
+    int64_t _max_executor_threads = 0; // Max thread number of executor
 
     LoadPathMgr* _load_path_mgr = nullptr;
 
@@ -276,10 +312,13 @@ private:
     RuntimeFilterWorker* _runtime_filter_worker = nullptr;
     RuntimeFilterCache* _runtime_filter_cache = nullptr;
 
+    ProfileReportWorker* _profile_report_worker = nullptr;
+
     lake::TabletManager* _lake_tablet_manager = nullptr;
     lake::LocationProvider* _lake_location_provider = nullptr;
 
     AgentServer* _agent_server = nullptr;
+    query_cache::CacheManagerRawPtr _cache_mgr;
 };
 
 template <>

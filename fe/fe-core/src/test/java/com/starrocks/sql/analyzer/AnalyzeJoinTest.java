@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.sql.ast.JoinRelation;
@@ -55,7 +55,8 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select sum(v1) from t0 left semi join t1 on v1 = v4 and v2 = v5 group by v2,v3");
 
         QueryRelation query = ((QueryStatement) analyzeSuccess(
-                "select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2")).getQueryRelation();
+                "select * from (select sum(v1) as v, sum(v2) from t0) a " +
+                        "left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2")).getQueryRelation();
         Assert.assertEquals("v,sum(v2)", String.join(",", query.getColumnOutputNames()));
     }
 
@@ -74,7 +75,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess("select * from tnotnull inner join (select * from t0) t using (v1)");
 
         analyzeSuccess("select * from (t0 join tnotnull using(v1)) , t1");
-        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1", "Syntax error");
+        analyzeFail("select * from (t0 join tnotnull using(v1)) t , t1", "the right syntax to use near 't'");
         analyzeFail("select v1 from (t0 join tnotnull using(v1)), t1", "Column 'v1' is ambiguous");
         analyzeSuccess("select a.v1 from (t0 a join tnotnull b using(v1)), t1");
     }
@@ -174,7 +175,7 @@ public class AnalyzeJoinTest {
         analyzeSuccess(sql);
 
         sql = "select * from (t0 a, (t1) b)";
-        analyzeFail(sql, "Syntax error");
+        analyzeFail(sql, "the right syntax to use near 'b'");
 
         sql = "select * from (t0 a, t1 a)";
         analyzeFail(sql, "Not unique table/alias: 'a'");
@@ -189,7 +190,7 @@ public class AnalyzeJoinTest {
         analyzeFail(sql, "Not unique table/alias: 't1'");
 
         sql = "select * from (t0 join t1) t,t1";
-        analyzeFail(sql, "Syntax error");
+        analyzeFail(sql, "the right syntax to use near 't'");
 
         sql = "select * from (t0 join t1 t) ,t1";
         analyzeSuccess(sql);

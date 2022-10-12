@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/general_tablet_writer.h"
 
@@ -16,9 +16,9 @@ GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(std::move(tabl
 
 GeneralTabletWriter::~GeneralTabletWriter() {}
 
+// To developers: Do NOT perform any I/O in this method, because this method may be invoked
+// in a bthread.
 Status GeneralTabletWriter::open() {
-    DCHECK(_schema == nullptr);
-    ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
     return Status::OK();
 }
 
@@ -60,10 +60,12 @@ void GeneralTabletWriter::close() {
 }
 
 Status GeneralTabletWriter::reset_segment_writer() {
+    if (_schema == nullptr) {
+        ASSIGN_OR_RETURN(_schema, _tablet.get_schema());
+    }
     auto name = fmt::format("{}.dat", generate_uuid_string());
     ASSIGN_OR_RETURN(auto of, fs::new_writable_file(_tablet.segment_location(name)));
     SegmentWriterOptions opts;
-    opts.storage_format_version = 2;
     auto w = std::make_unique<SegmentWriter>(std::move(of), _seg_id++, _schema.get(), opts);
     RETURN_IF_ERROR(w->init());
     _seg_writer = std::move(w);

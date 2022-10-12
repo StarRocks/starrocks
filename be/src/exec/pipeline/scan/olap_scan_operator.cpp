@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
@@ -7,12 +7,9 @@
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "runtime/current_thread.h"
-#include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
-#include "storage/rowset/rowset.h"
 #include "storage/storage_engine.h"
-#include "storage/tablet.h"
 
 namespace starrocks::pipeline {
 

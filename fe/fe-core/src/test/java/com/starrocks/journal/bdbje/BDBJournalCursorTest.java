@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.journal.bdbje;
 
@@ -11,7 +11,6 @@ import com.sleepycat.je.Transaction;
 import com.sleepycat.je.rep.InsufficientLogException;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Text;
-import com.starrocks.common.util.NetUtils;
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
@@ -366,7 +365,7 @@ public class BDBJournalCursorTest {
                 times = 1;
                 result = new InsufficientLogException("mock mock");
 
-                environment.refreshLog((InsufficientLogException)any);
+                environment.refreshLog((InsufficientLogException) any);
                 times = 1;
             }
         };
@@ -400,7 +399,7 @@ public class BDBJournalCursorTest {
                             final Transaction txn, final DatabaseEntry key, final DatabaseEntry data,
                             LockMode lockMode) {
                         data.setData(new String("lalala").getBytes());
-                    return OperationStatus.SUCCESS;
+                        return OperationStatus.SUCCESS;
                     }
                 };
             }
@@ -458,9 +457,9 @@ public class BDBJournalCursorTest {
         journal.close();
         Assert.assertEquals(Arrays.asList(1L, 3L, 5L, 7L, 9L), environment.getDatabaseNames());
 
-        long CNT = 1000000;
+        long cnt = 1000000;
         long start = System.currentTimeMillis();
-        for (int i = 0; i < CNT; ++ i) {
+        for (int i = 0; i < cnt; ++ i) {
             environment.getDatabaseNames();
         }
         long interval = System.currentTimeMillis() - start;
@@ -468,11 +467,11 @@ public class BDBJournalCursorTest {
         // 2022-07-12 17:20:49 .. - call environment.getDatabaseNames() 1000000 times cost 6797 ms
         // 2022-07-12 18:56:41 .. - call environment.getDatabaseNames() 1000000 times cost 6892 ms
         // seems like an in-memory operation, only cost 6µs
-        LOG.info("call environment.getDatabaseNames() {} times cost {} ms", CNT, interval);
-   }
+        LOG.info("call environment.getDatabaseNames() {} times cost {} ms", cnt, interval);
+    }
 
-     @Test
-     public void refreshFailedRetriedSucceed(@Mocked BDBEnvironment environment) throws Exception {
+    @Test
+    public void refreshFailedRetriedSucceed(@Mocked BDBEnvironment environment) throws Exception {
         new Expectations(environment) {
             {
                 environment.getDatabaseNamesWithPrefix("");
@@ -481,20 +480,20 @@ public class BDBJournalCursorTest {
                 result = Arrays.asList(3L, 23L, 45L);
             }
         };
-         BDBJEJournal journal = new BDBJEJournal(environment);
-         journal.read(10, 10);
-     }
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        journal.read(10, 10);
+    }
 
-     @Test(expected = JournalException.class)
-     public void refreshFailed(@Mocked BDBEnvironment environment) throws Exception {
-         new Expectations(environment) {
+    @Test(expected = JournalException.class)
+    public void refreshFailed(@Mocked BDBEnvironment environment) throws Exception {
+        new Expectations(environment) {
             {
                 environment.getDatabaseNamesWithPrefix("");
                 result = new DatabaseNotFoundException("mock mock");
             }
         };
-         BDBJEJournal journal = new BDBJEJournal(environment);
-         JournalCursor cursor = journal.read(10, 10);
-         cursor.refresh();
-     }
+        BDBJEJournal journal = new BDBJEJournal(environment);
+        JournalCursor cursor = journal.read(10, 10);
+        cursor.refresh();
+    }
 }

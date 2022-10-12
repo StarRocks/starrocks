@@ -112,14 +112,6 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public String toDigestImpl() {
-        if (isImplicit) {
-            return getChild(0).toDigest();
-        }
-        return "cast(" + getChild(0).toDigest() + " as " + targetTypeDef.toString() + ")";
-    }
-
-    @Override
     protected String explainImpl() {
         if (noOp) {
             return getChild(0).explain();

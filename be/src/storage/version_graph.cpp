@@ -27,6 +27,7 @@
 #include <queue>
 
 #include "common/logging.h"
+#include "util/ratelimit.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -34,8 +35,8 @@ namespace starrocks {
 void TimestampedVersionTracker::_construct_versioned_tracker(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
     int64_t max_version = 0;
 
-    // construct the roset graph
-    _version_graph.reconstruct_version_graph(rs_metas, &max_version);
+    // construct the rowset graph
+    _version_graph.construct_version_graph(rs_metas, &max_version);
 }
 
 void TimestampedVersionTracker::construct_versioned_tracker(const std::vector<RowsetMetaSharedPtr>& rs_metas) {
@@ -102,6 +103,10 @@ void TimestampedVersionTracker::get_stale_version_path_json_doc(rapidjson::Docum
 
 int64_t TimestampedVersionTracker::get_max_continuous_version() const {
     return _version_graph.max_continuous_version();
+}
+
+int64_t TimestampedVersionTracker::get_min_readable_version() const {
+    return _version_graph.min_readable_version();
 }
 
 void TimestampedVersionTracker::add_version(const Version& version) {
@@ -219,6 +224,9 @@ std::vector<TimestampedVersionSharedPtr>& TimestampedVersionPathContainer::times
 }
 
 void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
+    _version_graph.clear();
+    _max_continuous_version = -1;
+    _min_readable_version = -1;
     if (rs_metas.empty()) {
         VLOG(3) << "there is no version in the header.";
         return;
@@ -234,18 +242,32 @@ void VersionGraph::construct_version_graph(const std::vector<RowsetMetaSharedPtr
         }
     }
     _max_continuous_version = _get_max_continuous_version_from(0);
-}
-
-void VersionGraph::reconstruct_version_graph(const std::vector<RowsetMetaSharedPtr>& rs_metas, int64_t* max_version) {
-    _version_graph.clear();
-    _max_continuous_version = -1;
-    construct_version_graph(rs_metas, max_version);
+    _min_readable_version = -1;
+    for (const auto& rs_meta : rs_metas) {
+        const auto& version = rs_meta->version();
+        if (version.second <= _max_continuous_version && version.first != version.second) {
+            // it's a compacted version
+            _min_readable_version = std::max(version.second, _min_readable_version);
+        }
+    }
+    _tablet_id = rs_metas[0]->tablet_id();
 }
 
 void VersionGraph::add_version_to_graph(const Version& version) {
     _add_version_to_graph(version);
     if (version.first == _max_continuous_version + 1) {
         _max_continuous_version = _get_max_continuous_version_from(_max_continuous_version + 1);
+    } else if (version.first == 0) {
+        // We need to reconstruct max_continuous_version from zero if input version is starting from zero
+        // e.g.
+        // 1. Tablet A is doing schema change
+        // 2. We create a new tablet B releated A, and we will create a initial rowset and _max_continuous_version
+        //    will be updated to 1
+        // 3. Tablet A has a rowset R with version (0, m)
+        // 4. Schema change will try convert R
+        // 5. The start version of R (0) is not equal to `_max_continuous_version + 1`, and the _max_continuous_version
+        //    will not update
+        _max_continuous_version = _get_max_continuous_version_from(0);
     }
 }
 
@@ -316,6 +338,9 @@ Status VersionGraph::delete_version_from_graph(const Version& version) {
         _version_graph.erase(end_iter);
     }
 
+    if (version.second <= _max_continuous_version) {
+        _min_readable_version = std::max(_min_readable_version, version.second);
+    }
     return Status::OK();
 }
 
@@ -365,8 +390,11 @@ Status VersionGraph::capture_consistent_versions(const Version& spec_version,
     auto end_vertex_iter = _version_graph.find(spec_version.second + 1);
 
     if (start_vertex_iter == _version_graph.end() || end_vertex_iter == _version_graph.end()) {
-        LOG(WARNING) << "fail to find path in version_graph. "
-                     << "spec_version: " << spec_version.first << "-" << spec_version.second;
+        RATE_LIMIT_BY_TAG(_tablet_id,
+                          LOG(WARNING) << "fail to find path in version_graph. "
+                                       << "spec_version: " << spec_version.first << "-" << spec_version.second
+                                       << " tablet_id: " << _tablet_id,
+                          1000);
         return Status::NotFound("Version not found");
     }
 

@@ -3,9 +3,6 @@
 package com.starrocks.catalog;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.AccessTestUtil;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateResourceStmt;
 import com.starrocks.common.UserException;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.mysql.privilege.Auth;
@@ -13,6 +10,9 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.PrivilegeChecker;
+import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -24,11 +24,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class IcebergResourceTest {
-    private Analyzer analyzer;
+    private static ConnectContext connectContext;
 
     @Before
-    public void setUp() {
-        analyzer = AccessTestUtil.fetchAdminAnalyzer(true);
+    public void setUp() throws Exception {
+        connectContext = UtFrameUtils.createDefaultCtx();
     }
 
     @Test
@@ -51,7 +51,8 @@ public class IcebergResourceTest {
         properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog.hive.metastore.uris", metastoreURIs);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg0", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());
@@ -83,7 +84,8 @@ public class IcebergResourceTest {
         properties.put("iceberg.catalog.type", catalogType);
         properties.put("iceberg.catalog-impl", catalogImpl);
         CreateResourceStmt stmt = new CreateResourceStmt(true, name, properties);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, connectContext);
+        PrivilegeChecker.check(stmt, connectContext);
         IcebergResource resource = (IcebergResource) Resource.fromStmt(stmt);
         Assert.assertEquals("iceberg1", resource.getName());
         Assert.assertEquals(type, resource.getType().name().toLowerCase());

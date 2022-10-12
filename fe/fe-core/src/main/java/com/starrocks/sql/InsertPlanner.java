@@ -1,14 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
-import com.starrocks.analysis.CreateMaterializedViewStmt;
-import com.starrocks.analysis.DefaultValueExpr;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.InsertStmt;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
@@ -29,6 +27,9 @@ import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.DefaultValueExpr;
+import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.ValuesRelation;
@@ -39,6 +40,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.GatherDistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -46,6 +48,9 @@ import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
@@ -55,13 +60,18 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
+import com.starrocks.thrift.TResultSinkType;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 
 public class InsertPlanner {
     // Only for unit test
@@ -95,64 +105,76 @@ public class InsertPlanner {
         //6. Optimize logical plan and build physical plan
         logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
 
-        Optimizer optimizer = new Optimizer();
-        PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
-        OptExpression optimizedPlan = optimizer.optimize(
-                session,
-                logicalPlan.getRoot(),
-                requiredPropertySet,
-                new ColumnRefSet(logicalPlan.getOutputColumn()),
-                columnRefFactory);
+        // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
+        boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
+        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
+        boolean canUsePipeline =
+                isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
+                        logicalPlan.canUsePipeline() && session.getSessionVariable().getParallelExecInstanceNum() <= 1;
+        boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
+        try {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(false);
+            }
 
-        //7. Build fragment exec plan
-        ExecPlan execPlan;
-        if ((queryRelation instanceof SelectRelation &&
-                queryRelation.hasLimit())
-                || insertStmt.getTargetTable() instanceof MysqlTable) {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlan(
+            Optimizer optimizer = new Optimizer();
+            PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            OptExpression optimizedPlan = optimizer.optimize(
+                    session,
+                    logicalPlan.getRoot(),
+                    requiredPropertySet,
+                    new ColumnRefSet(logicalPlan.getOutputColumn()),
+                    columnRefFactory);
+
+            //7. Build fragment exec plan
+            boolean hasOutputFragment = ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())
+                    || insertStmt.getTargetTable() instanceof MysqlTable);
+            ExecPlan execPlan = new PlanFragmentBuilder().createPhysicalPlan(
                     optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        } else {
-            execPlan = new PlanFragmentBuilder().createPhysicalPlanWithoutOutputFragment(
-                    optimizedPlan, session, logicalPlan.getOutputColumn(), columnRefFactory,
-                    queryRelation.getColumnOutputNames());
-        }
+                    queryRelation.getColumnOutputNames(), TResultSinkType.MYSQL_PROTOCAL, hasOutputFragment);
 
-        DescriptorTable descriptorTable = execPlan.getDescTbl();
-        TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
+            DescriptorTable descriptorTable = execPlan.getDescTbl();
+            TupleDescriptor olapTuple = descriptorTable.createTupleDescriptor();
 
-        List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
-        long tableId = insertStmt.getTargetTable().getId();
-        for (Column column : insertStmt.getTargetTable().getFullSchema()) {
-            SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
-            slotDescriptor.setIsMaterialized(true);
-            slotDescriptor.setType(column.getType());
-            slotDescriptor.setColumn(column);
-            slotDescriptor.setIsNullable(column.isAllowNull());
-            if (column.getType().isVarchar() && IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
-                Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
-                dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+            List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+            long tableId = insertStmt.getTargetTable().getId();
+            for (Column column : insertStmt.getTargetTable().getFullSchema()) {
+                SlotDescriptor slotDescriptor = descriptorTable.addSlotDescriptor(olapTuple);
+                slotDescriptor.setIsMaterialized(true);
+                slotDescriptor.setType(column.getType());
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                if (column.getType().isVarchar() &&
+                        IDictManager.getInstance().hasGlobalDict(tableId, column.getName())) {
+                    Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(tableId, column.getName());
+                    dict.ifPresent(
+                            columnDict -> globalDicts.add(new Pair<>(slotDescriptor.getId().asInt(), columnDict)));
+                }
+            }
+            olapTuple.computeMemLayout();
+
+            DataSink dataSink;
+            if (insertStmt.getTargetTable() instanceof OlapTable) {
+                dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
+                        insertStmt.getTargetPartitionIds(), canUsePipeline);
+                // At present, we only support dop=1 for olap table sink.
+                // because tablet writing needs to know the number of senders in advance
+                // and guaranteed order of data writing
+                // It can be parallel only in some scenes, for easy use 1 dop now.
+                execPlan.getFragments().get(0).setPipelineDop(1);
+            } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
+                dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
+            } else {
+                throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+            execPlan.getFragments().get(0).setSink(dataSink);
+            execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
+            return execPlan;
+        } finally {
+            if (forceDisablePipeline) {
+                session.getSessionVariable().setEnablePipelineEngine(true);
             }
         }
-        olapTuple.computeMemLayout();
-
-        DataSink dataSink;
-        if (insertStmt.getTargetTable() instanceof OlapTable) {
-            dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                    insertStmt.getTargetPartitionIds());
-            // At present, we only support dop=1 for olap table sink.
-            // because tablet writing needs to know the number of senders in advance
-            // and guaranteed order of data writing
-            // It can be parallel only in some scenes, for easy use 1 dop now.
-            execPlan.getFragments().get(0).setPipelineDop(1);
-        } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
-            dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
-        } else {
-            throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
-        }
-        execPlan.getFragments().get(0).setSink(dataSink);
-        execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
-        return execPlan;
     }
 
     private void castLiteralToTargetColumnsType(InsertStmt insertStatement) {
@@ -207,10 +229,14 @@ public class InsertPlanner {
                     } else if (defaultValueType == Column.DefaultValueType.CONST) {
                         scalarOperator = ConstantOperator.createVarchar(targetColumn.calculatedDefaultValue());
                     } else if (defaultValueType == Column.DefaultValueType.VARY) {
-                        throw new SemanticException(
-                                "Column:" + targetColumn.getName() + " has unsupported default value:"
-                                        + targetColumn.getDefaultExpr().getExpr());
-
+                        if (SUPPORTED_DEFAULT_FNS.contains(targetColumn.getDefaultExpr().getExpr())) {
+                            scalarOperator = SqlToScalarOperatorTranslator.
+                                    translate(targetColumn.getDefaultExpr().obtainExpr());
+                        } else {
+                            throw new SemanticException(
+                                    "Column:" + targetColumn.getName() + " has unsupported default value:"
+                                            + targetColumn.getDefaultExpr().getExpr());
+                        }
                     } else {
                         throw new SemanticException("Unknown default value type:%s", defaultValueType.toString());
                     }
@@ -231,6 +257,7 @@ public class InsertPlanner {
     private OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
                                              List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                              ConnectContext session) {
+        Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -252,7 +279,10 @@ public class InsertPlanner {
                 continue;
             }
 
-            if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX)) {
+            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
+            // this could be created by user.
+            if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX) &&
+                    !baseSchema.contains(targetColumn)) {
                 String originName = targetColumn.getRefColumn().getColumnName();
                 Column originColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst().get();
@@ -270,7 +300,8 @@ public class InsertPlanner {
                                 Lists.newArrayList());
                 expressionMapping.put(targetColumn.getRefColumn(), originColRefOp);
                 ScalarOperator scalarOperator =
-                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping);
+                        SqlToScalarOperatorTranslator.translate(targetColumn.getDefineExpr(), expressionMapping,
+                                columnRefFactory);
 
                 ColumnRefOperator columnRefOperator =
                         columnRefFactory.create(scalarOperator, scalarOperator.getType(), scalarOperator.isNullable());
@@ -308,13 +339,15 @@ public class InsertPlanner {
                                                                 OptExprBuilder root) {
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
-
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        List<ScalarOperatorRewriteRule> rewriteRules = Arrays.asList(new FoldConstantsRule());
         for (int columnIdx = 0; columnIdx < fullSchema.size(); ++columnIdx) {
             if (!fullSchema.get(columnIdx).getType().matchesType(outputColumns.get(columnIdx).getType())) {
                 Column c = fullSchema.get(columnIdx);
                 ColumnRefOperator k = columnRefFactory.create(c.getName(), c.getType(), c.isAllowNull());
-                columnRefMap.put(k,
-                        new CastOperator(fullSchema.get(columnIdx).getType(), outputColumns.get(columnIdx), true));
+                ScalarOperator castOperator = new CastOperator(fullSchema.get(columnIdx).getType(),
+                        outputColumns.get(columnIdx), true);
+                columnRefMap.put(k, rewriter.rewrite(castOperator, rewriteRules));
                 outputColumns.set(columnIdx, k);
             } else {
                 columnRefMap.put(outputColumns.get(columnIdx), outputColumns.get(columnIdx));
@@ -331,6 +364,13 @@ public class InsertPlanner {
      */
     private PhysicalPropertySet createPhysicalPropertySet(InsertStmt insertStmt,
                                                           List<ColumnRefOperator> outputColumns) {
+        QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
+        if ((queryRelation instanceof SelectRelation && queryRelation.hasLimit())) {
+            DistributionProperty distributionProperty =
+                    new DistributionProperty(new GatherDistributionSpec(queryRelation.getLimit().getLimit()));
+            return new PhysicalPropertySet(distributionProperty);
+        }
+
         if (!(insertStmt.getTargetTable() instanceof OlapTable)) {
             return new PhysicalPropertySet();
         }

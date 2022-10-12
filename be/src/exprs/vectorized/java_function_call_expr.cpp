@@ -1,43 +1,28 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021 StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/java_function_call_expr.h"
 
-#include <algorithm>
-#include <functional>
-#include <future>
 #include <memory>
 #include <sstream>
 #include <tuple>
-#include <type_traits>
-#include <variant>
 #include <vector>
 
 #include "column/chunk.h"
 #include "column/column.h"
-#include "column/column_builder.h"
 #include "column/column_helper.h"
 #include "column/nullable_column.h"
-#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/anyval_util.h"
-#include "exprs/vectorized/java_function_call_expr.h"
-#include "fmt/compile.h"
-#include "fmt/core.h"
-#include "gen_cpp/Exprs_types.h"
 #include "gutil/casts.h"
 #include "jni.h"
-#include "jni_md.h"
-#include "runtime/primitive_type.h"
 #include "runtime/types.h"
 #include "runtime/user_function_cache.h"
 #include "udf/java/java_data_converter.h"
 #include "udf/java/java_udf.h"
 #include "udf/java/utils.h"
 #include "udf/udf.h"
-#include "util/slice.h"
-#include "util/unaligned_access.h"
 
 namespace starrocks::vectorized {
 
@@ -161,7 +146,7 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
                                   FunctionContext::FunctionStateScope scope) {
     // init parent open
     RETURN_IF_ERROR(Expr::open(state, context, scope));
-
+    RETURN_IF_ERROR(detect_java_runtime());
     // init function context
     Columns const_columns;
     if (scope == FunctionContext::FRAGMENT_LOCAL) {

@@ -39,8 +39,6 @@ namespace starrocks {
 class TabletSchemaMap;
 class MemTracker;
 class SegmentReaderWriterTest;
-class SegmentReaderWriterTest_estimate_segment_size_Test;
-class SegmentReaderWriterTest_TestStringDict_Test;
 
 class TabletColumn {
     struct ExtraFields {
@@ -67,10 +65,10 @@ public:
     ~TabletColumn();
 
     TabletColumn(const TabletColumn& rhs);
-    TabletColumn(TabletColumn&& rhs);
+    TabletColumn(TabletColumn&& rhs) noexcept;
 
     TabletColumn& operator=(const TabletColumn& rhs);
-    TabletColumn& operator=(TabletColumn&& rhs);
+    TabletColumn& operator=(TabletColumn&& rhs) noexcept;
 
     void swap(TabletColumn* rhs);
 
@@ -80,7 +78,7 @@ public:
     ColumnUID unique_id() const { return _unique_id; }
     void set_unique_id(ColumnUID unique_id) { _unique_id = unique_id; }
 
-    std::string_view name() const { return std::string_view(_col_name.data(), _col_name.size()); }
+    std::string_view name() const { return {_col_name.data(), _col_name.size()}; }
     void set_name(std::string_view name) { _col_name.assign(name.data(), name.size()); }
 
     FieldType type() const { return _type; }
@@ -210,9 +208,8 @@ class TabletSchema {
 public:
     using SchemaId = int64_t;
 
-    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb);
-    static std::shared_ptr<TabletSchema> create(MemTracker* mem_tracker, const TabletSchemaPB& schema_pb,
-                                                TabletSchemaMap* schema_map);
+    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb);
+    static std::shared_ptr<TabletSchema> create(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
     static std::shared_ptr<TabletSchema> create(const TabletSchema& tablet_schema,
                                                 const std::vector<int32_t>& column_indexes);
 
@@ -220,16 +217,13 @@ public:
     // file ./fe/fe-core/src/main/java/com/starrocks/catalog/MaterializedIndexMeta.java
     constexpr static SchemaId invalid_id() { return 0; }
 
-    TabletSchema() = default;
-    explicit TabletSchema(const TabletSchemaPB& schema_pb) { init_from_pb(schema_pb); }
+    TabletSchema() = delete;
+    explicit TabletSchema(const TabletSchemaPB& schema_pb);
     // Does NOT take ownership of |schema_map| and |schema_map| must outlive TabletSchema.
-    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map) : _schema_map(schema_map) {
-        init_from_pb(schema_pb);
-    }
+    TabletSchema(const TabletSchemaPB& schema_pb, TabletSchemaMap* schema_map);
 
     ~TabletSchema();
 
-    void init_from_pb(const TabletSchemaPB& schema);
     void to_schema_pb(TabletSchemaPB* tablet_meta_pb) const;
 
     // Caller should always check the returned value with `invalid_id()`.
@@ -244,14 +238,14 @@ public:
     size_t num_short_key_columns() const { return _num_short_key_columns; }
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
-    CompressKind compress_kind() const { return static_cast<CompressKind>(_compress_kind); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
+    CompressionTypePB compression_type() const { return _compression_type; }
 
     // The in-memory property is no longer supported, but leave this API for compatibility.
     // Newly-added code should not rely on this method, it may be removed at any time.
-    bool is_in_memory() const { return false; }
+    static bool is_in_memory() { return false; }
 
     bool contains_format_v1_column() const;
     bool contains_format_v2_column() const;
@@ -270,7 +264,7 @@ public:
 
     bool shared() const { return _schema_map != nullptr; }
 
-    starrocks::vectorized::Schema* schema() const;
+    vectorized::Schema* schema() const;
 
 private:
     friend class SegmentReaderWriterTest;
@@ -279,6 +273,8 @@ private:
 
     friend bool operator==(const TabletSchema& a, const TabletSchema& b);
     friend bool operator!=(const TabletSchema& a, const TabletSchema& b);
+
+    void _init_from_pb(const TabletSchemaPB& schema);
 
     void _init_schema() const;
 
@@ -294,9 +290,8 @@ private:
     uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
 
-    // Using `uint8_t` instead of `CompressKind` and `KeysType` for less memory usage.
-    uint8_t _compress_kind = static_cast<uint8_t>(COMPRESS_NONE);
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
+    CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
 
     bool _has_bf_fpp = false;
 

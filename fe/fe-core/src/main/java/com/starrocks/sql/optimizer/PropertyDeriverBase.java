@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -133,7 +133,4 @@ public abstract class PropertyDeriverBase<R, C> extends OperatorVisitor<R, C> {
         return new PhysicalPropertySet(distributionProperty);
     }
 
-    protected PhysicalPropertySet createBroadcastPropertySet() {
-        return new PhysicalPropertySet(new DistributionProperty(DistributionSpec.createReplicatedDistributionSpec()));
-    }
 }

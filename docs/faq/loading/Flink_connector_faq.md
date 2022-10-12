@@ -21,8 +21,8 @@ WITH (
     'url' = 'jdbc:mysql://192.168.110.66:9030/sys_device?characterEncoding=utf-8&serverTimezone=Asia/Shanghai',
     'table-name' = 'sink',
     'driver' = 'com.mysql.jdbc.Driver',
-    'username' = 'doris',
-    'password' = 'doris123',
+    'username' = 'sr',
+    'password' = 'sr123',
     'server-time-zone' = 'Asia/Shanghai'
 );
 ```

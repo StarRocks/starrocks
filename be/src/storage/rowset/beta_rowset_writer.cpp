@@ -21,6 +21,8 @@
 
 #include "storage/rowset/beta_rowset_writer.h"
 
+#include <butil/iobuf.h>
+#include <butil/reader_writer.h>
 #include <fmt/format.h>
 
 #include <ctime>
@@ -31,12 +33,14 @@
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "fs/fs.h"
+#include "io/io_error.h"
 #include "runtime/exec_env.h"
 #include "segment_options.h"
 #include "serde/column_array_serde.h"
 #include "storage/aggregate_iterator.h"
 #include "storage/chunk_helper.h"
 #include "storage/merge_iterator.h"
+#include "storage/metadata_util.h"
 #include "storage/olap_define.h"
 #include "storage/row_source_mask.h"
 #include "storage/rowset/rowset.h"
@@ -48,52 +52,65 @@
 
 namespace starrocks {
 
+class SegmentFileWriter : public butil::IWriter {
+public:
+    SegmentFileWriter(WritableFile* wfile) : _wfile(wfile) {}
+
+    ssize_t WriteV(const iovec* iov, int iovcnt) override;
+
+private:
+    WritableFile* _wfile;
+};
+
+ssize_t SegmentFileWriter::WriteV(const iovec* iov, int iovcnt) {
+    size_t bytes_written = 0;
+    auto st = _wfile->appendv(reinterpret_cast<const Slice*>(iov), iovcnt);
+    if (st.ok()) {
+        for (int i = 0; i < iovcnt; ++i) {
+            bytes_written += iov[i].iov_len;
+        }
+        return bytes_written;
+    } else {
+        LOG(WARNING) << "Failed to write " << _wfile->filename() << " err=" << st;
+        return -1;
+    }
+}
+
 BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
-        : _context(context),
-          _rowset_meta(nullptr),
-          _num_rows_written(0),
-          _total_row_size(0),
-          _total_data_size(0),
-          _total_index_size(0) {}
+        : _context(context), _num_rows_written(0), _total_row_size(0), _total_data_size(0), _total_index_size(0) {}
 
 Status BetaRowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
              _context.tablet_schema->contains_format_v2_column()));
-    auto real_data_format = _context.storage_format_version;
-    auto tablet_format = real_data_format;
-    if (_context.tablet_schema->contains_format_v1_column()) {
-        tablet_format = kDataFormatV1;
-    } else if (_context.tablet_schema->contains_format_v2_column()) {
-        tablet_format = kDataFormatV2;
-    }
-
-    // StarRocks is built on earlier work on Apache Doris and is compatible with its data format but
-    // has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
+    // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
     // When loading data into a tablet created by Apache Doris, the real data format will
     // be different from the tablet schema, so here we create a new schema matched with the
     // real data format to init `SegmentWriter`.
-    if (real_data_format != tablet_format) {
-        _rowset_schema = _context.tablet_schema->convert_to_format(real_data_format);
+    if (_context.tablet_schema->contains_format_v1_column()) {
+        _rowset_schema = _context.tablet_schema->convert_to_format(kDataFormatV2);
     }
+    _rowset_meta_pb = std::make_unique<RowsetMetaPB>();
+    _rowset_meta_pb->set_deprecated_rowset_id(0);
+    _rowset_meta_pb->set_rowset_id(_context.rowset_id.to_string());
+    _rowset_meta_pb->set_partition_id(_context.partition_id);
+    _rowset_meta_pb->set_tablet_id(_context.tablet_id);
+    _rowset_meta_pb->set_tablet_schema_hash(_context.tablet_schema_hash);
+    _rowset_meta_pb->set_rowset_type(BETA_ROWSET);
+    _rowset_meta_pb->set_rowset_state(_context.rowset_state);
+    _rowset_meta_pb->set_segments_overlap_pb(_context.segments_overlap);
 
-    _rowset_meta = std::make_shared<RowsetMeta>();
-    _rowset_meta->set_rowset_id(_context.rowset_id);
-    _rowset_meta->set_partition_id(_context.partition_id);
-    _rowset_meta->set_tablet_id(_context.tablet_id);
-    _rowset_meta->set_tablet_schema_hash(_context.tablet_schema_hash);
-    _rowset_meta->set_rowset_type(BETA_ROWSET);
-    _rowset_meta->set_rowset_state(_context.rowset_state);
-    _rowset_meta->set_segments_overlap(_context.segments_overlap);
     if (_context.rowset_state == PREPARED || _context.rowset_state == COMMITTED) {
         _is_pending = true;
-        _rowset_meta->set_txn_id(_context.txn_id);
-        _rowset_meta->set_load_id(_context.load_id);
+        _rowset_meta_pb->set_txn_id(_context.txn_id);
+        PUniqueId* new_load_id = _rowset_meta_pb->mutable_load_id();
+        new_load_id->set_hi(_context.load_id.hi());
+        new_load_id->set_lo(_context.load_id.lo());
     } else {
-        _rowset_meta->set_version(_context.version);
+        _rowset_meta_pb->set_start_version(_context.version.first);
+        _rowset_meta_pb->set_end_version(_context.version.second);
     }
-    _rowset_meta->set_tablet_uid(_context.tablet_uid);
+    *(_rowset_meta_pb->mutable_tablet_uid()) = _context.tablet_uid.to_proto();
 
-    _writer_options.storage_format_version = _context.storage_format_version;
     _writer_options.global_dicts = _context.global_dicts != nullptr ? _context.global_dicts : nullptr;
     _writer_options.referenced_column_ids = _context.referenced_column_ids;
 
@@ -109,21 +126,23 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
-    _rowset_meta->set_num_rows(_num_rows_written);
-    _rowset_meta->set_total_row_size(_total_row_size);
-    _rowset_meta->set_total_disk_size(_total_data_size);
-    _rowset_meta->set_data_disk_size(_total_data_size);
-    _rowset_meta->set_index_disk_size(_total_index_size);
+    _rowset_meta_pb->set_num_rows(_num_rows_written);
+    _rowset_meta_pb->set_total_row_size(_total_row_size);
+    _rowset_meta_pb->set_total_disk_size(_total_data_size);
+    _rowset_meta_pb->set_data_disk_size(_total_data_size);
+    _rowset_meta_pb->set_index_disk_size(_total_index_size);
     // TODO write zonemap to meta
-    _rowset_meta->set_empty(_num_rows_written == 0);
-    _rowset_meta->set_creation_time(time(nullptr));
-    _rowset_meta->set_num_segments(_num_segment);
+    _rowset_meta_pb->set_empty(_num_rows_written == 0);
+    _rowset_meta_pb->set_creation_time(time(nullptr));
+    _rowset_meta_pb->set_num_segments(_num_segment);
     // newly created rowset do not have rowset_id yet, use 0 instead
-    _rowset_meta->set_rowset_seg_id(0);
+    _rowset_meta_pb->set_rowset_seg_id(0);
     // updatable tablet require extra processing
     if (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) {
-        _rowset_meta->set_num_delete_files(_num_delfile);
-        _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+        _rowset_meta_pb->set_num_delete_files(_num_delfile);
+        if (_num_segment <= 1) {
+            _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
+        }
         // if load only has delete, we can skip the partial update logic
         if (_context.partial_update_tablet_schema && _flush_chunk_state != FlushChunkState::DELETE) {
             DCHECK(_context.referenced_column_ids.size() == _context.partial_update_tablet_schema->columns().size());
@@ -134,23 +153,68 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
                 _rowset_txn_meta_pb->add_partial_update_column_ids(_context.referenced_column_ids[i]);
                 _rowset_txn_meta_pb->add_partial_update_column_unique_ids(tablet_column.unique_id());
             }
-            _rowset_meta->set_txn_meta(*_rowset_txn_meta_pb);
+            *_rowset_meta_pb->mutable_txn_meta() = *_rowset_txn_meta_pb;
         }
     } else {
         if (_num_segment <= 1) {
-            _rowset_meta->set_segments_overlap(NONOVERLAPPING);
+            _rowset_meta_pb->set_segments_overlap_pb(NONOVERLAPPING);
         }
     }
     if (_is_pending) {
-        _rowset_meta->set_rowset_state(COMMITTED);
+        _rowset_meta_pb->set_rowset_state(COMMITTED);
     } else {
-        _rowset_meta->set_rowset_state(VISIBLE);
+        _rowset_meta_pb->set_rowset_state(VISIBLE);
     }
+    auto rowset_meta = std::make_shared<RowsetMeta>(_rowset_meta_pb);
     RowsetSharedPtr rowset;
     RETURN_IF_ERROR(
-            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, _rowset_meta, &rowset));
+            RowsetFactory::create_rowset(_context.tablet_schema, _context.rowset_path_prefix, rowset_meta, &rowset));
     _already_built = true;
     return rowset;
+}
+
+Status BetaRowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    // 1. create segment file
+    if (data.size() != segment_pb.data_size()) {
+        return Status::InternalError(
+                fmt::format("segment size {} not equal attachment size {}", segment_pb.data_size(), data.size()));
+    }
+
+    auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
+    // use MUST_CREATE make sure atomic
+    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+
+    // 2. flush segment file
+    auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+    size_t remaining_bytes = segment_pb.data_size();
+    while (remaining_bytes > 0) {
+        auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+        if (written_bytes < 0) {
+            return io::io_error(wfile->filename(), errno);
+        }
+        remaining_bytes -= written_bytes;
+    }
+    if (remaining_bytes != 0) {
+        return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
+                                                 wfile->filename(), segment_pb.data_size() - remaining_bytes,
+                                                 segment_pb.data_size()));
+    }
+
+    RETURN_IF_ERROR(wfile->close());
+
+    // 3. update statistic
+    {
+        std::lock_guard<std::mutex> l(_lock);
+        _total_data_size += segment_pb.data_size();
+        _total_index_size += segment_pb.index_size();
+        _num_rows_written += segment_pb.num_rows();
+        _total_row_size += segment_pb.row_size();
+        _num_segment++;
+    }
+
+    VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
+    return Status::OK();
 }
 
 HorizontalBetaRowsetWriter::HorizontalBetaRowsetWriter(const RowsetWriterContext& context)
@@ -188,20 +252,20 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
             //std::vector<std::string> files;
             //Status st = _context.env->get_children(_context.rowset_path_prefix, &files);
             //if (!st.ok()) {
-            //	LOG(WARNING) << "list dir failed: " << _context.rowset_path_prefix << " "
-            //				 << st.to_string();
+            //    LOG(WARNING) << "list dir failed: " << _context.rowset_path_prefix << " "
+            //                 << st.to_string();
             //}
             //string prefix = _context.rowset_id.to_string();
             //for (auto& f : files) {
-            //	if (strncmp(f.c_str(), prefix.c_str(), prefix.size()) == 0) {
-            //		string path = _context.rowset_path_prefix + "/" + f;
-            //		// Even if an error is encountered, these files that have not been cleaned up
-            //		// will be cleaned up by the GC background. So here we only print the error
-            //		// message when we encounter an error.
-            //		Status st = _context.env->delete_file(path);
-            //		LOG_IF(WARNING, !st.ok())
-            //				<< "Fail to delete file=" << path << ", " << st.to_string();
-            //	}
+            //    if (strncmp(f.c_str(), prefix.c_str(), prefix.size()) == 0) {
+            //        string path = _context.rowset_path_prefix + "/" + f;
+            //        // Even if an error is encountered, these files that have not been cleaned up
+            //        // will be cleaned up by the GC background. So here we only print the error
+            //        // message when we encounter an error.
+            //        Status st = _context.env->delete_file(path);
+            //        LOG_IF(WARNING, !st.ok())
+            //                << "Fail to delete file=" << path << ", " << st.to_string();
+            //    }
             //}
         } else {
             for (int i = 0; i < _num_segment; ++i) {
@@ -219,9 +283,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
 StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_segment_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path;
-    if ((_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
-         _context.segments_overlap != NONOVERLAPPING) ||
-        _context.schema_change_sorting) {
+    if (_context.schema_change_sorting) {
         path = Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, _num_segment);
         _tmp_segment_files.emplace_back(path);
     } else {
@@ -262,7 +324,7 @@ std::string HorizontalBetaRowsetWriter::_dump_mixed_segment_delfile_not_supporte
     return msg;
 }
 
-Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
+Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
     // 1. pure upsert
     // once upsert, subsequent flush can only do upsert
     switch (_flush_chunk_state) {
@@ -274,10 +336,10 @@ Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk) {
     default:
         return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
     }
-    return _flush_chunk(chunk);
+    return _flush_chunk(chunk, seg_info);
 }
 
-Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) {
+Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
     auto segment_writer = _create_segment_writer();
     if (!segment_writer.ok()) {
         return segment_writer.status();
@@ -288,7 +350,11 @@ Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk) 
         _num_rows_written += static_cast<int64_t>(chunk.num_rows());
         _total_row_size += static_cast<int64_t>(chunk.bytes_usage());
     }
-    return _flush_segment_writer(&segment_writer.value());
+    if (seg_info) {
+        seg_info->set_num_rows(static_cast<int64_t>(chunk.num_rows()));
+        seg_info->set_row_size(static_cast<int64_t>(chunk.bytes_usage()));
+    }
+    return _flush_segment_writer(&segment_writer.value(), seg_info);
 }
 
 Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
@@ -339,7 +405,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         RETURN_IF_ERROR(flush_del_file(deletes));
         return _flush_chunk(upserts);
     } else {
-        return flush_chunk(upserts);
+        return Status::OK();
     }
 }
 
@@ -352,7 +418,7 @@ Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     _num_segment += static_cast<int>(rowset->num_segments());
     // TODO update zonemap
     if (rowset->rowset_meta()->has_delete_predicate()) {
-        _rowset_meta->set_delete_predicate(rowset->rowset_meta()->delete_predicate());
+        *_rowset_meta_pb->mutable_delete_predicate() = rowset->rowset_meta()->delete_predicate();
     }
     return Status::OK();
 }
@@ -384,19 +450,10 @@ StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
     }
 }
 
-// why: when the data is large, multi segment files created, may be OVERLAPPINGed.
-// what: do final merge for NONOVERLAPPING state among segment files
-// when: segment files number larger than one, no delete files(for now, ignore it when just one segment)
-// how: for final merge scenario, temporary files created at first, merge them, create final segment files.
+// final merge is still used for sorting schema change right now, so we keep the logic in RowsetWriter
+// we may move this logic to `schema change` in near future, we can remove the following logic at that time
 Status HorizontalBetaRowsetWriter::_final_merge() {
-    if (_num_segment == 1) {
-        RETURN_IF_ERROR_WITH_WARN(
-                _fs->rename_file(Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, 0),
-                                 Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, 0)),
-                "Fail to rename file");
-        return Status::OK();
-    }
-
+    DCHECK(_context.schema_change_sorting);
     auto span = Tracer::Instance().start_trace_txn_tablet("final_merge", _context.txn_id, _context.tablet_id);
     auto scoped = trace::Scope(span);
     MonotonicStopWatch timer;
@@ -416,8 +473,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         }
         std::string tmp_segment_file =
                 Rowset::segment_temp_file_path(_context.rowset_path_prefix, _context.rowset_id, seg_id);
-        auto segment_ptr = Segment::open(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), _fs, tmp_segment_file,
-                                         seg_id, _context.tablet_schema);
+        auto segment_ptr = Segment::open(_fs, tmp_segment_file, seg_id, _context.tablet_schema);
         if (!segment_ptr.ok()) {
             LOG(WARNING) << "Fail to open " << tmp_segment_file << ": " << segment_ptr.status();
             return segment_ptr.status();
@@ -708,7 +764,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     return Status::OK();
 }
 
-Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer) {
+Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer,
+                                                         SegmentPB* seg_info) {
     uint64_t segment_size = 0;
     uint64_t index_size = 0;
     uint64_t footer_position = 0;
@@ -738,6 +795,13 @@ Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Segment
                 _global_dict_columns_valid_info[it.first] = true;
             }
         }
+    }
+
+    if (seg_info) {
+        seg_info->set_data_size(segment_size);
+        seg_info->set_index_size(index_size);
+        seg_info->set_segment_id((*segment_writer)->segment_id());
+        seg_info->set_path(std::move((*segment_writer)->segment_path()));
     }
 
     (*segment_writer).reset();

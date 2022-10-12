@@ -46,6 +46,7 @@ namespace starrocks {
 
 class Tablet;
 class DataDir;
+using TabletAndRowsets = std::tuple<TabletSharedPtr, std::vector<RowsetSharedPtr>>;
 
 enum TabletDropFlag {
     kMoveFilesToTrash = 0,
@@ -58,7 +59,7 @@ enum TabletDropFlag {
 // please uniformly name the method in "xxx_unlocked()" mode
 class TabletManager {
 public:
-    explicit TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size);
+    explicit TabletManager(int32_t tablet_map_lock_shard_size);
     ~TabletManager() = default;
 
     // The param stores holds all candidate data_dirs for this tablet.
@@ -74,12 +75,16 @@ public:
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
-    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir);
+    TabletSharedPtr find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
+                                                   std::pair<int32_t, int32_t> tablet_shards_range);
 
     TabletSharedPtr find_best_tablet_to_do_update_compaction(DataDir* data_dir);
 
     // TODO: pass |include_deleted| as an enum instead of boolean to avoid unexpected implicit cast.
     TabletSharedPtr get_tablet(TTabletId tablet_id, bool include_deleted = false, std::string* err = nullptr);
+
+    StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
+                                                          int64_t to_version);
 
     TabletSharedPtr get_tablet(TTabletId tablet_id, const TabletUid& tablet_uid, bool include_deleted = false,
                                std::string* err = nullptr);
@@ -141,8 +146,6 @@ public:
     }
 
     Status delete_shutdown_tablet(int64_t tablet_id);
-
-    MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
 
     // return true if all tablets visited
     bool get_next_batch_tablets(size_t batch_size, std::vector<TabletSharedPtr>* tablets);
@@ -222,8 +225,6 @@ private:
     static Status _remove_tablet_meta(const TabletSharedPtr& tablet);
     static Status _remove_tablet_directories(const TabletSharedPtr& tablet);
     static Status _move_tablet_directories_to_trash(const TabletSharedPtr& tablet);
-
-    MemTracker* _mem_tracker = nullptr;
 
     std::vector<TabletsShard> _tablets_shards;
     const int32_t _tablets_shards_mask;

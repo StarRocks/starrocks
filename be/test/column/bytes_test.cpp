@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/bytes.h"
 
@@ -326,7 +326,7 @@ TEST(BytesTest, test_hook_pvalloc) {
 TEST(BytesTest, test_hook_posix_memalign) {
     srand((int)time(NULL));
 
-    void* ptr;
+    void* ptr = nullptr;
     int before;
     int after;
     int size;

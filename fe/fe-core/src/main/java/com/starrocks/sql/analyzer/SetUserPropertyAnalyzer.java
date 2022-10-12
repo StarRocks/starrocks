@@ -1,9 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
 import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 
@@ -18,7 +17,7 @@ public class SetUserPropertyAnalyzer {
         } else {
             // If param 'user' is set, check if it need to be full-qualified
             if (!user.equals(Auth.ROOT_USER)) {
-                statement.setUser(ClusterNamespace.getFullName(user));
+                statement.setUser(user);
             }
         }
     }

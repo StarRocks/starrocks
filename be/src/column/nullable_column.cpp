@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/nullable_column.h"
 
@@ -107,6 +107,11 @@ void NullableColumn::append_value_multiple_times(const Column& src, uint32_t ind
     DCHECK_EQ(_null_column->size(), _data_column->size());
 }
 
+ColumnPtr NullableColumn::replicate(const std::vector<uint32_t>& offsets) {
+    return NullableColumn::create(this->_data_column->replicate(offsets),
+                                  std::dynamic_pointer_cast<NullColumn>(this->_null_column->replicate(offsets)));
+}
+
 bool NullableColumn::append_nulls(size_t count) {
     DCHECK_GT(count, 0u);
     _data_column->append_default(count);
@@ -137,6 +142,15 @@ bool NullableColumn::append_strings_overflow(const Buffer<Slice>& strs, size_t m
 bool NullableColumn::append_continuous_strings(const Buffer<Slice>& strs) {
     if (_data_column->append_continuous_strings(strs)) {
         null_column_data().resize(_null_column->size() + strs.size(), 0);
+        return true;
+    }
+    DCHECK_EQ(_null_column->size(), _data_column->size());
+    return false;
+}
+
+bool NullableColumn::append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
+    if (_data_column->append_continuous_fixed_length_strings(data, size, fixed_length)) {
+        null_column_data().resize(_null_column->size() + size, 0);
         return true;
     }
     DCHECK_EQ(_null_column->size(), _data_column->size());

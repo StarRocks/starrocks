@@ -27,8 +27,9 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.MaterializedViewHandler;
-import com.starrocks.analysis.CreateTableStmt;
+import com.starrocks.alter.OlapTableAlterJobV2Builder;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.backup.Status.ErrCode;
@@ -50,21 +51,25 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.RangeUtils;
 import com.starrocks.common.util.Util;
-import com.starrocks.lake.StorageInfo;
+import com.starrocks.lake.StorageCacheInfo;
+import com.starrocks.persist.ColocatePersistInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.DropReplicaTask;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TOlapTable;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -76,6 +81,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -111,6 +117,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     @SerializedName(value = "clusterId")
+    @Deprecated
     protected int clusterId;
 
     @SerializedName(value = "state")
@@ -150,6 +157,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @SerializedName(value = "colocateGroup")
     protected String colocateGroup;
 
+    @SerializedName(value = "colocateMv")
+    protected Set<String> colocateMaterializedViewNames = Sets.newHashSet();
+    @SerializedName(value = "isInColocateMvGroup")
+    protected boolean isInColocateMvGroup = false;
+
     @SerializedName(value = "indexes")
     protected TableIndexes indexes;
 
@@ -164,10 +176,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     @SerializedName(value = "tableProperty")
     protected TableProperty tableProperty;
-
-    // not serialized field
-    // record all materialized views based on this OlapTable
-    private Set<Long> relatedMaterializedViews;
 
     public OlapTable() {
         this(TableType.OLAP);
@@ -187,7 +195,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.indexes = null;
 
         this.tableProperty = null;
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public OlapTable(long id, String tableName, List<Column> baseSchema, KeysType keysType,
@@ -229,7 +236,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
         this.indexes = indexes;
 
         this.tableProperty = null;
-        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public void setTableProperty(TableProperty tableProperty) {
@@ -252,10 +258,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public long getBaseIndexId() {
         return baseIndexId;
-    }
-
-    public void setClusterId(int clusterId) {
-        this.clusterId = clusterId;
     }
 
     public int getClusterId() {
@@ -538,26 +540,11 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 // generate new tablets in origin tablet order
                 int tabletNum = idx.getTablets().size();
                 idx.clearTabletsForRestore();
-                for (int i = 0; i < tabletNum; i++) {
-                    long newTabletId = globalStateMgr.getNextId();
-                    LocalTablet newTablet = new LocalTablet(newTabletId);
-                    idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
-
-                    // replicas
-                    List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
-                            .seqChooseBackendIds(partitionInfo.getReplicationNum(entry.getKey()),
-                                    true, true);
-                    if (beIds == null) {
-                        return new Status(ErrCode.COMMON_ERROR, "failed to find "
-                                + partitionInfo.getReplicationNum(entry.getKey())
-                                + " different hosts to create table: " + name);
-                    }
-                    for (Long beId : beIds) {
-                        long newReplicaId = globalStateMgr.getNextId();
-                        Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
-                                partition.getVisibleVersion(), schemaHash);
-                        newTablet.addReplica(replica, true /* is restore */);
-                    }
+                Status status = createTabletsForRestore(tabletNum, idx, globalStateMgr,
+                        partitionInfo.getReplicationNum(entry.getKey()), partition.getVisibleVersion(),
+                        schemaHash, partition.getId());
+                if (!status.ok()) {
+                    return status;
                 }
             }
 
@@ -565,6 +552,31 @@ public class OlapTable extends Table implements GsonPostProcessable {
             partition.setIdForRestore(entry.getKey());
         }
 
+        return Status.OK;
+    }
+
+    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
+        for (int i = 0; i < tabletNum; i++) {
+            long newTabletId = globalStateMgr.getNextId();
+            LocalTablet newTablet = new LocalTablet(newTabletId);
+            index.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+
+            // replicas
+            List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
+                    .seqChooseBackendIds(replicationNum, true, true);
+            if (CollectionUtils.isEmpty(beIds)) {
+                return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                        + replicationNum
+                        + " different hosts to create table: " + name);
+            }
+            for (Long beId : beIds) {
+                long newReplicaId = globalStateMgr.getNextId();
+                Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
+                        version, schemaHash);
+                newTablet.addReplica(replica, true /* is restore */);
+            }
+        }
         return Status.OK;
     }
 
@@ -691,6 +703,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return defaultDistributionInfo;
     }
 
+    @Override
     public Set<String> getDistributionColumnNames() {
         Set<String> distributionColumnNames = Sets.newHashSet();
         if (defaultDistributionInfo instanceof RandomDistributionInfo) {
@@ -750,7 +763,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
                         rangePartitionInfo.getRange(partition.getId()),
                         rangePartitionInfo.getDataProperty(partition.getId()),
                         rangePartitionInfo.getReplicationNum(partition.getId()),
-                        rangePartitionInfo.getIsInMemory(partition.getId()));
+                        rangePartitionInfo.getIsInMemory(partition.getId()),
+                        rangePartitionInfo.getStorageCacheInfo(partition.getId()),
+                        isLakeTable());
             } else if (!reserveTablets) {
                 tabletIds = GlobalStateMgr.getCurrentState().onErasePartition(partition);
             }
@@ -844,6 +859,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     }
 
     // get all partitions except temp partitions
+    @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
     }
@@ -858,6 +874,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         List<Partition> partitions = Lists.newArrayList(idToPartition.values());
         partitions.addAll(tempPartitions.getAllPartitions());
         return partitions;
+    }
+
+    public Collection<Partition> getRecentPartitions(int recentPartitionNum) {
+        List<Partition> partitions = Lists.newArrayList(idToPartition.values());
+        Collections.sort(partitions, new Comparator<Partition>() {
+            @Override
+            public int compare(Partition h1, Partition h2) {
+                return (int) (h2.getVisibleVersion() - h1.getVisibleVersion());
+            }
+        });
+        return partitions.subList(0, recentPartitionNum);
     }
 
     // get all partitions' name except the temp partitions
@@ -905,6 +932,66 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
     public void setColocateGroup(String colocateGroup) {
         this.colocateGroup = colocateGroup;
+    }
+
+    public Set<String> getColocateMaterializedViewNames() {
+        return colocateMaterializedViewNames;
+    }
+
+    public void setColocateMaterializedViewNames(Set<String> colocateMaterializedViewNames) {
+        this.colocateMaterializedViewNames = colocateMaterializedViewNames;
+    }
+
+    public boolean isInColocateMvGroup() {
+        return isInColocateMvGroup;
+    }
+
+    public void setInColocateMvGroup(boolean inColocateMvGroup) {
+        this.isInColocateMvGroup = inColocateMvGroup;
+    }
+
+    public void addColocateMaterializedView(String mvName) {
+        colocateMaterializedViewNames.add(mvName);
+    }
+
+    // 1. remove the materialized view name from the set colocateMaterializedViewNames
+    // 2. the base table will be removed from the colocate group
+    // only the currently deleted materialized view is the only colocate mv of the base table
+    public void removeColocateMaterializedView(String mvName) {
+        if (colocateMaterializedViewNames.contains(mvName)) {
+            if (colocateMaterializedViewNames.size() == 1 && isInColocateMvGroup()) {
+                ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+                colocateTableIndex.removeTable(this.id);
+                setInColocateMvGroup(false);
+                setColocateGroup(null);
+            }
+            colocateMaterializedViewNames.remove(mvName);
+        }
+    }
+
+    // this will be called when rollupJobV2 is finished
+    public void addTableToColocateGroupIfSet(Long dbId, String rollupIndexName) {
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
+        if (!colocateTableIndex.isColocateTable(this.id) && colocateMaterializedViewNames.contains(rollupIndexName)) {
+            String dbName = GlobalStateMgr.getCurrentState().getDb(dbId).getFullName();
+            String groupName = dbName + ":" + rollupIndexName;
+            colocateTableIndex.addTableToGroup(dbId, this, groupName, null);
+            setInColocateMvGroup(true);
+            setColocateGroup(groupName);
+
+            ColocateTableIndex.GroupId groupId = colocateTableIndex.getGroup(this.id);
+            List<List<Long>> backendsPerBucketSeq = colocateTableIndex.getBackendsPerBucketSeq(groupId);
+            ColocatePersistInfo info =
+                    ColocatePersistInfo.createForAddTable(groupId, this.id, backendsPerBucketSeq);
+            GlobalStateMgr.getCurrentState().getEditLog().logColocateAddTable(info);
+        }
+    }
+
+    // when the state of rollupJobV2 is canceled
+    // just remove the materialized view from the set
+    // for the materialized view is added to the set before the rollupJobV2 running
+    public void removeMaterializedViewWhenJobCanceled(String rollupIndexName) {
+        colocateMaterializedViewNames.remove(rollupIndexName);
     }
 
     // when the table is creating new rollup and enter finishing state, should tell be not auto load to new rollup
@@ -1264,6 +1351,9 @@ public class OlapTable extends Table implements GsonPostProcessable {
         for (Partition partition : idToPartition.values()) {
             nameToPartition.put(partition.getName(), partition);
         }
+
+        // The table may be restored from another cluster, it should be set to current cluster id.
+        clusterId = GlobalStateMgr.getCurrentState().getClusterId();
     }
 
     public OlapTable selectiveCopy(Collection<String> reservedPartitions, boolean resetState, IndexExtState extState) {
@@ -1275,7 +1365,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return selectiveCopyInternal(copied, reservedPartitions, resetState, extState);
     }
 
-    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions, boolean resetState,
+    protected OlapTable selectiveCopyInternal(OlapTable copied, Collection<String> reservedPartitions,
+                                              boolean resetState,
                                               IndexExtState extState) {
         if (resetState) {
             // remove shadow index from copied table
@@ -1339,17 +1430,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
         DataProperty dataProperty = partitionInfo.getDataProperty(oldPartition.getId());
         short replicationNum = partitionInfo.getReplicationNum(oldPartition.getId());
         boolean isInMemory = partitionInfo.getIsInMemory(oldPartition.getId());
-        StorageInfo storageInfo = partitionInfo.getStorageInfo(oldPartition.getId());
+        StorageCacheInfo storageCacheInfo = partitionInfo.getStorageCacheInfo(oldPartition.getId());
 
         if (partitionInfo.getType() == PartitionType.RANGE) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             Range<PartitionKey> range = rangePartitionInfo.getRange(oldPartition.getId());
             rangePartitionInfo.dropPartition(oldPartition.getId());
             rangePartitionInfo.addPartition(newPartition.getId(), false, range, dataProperty,
-                    replicationNum, isInMemory, storageInfo);
+                    replicationNum, isInMemory, storageCacheInfo);
         } else {
             partitionInfo.dropPartition(oldPartition.getId());
-            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageInfo);
+            partitionInfo.addPartition(newPartition.getId(), dataProperty, replicationNum, isInMemory, storageCacheInfo);
         }
 
         return oldPartition;
@@ -1540,28 +1631,6 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
-    }
-
-    public Boolean checkPersistentIndex() {
-        // check key type and length
-        int keyLength = 0;
-        for (Column column : getFullSchema()) {
-            if (!column.isKey()) {
-                continue;
-            }
-            if (column.getPrimitiveType() == PrimitiveType.VARCHAR
-                    || column.getPrimitiveType() == PrimitiveType.CHAR) {
-                LOG.warn("PrimaryKey table using persistent index doesn't support varchar(char) so far");
-                return false;
-            }
-            // calculate key size
-            keyLength += column.getOlapColumnIndexSize();
-        }
-        if (keyLength > 64) {
-            LOG.warn("Primary key size of primaryKey table using persistent index should be no more than 64Bytes");
-            return false;
-        }
-        return true;
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {
@@ -1770,19 +1839,21 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return tableProperty.getStorageFormat();
     }
 
-    // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
-        relatedMaterializedViews.add(mvId);
+    public void setCompressionType(TCompressionType compressionType) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty.modifyTableProperties(PropertyAnalyzer.PROPERTIES_COMPRESSION, compressionType.name());
+        tableProperty.buildCompressionType();
     }
 
-    // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
-        relatedMaterializedViews.remove(mvId);
+    public TCompressionType getCompressionType() {
+        if (tableProperty == null) {
+            return TCompressionType.LZ4_FRAME;
+        }
+        return tableProperty.getCompressionType();
     }
 
-    public Set<Long> getRelatedMaterializedViews() {
-        return relatedMaterializedViews;
-    }
 
     @Override
     public void onCreate() {
@@ -1798,6 +1869,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);
+            } else {
+                LOG.warn("Ignore materialized view {} does not exists", mvId);
             }
         }
     }
@@ -1805,7 +1878,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @Override
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
-        return replay ? null : new DeleteTableTask(this);
+        return replay ? null : new DeleteOlapTableTask(this);
     }
 
     @Override
@@ -1813,10 +1886,14 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return true;
     }
 
-    private static class DeleteTableTask implements Runnable {
+    public AlterJobV2Builder alterTable() {
+        return new OlapTableAlterJobV2Builder(this);
+    }
+
+    private static class DeleteOlapTableTask implements Runnable {
         private final OlapTable table;
 
-        public DeleteTableTask(OlapTable table) {
+        public DeleteOlapTableTask(OlapTable table) {
             this.table = table;
         }
 
@@ -1826,7 +1903,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
 
             // drop all replicas
             for (Partition partition : table.getAllPartitions()) {
-                List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
+                List<MaterializedIndex> allIndices =
+                        partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
                 for (MaterializedIndex materializedIndex : allIndices) {
                     long indexId = materializedIndex.getId();
                     int schemaHash = table.getSchemaHashByIndexId(indexId);
@@ -1871,5 +1949,20 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 }
             }
         }
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = Maps.newHashMap();
+
+        properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, getDefaultReplicationNum().toString());
+        properties.put(PropertyAnalyzer.PROPERTIES_INMEMORY, isInMemory().toString());
+
+        Map<String, String> tableProperty = getTableProperty().getProperties();
+        if (tableProperty != null && tableProperty.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
+            properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM,
+                    tableProperty.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM));
+        }
+        return properties;
     }
 }

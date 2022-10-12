@@ -23,7 +23,6 @@
 #include <list>
 #include <map>
 #include <regex>
-#include <sstream>
 
 #define __IN_CONFIGBASE_CPP__
 #include "common/config.h"
@@ -38,6 +37,14 @@ std::map<std::string, Register::Field>* Register::_s_field_map = nullptr;
 std::map<std::string, std::string>* full_conf_map = nullptr;
 
 Properties props;
+
+// Because changes to the std::string type are not atomic,
+// we introduce a lock to protect mutable string type config item.
+std::mutex mstring_conf_lock;
+
+std::mutex* get_mstring_conf_lock() {
+    return &mstring_conf_lock;
+}
 
 // trim string
 std::string& trim(std::string& s) {
@@ -322,6 +329,10 @@ Status set_config(const std::string& field, const std::string& value) {
     UPDATE_FIELD(it->second, value, int32_t);
     UPDATE_FIELD(it->second, value, int64_t);
     UPDATE_FIELD(it->second, value, double);
+    {
+        std::lock_guard lock(mstring_conf_lock);
+        UPDATE_FIELD(it->second, value, std::string);
+    }
 
     // The other types are not thread safe to change dynamically.
     return Status::NotSupported(

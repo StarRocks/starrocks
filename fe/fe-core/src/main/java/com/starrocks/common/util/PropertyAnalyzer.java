@@ -32,6 +32,8 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
@@ -71,6 +73,10 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_DISTRIBUTION_TYPE = "distribution_type";
     public static final String PROPERTIES_SEND_CLEAR_ALTER_TASK = "send_clear_alter_tasks";
+
+    public static final String PROPERTIES_COMPRESSION = "compression";
+
+    public static final String PROPERTIES_COLOCATE_MV = "colocate_mv";
     /*
      * for upgrade alpha rowset to beta rowset, valid value: v1, v2
      * v1: alpha rowset
@@ -95,6 +101,7 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
+    public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -190,11 +197,7 @@ public class PropertyAnalyzer {
             } catch (Exception e) {
                 throw new AnalysisException(e.getMessage());
             }
-
-            if (replicationNum <= 0) {
-                throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
-            }
-
+            checkAvailableBackendsIsEnough(replicationNum);
             properties.remove(PROPERTIES_REPLICATION_NUM);
         }
         return replicationNum;
@@ -209,10 +212,19 @@ public class PropertyAnalyzer {
             key = PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
         }
         short replicationNum = Short.parseShort(properties.get(key));
+        checkAvailableBackendsIsEnough(replicationNum);
+        return replicationNum;
+    }
+
+    private static void checkAvailableBackendsIsEnough(short replicationNum) throws AnalysisException {
         if (replicationNum <= 0) {
             throw new AnalysisException("Replication num should larger than 0. (suggested 3)");
         }
-        return replicationNum;
+        List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().getAvailableBackendIds();
+        if (replicationNum > backendIds.size()) {
+            throw new AnalysisException("Replication num should be less than the number of available BE nodes. " 
+            + "Replication num is " + replicationNum + " available BE nodes is " + backendIds.size());
+        }
     }
 
     public static String analyzeColumnSeparator(Map<String, String> properties, String oldColumnSeparator) {
@@ -416,6 +428,22 @@ public class PropertyAnalyzer {
             return TStorageFormat.DEFAULT;
         } else {
             throw new AnalysisException("unknown storage format: " + storageFormat);
+        }
+    }
+
+    // analyzeCompressionType will parse the compression type from properties
+    public static TCompressionType analyzeCompressionType(Map<String, String> properties) throws AnalysisException {
+        String compressionType;
+        if (properties == null || !properties.containsKey(PROPERTIES_COMPRESSION)) {
+            return TCompressionType.LZ4_FRAME;
+        }
+        compressionType = properties.get(PROPERTIES_COMPRESSION);
+        properties.remove(PROPERTIES_COMPRESSION);
+
+        if (CompressionUtils.getCompressTypeByName(compressionType) != null) {
+            return CompressionUtils.getCompressTypeByName(compressionType);
+        } else {
+            throw new AnalysisException("unknown compression type: " + compressionType);
         }
     }
 

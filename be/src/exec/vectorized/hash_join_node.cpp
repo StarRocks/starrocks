@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/vectorized/hash_join_node.h"
 
@@ -149,7 +149,7 @@ Status HashJoinNode::prepare(RuntimeState* state) {
     _push_down_expr_num = ADD_COUNTER(_runtime_profile, "PushDownExprNum", TUnit::UNIT);
     _avg_input_probe_chunk_size = ADD_COUNTER(_runtime_profile, "AvgInputProbeChunkSize", TUnit::UNIT);
     _avg_output_chunk_size = ADD_COUNTER(_runtime_profile, "AvgOutputChunkSize", TUnit::UNIT);
-    _runtime_profile->add_info_string("JoinType", _get_join_type_str(_join_type));
+    _runtime_profile->add_info_string("JoinType", to_string(_join_type));
 
     RETURN_IF_ERROR(Expr::prepare(_build_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::prepare(_probe_expr_ctxs, state));
@@ -943,7 +943,7 @@ Status HashJoinNode::_create_implicit_local_join_runtime_filters(RuntimeState* s
     for (int i = 0; i < _probe_expr_ctxs.size(); i++) {
         auto* desc = _pool->add(new RuntimeFilterProbeDescriptor());
         desc->_filter_id = implicit_runtime_filter_id_offset + i;
-        RETURN_IF_ERROR(_probe_expr_ctxs[i]->clone(state, &desc->_probe_expr_ctx));
+        RETURN_IF_ERROR(_probe_expr_ctxs[i]->clone(state, _pool, &desc->_probe_expr_ctx));
         desc->_runtime_filter.store(nullptr);
         child(0)->register_runtime_filter_descriptor(state, desc);
     }
@@ -952,33 +952,6 @@ Status HashJoinNode::_create_implicit_local_join_runtime_filters(RuntimeState* s
     child(0)->push_down_join_runtime_filter(state, &(child(0)->runtime_filter_collector()));
 
     return Status::OK();
-}
-
-std::string HashJoinNode::_get_join_type_str(TJoinOp::type join_type) {
-    switch (join_type) {
-    case TJoinOp::INNER_JOIN:
-        return "InnerJoin";
-    case TJoinOp::LEFT_OUTER_JOIN:
-        return "LeftOuterJoin";
-    case TJoinOp::LEFT_SEMI_JOIN:
-        return "LeftSemiJoin";
-    case TJoinOp::RIGHT_OUTER_JOIN:
-        return "RightOuterJoin";
-    case TJoinOp::FULL_OUTER_JOIN:
-        return "FullOuterJoin";
-    case TJoinOp::CROSS_JOIN:
-        return "CrossJoin";
-    case TJoinOp::RIGHT_SEMI_JOIN:
-        return "RightSemiJoin";
-    case TJoinOp::LEFT_ANTI_JOIN:
-        return "LeftAntiJoin";
-    case TJoinOp::RIGHT_ANTI_JOIN:
-        return "RightAntiJoin";
-    case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
-        return "NullAwareLeftAntiJoin";
-    default:
-        return "";
-    }
 }
 
 } // namespace starrocks::vectorized

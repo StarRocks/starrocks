@@ -78,6 +78,7 @@ set(EXEC_FILES
     vectorized/except_node.cpp
     vectorized/file_scanner.cpp
     vectorized/orc_scanner.cpp
+    vectorized/jni_scanner.cpp
     vectorized/arrow_to_starrocks_converter.cpp
     vectorized/arrow_to_json_converter.cpp
     vectorized/parquet_scanner.cpp
@@ -115,6 +116,7 @@ set(EXEC_FILES
     vectorized/schema_scanner/schema_user_privileges_scanner.cpp
     vectorized/schema_scanner/schema_schema_privileges_scanner.cpp
     vectorized/schema_scanner/schema_table_privileges_scanner.cpp
+    vectorized/schema_scanner/schema_tables_config_scanner.cpp
     vectorized/schema_scanner/schema_helper.cpp
     vectorized/jdbc_scanner.cpp
     vectorized/sorting/compare_column.cpp
@@ -150,10 +152,11 @@ set(EXEC_FILES
     pipeline/scan/connector_scan_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
+    pipeline/sink/file_sink_operator.cpp
     pipeline/select_operator.cpp
-    pipeline/crossjoin/cross_join_context.cpp
-    pipeline/crossjoin/cross_join_right_sink_operator.cpp
-    pipeline/crossjoin/cross_join_left_operator.cpp
+    pipeline/nljoin/nljoin_context.cpp
+    pipeline/nljoin/nljoin_build_operator.cpp
+    pipeline/nljoin/nljoin_probe_operator.cpp
     pipeline/sort/partition_sort_sink_operator.cpp
     pipeline/sort/local_partition_topn_sink.cpp
     pipeline/sort/local_partition_topn_source.cpp
@@ -198,7 +201,11 @@ set(EXEC_FILES
     workgroup/work_group.cpp
     workgroup/scan_executor.cpp
     workgroup/scan_task_queue.cpp
-)
+    query_cache/multilane_operator.cpp
+    query_cache/cache_operator.cpp
+    query_cache/cache_manager.cpp
+    query_cache/lane_arbiter.cpp
+    query_cache/conjugate_operator.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

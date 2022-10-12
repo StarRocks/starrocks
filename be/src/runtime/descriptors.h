@@ -177,7 +177,7 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
-    Status create_part_key_exprs(ObjectPool* pool, int32_t chunk_size);
+    Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size);
 
 private:
     int64_t _id = 0;
@@ -196,9 +196,9 @@ public:
     virtual int get_partition_col_index(const SlotDescriptor* slot) const;
     virtual HdfsPartitionDescriptor* get_partition(int64_t partition_id) const;
 
-    Status create_key_exprs(ObjectPool* pool, int32_t chunk_size) {
+    Status create_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
         for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(pool, chunk_size));
+            RETURN_IF_ERROR(part.second->create_part_key_exprs(state, pool, chunk_size));
         }
         return Status::OK();
     }
@@ -230,6 +230,21 @@ public:
     HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~HudiTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    const bool& is_mor_table() const;
+    const std::string& get_base_path() const;
+    const std::string& get_instant_time() const;
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_input_format() const;
+    const std::string& get_serde_lib() const;
+
+private:
+    bool _is_mor_table;
+    std::string _hudi_instant_time;
+    std::string _hive_column_names;
+    std::string _hive_column_types;
+    std::string _input_format;
+    std::string _serde_lib;
 };
 
 // ===========================================
@@ -367,7 +382,8 @@ class DescriptorTbl {
 public:
     // Creates a descriptor tbl within 'pool' from thrift_tbl and returns it via 'tbl'.
     // Returns OK on success, otherwise error (in which case 'tbl' will be unset).
-    static Status create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl, int32_t chunk_size);
+    static Status create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl,
+                         int32_t chunk_size);
 
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;

@@ -1,13 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.SelectList;
-import com.starrocks.analysis.SelectListItem;
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UpdateStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedView;
@@ -16,8 +14,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ColumnAssignment;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectList;
+import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 
@@ -51,7 +52,11 @@ public class UpdateAnalyzer {
         List<ColumnAssignment> assignmentList = updateStmt.getAssignments();
         Map<String, ColumnAssignment> assignmentByColName = assignmentList.stream().collect(
                 Collectors.toMap(assign -> assign.getColumn().toLowerCase(), a -> a));
-
+        for (String colName : assignmentByColName.keySet()) {
+            if (table.getColumn(colName) == null) {
+                throw new SemanticException("table '%s' do not existing column '%s'", tableName.getTbl(), colName);
+            }
+        }
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
@@ -60,13 +65,8 @@ public class UpdateAnalyzer {
                 if (col.isKey()) {
                     throw new SemanticException("primary key column cannot be updated: " + col.getName());
                 }
-                if (assign.getExpr() instanceof LiteralExpr) {
-                    // TypeManager.addCastExpr can check if the literal can be cast to the column type
-                    item = new SelectListItem(TypeManager.addCastExpr(assign.getExpr(), col.getType()), col.getName());
-                } else {
-                    // There are still cases that this expr cannot cast to the column type, that's a known issue
-                    item = new SelectListItem(new CastExpr(col.getType(), assign.getExpr()), col.getName());
-                }
+
+                item = new SelectListItem(assign.getExpr(), col.getName());
             } else {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             }
@@ -82,5 +82,16 @@ public class UpdateAnalyzer {
 
         updateStmt.setTable(table);
         updateStmt.setQueryStatement(queryStatement);
+
+
+        List<Expr> outputExpression = queryStatement.getQueryRelation().getOutputExpression();
+        Preconditions.checkState(outputExpression.size() == table.getBaseSchema().size());
+        List<Expr> castOutputExpressions = Lists.newArrayList();
+        for (int i = 0; i < table.getBaseSchema().size(); ++i) {
+            Expr e = outputExpression.get(i);
+            Column c = table.getBaseSchema().get(i);
+            castOutputExpressions.add(TypeManager.addCastExpr(e, c.getType()));
+        }
+        ((SelectRelation) queryStatement.getQueryRelation()).setOutputExpr(castOutputExpressions);
     }
 }

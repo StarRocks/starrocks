@@ -59,6 +59,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.atomic.AtomicReference;
 
+import static java.lang.Math.min;
+
 /**
  * Heartbeat manager run as a daemon at a fix interval.
  * For now, it will send heartbeat to all Frontends, Backends and Brokers
@@ -80,6 +82,20 @@ public class HeartbeatMgr extends LeaderDaemon {
         this.heartbeatFlags = new HeartbeatFlags();
     }
 
+    private long computeMinActiveTxnId() {
+        Long a = GlobalStateMgr.getCurrentGlobalTransactionMgr().getMinActiveTxnId();
+        Long b = GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getMinActiveTxnId();
+        if (a == null && b == null) {
+            return 0;
+        } else if (a == null) {
+            return b;
+        } else if (b == null) {
+            return a;
+        } else {
+            return min(a, b);
+        }
+    }
+
     public void setLeader(int clusterId, String token, long epoch) {
         TMasterInfo tMasterInfo = new TMasterInfo(
                 new TNetworkAddress(FrontendOptions.getLocalHostAddress(), Config.rpc_port), clusterId, epoch);
@@ -87,6 +103,7 @@ public class HeartbeatMgr extends LeaderDaemon {
         tMasterInfo.setHttp_port(Config.http_port);
         long flags = heartbeatFlags.getHeartbeatFlags();
         tMasterInfo.setHeartbeat_flags(flags);
+        tMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
         masterInfo.set(tMasterInfo);
     }
 
@@ -263,6 +280,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 long flags = heartbeatFlags.getHeartbeatFlags();
                 copiedMasterInfo.setHeartbeat_flags(flags);
                 copiedMasterInfo.setBackend_id(computeNodeId);
+                copiedMasterInfo.setMin_active_txn_id(computeMinActiveTxnId());
                 THeartbeatResult result = client.heartbeat(copiedMasterInfo);
 
                 ok = true;
@@ -290,8 +308,13 @@ public class HeartbeatMgr extends LeaderDaemon {
                     }
 
                     // backend.updateOnce(bePort, httpPort, beRpcPort, brpcPort);
-                    return new BackendHbResponse(computeNodeId, bePort, httpPort, brpcPort, starletPort,
+                    BackendHbResponse backendHbResponse = new BackendHbResponse(
+                            computeNodeId, bePort, httpPort, brpcPort, starletPort,
                             System.currentTimeMillis(), version, cpuCores);
+                    if (tBackendInfo.isSetReboot_time()) {
+                        backendHbResponse.setRebootTime(tBackendInfo.getReboot_time());
+                    }
+                    return backendHbResponse;
                 } else {
                     return new BackendHbResponse(computeNodeId,
                             result.getStatus().getError_msgs().isEmpty() ? "Unknown error"

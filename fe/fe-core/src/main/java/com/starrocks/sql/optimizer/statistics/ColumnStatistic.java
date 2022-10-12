@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -118,7 +118,7 @@ public class ColumnStatistic {
 
     public static Builder buildFrom(ColumnStatistic other) {
         return new Builder(other.minValue, other.maxValue, other.nullsFraction, other.averageRowSize,
-                other.distinctValuesCount, other.type);
+                other.distinctValuesCount, other.histogram, other.type);
     }
 
     public static Builder buildFrom(String columnStatistic) {
@@ -157,19 +157,20 @@ public class ColumnStatistic {
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
-                        double distinctValuesCount,
+                        double distinctValuesCount, Histogram histogram,
                         StatisticType type) {
             this.minValue = minValue;
             this.maxValue = maxValue;
             this.nullsFraction = nullsFraction;
             this.averageRowSize = averageRowSize;
             this.distinctValuesCount = distinctValuesCount;
+            this.histogram = histogram;
             this.type = type;
         }
 
         private Builder(double minValue, double maxValue, double nullsFraction, double averageRowSize,
                         double distinctValuesCount) {
-            this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, StatisticType.ESTIMATE);
+            this(minValue, maxValue, nullsFraction, averageRowSize, distinctValuesCount, null, StatisticType.ESTIMATE);
         }
 
         public Builder setMinValue(double minValue) {

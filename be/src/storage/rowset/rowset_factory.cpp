@@ -25,50 +25,21 @@
 
 #include "gen_cpp/olap_file.pb.h"
 #include "rowset.h"
-#include "rowset_writer_adapter.h"
 #include "runtime/exec_env.h"
 #include "storage/rowset/beta_rowset_writer.h"
 #include "storage/rowset/rowset_writer.h"
-#include "storage/type_utils.h"
 
 namespace starrocks {
 
 Status RowsetFactory::create_rowset(const TabletSchema* schema, const std::string& rowset_path,
                                     const RowsetMetaSharedPtr& rowset_meta, RowsetSharedPtr* rowset) {
-    *rowset = Rowset::create(ExecEnv::GetInstance()->tablet_meta_mem_tracker(), schema, rowset_path, rowset_meta);
+    *rowset = Rowset::create(schema, rowset_path, rowset_meta);
     RETURN_IF_ERROR((*rowset)->init());
     return Status::OK();
 }
 
 Status RowsetFactory::create_rowset_writer(const RowsetWriterContext& context, std::unique_ptr<RowsetWriter>* output) {
-    auto tablet_schema = context.tablet_schema;
-    auto memory_format_version = context.memory_format_version;
-    auto storage_format_version = context.storage_format_version;
-
-    if (memory_format_version == kDataFormatUnknown) {
-        if (tablet_schema->contains_format_v1_column()) {
-            memory_format_version = kDataFormatV1;
-        } else if (tablet_schema->contains_format_v2_column()) {
-            memory_format_version = kDataFormatV2;
-        } else {
-            memory_format_version = storage_format_version;
-        }
-    }
-
-    if (storage_format_version != kDataFormatV1 && storage_format_version != kDataFormatV2) {
-        LOG(WARNING) << "Invalid storage format version " << storage_format_version;
-        return Status::InvalidArgument("invalid storage_format_version");
-    }
-    if (memory_format_version != kDataFormatV1 && memory_format_version != kDataFormatV2) {
-        LOG(WARNING) << "Invalid memory format version " << memory_format_version;
-        return Status::InvalidArgument("invalid memory_format_version");
-    }
-
-    if (memory_format_version != storage_format_version) {
-        auto adapter_context = context;
-        adapter_context.memory_format_version = memory_format_version;
-        *output = std::make_unique<vectorized::RowsetWriterAdapter>(adapter_context);
-    } else if (context.writer_type == kHorizontal) {
+    if (context.writer_type == kHorizontal) {
         *output = std::make_unique<HorizontalBetaRowsetWriter>(context);
     } else {
         DCHECK(context.writer_type == kVertical);

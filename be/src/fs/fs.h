@@ -25,6 +25,8 @@ class RandomAccessFile;
 class WritableFile;
 class SequentialFile;
 class ResultFileOptions;
+class TUploadReq;
+class TDownloadReq;
 struct WritableFileOptions;
 struct RandomAccessFileOptions;
 
@@ -38,14 +40,44 @@ struct SpaceInfo {
 };
 
 struct FSOptions {
-    FSOptions(const TBrokerScanRangeParams* scan_range_params = nullptr, const TExportSink* export_sink = nullptr,
-              const ResultFileOptions* result_file_options = nullptr)
+private:
+    FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
+              const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download)
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
-              result_file_options(result_file_options) {}
+              result_file_options(result_file_options),
+              upload(upload),
+              download(download) {}
+
+public:
+    FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr) {}
+
+    FSOptions(const TBrokerScanRangeParams* scan_range_params)
+            : FSOptions(scan_range_params, nullptr, nullptr, nullptr, nullptr) {}
+
+    FSOptions(const TExportSink* export_sink) : FSOptions(nullptr, export_sink, nullptr, nullptr, nullptr) {}
+
+    FSOptions(const ResultFileOptions* result_file_options)
+            : FSOptions(nullptr, nullptr, result_file_options, nullptr, nullptr) {}
+
+    FSOptions(const TUploadReq* upload) : FSOptions(nullptr, nullptr, nullptr, upload, nullptr) {}
+
+    FSOptions(const TDownloadReq* download) : FSOptions(nullptr, nullptr, nullptr, nullptr, download) {}
+
+    const THdfsProperties* hdfs_properties() const;
+
     const TBrokerScanRangeParams* scan_range_params;
     const TExportSink* export_sink;
     const ResultFileOptions* result_file_options;
+    const TUploadReq* upload;
+    const TDownloadReq* download;
+};
+
+struct FileStatus {
+    FileStatus(std::string_view name, bool is_dir, int64_t size) : name(name), is_dir(is_dir), size(size) {}
+    std::string name;
+    bool is_dir;
+    int64_t size;
 };
 
 class FileSystem {
@@ -119,6 +151,8 @@ public:
     //                  permission to access "dir", or if "dir" is invalid.
     //         IOError if an IO Error was encountered
     virtual Status get_children(const std::string& dir, std::vector<std::string>* result) = 0;
+
+    virtual Status list_path(const std::string& dir, std::vector<FileStatus>* result) { return Status::OK(); }
 
     // Iterate the specified directory and call given callback function with child's
     // name. This function continues execution until all children have been iterated

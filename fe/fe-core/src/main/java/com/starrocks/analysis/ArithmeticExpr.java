@@ -358,15 +358,6 @@ public class ArithmeticExpr extends Expr {
     }
 
     @Override
-    public String toDigestImpl() {
-        if (children.size() == 1) {
-            return op.toString() + " " + getChild(0).toDigest();
-        } else {
-            return getChild(0).toDigest() + " " + op.toString() + " " + getChild(1).toDigest();
-        }
-    }
-
-    @Override
     protected String explainImpl() {
         if (children.size() == 1) {
             return op.toString() + " " + getChild(0).explain();
@@ -452,7 +443,7 @@ public class ArithmeticExpr extends Expr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(op);
+        return Objects.hash(super.hashCode(), op);
     }
 
     @Override

@@ -65,13 +65,15 @@ using ChunkIteratorPtr = std::shared_ptr<vectorized::ChunkIterator>;
 
 class Tablet : public BaseTablet {
 public:
-    static TabletSharedPtr create_tablet_from_meta(MemTracker* mem_tracker, const TabletMetaSharedPtr& tablet_meta,
-                                                   DataDir* data_dir = nullptr);
+    static TabletSharedPtr create_tablet_from_meta(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir = nullptr);
 
-    Tablet(TabletMetaSharedPtr tablet_meta, DataDir* data_dir);
+    Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir);
+
+    Tablet(const Tablet&) = delete;
+    const Tablet& operator=(const Tablet&) = delete;
 
     // for ut
-    Tablet() = default;
+    Tablet();
 
     ~Tablet() override;
 
@@ -85,7 +87,7 @@ public:
 
     void save_meta();
     // Used in clone task, to update local meta when finishing a clone job
-    Status revise_tablet_meta(MemTracker* mem_tracker, const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
+    Status revise_tablet_meta(const std::vector<RowsetMetaSharedPtr>& rowsets_to_clone,
                               const std::vector<Version>& versions_to_delete);
 
     const int64_t cumulative_layer_point() const;
@@ -100,11 +102,8 @@ public:
     KeysType keys_type() const;
     size_t num_columns() const;
     size_t num_key_columns() const;
-    size_t num_short_key_columns() const;
     size_t num_rows_per_row_block() const;
-    CompressKind compress_kind() const;
     size_t next_unique_id() const;
-    size_t row_size() const;
     size_t field_index(const string& field_name) const;
 
     // operation in rowsets
@@ -129,17 +128,14 @@ public:
 
     Status capture_consistent_versions(const Version& spec_version, vector<Version>* version_path) const;
     Status check_version_integrity(const Version& version);
-    bool check_version_exist(const Version& version) const;
     void list_versions(std::vector<Version>* versions) const;
 
     // REQUIRE: `obtain_header_rdlock()`ed
     Status capture_consistent_rowsets(const Version& spec_version, vector<RowsetSharedPtr>* rowsets) const;
 
-    using IteratorList = std::vector<ChunkIteratorPtr>;
-
     const DelPredicateArray& delete_predicates() const { return _tablet_meta->delete_predicates(); }
-    void add_delete_predicate(const DeletePredicatePB& delete_predicate, int64_t version);
     bool version_for_delete_predicate(const Version& version);
+    bool has_delete_predicates(const Version& version);
 
     // meta lock
     void obtain_header_rdlock() { _meta_lock.lock_shared(); }
@@ -174,7 +170,6 @@ public:
     static bool check_migrate(const TabletSharedPtr& tablet);
 
     // operation for compaction
-    bool can_do_compaction();
     const uint32_t calc_cumulative_compaction_score() const;
     const uint32_t calc_base_compaction_score() const;
 
@@ -182,15 +177,14 @@ public:
     void calc_missed_versions(int64_t spec_version, vector<Version>* missed_versions);
     void calc_missed_versions_unlocked(int64_t spec_version, vector<Version>* missed_versions) const;
 
-    // This function to find max continuous version from the beginning.
-    // For example: If there are 1, 2, 3, 5, 6, 7 versions belongs tablet, then 3 is target.
-    Version max_continuous_version_from_beginning() const;
-
     // Same as max_continuous_version_from_beginning, only return end version, using a more efficient implementation
     int64_t max_continuous_version() const;
 
     int64_t last_cumu_compaction_failure_time() { return _last_cumu_compaction_failure_millis; }
     void set_last_cumu_compaction_failure_time(int64_t millis) { _last_cumu_compaction_failure_millis = millis; }
+
+    TStatusCode::type last_cumu_compaction_failure_status() { return _last_cumu_compaction_failure_status; }
+    void set_last_cumu_compaction_failure_status(TStatusCode::type st) { _last_cumu_compaction_failure_status = st; }
 
     int64_t last_base_compaction_failure_time() { return _last_base_compaction_failure_millis; }
     void set_last_base_compaction_failure_time(int64_t millis) { _last_base_compaction_failure_millis = millis; }
@@ -209,18 +203,10 @@ public:
 
     TabletInfo get_tablet_info() const;
 
-    void pick_candicate_rowsets_to_cumulative_compaction(int64_t skip_window_sec,
-                                                         std::vector<RowsetSharedPtr>* candidate_rowsets);
+    void pick_candicate_rowsets_to_cumulative_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
     void pick_candicate_rowsets_to_base_compaction(std::vector<RowsetSharedPtr>* candidate_rowsets);
 
     void calculate_cumulative_point();
-    // TODO(ygl):
-    bool is_primary_replica() { return false; }
-
-    // TODO(ygl):
-    // eco mode means power saving in new energy car
-    // eco mode also means save money in starrocks
-    bool in_eco_mode() { return false; }
 
     void do_tablet_meta_checkpoint();
 
@@ -238,8 +224,6 @@ public:
     // updatable tablet specific operations
     TabletUpdates* updates() { return _updates.get(); }
     Status rowset_commit(int64_t version, const RowsetSharedPtr& rowset);
-
-    int64_t mem_usage() { return sizeof(Tablet); }
 
     // if there is _compaction_task running
     // do not do compaction
@@ -267,10 +251,14 @@ public:
         return _tablet_meta->set_enable_persistent_index(enable_persistent_index);
     }
 
+    Status contains_version(const Version& version);
+
 protected:
     void on_shutdown() override;
 
 private:
+    int64_t _mem_usage() { return sizeof(Tablet); }
+
     Status _init_once_action();
     void _print_missed_versions(const std::vector<Version>& missed_versions) const;
     bool _contains_rowset(const RowsetId rowset_id);
@@ -286,8 +274,6 @@ private:
     bool _check_versions_completeness();
 
     std::unique_ptr<CompactionContext> _get_compaction_context();
-
-    bool _is_compacted_singleton(Rowset* rowset);
 
     // protected by _meta_lock
     void _update_tablet_compaction_context();
@@ -349,12 +335,11 @@ private:
     // timestamp of last base compaction success
     std::atomic<int64_t> _last_base_compaction_success_millis{0};
 
+    TStatusCode::type _last_cumu_compaction_failure_status = TStatusCode::OK;
+
     std::atomic<int64_t> _cumulative_point{0};
     std::atomic<int32_t> _newly_created_rowset_num{0};
     std::atomic<int64_t> _last_checkpoint_time{0};
-
-    Tablet(const Tablet&) = delete;
-    const Tablet& operator=(const Tablet&) = delete;
 };
 
 inline bool Tablet::init_succeeded() {
@@ -393,16 +378,8 @@ inline size_t Tablet::num_key_columns() const {
     return _tablet_meta->tablet_schema().num_key_columns();
 }
 
-inline size_t Tablet::num_short_key_columns() const {
-    return _tablet_meta->tablet_schema().num_short_key_columns();
-}
-
 inline size_t Tablet::num_rows_per_row_block() const {
     return _tablet_meta->tablet_schema().num_rows_per_row_block();
-}
-
-inline CompressKind Tablet::compress_kind() const {
-    return _tablet_meta->tablet_schema().compress_kind();
 }
 
 inline size_t Tablet::next_unique_id() const {
@@ -411,10 +388,6 @@ inline size_t Tablet::next_unique_id() const {
 
 inline size_t Tablet::field_index(const string& field_name) const {
     return _tablet_meta->tablet_schema().field_index(field_name);
-}
-
-inline size_t Tablet::row_size() const {
-    return _tablet_meta->tablet_schema().row_size();
 }
 
 } // namespace starrocks

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -75,6 +75,8 @@ public:
 
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
+
+    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     connector::DataSourcePtr _data_source;
     vectorized::ConnectorScanNode* _scan_node;

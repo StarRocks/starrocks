@@ -24,6 +24,7 @@ package com.starrocks.backup;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
 
 import java.io.DataInput;
@@ -35,6 +36,7 @@ public class RestoreFileMapping implements Writable {
 
     public static class IdChain implements Writable {
         // tblId, partId, idxId, tabletId, replicaId
+        @SerializedName(value = "chain")
         private Long[] chain;
 
         private IdChain() {
@@ -125,8 +127,10 @@ public class RestoreFileMapping implements Writable {
     }
 
     // globalStateMgr ids -> repository ids
+    @SerializedName(value = "mapping")
     private Map<IdChain, IdChain> mapping = Maps.newHashMap();
     // tablet id -> is overwrite
+    @SerializedName(value = "overwriteMap")
     private Map<Long, Boolean> overwriteMap = Maps.newHashMap();
 
     public RestoreFileMapping() {

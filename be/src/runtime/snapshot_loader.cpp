@@ -69,11 +69,15 @@ SnapshotLoader::SnapshotLoader(ExecEnv* env, int64_t job_id, int64_t task_id)
 
 SnapshotLoader::~SnapshotLoader() = default;
 
-Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_dest_path,
-                              const TNetworkAddress& broker_addr, const std::map<std::string, std::string>& broker_prop,
+Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                               std::map<int64_t, std::vector<std::string>>* tablet_files) {
-    LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size() << ", broker addr: " << broker_addr
-              << ", job: " << _job_id << ", task" << _task_id;
+    if (upload.use_broker) {
+        LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size()
+                  << ", broker addr: " << upload.broker_addr << ", job: " << _job_id << ", task" << _task_id;
+    } else {
+        LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size() << ", job: " << _job_id
+                  << ", task" << _task_id;
+    }
 
     // check if job has already been cancelled
     int tmp_counter = 1;
@@ -84,13 +88,24 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, true));
 
     // 2. get broker client
-    BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
-    if (!status.ok()) {
-        std::stringstream ss;
-        ss << "failed to get broker client. "
-           << "broker addr: " << broker_addr << ". msg: " << status.get_error_msg();
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+    std::unique_ptr<BrokerServiceConnection> client;
+    std::unique_ptr<FileSystem> fs;
+    if (upload.use_broker) {
+        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), upload.broker_addr, 10000, &status);
+        if (!status.ok()) {
+            std::stringstream ss;
+            ss << "failed to get broker client. "
+               << "broker addr: " << upload.broker_addr << ". msg: " << status.get_error_msg();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+    } else {
+        std::string random_dest_path = src_to_dest_path.begin()->second;
+        auto maybe_fs = FileSystem::CreateUniqueFromString(random_dest_path, FSOptions(&upload));
+        if (!maybe_fs.ok()) {
+            return Status::InternalError("fail to create file system");
+        }
+        fs = std::move(maybe_fs.value());
     }
 
     // 3. for each src path, upload it to remote storage
@@ -109,8 +124,11 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
 
         // 2.1 get existing files from remote path
         std::map<std::string, FileStat> remote_files;
-        RETURN_IF_ERROR(_get_existing_files_from_remote(client, dest_path, broker_prop, &remote_files));
-
+        if (upload.use_broker) {
+            RETURN_IF_ERROR(_get_existing_files_from_remote(*client, dest_path, upload.broker_prop, &remote_files));
+        } else {
+            RETURN_IF_ERROR(_get_existing_files_from_remote_without_broker(fs, dest_path, &remote_files));
+        }
         for (auto& tmp : remote_files) {
             VLOG(2) << "get remote file: " << tmp.first << ", checksum: " << tmp.second.md5;
         }
@@ -154,22 +172,29 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             auto full_remote_file = dest_path + "/" + local_file;
             auto tmp_broker_file_name = full_remote_file + ".part";
             auto local_file_path = src_path + "/" + local_file;
-
-            BrokerFileSystem fs_broker(broker_addr, broker_prop);
+            std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
-
+            if (upload.use_broker) {
+                BrokerFileSystem fs_broker(upload.broker_addr, upload.broker_prop);
+                ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
+            } else {
+                ASSIGN_OR_RETURN(remote_writable_file, fs->new_writable_file(opts, tmp_broker_file_name));
+            }
             ASSIGN_OR_RETURN(auto input_file, FileSystem::Default()->new_sequential_file(local_file_path));
-
-            auto res = fs::copy(input_file.get(), broker_file.get(), 1024 * 1024);
+            auto res = fs::copy(input_file.get(), remote_writable_file.get(), 1024 * 1024);
             if (!res.ok()) {
                 return res.status();
             }
             LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
-            RETURN_IF_ERROR(broker_file->close());
+            RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
-            RETURN_IF_ERROR(_rename_remote_file(client, full_remote_file + ".part", full_remote_file + "." + md5sum,
-                                                broker_prop));
+            if (upload.use_broker) {
+                RETURN_IF_ERROR(_rename_remote_file(*client, full_remote_file + ".part",
+                                                    full_remote_file + "." + md5sum, upload.broker_prop));
+            } else {
+                RETURN_IF_ERROR(_rename_remote_file_without_broker(fs, full_remote_file + ".part",
+                                                                   full_remote_file + "." + md5sum));
+            }
         } // end for each tablet's local files
 
         tablet_files->emplace(tablet_id, local_files_with_checksum);
@@ -187,11 +212,14 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
  * may also contains severval useless files.
  */
 Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to_dest_path,
-                                const TNetworkAddress& broker_addr,
-                                const std::map<std::string, std::string>& broker_prop,
-                                std::vector<int64_t>* downloaded_tablet_ids) {
-    LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size()
-              << ", broker addr: " << broker_addr << ", job: " << _job_id << ", task id: " << _task_id;
+                                const TDownloadReq& download, std::vector<int64_t>* downloaded_tablet_ids) {
+    if (download.use_broker) {
+        LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size()
+                  << ", broker addr: " << download.broker_addr << ", job: " << _job_id << ", task id: " << _task_id;
+    } else {
+        LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size() << ", job: " << _job_id
+                  << ", task id: " << _task_id;
+    }
 
     // check if job has already been cancelled
     int tmp_counter = 1;
@@ -202,17 +230,28 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, false));
 
     // 2. get broker client
-    BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
-    if (!status.ok()) {
-        std::stringstream ss;
-        ss << "failed to get broker client. "
-           << "broker addr: " << broker_addr << ". msg: " << status.get_error_msg();
-        LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+    std::unique_ptr<BrokerServiceConnection> client;
+    std::unique_ptr<FileSystem> fs;
+    std::vector<TNetworkAddress> broker_addrs;
+    if (download.use_broker) {
+        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), download.broker_addr, 10000, &status);
+        if (!status.ok()) {
+            std::stringstream ss;
+            ss << "failed to get broker client. "
+               << "broker addr: " << download.broker_addr << ". msg: " << status.get_error_msg();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        broker_addrs.push_back(download.broker_addr);
+    } else {
+        std::string random_src_path = src_to_dest_path.begin()->first;
+        auto maybe_fs = FileSystem::CreateUniqueFromString(random_src_path, FSOptions(&download));
+        if (!maybe_fs.ok()) {
+            return Status::InternalError("fail to create file system");
+        }
+        fs = std::move(maybe_fs.value());
     }
 
-    std::vector<TNetworkAddress> broker_addrs;
-    broker_addrs.push_back(broker_addr);
     // 3. for each src path, download it to local storage
     int report_counter = 0;
     int total_num = src_to_dest_path.size();
@@ -237,7 +276,11 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
         // 2. get remote files
         std::map<std::string, FileStat> remote_files;
-        RETURN_IF_ERROR(_get_existing_files_from_remote(client, remote_path, broker_prop, &remote_files));
+        if (download.use_broker) {
+            RETURN_IF_ERROR(_get_existing_files_from_remote(*client, remote_path, download.broker_prop, &remote_files));
+        } else {
+            RETURN_IF_ERROR(_get_existing_files_from_remote_without_broker(fs, remote_path, &remote_files));
+        }
         if (remote_files.empty()) {
             std::stringstream ss;
             ss << "get nothing from remote path: " << remote_path;
@@ -245,7 +288,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             return Status::InternalError(ss.str());
         }
 
-        TabletSharedPtr tablet = _env->storage_engine()->tablet_manager()->get_tablet(local_tablet_id);
+        TabletSharedPtr tablet = StorageEngine::instance()->tablet_manager()->get_tablet(local_tablet_id);
         if (tablet == nullptr) {
             std::stringstream ss;
             ss << "failed to get local tablet: " << local_tablet_id;
@@ -305,9 +348,13 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
                 return Status::InternalError("capacity limit reached");
             }
 
-            BrokerFileSystem fs_broker(broker_addr, broker_prop);
-            ASSIGN_OR_RETURN(auto broker_file, fs_broker.new_sequential_file(full_remote_file));
-
+            std::unique_ptr<SequentialFile> remote_sequential_file;
+            if (download.use_broker) {
+                BrokerFileSystem fs_broker(download.broker_addr, download.broker_prop);
+                ASSIGN_OR_RETURN(remote_sequential_file, fs_broker.new_sequential_file(full_remote_file));
+            } else {
+                ASSIGN_OR_RETURN(remote_sequential_file, fs->new_sequential_file(full_remote_file));
+            }
             // remove file which will be downloaded now.
             // this file will be added to local_files if it be downloaded successfully.
             local_files.erase(find);
@@ -316,7 +363,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
             ASSIGN_OR_RETURN(auto local_file, FileSystem::Default()->new_writable_file(opts, full_local_file));
 
-            auto res = fs::copy(broker_file.get(), local_file.get(), 1024 * 1024);
+            auto res = fs::copy(remote_sequential_file.get(), local_file.get(), 1024 * 1024);
             if (!res.ok()) {
                 return res.status();
             }
@@ -612,6 +659,44 @@ Status SnapshotLoader::_get_existing_files_from_remote(BrokerServiceConnection& 
     return Status::OK();
 }
 
+Status SnapshotLoader::_get_existing_files_from_remote_without_broker(const std::unique_ptr<FileSystem>& fs,
+                                                                      const std::string& remote_path,
+                                                                      std::map<std::string, FileStat>* files) {
+    std::vector<FileStatus> file_status;
+    Status status = fs->list_path(remote_path, &file_status);
+    if (!status.ok() && !status.is_not_found()) {
+        std::stringstream ss;
+        ss << "failed to list files in remote path: " << remote_path << ", msg: " << status.message();
+        LOG(WARNING) << ss.str();
+        return status;
+    }
+    LOG(INFO) << "finished to list files from remote path. file num: " << file_status.size();
+
+    // split file name and checksum
+    for (const auto& file : file_status) {
+        if (file.is_dir) {
+            // this is not a file
+            continue;
+        }
+
+        const std::string& file_name = file.name;
+        size_t pos = file_name.find_last_of('.');
+        if (pos == std::string::npos || pos == file_name.size() - 1) {
+            // Not found checksum separator, ignore this file
+            continue;
+        }
+        std::string name = std::string(file_name, 0, pos);
+        std::string md5 = std::string(file_name, pos + 1);
+        FileStat stat = {name, md5, file.size};
+        files->emplace(name, stat);
+        VLOG(2) << "split remote file: " << name << ", checksum: " << md5;
+    }
+
+    LOG(INFO) << "finished to split files. valid file num: " << files->size();
+
+    return Status::OK();
+}
+
 Status SnapshotLoader::_get_existing_files_from_local(const std::string& local_path,
                                                       std::vector<std::string>* local_files) {
     Status status = FileSystem::Default()->get_children(local_path, local_files);
@@ -656,6 +741,20 @@ Status SnapshotLoader::_rename_remote_file(BrokerServiceConnection& client, cons
         return Status::ThriftRpcError(ss.str());
     }
 
+    LOG(INFO) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
+
+    return Status::OK();
+}
+
+Status SnapshotLoader::_rename_remote_file_without_broker(const std::unique_ptr<FileSystem>& fs,
+                                                          const std::string& orig_name, const std::string& new_name) {
+    Status status = fs->rename_file(orig_name, new_name);
+    if (!status.ok()) {
+        std::stringstream ss;
+        ss << "Fail to rename file: " << orig_name << " to: " << new_name << " msg:" << status.message();
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
     LOG(INFO) << "finished to rename file. orig: " << orig_name << ", new: " << new_name;
 
     return Status::OK();

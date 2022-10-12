@@ -1,16 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.AlterClause;
-import com.starrocks.analysis.AlterTableStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.TableRenameClause;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -29,6 +29,8 @@ public class AnalyzeAlterTableStatementTest {
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster();
         AnalyzeTestUtil.init();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
         connectContext = AnalyzeTestUtil.getConnectContext();
         clauseAnalyzerVisitor = new AlterTableStatementAnalyzer.AlterTableClauseAnalyzerVisitor();
     }
@@ -49,7 +51,7 @@ public class AnalyzeAlterTableStatementTest {
 
     @Test(expected = SemanticException.class)
     public void testIllegalNewTableName() {
-        TableRenameClause clause = new TableRenameClause("_newName");
+        TableRenameClause clause = new TableRenameClause("__newName");
         clauseAnalyzerVisitor.analyze(clause, connectContext);
     }
 
@@ -122,5 +124,11 @@ public class AnalyzeAlterTableStatementTest {
         connectContext.getState().getErrorMessage()
                 .contains("cannot be alter by 'ALTER TABLE', because 'mv1_partition_by_column' is a materialized view");
 
+    }
+
+    @Test
+    public void testRollup() {
+        analyzeSuccess("alter table t0 drop rollup test1");
+        analyzeSuccess("alter table t0 drop rollup test1, test2");
     }
 }

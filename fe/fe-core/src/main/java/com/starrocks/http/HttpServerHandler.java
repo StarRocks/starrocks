@@ -27,6 +27,7 @@ import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
+import io.netty.handler.codec.DecoderResult;
 import io.netty.handler.codec.http.DefaultFullHttpResponse;
 import io.netty.handler.codec.http.FullHttpRequest;
 import io.netty.handler.codec.http.FullHttpResponse;
@@ -60,16 +61,33 @@ public class HttpServerHandler extends ChannelInboundHandlerAdapter {
     public void channelRead(ChannelHandlerContext ctx, Object msg) throws Exception {
         if (msg instanceof HttpRequest) {
             this.request = (HttpRequest) msg;
-            LOG.debug("request: url:[{}]", request.uri());
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("request: url:[{}]", request.uri());
+            }
+            try {
+                validateRequest(ctx, request);
+            } catch (Exception e) {
+                LOG.warn("accept bad request: {}, error: {}", request.uri(), e.getMessage(), e);
+                writeResponse(ctx, HttpResponseStatus.BAD_REQUEST, "Bad Request. <br/> " + e.getMessage());
+                return;
+            }
             BaseRequest req = new BaseRequest(ctx, request);
-
             action = getAction(req);
             if (action != null) {
-                LOG.debug("action: {} ", action.getClass().getName());
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("action: {} ", action.getClass().getName());
+                }
                 action.handleRequest(req);
             }
         } else {
             ReferenceCountUtil.release(msg);
+        }
+    }
+
+    private void validateRequest(ChannelHandlerContext ctx, HttpRequest request) {
+        DecoderResult decoderResult = request.decoderResult();
+        if (decoderResult.isFailure()) {
+            throw new HttpRequestException(decoderResult.cause().getMessage());
         }
     }
 

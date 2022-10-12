@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
-import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -22,8 +21,6 @@ public class ExecuteAsStmtTest {
     @Mocked
     private Auth auth;
     @Mocked
-    private UserPrivTable userPrivTable;
-    @Mocked
     private ConnectContext ctx;
 
     @Before
@@ -34,13 +31,6 @@ public class ExecuteAsStmtTest {
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
-            }
-        };
-        new Expectations(auth) {
-            {
-                auth.getUserPrivTable();
-                minTimes = 0;
-                result = userPrivTable;
             }
         };
 
@@ -56,9 +46,9 @@ public class ExecuteAsStmtTest {
     @Test
     public void testWithNoRevert() throws Exception {
         // suppose current user exists
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }
@@ -67,18 +57,18 @@ public class ExecuteAsStmtTest {
         ExecuteAsStmt stmt = (ExecuteAsStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "execute as user1 with no revert", 1).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("default_cluster:user1", stmt.getToUser().getQualifiedUser());
+        Assert.assertEquals("user1", stmt.getToUser().getQualifiedUser());
         Assert.assertEquals("%", stmt.getToUser().getHost());
-        Assert.assertEquals("EXECUTE AS 'default_cluster:user1'@'%' WITH NO REVERT", stmt.toString());
+        Assert.assertEquals("EXECUTE AS 'user1'@'%' WITH NO REVERT", stmt.toString());
         Assert.assertFalse(stmt.isAllowRevert());
     }
 
     @Test(expected = SemanticException.class)
     public void testUserNotExist() throws Exception {
         // suppose current user doesn't exist, check for exception
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = false;
             }
@@ -92,9 +82,9 @@ public class ExecuteAsStmtTest {
     @Test(expected = SemanticException.class)
     public void testAllowRevert() throws Exception {
         // suppose current user exists
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity) any);
+                auth.doesUserExist((UserIdentity) any);
                 minTimes = 0;
                 result = true;
             }

@@ -93,7 +93,6 @@ public class TabletSchedCtxTest {
 
         be1.setDisks(ImmutableMap.copyOf(disks));
         be1.setAlive(true);
-        be1.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         // be2
         be2 = new Backend(10002, "192.168.0.2", 9052);
@@ -106,7 +105,6 @@ public class TabletSchedCtxTest {
 
         be2.setDisks(ImmutableMap.copyOf(disks));
         be2.setAlive(true);
-        be2.setOwnerClusterName(SystemInfoService.DEFAULT_CLUSTER);
 
         systemInfoService = new SystemInfoService();
         systemInfoService.addBackend(be1);
@@ -157,11 +155,11 @@ public class TabletSchedCtxTest {
     public void testSingleReplicaRecover() throws SchedException {
         // mock be1 down and TABLET_ID_1 missing
         be1.setAlive(false);
-        LocalTablet MissedTablet = new LocalTablet(TABLET_ID_1, invertedIndex.getReplicasByTabletId(TABLET_ID_1));
+        LocalTablet missedTablet = new LocalTablet(TABLET_ID_1, invertedIndex.getReplicasByTabletId(TABLET_ID_1));
         TabletSchedCtx ctx =
                 new TabletSchedCtx(Type.REPAIR, DB_ID, TB_ID, PART_ID, INDEX_ID,
                         TABLET_ID_1, System.currentTimeMillis(), systemInfoService);
-        ctx.setTablet(MissedTablet);
+        ctx.setTablet(missedTablet);
         ctx.setStorageMedium(TStorageMedium.HDD);
 
         AgentBatchTask agentBatchTask = new AgentBatchTask();

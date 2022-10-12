@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.analysis;
 
@@ -6,9 +6,9 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.MockedAuth;
 import com.starrocks.mysql.privilege.PrivPredicate;
-import com.starrocks.mysql.privilege.UserPrivTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -23,8 +23,6 @@ public class ShowGrantsStmtTest {
     private GlobalStateMgr globalStateMgr;
     @Mocked
     private Auth auth;
-    @Mocked
-    private UserPrivTable userPrivTable;
     @Mocked
     private ConnectContext ctx;
 
@@ -47,10 +45,6 @@ public class ShowGrantsStmtTest {
         };
         new Expectations(auth) {
             {
-                auth.getUserPrivTable();
-                minTimes = 0;
-                result = userPrivTable;
-
                 auth.checkGlobalPriv(ctx, PrivPredicate.GRANT);
                 minTimes = 0;
                 result = true;
@@ -61,29 +55,29 @@ public class ShowGrantsStmtTest {
     @Test
     public void testNormal() throws Exception {
         // suppose current user exists
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                auth.doesUserExist((UserIdentity)any);
                 minTimes = 0;
                 result = true;
             }
         };
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("test_user", "localhost"), false);
-        stmt.analyze(analyzer);
+        String revokeSql = "SHOW GRANTS FOR test_user@'localhost'";
+        UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
     }
 
     @Test(expected = AnalysisException.class)
     public void testUserNotExist() throws Exception {
         // suppose current user doesn't exist, check for exception
-        new Expectations(userPrivTable) {
+        new Expectations(auth) {
             {
-                userPrivTable.doesUserExist((UserIdentity)any);
+                auth.doesUserExist((UserIdentity)any);
                 minTimes = 0;
                 result = false;
             }
         };
-        ShowGrantsStmt stmt = new ShowGrantsStmt(new UserIdentity("fake_user", "localhost"), false);
-        stmt.analyze(analyzer);
+        String revokeSql = "SHOW GRANTS FOR fake_user@'localhost'";
+        UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx);
         Assert.fail("No exception throws.");
     }
 }

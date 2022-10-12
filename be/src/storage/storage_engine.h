@@ -61,6 +61,8 @@ class MemTableFlushExecutor;
 class Tablet;
 class UpdateManager;
 class CompactionManager;
+class SegmentFlushExecutor;
+class SegmentReplicateExecutor;
 
 // StorageEngine singleton to manage all Table pointers.
 // Providing add/drop/get operations.
@@ -160,6 +162,10 @@ public:
 
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
 
+    SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
+
+    SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
+
     UpdateManager* update_manager() { return _update_manager.get(); }
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
@@ -179,8 +185,6 @@ public:
 
     bool bg_worker_stopped() { return _bg_worker_stopped.load(std::memory_order_consume); }
 
-    MemTracker* tablet_meta_mem_tracker() { return _options.tablet_meta_mem_tracker; }
-
     void compaction_check();
 
     // submit repair compaction tasks
@@ -188,8 +192,13 @@ public:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>>
     get_executed_repair_compaction_tasks();
 
+    void do_manual_compact(bool force_compact);
+
 protected:
     static StorageEngine* _s_instance;
+
+    static StorageEngine* _p_instance;
+
     int32_t _effective_cluster_id;
 
 private:
@@ -212,8 +221,6 @@ private:
 
     void _clean_unused_rowset_metas();
 
-    void _do_manual_compact();
-
     Status _do_sweep(const std::string& scan_root, const time_t& local_tm_now, const int32_t expire);
 
     // All these xxx_callback() functions are for Background threads
@@ -223,10 +230,10 @@ private:
     // unused rowset monitor thread
     void* _unused_rowset_monitor_thread_callback(void* arg);
 
-    // base compaction thread process function
-    void* _base_compaction_thread_callback(void* arg, DataDir* data_dir);
-    // cumulative process function
-    void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir);
+    void* _base_compaction_thread_callback(void* arg, DataDir* data_dir,
+                                           std::pair<int32_t, int32_t> tablet_shards_range);
+    void* _cumulative_compaction_thread_callback(void* arg, DataDir* data_dir,
+                                                 const std::pair<int32_t, int32_t>& tablet_shards_range);
     // update compaction function
     void* _update_compaction_thread_callback(void* arg, DataDir* data_dir);
     // repair compaction function
@@ -249,8 +256,8 @@ private:
     void* _tablet_checkpoint_callback(void* arg);
 
     void _start_clean_fd_cache();
-    Status _perform_cumulative_compaction(DataDir* data_dir);
-    Status _perform_base_compaction(DataDir* data_dir);
+    Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
+    Status _perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
     Status _perform_update_compaction(DataDir* data_dir);
     Status _start_trash_sweep(double* usage);
     void _start_disk_stat_monitor();
@@ -325,6 +332,9 @@ private:
     std::mutex _checker_mutex;
     std::condition_variable _checker_cv;
 
+    std::mutex _trash_sweeper_mutex;
+    std::condition_variable _trash_sweeper_cv;
+
     // For tablet and disk-stat report
     std::mutex _report_mtx;
     std::condition_variable _report_cv;
@@ -341,6 +351,10 @@ private:
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
+
+    std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
+
+    std::unique_ptr<SegmentFlushExecutor> _segment_flush_executor;
 
     std::unique_ptr<UpdateManager> _update_manager;
 

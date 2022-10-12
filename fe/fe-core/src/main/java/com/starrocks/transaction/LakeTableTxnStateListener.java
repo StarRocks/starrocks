@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.transaction;
 
@@ -16,11 +16,10 @@ import com.starrocks.common.NoAliveBackendException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.AbortTxnRequest;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
-import com.starrocks.thrift.TNetworkAddress;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -145,12 +144,10 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             request.txnIds.add(txnState.getTransactionId());
             request.tabletIds = entry.getValue();
 
-            TNetworkAddress address = new TNetworkAddress(backend.getHost(), backend.getBrpcPort());
-            LakeServiceClient client = new LakeServiceClient(address);
             try {
-                // Does not care about the response.
-                client.abortTxn(request);
-            } catch (RpcException e) {
+                LakeService lakeService = BrpcProxy.getLakeService(backend.getHost(), backend.getBrpcPort());
+                lakeService.abortTxn(request);
+            } catch (Throwable e) {
                 LOG.error(e);
             }
         }

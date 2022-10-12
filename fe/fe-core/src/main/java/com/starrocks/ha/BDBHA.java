@@ -237,7 +237,7 @@ public class BDBHA implements HAProtocol {
         }
     }
 
-    public void removeNodeIfExist(String host, int port) {
+    public void removeNodeIfExist(String host, int port, String excludeNodeName) {
         ReplicationGroupAdmin replicationGroupAdmin = environment.getReplicationGroupAdmin();
         if (replicationGroupAdmin == null) {
             return;
@@ -246,6 +246,9 @@ public class BDBHA implements HAProtocol {
         List<String> conflictNodes = Lists.newArrayList();
         Set<ReplicationNode> nodes = replicationGroupAdmin.getGroup().getElectableNodes();
         for (ReplicationNode node : nodes) {
+            if (node.getName().equals(excludeNodeName)) {
+                continue;
+            }
             if (node.getHostName().equals(host) && node.getPort() == port) {
                 conflictNodes.add(node.getName());
             }

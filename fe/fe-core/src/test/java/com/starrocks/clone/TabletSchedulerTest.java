@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.clone;
 
@@ -6,8 +6,8 @@ import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,7 +64,7 @@ public class TabletSchedulerTest {
         recycleBin.recycleDatabase(badDb, new HashSet<>());
         recycleBin.recycleTable(goodDB.getId(), badTable);
         recycleBin.recyclePartition(goodDB.getId(), goodTable.getId(), badPartition,
-                null, new DataProperty(TStorageMedium.HDD), (short)2, false);
+                null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null, false);
 
         List<TabletSchedCtx> allCtxs = new ArrayList<>();
         List<Triple<Database, Table, Partition>> arguments = Arrays.asList(
@@ -85,7 +85,8 @@ public class TabletSchedulerTest {
                     systemInfoService));
         }
 
-        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        TabletScheduler tabletScheduler = new TabletScheduler(globalStateMgr,
+                systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
 
         long almostExpireTime = now + (Config.catalog_trash_expire_second - 1) * 1000L;
         for (int i = 0; i != allCtxs.size(); ++ i) {
@@ -100,10 +101,10 @@ public class TabletSchedulerTest {
         Assert.assertFalse(tabletScheduler.checkIfTabletExpired(allCtxs.get(3), recycleBin, expireTime));
     }
 
-    private void updateSlotWithNewConfig(int new_slot_per_path, Method updateWorkingSlotsMethod,
+    private void updateSlotWithNewConfig(int newSlotPerPath, Method updateWorkingSlotsMethod,
                                          TabletScheduler tabletScheduler)
             throws InvocationTargetException, IllegalAccessException {
-        Config.tablet_sched_slot_num_per_path = new_slot_per_path;
+        Config.tablet_sched_slot_num_per_path = newSlotPerPath;
         updateWorkingSlotsMethod.invoke(tabletScheduler, null);
     }
 

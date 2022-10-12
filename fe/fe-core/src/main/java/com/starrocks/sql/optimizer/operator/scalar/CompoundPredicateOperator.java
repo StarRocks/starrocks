@@ -1,9 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.optimizer.operator.scalar;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.Arrays;
 import java.util.Comparator;
@@ -18,6 +19,12 @@ public class CompoundPredicateOperator extends PredicateOperator {
         super(OperatorType.COMPOUND, arguments);
         this.type = compoundType;
         Preconditions.checkState(arguments.length >= 1);
+    }
+
+    public CompoundPredicateOperator(CompoundType compoundType, List<ScalarOperator> arguments) {
+        super(OperatorType.COMPOUND, arguments);
+        this.type = compoundType;
+        Preconditions.checkState(!CollectionUtils.isEmpty(arguments));
     }
 
     public CompoundType getCompoundType() {

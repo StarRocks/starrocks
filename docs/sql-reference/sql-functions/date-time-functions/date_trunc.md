@@ -1,91 +1,94 @@
 # date_trunc
 
-## Background
+## Description
 
-When using the time function, users often need to group time by hour / week and want to display it directly in time format and in the first column. They need a function similar to oracle trunc to effectively truncate the datetime so as to avoid writing sql as ineffective as below:
+Truncates a time value based on the specified date part, such as year, day, hour, or minute.
 
-```sql
-select ADDDATE(DATE_FORMAT(DATE_ADD(from_unixtime(`timestamp`), INTERVAL 8 HOUR),
-                           '%Y-%m-%d %H:%i:00'),
-               INTERVAL 0 SECOND),
-    count()
-from xxx group 1 ;
-```
+StarRocks also provides the year, quarter, month, week, day, and hour functions for you to extract the specified date part.
 
-## Motive
-
-To truncate time more efficiently and to provide vectorized date_trunc functions.
-
-We already have time functions that directly truncate year/month/day.
-
-Similarly, we truncate the high bits of datetime using data_trunc
-
-```Plain Text
-date_trunc("minute", datetime):
-2020-11-04 11:12:19 => 2020-11-04 11:12:00
-```
-
-## Function Signature
-
-1. Oracle uses the function format of TRUNC(date,[fmt]).
-2. PostgreSQL/redshift uses the function format of date_trunc(text,time).
-3. StarRocks uses the function format of date_trunc([fmt], datetime).
-
-## Function Implementation
-
-Take two easy steps to create date_trunc:
-
-1. Break down the datetime into small parts (Year, Month, Day/Hour, Minute, Second) and extract the parts you need
-2. Based on the parts extracted, create a new datetime
-
-Special calculation is needed for week/quarter.
-
-Also, you need to study the week in snowflake.
-
-```SQL
---set the first day of the week in snowflake
-
---Set Monday as the first day of the week for these two according to the default. 
-alter session set week_start = 0
-alter session set week_start = 1
-
---Set Wednesday as the first day of the week
-alter session set week_start = 3
-```
-
-## description
-
-### Syntax
+## Syntax
 
 ```Haskell
-DATETIME date_trunc(VARCHAR fmt, DATETIME datetime)
+DATETIME date_trunc(VARCHAR fmt, DATETIME|DATE datetime)
 ```
 
-Truncate datetime into fmt format.
+## Parameters
 
-- Fmt supports string literals. But they must be several fixed values: second, minute, hour, day, month, year, week, quarter). Wrong values inputted will be returned as error information by FE analysis.
+- `datetime`: the time to truncate, which can be of the DATETIME or DATE type. The date and time must exist. Otherwise, NULL will be returned. For example, `2021-02-29 11:12:13` does not exist as a date and NULL will be returned.
 
-- The string literals inputted in datetime will be identified. This process happens only once.
+- `fmt`: the date part, that is, to which precision `datetime` will be truncated. The value must be a VARCHAR constant.
+  `fmt` must be set to a value listed in the following table. If the value is incorrect, an error will be returned.
 
-  | strings in fmt format | Meaning                                    | example                                    |
-  | --------------------- | ------------------------------------------ | ------------------------------------------ |
-  | second                | round down to second                       | 2020-10-25 11:15:32 => 2020-10-25 11:15:32 |
-  | minute                | round down to minute                       | 2020-11-04 11:12:19 => 2020-11-04 11:12:00 |
-  | hour                  | round down to hour                         | 2020-11-04 11:12:13 => 2020-11-04 11:00:00 |
-  | day                   | round down to day                          | 2020-11-04 11:12:05 => 2020-11-04 00:00:00 |
-  | month                 | round down to the first day of the month   | 2020-11-04 11:12:51 => 2020-11-01 00:00:00 |
-  | year                  | round down to the first day of the year    | 2020-11-04 11:12:00 => 2020-01-01 00:00:00 |
-  | week                  | round down to the first day of the week    | 2020-11-04 11:12:00 => 2020-11-02 00:00:00 |
-  | quarter               | round down to the first day of the quarter | 2020-06-23 11:12:00 => 2020-04-01 00:00:00 |
+| Value   | Description                                                  |
+| ------- | ------------------------------------------------------------ |
+| second  | Truncates to the second.                                     |
+| minute  | Truncates to the minute. The second part will be zero out.   |
+| hour    | Truncates to the hour. The minute and second parts will be zero out. |
+| day     | Truncates to the day. The time part will be zero out.        |
+| week    | Truncates to the first date of the week that `datetime` falls in. The time part will be zero out. |
+| month   | Truncates to the first date of the month that `datetime` falls in. The time part will be zero out. |
+| quarter | Truncates to the first date of the quarter that `datetime` falls in. The time part will be zero out. |
+| year    | Truncates to the first date of the year that `datetime` falls in. The time part will be zero out. |
 
-## example
+## Return value
 
-```Plain Text
-MySQL > select date_trunc("hour", "2020-11-04 11:12:13")
+Returns a value of the DATETIME type.
 
-2020-11-04 11:00:00
+If `datetime` is of the DATE type and `fmt` is set to `hour`, `minute`, or `second`, the time part of the returned value defaults to `00:00:00`.
+
+## Examples
+
+Example 1: Truncate the input time to the minute.
+
+```Plain
+select date_trunc("minute", "2020-11-04 11:12:13");
++---------------------------------------------+
+| date_trunc('minute', '2020-11-04 11:12:13') |
++---------------------------------------------+
+| 2020-11-04 11:12:00                         |
++---------------------------------------------+
 ```
 
-## keyword
+Example 2: Truncate the input time to the hour.
 
-DATE_TRUNC,DATE
+```Plain
+select date_trunc("hour", "2020-11-04 11:12:13");
++-------------------------------------------+
+| date_trunc('hour', '2020-11-04 11:12:13') |
++-------------------------------------------+
+| 2020-11-04 11:00:00                       |
++-------------------------------------------+
+```
+
+Example 3: Truncate the input time to the first day of a week.
+
+```Plain
+select date_trunc("week", "2020-11-04 11:12:13");
++-------------------------------------------+
+| date_trunc('week', '2020-11-04 11:12:13') |
++-------------------------------------------+
+| 2020-11-02 00:00:00                       |
++-------------------------------------------+
+```
+
+Example 4: Truncate the input time to the first day of a year.
+
+```Plain
+select date_trunc("year", "2020-11-04 11:12:13");
++-------------------------------------------+
+| date_trunc('year', '2020-11-04 11:12:13') |
++-------------------------------------------+
+| 2020-01-01 00:00:00                       |
++-------------------------------------------+
+```
+
+Example 5: Truncate a DATE value to the hour. `00:00:00` is returned as the time part.
+
+```Plain
+select date_trunc("hour", "2020-11-04");
++----------------------------------+
+| date_trunc('hour', '2020-11-04') |
++----------------------------------+
+| 2020-11-04 00:00:00              |
++----------------------------------+
+```

@@ -40,7 +40,6 @@ import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
 import com.sleepycat.je.rep.ReplicationNode;
-import com.sleepycat.je.rep.RestartRequiredException;
 import com.sleepycat.je.rep.UnknownMasterException;
 import com.sleepycat.je.rep.util.DbResetRepGroup;
 import com.sleepycat.je.rep.util.ReplicationGroupAdmin;
@@ -296,29 +295,26 @@ public class BDBEnvironment {
                 epochDB = new CloseSafeDatabase(replicatedEnvironment.openDatabase(null, "epochDB", dbConfig));
                 LOG.info("end setup bdb environment after {} times", i + 1);
                 return;
-            } catch (RestartRequiredException e) {
-                String errMsg = String.format(
-                        "catch a RestartRequiredException when setup environment after retried %d times, refresh and setup again",
-                        i + 1);
-                LOG.warn(errMsg, e);
-                exception = new JournalException(errMsg);
-                exception.initCause(e);
-                if (e instanceof InsufficientLogException) {
-                    refreshLog((InsufficientLogException) e);
-                }
-                close();
             } catch (DatabaseException e) {
                 if (i == 0 && e instanceof UnknownMasterException) {
                     // The node may be unable to join the group because the Master could not be determined because a
                     // master was present but lacked a {@link QuorumPolicy#SIMPLE_MAJORITY} needed to update the
                     // environment with information about this node, if it's a new node and is joining the group for
                     // the first time.
-                    LOG.warn("failed to setup environment because of UnknowMasterException for the first time, ignore it.");
-                } else {
-                    String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
-                    LOG.error(errMsg, e);
-                    exception = new JournalException(errMsg);
-                    exception.initCause(e);
+                    LOG.warn(
+                            "failed to setup environment because of UnknowMasterException for the first time, ignore it.");
+                    continue;
+                }
+                String errMsg = String.format("failed to setup environment after retried %d times", i + 1);
+                LOG.error(errMsg, e);
+                exception = new JournalException(errMsg);
+                exception.initCause(e);
+                if (e instanceof InsufficientLogException) {
+                    refreshLog((InsufficientLogException) e);
+                }
+                // close before next attempt
+                if (replicatedEnvironment != null && ! replicatedEnvironment.isValid()) {
+                    close();
                 }
             }
         }
@@ -389,30 +385,13 @@ public class BDBEnvironment {
                 throw new JournalException(
                         String.format("bad environment %s! helper host %s not in local %s",
                                 envHome, helperHostPort, localNodes));
-            } catch (RestartRequiredException e) {
-                String errMsg = String.format(
-                        "catch a RestartRequiredException when checking if helper in local after retried %d times, " +
-                        "refresh and check again",
-                        i + 1);
-                LOG.warn(errMsg, e);
+            } catch (DatabaseException e) {
+                String errMsg = String.format("failed to check if helper in local after retried %d times", i + 1);
+                LOG.error(errMsg, e);
                 exception = new JournalException(errMsg);
                 exception.initCause(e);
                 if (e instanceof InsufficientLogException) {
                     refreshLog((InsufficientLogException) e);
-                }
-            } catch (DatabaseException e) {
-                if (i == 0 && e instanceof UnknownMasterException) {
-                    // The node may be unable to join the group because the Master could not be determined because a
-                    // master was present but lacked a {@link QuorumPolicy#SIMPLE_MAJORITY} needed to update the
-                    // environment with information about this node, if it's a new node and is joining the group for
-                    // the first time.
-                    LOG.warn(
-                            "failed to check if helper in local because of UnknowMasterException for the first time, ignore it.");
-                } else {
-                    String errMsg = String.format("failed to check if helper in local after retried %d times", i + 1);
-                    LOG.error(errMsg, e);
-                    exception = new JournalException(errMsg);
-                    exception.initCause(e);
                 }
             } finally {
                 if (replicatedEnvironment != null) {

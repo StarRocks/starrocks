@@ -21,6 +21,7 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
@@ -37,8 +38,10 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
+import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.hive.HivePartition;
@@ -67,8 +70,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.Util.validateMetastoreUris;
-import static com.starrocks.external.HiveMetaStoreTableUtils.convertHiveTableColumnType;
 import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 
 /**
  * External hive table
@@ -98,19 +101,20 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     public static final String HIVE_RESOURCE = "resource";
 
+    private String catalogName;
     private String hiveDbName;
     private String hiveTableName;
     private String resourceName;
     private String hdfsPath;
-    private final List<String> partColumnNames = Lists.newArrayList();
+    private List<String> partColumnNames = Lists.newArrayList();
     // dataColumnNames stores all the non-partition columns of the hive table,
     // consistent with the order defined in the hive table
-    private final List<String> dataColumnNames = Lists.newArrayList();
-    private final Map<String, String> hiveProperties = Maps.newHashMap();
+    private List<String> dataColumnNames = Lists.newArrayList();
+    private Map<String, String> hiveProperties = Maps.newHashMap();
 
     private HiveMetaStoreTableInfo hmsTableInfo;
 
-    private final HiveRepository hiveRepository;
+    private HiveRepository hiveRepository;
 
     public HiveTable() {
         super(TableType.HIVE);
@@ -129,15 +133,36 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         initHmsTableInfo();
     }
 
+    public HiveTable(long id, String name, List<Column> fullSchema, String resourceName, String catalog,
+                     String hiveDbName, String hiveTableName, String hdfsPath, List<String> partColumnNames,
+                     List<String> dataColumnNames, Map<String, String> properties) {
+        super(id, name, TableType.HIVE, fullSchema);
+        this.resourceName = resourceName;
+        this.catalogName = catalog;
+        this.hiveDbName = hiveDbName;
+        this.hiveTableName = hiveTableName;
+        this.hdfsPath = hdfsPath;
+        this.partColumnNames = partColumnNames;
+        this.dataColumnNames = dataColumnNames;
+        this.hiveProperties = properties;
+        initHmsTableInfo();
+    }
+
     public String getHiveDbTable() {
         return String.format("%s.%s", hiveDbName, hiveTableName);
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
 
-    public String getHiveDb() {
+    @Override
+    public String getCatalogName() {
+        return catalogName == null ? getResourceMappingCatalogName(resourceName, "hive") : catalogName;
+    }
+
+    public String getDbName() {
         return hiveDbName;
     }
 
@@ -152,7 +177,9 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public List<Column> getPartitionColumns() {
-        return HiveMetaStoreTableUtils.getPartitionColumns(hmsTableInfo);
+        return partColumnNames.stream()
+                .map(name -> nameToColumn.get(name))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -164,8 +191,18 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         return dataColumnNames;
     }
 
+    @Override
+    public boolean isUnPartitioned() {
+        return partColumnNames.size() == 0;
+    }
+
     public String getHdfsPath() {
         return this.hdfsPath;
+    }
+
+    @Override
+    public String getTableIdentifier() {
+        return Joiner.on(":").join(name, createTime);
     }
 
     public Map<String, String> getHiveProperties() {
@@ -250,7 +287,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
                     needRefreshColumn = true;
                     break;
                 }
-                Type type = convertHiveTableColumnType(fieldSchema.getType());
+                Type type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
                 if (!type.equals(column.getType())) {
                     needRefreshColumn = true;
                     break;
@@ -269,7 +306,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
         // TODO: Column type conversion should not throw an exception, use invalidate type instead.
         for (FieldSchema fieldSchema : allHiveColumns) {
-            Type srType = convertHiveTableColumnType(fieldSchema.getType());
+            Type srType = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
             Column column = new Column(fieldSchema.getName(), srType, true);
             fullSchemaTemp.add(column);
             nameToColumnTemp.put(column.getName(), column);
@@ -368,6 +405,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         if (hiveTable == null) {
             hiveTable = hiveRepository.getTable(resourceName, this.hiveDbName, this.hiveTableName);
         }
+        this.createTime = hiveTable.getCreateTime();
+
         String hiveTableType = hiveTable.getTableType();
         if (hiveTableType == null) {
             throw new DdlException("Unknown hive table type.");
@@ -393,7 +432,8 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
             }
             // Only internal catalog like hive external table need to validate column type
             if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName) &&
-                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType())) {
+                    !HiveMetaStoreTableUtils.validateColumnType(hiveColumn.getType(), column.getType()) &&
+                    !FeConstants.runningUnitTest) {
                 throw new DdlException("can not convert hive column type [" + hiveColumn.getType() + "] to " +
                         "starrocks type [" + column.getPrimitiveType() + "]");
             }
@@ -613,5 +653,80 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     @Override
     public boolean isSupported() {
         return true;
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public static class Builder {
+        private long id;
+        private String catalogName;
+        private String hiveDbName;
+        private String hiveTableName;
+        private String resourceName;
+        private String hdfsPath;
+        private List<Column> fullSchema;
+        private List<String> partitionColNames = Lists.newArrayList();
+        private List<String> dataColNames = Lists.newArrayList();
+        private Map<String, String> properties = Maps.newHashMap();
+
+        public Builder() {
+        }
+
+        public Builder setId(long id) {
+            this.id = id;
+            return this;
+        }
+
+        public Builder setCatalogName(String catalogName) {
+            this.catalogName = catalogName;
+            return this;
+        }
+
+        public Builder setHiveDbName(String hiveDbName) {
+            this.hiveDbName = hiveDbName;
+            return this;
+        }
+
+        public Builder setHiveTableName(String hiveTableName) {
+            this.hiveTableName = hiveTableName;
+            return this;
+        }
+
+        public Builder setResourceName(String resourceName) {
+            this.resourceName = resourceName;
+            return this;
+        }
+
+        public Builder setHdfsPath(String hdfsPath) {
+            this.hdfsPath = hdfsPath;
+            return this;
+        }
+
+        public Builder setFullSchema(List<Column> fullSchema) {
+            this.fullSchema = fullSchema;
+            return this;
+        }
+
+        public Builder setDataColumnNames(List<String> dataColumnNames) {
+            this.dataColNames = dataColumnNames;
+            return this;
+        }
+
+        public Builder setPartitionColumnNames(List<String> partitionColumnNames) {
+            this.partitionColNames = partitionColumnNames;
+            return this;
+        }
+
+        public Builder setProperties(Map<String, String> properties) {
+            this.properties = properties;
+            return this;
+        }
+
+        public HiveTable build() {
+            return new HiveTable(id, hiveTableName, fullSchema, resourceName, catalogName, hiveDbName, hiveTableName,
+                    hdfsPath, partitionColNames, dataColNames, properties);
+        }
     }
 }

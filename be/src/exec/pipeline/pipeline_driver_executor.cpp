@@ -1,11 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/pipeline_driver_executor.h"
 
 #include <memory>
 
 #include "exec/workgroup/work_group.h"
-#include "gen_cpp/Types_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
 #include "util/debug/query_trace.h"
@@ -17,9 +16,8 @@ GlobalDriverExecutor::GlobalDriverExecutor(std::string name, std::unique_ptr<Thr
                                            bool enable_resource_group)
         : Base(name),
           _enable_resource_group(enable_resource_group),
-          _driver_queue(enable_resource_group
-                                ? std::unique_ptr<DriverQueue>(std::make_unique<DriverQueueWithWorkGroup>())
-                                : std::make_unique<QuerySharedDriverQueue>()),
+          _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
+                                              : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
           _blocked_driver_poller(new PipelineDriverPoller(_driver_queue.get())),
           _exec_state_reporter(new ExecStateReporter()) {}
@@ -85,7 +83,7 @@ void GlobalDriverExecutor::_worker_thread() {
         CurrentThread::current().set_fragment_instance_id({});
         CurrentThread::current().set_pipeline_driver_id(0);
 
-        auto maybe_driver = this->_driver_queue->take(worker_id);
+        auto maybe_driver = this->_driver_queue->take();
         if (maybe_driver.status().is_cancelled()) {
             return;
         }
@@ -94,9 +92,8 @@ void GlobalDriverExecutor::_worker_thread() {
 
         auto* query_ctx = driver->query_ctx();
         auto* fragment_ctx = driver->fragment_ctx();
-        CurrentThread::current().set_query_id(query_ctx->query_id());
-        CurrentThread::current().set_fragment_instance_id(fragment_ctx->fragment_instance_id());
-        CurrentThread::current().set_pipeline_driver_id(driver->driver_id());
+
+        SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
 
         SET_THREAD_LOCAL_QUERY_TRACE_CONTEXT(query_ctx->query_trace(), fragment_ctx->fragment_instance_id(), driver);
 
@@ -313,7 +310,8 @@ void GlobalDriverExecutor::_simplify_common_metrics(RuntimeProfile* driver_profi
                                               "JoinRuntimeFilterInputRows", "JoinRuntimeFilterOutputRows",
                                               "JoinRuntimeFilterEvaluate",  "JoinRuntimeFilterTime",
                                               "ConjunctsInputRows",         "ConjunctsOutputRows",
-                                              "ConjunctsEvaluate",          "ConjunctsTime"};
+                                              "ConjunctsEvaluate",          "ConjunctsTime",
+                                              "JoinRuntimeFilterHashTime"};
         for (auto& name : counter_names) {
             auto* counter = common_metrics->get_counter(name);
             if (counter != nullptr && counter->value() == 0) {

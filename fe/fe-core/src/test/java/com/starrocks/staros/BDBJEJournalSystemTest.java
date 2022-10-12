@@ -1,18 +1,16 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.staros;
 
-import com.starrocks.common.Config;
-import com.starrocks.journal.bdbje.BDBEnvironment;
-import com.starrocks.journal.bdbje.BDBJEJournal;
-import com.starrocks.journal.bdbje.BDBJournalCursor;
+
 import com.starrocks.journal.JournalCursor;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalException;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalWriter;
-import com.starrocks.server.GlobalStateMgr;
-import mockit.Expectations;
+import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.journal.bdbje.BDBJournalCursor;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;

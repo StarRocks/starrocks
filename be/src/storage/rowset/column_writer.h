@@ -58,7 +58,6 @@ struct ColumnWriterOptions {
     bool need_zone_map = false;
     bool need_bitmap_index = false;
     bool need_bloom_filter = false;
-    bool adaptive_page_format = false;
     // for char/varchar will speculate encoding in append
     // for others will decide encoding in init method
     bool need_speculate_encoding = false;

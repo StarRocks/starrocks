@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/rowset_merger.h"
 
@@ -34,7 +34,9 @@ public:
         return Status::OK();
     }
 
-    Status flush_chunk(const vectorized::Chunk& chunk) override { return Status::NotSupported(""); }
+    Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override {
+        return Status::NotSupported("");
+    }
 
     Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override {
         return Status::NotSupported("");
@@ -89,7 +91,7 @@ public:
     RowsetSharedPtr create_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                   vectorized::Column* one_delete = nullptr) {
         // TODO(cbl): test multi-segment rowsets
-        RowsetWriterContext writer_context(kDataFormatV2, config::storage_format_version);
+        RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
         writer_context.rowset_id = rowset_id;
         writer_context.tablet_id = tablet->tablet_id();

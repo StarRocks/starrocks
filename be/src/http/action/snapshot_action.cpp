@@ -24,12 +24,9 @@
 #include "common/logging.h"
 #include "gen_cpp/AgentService_types.h"
 #include "http/http_channel.h"
-#include "http/http_headers.h"
 #include "http/http_request.h"
-#include "http/http_response.h"
 #include "http/http_status.h"
 #include "runtime/exec_env.h"
-#include "storage/olap_define.h"
 #include "storage/snapshot_manager.h"
 #include "storage/storage_engine.h"
 

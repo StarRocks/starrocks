@@ -1,95 +1,136 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.lake.compaction;
 
-import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.Config;
+import com.starrocks.common.io.Text;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.lang.reflect.InvocationTargetException;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
+import javax.validation.constraints.NotNull;
 
 public class CompactionManager {
     private static final Logger LOG = LogManager.getLogger(CompactionManager.class);
 
+    @SerializedName(value = "partitionStatisticsHashMap")
     private final Map<PartitionIdentifier, PartitionStatistics> partitionStatisticsHashMap = new HashMap<>();
-    private final List<CompactionPicker> compactionPickers = Lists.newArrayList();
+
+    private Selector selector;
+    private Sorter sorter;
+    private CompactionScheduler compactionScheduler;
 
     public CompactionManager() {
-        compactionPickers.add(new CompactionPickerByCount(Config.experimental_lake_compaction_max_version_count));
-        compactionPickers.add(new CompactionPickerByTime(Config.experimental_lake_compaction_max_interval_seconds * 1000,
-                Config.experimental_lake_compaction_min_version_count));
+        try {
+            init();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
-    public synchronized void handleLoadingFinished(PartitionIdentifier partition, long version) {
-        PartitionStatistics statistics = partitionStatisticsHashMap.get(partition);
-        if (statistics == null) {
-            // We don't know the compaction version and time, just set compaction version as |version-1|.
-            // FE's follower nodes may have a different timestamp with the leader node.
-            long now = System.currentTimeMillis();
-            statistics = new PartitionStatistics(partition, now, version - 1, version);
-            partitionStatisticsHashMap.put(partition, statistics);
-        } else {
-            Preconditions.checkState(version == statistics.getCurrentVersion() + 1);
-            statistics.setCurrentVersion(version);
+    void init() throws ClassNotFoundException, NoSuchMethodException, InvocationTargetException, InstantiationException,
+            IllegalAccessException {
+        String packageName = CompactionManager.class.getPackage().getName();
+        Class<?> selectorClazz = Class.forName(packageName + "." + Config.lake_compaction_selector);
+        selector = (Selector) selectorClazz.getConstructor().newInstance();
+
+        Class<?> sorterClazz = Class.forName(packageName + "." + Config.lake_compaction_sorter);
+        sorter = (Sorter) sorterClazz.getConstructor().newInstance();
+    }
+
+    public synchronized void start() {
+        if (compactionScheduler == null) {
+            compactionScheduler = new CompactionScheduler(this, GlobalStateMgr.getCurrentSystemInfo(),
+                    GlobalStateMgr.getCurrentGlobalTransactionMgr(), GlobalStateMgr.getCurrentState());
+            compactionScheduler.start();
+        }
+    }
+
+    public synchronized void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.computeIfAbsent(partition, PartitionStatistics::new);
+        PartitionVersion currentVersion = new PartitionVersion(version, versionTime);
+        statistics.setCurrentVersion(currentVersion);
+        if (statistics.getLastCompactionVersion() == null) {
+            // Set version-1 as last compaction version
+            statistics.setLastCompactionVersion(new PartitionVersion(version - 1, versionTime));
         }
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished loading: {}", statistics);
         }
     }
 
-    public synchronized void handleCompactionFinished(PartitionIdentifier partition, long version) {
-        // FE's follower nodes may have a different timestamp with the leader node.
-        long now = System.currentTimeMillis();
-        PartitionStatistics statistics = partitionStatisticsHashMap.get(partition);
-        if (statistics == null) {
-            statistics = new PartitionStatistics(partition, now, version, version);
-            partitionStatisticsHashMap.put(partition, statistics);
-        } else {
-            Preconditions.checkState(version == statistics.getCurrentVersion() + 1);
-            statistics.setCurrentVersion(version);
-            statistics.setLastCompactionVersion(version);
-            statistics.setLastCompactionTime(now);
-        }
+    public synchronized void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime) {
+        PartitionStatistics statistics = partitionStatisticsHashMap.computeIfAbsent(partition, PartitionStatistics::new);
+        PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
+        statistics.setCurrentVersion(compactionVersion);
+        statistics.setLastCompactionVersion(compactionVersion);
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished compaction: {}", statistics);
         }
     }
 
-    synchronized PartitionIdentifier choosePartitionToCompact() {
-        PartitionStatistics target = null;
-        for (CompactionPicker picker : compactionPickers) {
-            target = picker.pick(partitionStatisticsHashMap.values());
-            if (target != null) {
-                Preconditions.checkState(!target.isDoingCompaction());
-                target.setDoingCompaction(true);
-                break;
-            }
-        }
-        if (LOG.isDebugEnabled() && target != null) {
-            LOG.debug("Compacting partition: {}", target);
-        }
-        return (target != null) ? target.getPartitionId() : null;
+    @NotNull
+    synchronized List<PartitionIdentifier> choosePartitionsToCompact(@NotNull Set<PartitionIdentifier> excludes) {
+        return choosePartitionsToCompact().stream().filter(p -> !excludes.contains(p)).collect(Collectors.toList());
+    }
+
+    @NotNull
+    synchronized List<PartitionIdentifier> choosePartitionsToCompact() {
+        List<PartitionStatistics> selection = sorter.sort(selector.select(partitionStatisticsHashMap.values()));
+        return selection.stream().map(PartitionStatistics::getPartition).collect(Collectors.toList());
+    }
+
+    @NotNull
+    synchronized Set<PartitionIdentifier> getAllPartitions() {
+        return new HashSet<>(partitionStatisticsHashMap.keySet());
     }
 
     synchronized void enableCompactionAfter(PartitionIdentifier partition, long delayMs) {
         PartitionStatistics statistics = partitionStatisticsHashMap.get(partition);
-        Preconditions.checkState(statistics != null);
-        Preconditions.checkState(statistics.isDoingCompaction());
-        statistics.setDoingCompaction(false);
-        // FE's follower nodes may have a different timestamp with the leader node.
-        statistics.setNextCompactionTime(System.currentTimeMillis() + delayMs);
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Enable partition to do compaction: {}", statistics);
+        if (statistics != null) {
+            // FE's follower nodes may have a different timestamp with the leader node.
+            statistics.setNextCompactionTime(System.currentTimeMillis() + delayMs);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Enable partition to do compaction: {}", statistics);
+            }
         }
     }
 
-    // todo: remove partition on follower nodes.
     synchronized void removePartition(PartitionIdentifier partition) {
-        PartitionStatistics statistics = partitionStatisticsHashMap.remove(partition);
-        Preconditions.checkState(statistics != null);
+        partitionStatisticsHashMap.remove(partition);
+    }
+
+    public synchronized long saveCompactionManager(DataOutput out, long checksum) throws IOException {
+        String json = GsonUtils.GSON.toJson(this);
+        Text.writeString(out, json);
+        checksum ^= getChecksum();
+        return checksum;
+    }
+
+    public synchronized long getChecksum() {
+        return partitionStatisticsHashMap.size();
+    }
+
+    public static CompactionManager loadCompactionManager(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        CompactionManager compactionManager = GsonUtils.GSON.fromJson(json, CompactionManager.class);
+        try {
+            compactionManager.init();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return compactionManager;
     }
 }

@@ -1,13 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.alter.DecommissionBackendJob;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.CoordinatorMonitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,6 +72,7 @@ public class ComputeNode implements IComputable, Writable {
     private int heartbeatRetryTimes = 0;
 
     // port of starlet on BE
+    @SerializedName("starletPort")
     private volatile int starletPort;
 
     public ComputeNode() {
@@ -88,7 +90,7 @@ public class ComputeNode implements IComputable, Writable {
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
 
-        this.decommissionType = DecommissionBackendJob.DecommissionType.SystemDecommission.ordinal();
+        this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
     public ComputeNode(long id, String host, int heartbeatPort) {
@@ -107,7 +109,7 @@ public class ComputeNode implements IComputable, Writable {
 
         this.ownerClusterName = "";
         this.backendState = Backend.BackendState.free.ordinal();
-        this.decommissionType = DecommissionBackendJob.DecommissionType.SystemDecommission.ordinal();
+        this.decommissionType = DecommissionType.SystemDecommission.ordinal();
     }
 
     public int getStarletPort() {
@@ -256,6 +258,10 @@ public class ComputeNode implements IComputable, Writable {
         return this.isDecommissioned.get();
     }
 
+    public void setIsDecommissioned(boolean isDecommissioned) {
+        this.isDecommissioned.set(isDecommissioned);
+    }
+
     public boolean isAvailable() {
         return this.isAlive.get() && !this.isDecommissioned.get();
     }
@@ -292,14 +298,6 @@ public class ComputeNode implements IComputable, Writable {
                 isAlive.get() + "]";
     }
 
-    public String getOwnerClusterName() {
-        return ownerClusterName;
-    }
-
-    public void setOwnerClusterName(String name) {
-        ownerClusterName = name;
-    }
-
     public void clearClusterName() {
         ownerClusterName = "";
     }
@@ -315,7 +313,7 @@ public class ComputeNode implements IComputable, Writable {
         }
     }
 
-    public void setDecommissionType(DecommissionBackendJob.DecommissionType type) {
+    public void setDecommissionType(DecommissionType type) {
         decommissionType = type.ordinal();
     }
 
@@ -343,11 +341,11 @@ public class ComputeNode implements IComputable, Writable {
         this.backendState = backendState;
     }
 
-    public DecommissionBackendJob.DecommissionType getDecommissionType() {
-        if (decommissionType == DecommissionBackendJob.DecommissionType.ClusterDecommission.ordinal()) {
-            return DecommissionBackendJob.DecommissionType.ClusterDecommission;
+    public DecommissionType getDecommissionType() {
+        if (decommissionType == DecommissionType.ClusterDecommission.ordinal()) {
+            return DecommissionType.ClusterDecommission;
         }
-        return DecommissionBackendJob.DecommissionType.SystemDecommission;
+        return DecommissionType.SystemDecommission;
     }
 
     public int getCpuCores() {
@@ -393,11 +391,18 @@ public class ComputeNode implements IComputable, Writable {
             this.lastUpdateMs = hbResponse.getHbTime();
             if (!isAlive.get()) {
                 isChanged = true;
-                this.lastStartTime = hbResponse.getHbTime();
+                // From version 2.5 we not use isAlive to determine whether to update the lastStartTime 
+                // This line to set 'lastStartTime' will be removed in due time
+                this.lastStartTime = hbResponse.getHbTime(); 
                 LOG.info("{} is alive, last start time: {}", this.toString(), hbResponse.getHbTime());
                 this.isAlive.set(true);
             } else if (this.lastStartTime <= 0) {
                 this.lastStartTime = hbResponse.getHbTime();
+            }
+
+            if (hbResponse.getRebootTime() > this.lastStartTime) {
+                this.lastStartTime = hbResponse.getRebootTime();
+                isChanged = true;
             }
 
             if (this.cpuCores != hbResponse.getCpuCores()) {
@@ -413,6 +418,7 @@ public class ComputeNode implements IComputable, Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
+                    CoordinatorMonitor.getInstance().addDeadBackend(id);
                     LOG.info("{} is dead,", this.toString());
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();

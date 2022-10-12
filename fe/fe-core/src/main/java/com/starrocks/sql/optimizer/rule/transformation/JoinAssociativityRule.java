@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.rule.transformation;
 
@@ -26,6 +26,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -45,10 +46,10 @@ public class JoinAssociativityRule extends TransformationRule {
                 .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
-    private static final JoinAssociativityRule instance = new JoinAssociativityRule();
+    private static final JoinAssociativityRule INSTANCE = new JoinAssociativityRule();
 
     public static JoinAssociativityRule getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public boolean check(final OptExpression input, OptimizerContext context) {
@@ -163,10 +164,11 @@ public class JoinAssociativityRule extends TransformationRule {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
                 // To handle mappings of expressions in projection, special processing is needed like
-                // ColumnRefOperator -> ColumnRefOperator mappings with name ("expr" -> column_name), it need to be handled
-                // like expression mapping.
-                boolean isProjectToColumnRef = entry.getValue().isColumnRef() &&
-                        entry.getKey().getName().equals(((ColumnRefOperator) entry.getValue()).getName());
+                // ColumnRefOperator -> ColumnRefOperator mappings with name ("1: expr" -> "2: column_name", or "1: sum" -> "2: sum"),
+                // it needs to be handled like expression mapping.
+                String keyIdentifier = entry.getKey().toString();
+                String valueIdentifier = entry.getValue().toString();
+                boolean isProjectToColumnRef = Objects.equals(keyIdentifier, valueIdentifier);
                 if (!isProjectToColumnRef &&
                         newRightChildColumns.containsAll(entry.getValue().getUsedColumns())) {
                     rightExpression.put(entry.getKey(), entry.getValue());

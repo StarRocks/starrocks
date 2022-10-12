@@ -1,11 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.PartitionNames;
-import com.starrocks.analysis.TruncateTableStmt;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 
 public class TruncateTableAnalyzer {

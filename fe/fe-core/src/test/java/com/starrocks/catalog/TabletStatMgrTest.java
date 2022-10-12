@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -11,15 +11,20 @@ import com.starrocks.lake.Utils;
 import com.starrocks.lake.proto.TabletStatRequest;
 import com.starrocks.lake.proto.TabletStatResponse;
 import com.starrocks.lake.proto.TabletStatResponse.TabletStat;
-import com.starrocks.rpc.LakeServiceClient;
-import com.starrocks.rpc.RpcException;
+import com.starrocks.rpc.BrpcProxy;
+import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.Backend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.jetbrains.annotations.NotNull;
 import org.junit.Assert;
@@ -28,14 +33,13 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 public class TabletStatMgrTest {
     @Test
-    public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr) {
+    public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
+                                          @Mocked SystemInfoService systemInfoService) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -85,12 +89,10 @@ public class TabletStatMgrTest {
         tablet2Stat.setRow_num(201L);
         tabletsStats.put(tablet2Id, tablet2Stat);
 
-        new Expectations() {
-            {
+        new Expectations() {{
                 GlobalStateMgr.getCurrentInvertedIndex();
                 result = invertedIndex;
-            }
-        };
+            }};
 
         // Check
         TabletStatMgr tabletStatMgr = new TabletStatMgr();
@@ -101,8 +103,8 @@ public class TabletStatMgrTest {
     }
 
     @Test
-    public void testUpdateLakeTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
-                                         @Mocked LakeServiceClient client) throws RpcException {
+    public void testUpdateLakeTabletStat(@Mocked SystemInfoService systemInfoService,
+                                         @Mocked LakeService lakeService) {
         long dbId = 1L;
         long tableId = 2L;
         long partitionId = 3L;
@@ -148,11 +150,31 @@ public class TabletStatMgrTest {
         Database db = new Database(dbId, "db");
         db.createTable(table);
 
+        new MockUp<BrpcProxy>() {
+            @Mock
+            public LakeService getLakeService(TNetworkAddress addr) {
+                return lakeService;
+            }
+
+            @Mock
+            public LakeService getLakeService(String host, int port) {
+                return lakeService;
+            }
+        };
+        new MockUp<Utils>() {
+            @Mock
+            public Long chooseBackend(LakeTablet tablet) {
+                return 1000L;
+            }
+        };
         new Expectations() {
             {
-                Utils.chooseBackend((LakeTablet) any);
-                result = 1000L;
-                client.getTabletStats((TabletStatRequest) any);
+                systemInfoService.getBackend(anyLong);
+                result = new Backend(1000L, "", 123);
+
+                lakeService.getTabletStats((TabletStatRequest) any);
+                minTimes = 1;
+                maxTimes = 1;
                 result = new Future<TabletStatResponse>() {
                     @Override
                     public boolean cancel(boolean mayInterruptIfRunning) {
@@ -170,7 +192,7 @@ public class TabletStatMgrTest {
                     }
 
                     @Override
-                    public TabletStatResponse get() throws InterruptedException, ExecutionException {
+                    public TabletStatResponse get() {
                         List<TabletStat> stats = Lists.newArrayList();
                         TabletStat stat1 = new TabletStat();
                         stat1.tabletId = tablet1Id;
@@ -189,8 +211,7 @@ public class TabletStatMgrTest {
                     }
 
                     @Override
-                    public TabletStatResponse get(long timeout, @NotNull TimeUnit unit)
-                            throws InterruptedException, ExecutionException, TimeoutException {
+                    public TabletStatResponse get(long timeout, @NotNull TimeUnit unit) {
                         return null;
                     }
                 };

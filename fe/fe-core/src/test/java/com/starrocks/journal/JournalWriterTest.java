@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.journal;
 
@@ -199,8 +199,8 @@ public class JournalWriterTest {
         };
 
         Assert.assertEquals(1, writer.nextVisibleJournalId);
-        for (int i = 0; i != 4; i ++) {
-            for (int j = 0; j != 3; j ++) {
+        for (int i = 0; i != 4; i++) {
+            for (int j = 0; j != 3; j++) {
                 journalQueue.add(new JournalTask(makeBuffer(10), -1));
             }
             writer.writeOneBatch();

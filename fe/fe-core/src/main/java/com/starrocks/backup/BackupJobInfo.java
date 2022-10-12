@@ -25,6 +25,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.backup.RestoreFileMapping.IdChain;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
@@ -65,18 +66,26 @@ import java.util.stream.Collectors;
 public class BackupJobInfo implements Writable {
     private static final Logger LOG = LogManager.getLogger(BackupJobInfo.class);
 
+    @SerializedName(value = "name")
     public String name;
+    @SerializedName(value = "dbName")
     public String dbName;
+    @SerializedName(value = "dbId")
     public long dbId;
+    @SerializedName(value = "backupTime")
     public long backupTime;
+    @SerializedName(value = "tables")
     public Map<String, BackupTableInfo> tables = Maps.newHashMap();
     public boolean success;
 
+    @SerializedName(value = "metaVersion")
     public int metaVersion;
+    @SerializedName(value = "starrocksMetaVersion")
     public int starrocksMetaVersion;
 
     // This map is used to save the table alias mapping info when processing a restore job.
     // origin -> alias
+    @SerializedName(value = "tblAlias")
     public Map<String, String> tblAlias = Maps.newHashMap();
 
     public boolean containsTbl(String tblName) {
@@ -114,8 +123,11 @@ public class BackupJobInfo implements Writable {
     }
 
     public static class BackupTableInfo {
+        @SerializedName(value = "name")
         public String name;
+        @SerializedName(value = "id")
         public long id;
+        @SerializedName(value = "partitions")
         public Map<String, BackupPartitionInfo> partitions = Maps.newHashMap();
 
         public boolean containsPart(String partName) {
@@ -149,9 +161,13 @@ public class BackupJobInfo implements Writable {
     }
 
     public static class BackupPartitionInfo {
+        @SerializedName(value = "name")
         public String name;
+        @SerializedName(value = "id")
         public long id;
+        @SerializedName(value = "version")
         public long version;
+        @SerializedName(value = "indexes")
         public Map<String, BackupIndexInfo> indexes = Maps.newHashMap();
 
         public BackupIndexInfo getIdx(String idxName) {
@@ -160,9 +176,13 @@ public class BackupJobInfo implements Writable {
     }
 
     public static class BackupIndexInfo {
+        @SerializedName(value = "name")
         public String name;
+        @SerializedName(value = "id")
         public long id;
+        @SerializedName(value = "schema")
         public int schemaHash;
+        @SerializedName(value = "BackupTabletInfo")
         public List<BackupTabletInfo> tablets = Lists.newArrayList();
 
         public BackupTabletInfo getTablet(long tabletId) {
@@ -176,7 +196,9 @@ public class BackupJobInfo implements Writable {
     }
 
     public static class BackupTabletInfo {
+        @SerializedName(value = "id")
         public long id;
+        @SerializedName(value = "files")
         public List<String> files = Lists.newArrayList();
     }
 
@@ -264,7 +286,9 @@ public class BackupJobInfo implements Writable {
                     for (Tablet tablet : index.getTablets()) {
                         BackupTabletInfo tabletInfo = new BackupTabletInfo();
                         tabletInfo.id = tablet.getId();
-                        tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
+                        if (tbl.isOlapTable()) {
+                            tabletInfo.files.addAll(snapshotInfos.get(tablet.getId()).getFiles());
+                        }
                         idxInfo.tablets.add(tabletInfo);
                     }
                 }

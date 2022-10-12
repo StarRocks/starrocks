@@ -17,39 +17,44 @@
 
 package com.starrocks.load;
 
+import com.starrocks.common.io.DataOutputBuffer;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 
 public class FailMsgTest {
 
     @Test
     public void testSerialization() throws Exception {
-        File file = new File("./failMsgTest");
-        file.createNewFile();
-        DataOutputStream dos = new DataOutputStream(new FileOutputStream(file));
+        DataOutputBuffer dof = new DataOutputBuffer();
 
         FailMsg failMsg = new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED, "Job failed");
-        failMsg.write(dos);
-        dos.flush();
-        dos.close();
+        failMsg.write(dof);
 
-        DataInputStream dis = new DataInputStream(new FileInputStream(file));
+        DataInputStream dif = new DataInputStream(new ByteArrayInputStream(dof.getData()));
         FailMsg failMsg1 = new FailMsg();
-        failMsg1.readFields(dis);
+        failMsg1.readFields(dif);
 
         Assert.assertEquals(failMsg1.getMsg(), "Job failed");
         Assert.assertEquals(failMsg1.getCancelType(), FailMsg.CancelType.ETL_QUALITY_UNSATISFIED);
 
-        Assert.assertTrue(failMsg1.equals(failMsg));
-
-        dis.close();
-        file.delete();
+        Assert.assertEquals(failMsg1, failMsg);
     }
 
+    @Test
+    public void testSerialization2() throws Exception {
+        DataOutputBuffer dof = new DataOutputBuffer();
+
+        FailMsg failMsg = new FailMsg(FailMsg.CancelType.ETL_QUALITY_UNSATISFIED, null);
+        failMsg.write(dof);
+
+        DataInputStream dif = new DataInputStream(new ByteArrayInputStream(dof.getData()));
+        FailMsg failMsg1 = new FailMsg();
+        failMsg1.readFields(dif);
+
+        Assert.assertEquals(failMsg1.getMsg(), "");
+        Assert.assertEquals(failMsg1.getCancelType(), FailMsg.CancelType.ETL_QUALITY_UNSATISFIED);
+    }
 }

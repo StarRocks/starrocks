@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "fs/fs_memory.h"
 
@@ -49,7 +49,7 @@ public:
 
     Status appendv(const Slice* data, size_t cnt) override {
         for (size_t i = 0; i < cnt; i++) {
-            (void)append(data[i]);
+            RETURN_IF_ERROR(append(data[i]));
         }
         return Status::OK();
     }

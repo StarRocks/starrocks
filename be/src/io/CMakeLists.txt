@@ -1,4 +1,4 @@
-# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 # where to put generated libraries
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/io")
@@ -15,4 +15,5 @@ add_library(IO STATIC
         readable.cpp
         s3_input_stream.cpp
         s3_output_stream.cpp
+        cache_input_stream.cpp
         )

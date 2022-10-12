@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/condition_expr.h"
 
@@ -7,12 +7,10 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
-#include "column/fixed_length_column_base.h"
 #include "column/nullable_column.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "common/object_pool.h"
-#include "exprs/vectorized/function_helper.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 #include "runtime/types.h"

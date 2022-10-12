@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/lake/tablet_reader.h"
 
@@ -11,12 +11,10 @@
 #include "column/vectorized_fwd.h"
 #include "common/logging.h"
 #include "fs/fs_util.h"
-#include "gen_cpp/lake_delete.pb.h"
-#include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
+#include "storage/lake/join_path.h"
 #include "storage/lake/location_provider.h"
-#include "storage/lake/tablet.h"
 #include "storage/lake/tablet_manager.h"
 #include "storage/lake/tablet_writer.h"
 #include "storage/tablet_schema.h"
@@ -34,7 +32,6 @@ using VChunk = starrocks::vectorized::Chunk;
 class DuplicateTabletReaderTest : public testing::Test {
 public:
     DuplicateTabletReaderTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -50,7 +47,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -68,13 +64,15 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kSegmentDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -83,7 +81,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
@@ -179,7 +176,6 @@ TEST_F(DuplicateTabletReaderTest, test_read_success) {
 class AggregateTabletReaderTest : public testing::Test {
 public:
     AggregateTabletReaderTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -195,7 +191,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(AGG_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -214,13 +209,15 @@ public:
             c1->set_aggregation("SUM");
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kTxnLogDirectoryName)));
+        CHECK_OK(fs::create_directories(join_path(kTestGroupPath, kSegmentDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -229,7 +226,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_aggregate_lake_tablet_reader";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;
@@ -348,7 +344,6 @@ TEST_F(AggregateTabletReaderTest, test_read_success) {
 class DuplicateTabletReaderWithDeleteTest : public testing::Test {
 public:
     DuplicateTabletReaderWithDeleteTest() {
-        _mem_tracker = std::make_unique<MemTracker>(-1);
         _location_provider = std::make_unique<FixedLocationProvider>(kTestGroupPath);
         _tablet_manager = std::make_unique<TabletManager>(_location_provider.get(), 0);
         _tablet_metadata = std::make_unique<TabletMetadata>();
@@ -364,7 +359,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -382,13 +376,15 @@ public:
             c1->set_is_nullable(false);
         }
 
-        _tablet_schema = TabletSchema::create(_mem_tracker.get(), *schema);
+        _tablet_schema = TabletSchema::create(*schema);
         _schema = std::make_shared<VSchema>(ChunkHelper::convert_schema(*_tablet_schema));
     }
 
     void SetUp() override {
         (void)fs::remove_all(kTestGroupPath);
-        CHECK_OK(fs::create_directories(kTestGroupPath));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kSegmentDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kMetadataDirectoryName)));
+        CHECK_OK(fs::create_directories(lake::join_path(kTestGroupPath, lake::kTxnLogDirectoryName)));
         CHECK_OK(_tablet_manager->put_tablet_metadata(*_tablet_metadata));
     }
 
@@ -397,7 +393,6 @@ public:
 protected:
     constexpr static const char* const kTestGroupPath = "test_duplicate_lake_tablet_reader_with_delete";
 
-    std::unique_ptr<MemTracker> _mem_tracker;
     std::unique_ptr<FixedLocationProvider> _location_provider;
     std::unique_ptr<TabletManager> _tablet_manager;
     std::unique_ptr<TabletMetadata> _tablet_metadata;

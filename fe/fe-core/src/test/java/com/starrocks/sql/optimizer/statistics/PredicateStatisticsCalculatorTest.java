@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.statistics;
 
@@ -81,5 +81,20 @@ public class PredicateStatisticsCalculatorTest {
         Assert.assertEquals(0, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
         Assert.assertEquals(10, estimatedStatistics.getColumnStatistic(c2).getDistinctValuesCount(), 0.001);
         Assert.assertEquals(0, estimatedStatistics.getColumnStatistic(c2).getNullsFraction(), 0.001);
+    }
+
+    @Test
+    public void testNullEqStatistic() throws Exception {
+        ColumnRefOperator c1 = new ColumnRefOperator(0, Type.INT, "c1", true);
+        Statistics statistics = Statistics.builder()
+                .addColumnStatistic(c1, ColumnStatistic.builder().setNullsFraction(0.5).setDistinctValuesCount(10).build())
+                .setOutputRowCount(10000).build();
+
+        BinaryPredicateOperator binaryPredicateOperator = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.EQ_FOR_NULL, c1, ConstantOperator.createNull(Type.INT));
+        Statistics estimatedStatistics =
+                PredicateStatisticsCalculator.statisticsCalculate(binaryPredicateOperator, statistics);
+        Assert.assertEquals(5000, estimatedStatistics.getOutputRowCount(), 0.001);
+        Assert.assertEquals(1, estimatedStatistics.getColumnStatistic(c1).getNullsFraction(), 0.001);
     }
 }

@@ -45,7 +45,8 @@ ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const st
           _profile(nullptr),
           _bytes_written_counter(nullptr),
           _rows_written_counter(nullptr),
-          _write_timer(nullptr) {}
+          _write_timer(nullptr),
+          _closed(false) {}
 
 Status ExportSink::init(const TDataSink& t_sink) {
     RETURN_IF_ERROR(DataSink::init(t_sink));
@@ -89,12 +90,17 @@ Status ExportSink::open(RuntimeState* state) {
 }
 
 Status ExportSink::close(RuntimeState* state, Status exec_status) {
+    if (_closed) {
+        return Status::OK();
+    }
     Expr::close(_output_expr_ctxs, state);
     if (_file_builder != nullptr) {
         Status st = _file_builder->finish();
         _file_builder.reset();
+        _closed = true;
         return st;
     }
+    _closed = true;
     return Status::OK();
 }
 
@@ -113,8 +119,7 @@ Status ExportSink::open_file_writer(int timeout_ms) {
     }
     case TFileType::FILE_BROKER: {
         if (_t_export_sink.__isset.use_broker && !_t_export_sink.use_broker) {
-            ASSIGN_OR_RETURN(auto fs,
-                             FileSystem::CreateUniqueFromString(file_path, FSOptions(nullptr, &_t_export_sink)));
+            ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
             break;
         } else {
@@ -151,8 +156,13 @@ Status ExportSink::gen_file_name(std::string* file_name) {
     return Status::OK();
 }
 
-Status ExportSink::send_chunk(RuntimeState*, vectorized::Chunk* chunk) {
-    return _file_builder->add_chunk(chunk);
+Status ExportSink::send_chunk(RuntimeState* state, vectorized::Chunk* chunk) {
+    Status status = _file_builder->add_chunk(chunk);
+    if (!status.ok()) {
+        Status status;
+        close(state, status);
+    }
+    return status;
 }
 
 } // namespace starrocks

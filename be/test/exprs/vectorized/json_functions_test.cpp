@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/json_functions.h"
 
@@ -10,6 +10,7 @@
 #include <string>
 
 #include "butil/time.h"
+#include "column/vectorized_fwd.h"
 #include "common/statusor.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
@@ -769,7 +770,120 @@ TEST_F(JsonFunctionsTest, extract_from_object_test) {
 
     EXPECT_STATUS(Status::NotFound(""),
                   test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[2].key", &output));
+
+    EXPECT_STATUS(Status::NotFound(""),
+                  test_extract_from_object(R"({"data": [{"key": 1},{"key": 2}]})", "$.data[3].key", &output));
+
+    EXPECT_STATUS(Status::DataQualityError(""),
+                  test_extract_from_object(R"({"data1 " : 1, "data2":})", "$.data", &output));
 }
+
+class JsonLengthTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, int>> {};
+
+TEST_P(JsonLengthTestFixture, json_length_test) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_column = JsonColumn::create();
+
+    std::string param_json = std::get<0>(GetParam());
+    std::string param_path = std::get<1>(GetParam());
+    int expect_length = std::get<2>(GetParam());
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_column->append(&*json);
+
+    Columns columns;
+    columns.push_back(json_column);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    // ctx.get()->impl()->set_constant_columns(columns);
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_OK(st);
+
+    ColumnPtr result = JsonFunctions::json_length(ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+    EXPECT_EQ(expect_length, result->get(0).get_int32());
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(JsonLengthTest, JsonLengthTestFixture,
+                         ::testing::Values(
+                            std::make_tuple(R"({ "k1":1, "k2": 2 })", "", 2), 
+                            std::make_tuple(R"({ "k1":1, "k2": {} })", "$.k2", 0), 
+                            std::make_tuple(R"({ "k1":1, "k2": [1,2] })", "$.k2", 2), 
+                            std::make_tuple(R"({ "k1":1, "k2": [1,2] })", "$.k3", 0), 
+                            std::make_tuple(R"({ })", "", 0),
+                            std::make_tuple(R"( [] )", "", 0), 
+                            std::make_tuple(R"( [1] )", "", 1),
+                            std::make_tuple(R"( null )", "", 1), 
+                            std::make_tuple(R"( 1 )", "", 1)
+                        ));
+// clang-format on
+
+class JsonKeysTestFixture : public ::testing::TestWithParam<std::tuple<std::string, std::string, std::string>> {};
+
+TEST_P(JsonKeysTestFixture, json_keys) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto json_column = JsonColumn::create();
+
+    std::string param_json = std::get<0>(GetParam());
+    std::string param_path = std::get<1>(GetParam());
+    std::string param_result = std::get<2>(GetParam());
+
+    auto json = JsonValue::parse(param_json);
+    ASSERT_TRUE(json.ok());
+    json_column->append(&*json);
+
+    Columns columns;
+    columns.push_back(json_column);
+    if (!param_path.empty()) {
+        auto path_column = BinaryColumn::create();
+        path_column->append(param_path);
+        columns.push_back(path_column);
+    }
+
+    Status st = JsonFunctions::native_json_path_prepare(ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+    ASSERT_OK(st);
+
+    ColumnPtr result = JsonFunctions::json_keys(ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+
+    if (param_result == "NULL") {
+        EXPECT_TRUE(result->is_null(0));
+    } else {
+        const JsonValue* keys = result->get(0).get_json();
+        std::string keys_str = keys->to_string_uncheck();
+        EXPECT_EQ(param_result, keys_str);
+    }
+
+    ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                        ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                        .ok());
+}
+
+// clang-format off
+INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
+                         ::testing::Values(std::make_tuple(R"({ "k1": 1, "k2": 2 })", "", R"(["k1", "k2"])"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  "", R"(["k1"])"),
+                                           std::make_tuple(R"({ "k1": {"k2": 1} })",  "", R"(["k1"])"),
+                                           std::make_tuple(R"({ })",  "", R"([])"),
+                                           std::make_tuple(R"( [] )",  "", "NULL"),
+                                           std::make_tuple(R"( 1 )",  "", "NULL"),
+                                           std::make_tuple(R"( "hehe")", "", "NULL"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  "$.k1", R"(NULL)"),
+                                           std::make_tuple(R"({ "k1": "v1" })",  "$.k3", R"(NULL)"),
+                                           std::make_tuple(R"({ "k1": {"k2": 1} })",  "$.k1", R"(["k2"])")
+                         ));
+
+// clang-format on
 
 } // namespace vectorized
 } // namespace starrocks

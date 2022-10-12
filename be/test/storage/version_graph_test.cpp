@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "storage/version_graph.h"
 
@@ -6,29 +6,44 @@
 
 namespace starrocks::vectorized {
 
+// NOLINTNEXTLINE
 TEST(VersionGraphTest, capture) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetMetaSharedPtr> rs_meta;
     for (int i = 0; i < 10; i++) {
-        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-        rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i);
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(i);
+        rs_meta_pb->set_end_version(i);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
     }
 
     for (int i = 0; i < 10; i = i + 2) {
-        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-        rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i + 1);
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(i);
+        rs_meta_pb->set_end_version(i + 1);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
     }
 
-    rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-    rs_meta.back()->set_start_version(0);
-    rs_meta.back()->set_end_version(5);
+    {
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(0);
+        rs_meta_pb->set_end_version(5);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
+    }
 
-    rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-    rs_meta.back()->set_start_version(11);
-    rs_meta.back()->set_end_version(11);
+    {
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(11);
+        rs_meta_pb->set_end_version(11);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
+    }
 
     int64_t max_version = -1;
     graph.construct_version_graph(rs_meta, &max_version);
@@ -197,29 +212,40 @@ TEST(VersionGraphTest, capture) {
 
     rs_meta.clear();
     max_version = -1;
-    graph.reconstruct_version_graph(rs_meta, &max_version);
+    graph.construct_version_graph(rs_meta, &max_version);
 
     EXPECT_EQ(max_version, -1);
 }
 
+// NOLINTNEXTLINE
 TEST(VersionGraphTest, multi_edge) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetMetaSharedPtr> rs_meta;
-    rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-    rs_meta.back()->set_start_version(0);
-    rs_meta.back()->set_end_version(5);
+    {
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(0);
+        rs_meta_pb->set_end_version(5);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
+    }
 
     for (int i = 0; i < 10; i = i + 2) {
-        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-        rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i + 1);
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(i);
+        rs_meta_pb->set_end_version(i + 1);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
     }
 
     for (int i = 0; i < 10; i++) {
-        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-        rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i);
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(i);
+        rs_meta_pb->set_end_version(i);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
     }
 
     int64_t max_version = -1;
@@ -238,24 +264,35 @@ TEST(VersionGraphTest, multi_edge) {
     }
 }
 
+// NOLINTNEXTLINE
 TEST(VersionGraphTest, remove_version) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
 
     std::vector<RowsetMetaSharedPtr> rs_meta;
-    rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-    rs_meta.back()->set_start_version(0);
-    rs_meta.back()->set_end_version(5);
+    {
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(0);
+        rs_meta_pb->set_end_version(5);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
+    }
 
     for (int i = 0; i < 10; i = i + 2) {
-        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-        rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i + 1);
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(i);
+        rs_meta_pb->set_end_version(i + 1);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
     }
 
     for (int i = 0; i < 10; i++) {
-        rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-        rs_meta.back()->set_start_version(i);
-        rs_meta.back()->set_end_version(i);
+        auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+        rs_meta_pb->set_rowset_id(id.to_string());
+        rs_meta_pb->set_start_version(i);
+        rs_meta_pb->set_end_version(i);
+        rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
     }
 
     int64_t max_version = -1;
@@ -284,24 +321,45 @@ TEST(VersionGraphTest, remove_version) {
     EXPECT_EQ(graph._version_graph.size(), 0);
 }
 
+// NOLINTNEXTLINE
 TEST(VersionGraphTest, max_continuous_version) {
     VersionGraph graph;
+    RowsetId id;
+    id.init(2, 3, 0, 0);
     auto gen_meta = [&](const std::vector<std::pair<int64_t, int64_t>>& versions) {
         std::vector<RowsetMetaSharedPtr> rs_meta;
         for (auto& version : versions) {
-            rs_meta.emplace_back(std::make_shared<RowsetMeta>());
-            rs_meta.back()->set_start_version(version.first);
-            rs_meta.back()->set_end_version(version.second);
+            auto rs_meta_pb = std::make_unique<RowsetMetaPB>();
+            rs_meta_pb->set_rowset_id(id.to_string());
+            rs_meta_pb->set_start_version(version.first);
+            rs_meta_pb->set_end_version(version.second);
+            rs_meta.emplace_back(std::make_shared<RowsetMeta>(rs_meta_pb));
         }
         return rs_meta;
     };
     auto input1 = gen_meta({{0, 1}, {2, 2}, {3, 3}, {4, 4}, {6, 6}});
-    graph.construct_version_graph(input1, NULL);
+    graph.construct_version_graph(input1, nullptr);
     EXPECT_EQ(graph.max_continuous_version(), 4);
+    EXPECT_EQ(graph.min_readable_version(), 1);
     graph.add_version_to_graph(Version(5, 5));
     EXPECT_EQ(graph.max_continuous_version(), 6);
+    EXPECT_EQ(graph.min_readable_version(), 1);
     graph.add_version_to_graph(Version(7, 7));
     EXPECT_EQ(graph.max_continuous_version(), 7);
+    EXPECT_EQ(graph.min_readable_version(), 1);
+
+    // The following case may be happened in schema change
+    // 1. Schema change first remove the existing rowset
+    // 2. Add new version rowset into new tablet
+    graph.delete_version_from_graph(Version(0, 1));
+    EXPECT_EQ(graph.min_readable_version(), 1);
+    for (int i = 2; i <= 7; i++) {
+        graph.delete_version_from_graph(Version(i, i));
+        EXPECT_EQ(graph.min_readable_version(), i);
+    }
+    EXPECT_EQ(graph.max_continuous_version(), 7);
+    graph.add_version_to_graph(Version(0, 10));
+    EXPECT_EQ(graph.max_continuous_version(), 10);
 }
 
 } // namespace starrocks::vectorized

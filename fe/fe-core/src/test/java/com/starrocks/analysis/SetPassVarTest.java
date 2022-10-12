@@ -56,15 +56,15 @@ public class SetPassVarTest {
         //  mode: SET PASSWORD FOR 'testUser' = 'testPass';
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B");
         stmt.analyze();
-        Assert.assertEquals("default_cluster:testUser", stmt.getUserIdent().getQualifiedUser());
+        Assert.assertEquals("testUser", stmt.getUserIdent().getQualifiedUser());
         Assert.assertEquals("*88EEBA7D913688E7278E2AD071FDB5E76D76D34B", new String(stmt.getPassword()));
-        Assert.assertEquals("SET PASSWORD FOR 'default_cluster:testUser'@'%' = '*XXX'",
+        Assert.assertEquals("SET PASSWORD FOR 'testUser'@'%' = '*XXX'",
                 stmt.toString());
 
         // empty password
         stmt = new SetPassVar(new UserIdentity("testUser", "%"), null);
         stmt.analyze();
-        Assert.assertEquals("SET PASSWORD FOR 'default_cluster:testUser'@'%' = '*XXX'", stmt.toString());
+        Assert.assertEquals("SET PASSWORD FOR 'testUser'@'%' = '*XXX'", stmt.toString());
 
         // empty user
         // empty password
@@ -76,12 +76,12 @@ public class SetPassVarTest {
     @Test
     public void testCreateTablePartitionNormal() throws Exception {
         String setSql = "set sql_mode = concat(@@sql_mode,',STRICT_TRANS_TABLES');";
-        SetStmt stmt = (SetStmt) UtFrameUtils.parseAndAnalyzeStmt(setSql, ctx);
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(setSql, ctx);
         ctx.getSessionVariable().setSqlMode(SqlModeHelper.MODE_STRICT_TRANS_TABLES);
-        stmt.analyze();
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         SetVar setVars = stmt.getSetVars().get(0);
 
-        Assert.assertTrue(setVars.getValue().getStringValue().contains("STRICT_TRANS_TABLES"));
+        Assert.assertTrue(setVars.getResolvedExpression().getStringValue().contains("STRICT_TRANS_TABLES"));
     }
 
     @Test(expected = SemanticException.class)

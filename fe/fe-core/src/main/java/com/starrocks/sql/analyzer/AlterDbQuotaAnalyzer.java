@@ -1,10 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AlterDatabaseQuotaStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 
 public class AlterDbQuotaAnalyzer {
     public static void analyze(AlterDatabaseQuotaStmt statement, ConnectContext context) {

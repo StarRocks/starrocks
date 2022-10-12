@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
@@ -7,25 +7,25 @@ import com.starrocks.analysis.TableName;
 import java.util.List;
 
 public class CTERelation extends Relation {
-    private final int cteId;
+    private final int cteMouldId;
     private final String name;
     private List<String> columnOutputNames;
     private final QueryStatement cteQueryStatement;
     private boolean resolvedInFromClause;
 
-    public CTERelation(int cteId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
-        this.cteId = cteId;
+    public CTERelation(int cteMouldId, String name, List<String> columnOutputNames, QueryStatement cteQueryStatement) {
+        this.cteMouldId = cteMouldId;
         this.name = name;
         this.columnOutputNames = columnOutputNames;
         this.cteQueryStatement = cteQueryStatement;
     }
 
-    public QueryStatement getCteQueryStatement() {
-        return cteQueryStatement;
+    public int getCteMouldId() {
+        return cteMouldId;
     }
 
-    public int getCteId() {
-        return cteId;
+    public QueryStatement getCteQueryStatement() {
+        return cteQueryStatement;
     }
 
     public String getName() {
@@ -50,7 +50,7 @@ public class CTERelation extends Relation {
 
     @Override
     public String toString() {
-        return name == null ? String.valueOf(cteId) : name;
+        return name == null ? String.valueOf(cteMouldId) : name;
     }
 
     @Override

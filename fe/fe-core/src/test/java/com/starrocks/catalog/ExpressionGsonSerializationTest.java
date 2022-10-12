@@ -1,4 +1,4 @@
-
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.catalog;
 
@@ -45,7 +45,7 @@ public class ExpressionGsonSerializationTest {
 
     @Test
     public void testSerializeSlotRef() {
-        TableName tableName = new TableName("default_cluster:test", "tbl1");
+        TableName tableName = new TableName("test", "tbl1");
         IdGenerator<SlotId> slotIdIdGenerator = SlotId.createGenerator();
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
         SlotDescriptor slotDescriptor = new SlotDescriptor(slotIdIdGenerator.getNextId(), null);
@@ -66,7 +66,7 @@ public class ExpressionGsonSerializationTest {
     @Test
     public void testSerializeFunctionCallExpr() throws IOException {
 
-        TableName tableName = new TableName("default_cluster:test", "tbl1");
+        TableName tableName = new TableName("test", "tbl1");
         Column k2 = new Column("k2", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
         SlotDescriptor slotDescriptor2 = new SlotDescriptor(SlotId.createGenerator().getNextId(), null);
         slotDescriptor2.setColumn(k2);
@@ -91,7 +91,7 @@ public class ExpressionGsonSerializationTest {
 
     @Test
     public void testSerializeColumnList() {
-        TableName tableName = new TableName("default_cluster:test", "tbl1");
+        TableName tableName = new TableName("test", "tbl1");
         IdGenerator<SlotId> slotIdIdGenerator = SlotId.createGenerator();
         Column k1 = new Column("k1", new ScalarType(PrimitiveType.DATETIME), true, null, "", "");
         SlotDescriptor slotDescriptor = new SlotDescriptor(slotIdIdGenerator.getNextId(), null);

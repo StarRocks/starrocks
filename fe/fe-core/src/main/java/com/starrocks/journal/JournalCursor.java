@@ -33,4 +33,7 @@ public interface JournalCursor {
     public void refresh() throws InterruptedException, JournalException, JournalInconsistentException;
 
     public void close();
+
+    // skip current log
+    public void skipNext();
 }

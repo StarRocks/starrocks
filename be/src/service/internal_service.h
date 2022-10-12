@@ -21,9 +21,19 @@
 
 #pragma once
 
+#include "common/compiler_util.h"
+
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
+DIAGNOSTIC_POP
+
 #include "common/status.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "util/countdown_latch.h"
+#include "util/priority_thread_pool.hpp"
 
 namespace brpc {
 class Controller;
@@ -75,6 +85,14 @@ public:
                                  const PTabletWriterAddChunkRequest* request, PTabletWriterAddBatchResult* response,
                                  google::protobuf::Closure* done) override;
 
+    void tablet_writer_add_chunks(google::protobuf::RpcController* controller,
+                                  const PTabletWriterAddChunksRequest* request, PTabletWriterAddBatchResult* response,
+                                  google::protobuf::Closure* done) override;
+
+    void tablet_writer_add_segment(google::protobuf::RpcController* controller,
+                                   const PTabletWriterAddSegmentRequest* request,
+                                   PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) override;
+
     void tablet_writer_cancel(google::protobuf::RpcController* controller, const PTabletWriterCancelRequest* request,
                               PTabletWriterCancelResult* response, google::protobuf::Closure* done) override;
 
@@ -85,7 +103,17 @@ public:
     void get_info(google::protobuf::RpcController* controller, const PProxyRequest* request, PProxyResult* response,
                   google::protobuf::Closure* done) override;
 
+    void get_pulsar_info(google::protobuf::RpcController* controller, const PPulsarProxyRequest* request,
+                         PPulsarProxyResult* response, google::protobuf::Closure* done) override;
+
 private:
+    void _get_info_impl(const PProxyRequest* request, PProxyResult* response,
+                        GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch, int timeout_ms);
+
+    void _get_pulsar_info_impl(const PPulsarProxyRequest* request, PPulsarProxyResult* response,
+                               GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>* latch,
+                               int timeout_ms);
+
     Status _exec_plan_fragment(brpc::Controller* cntl);
     Status _exec_batch_plan_fragments(brpc::Controller* cntl);
     Status _exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_request,
@@ -94,6 +122,15 @@ private:
 
 protected:
     ExecEnv* _exec_env;
+
+    // The BRPC call is executed by bthread.
+    // If the bthread is blocked by pthread primitive, the current bthread cannot release the bind pthread and cannot be yield.
+    // In this way, the available pthread become less and the scheduling of bthread would be influenced.
+    // So, we should execute the function that may use pthread block primitive in a specific thread pool.
+    // More detail: https://github.com/apache/incubator-brpc/blob/master/docs/cn/bthread.md
+
+    // Thread pool for executing task  asynchronously in BRPC call.
+    PriorityThreadPool _async_thread_pool;
 };
 
 } // namespace starrocks

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StringLiteral;
@@ -14,6 +14,7 @@ import java.util.List;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.getConnectContext;
 
 public class AnalyzeFunctionTest {
 
@@ -35,6 +36,8 @@ public class AnalyzeFunctionTest {
     public void testSingle() {
         analyzeFail("select sum() from t0", "No matching function with signature: sum()");
         analyzeFail("select now(*) from t0");
+
+        analyzeSuccess("SHOW FULL BUILTIN FUNCTIONS FROM `testDb1` LIKE '%year%'");
     }
 
     @Test
@@ -73,13 +76,21 @@ public class AnalyzeFunctionTest {
     @Test
     public void testDateFloor() {
         analyzeSuccess("select time_slice(th, interval 1 year) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 year, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 month) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 month, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 day) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 day, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 week) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 week, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 quarter) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 quarter, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 hour) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 hour, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 minute) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 minute, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 second) from tall");
+        analyzeSuccess("select time_slice(th, interval 1 second, ceil) from tall");
 
         analyzeFail("select time_slice(ta, th) from tall",
                 "time_slice requires second parameter must be a constant interval");
@@ -211,5 +222,33 @@ public class AnalyzeFunctionTest {
         analyzeSuccess("SELECT {fn UCASE(ucase(`ta`))} FROM tall");
         analyzeSuccess("select { fn extract(year from th)} from tall");
         analyzeFail("select {fn date_format(th, \"%Y\")} from tall", "invalid odbc scalar function");
+    }
+
+    @Test
+    public void testCreateFunction() throws Exception {
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("CREATE FUNCTION f(INT, INT) RETURNS INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE FUNCTION f(INT, INT, CHAR(10), BIGINT, ...) RETURNS INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE AGGREGATE FUNCTION f(INT, INT) RETURNS INT INTERMEDIATE INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE TABLE FUNCTION f(INT, INT) RETURNS INT",
+                getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "CREATE FUNCTION f(INT, INT) RETURNS INT PROPERTIES (\"key\"=\"value\")",
+                getConnectContext());
+    }
+
+    @Test
+    public void testDropFunction() throws Exception {
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("DROP FUNCTION f()", getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer("DROP FUNCTION f(int)", getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "DROP FUNCTION f(int, ...)", getConnectContext());
+        UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(
+                "DROP FUNCTION db.f(int, char(2))", getConnectContext());
     }
 }

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "binary_column.h"
 
@@ -129,6 +129,20 @@ Status add_native_json_column(Column* column, const TypeDescriptor& type_desc, c
     auto json_value = JsonValue::from_simdjson(value);
     RETURN_IF_ERROR(json_value);
     json_column->append(std::move(json_value.value()));
+    return Status::OK();
+}
+
+Status add_binary_column_from_json_object(Column* column, const TypeDescriptor& type_desc, const std::string& name,
+                                          simdjson::ondemand::object* obj) {
+    auto binary_column = down_cast<BinaryColumn*>(column);
+    std::string_view json_str = simdjson::to_json_string(*obj);
+    if (json_str.length() > type_desc.len) {
+        auto err_msg = strings::Substitute("Value length $0 exceed the column length $1($2)", json_str.length(), name,
+                                           type_desc.len);
+        return Status::InvalidArgument(err_msg);
+    }
+
+    binary_column->append(Slice(json_str.data(), json_str.length()));
     return Status::OK();
 }
 

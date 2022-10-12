@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/agg/aggregate_factory.h"
 
@@ -24,6 +24,7 @@
 #include "exprs/agg/hll_union_count.h"
 #include "exprs/agg/intersect_count.h"
 #include "exprs/agg/maxmin.h"
+#include "exprs/agg/maxmin_by.h"
 #include "exprs/agg/nullable_aggregate.h"
 #include "exprs/agg/percentile_approx.h"
 #include "exprs/agg/percentile_cont.h"
@@ -79,6 +80,9 @@ public:
     static auto MakeMaxAggregateFunction();
 
     template <PrimitiveType PT>
+    static auto MakeMaxByAggregateFunction();
+
+    template <PrimitiveType PT>
     static auto MakeMinAggregateFunction();
 
     template <PrimitiveType PT>
@@ -120,6 +124,9 @@ public:
 
     template <PrimitiveType T>
     static AggregateFunctionPtr MakeHllNdvAggregateFunction();
+
+    template <PrimitiveType T>
+    static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
@@ -223,6 +230,12 @@ auto AggregateFactory::MakeMaxAggregateFunction() {
 }
 
 template <PrimitiveType PT>
+auto AggregateFactory::MakeMaxByAggregateFunction() {
+    return std::make_shared<
+            MaxByAggregateFunction<PT, MaxByAggregateData<PT>, MaxByElement<PT, MaxByAggregateData<PT>>>>();
+}
+
+template <PrimitiveType PT>
 auto AggregateFactory::MakeMinAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunction<PT, MinAggregateData<PT>, MinElement<PT, MinAggregateData<PT>>>>();
 }
@@ -300,7 +313,12 @@ AggregateFunctionPtr AggregateFactory::MakeHllUnionCountAggregateFunction() {
 
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
-    return std::make_shared<HllNdvAggregateFunction<PT>>();
+    return std::make_shared<HllNdvAggregateFunction<PT, false>>();
+}
+
+template <PrimitiveType PT>
+AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
+    return std::make_shared<HllNdvAggregateFunction<PT, true>>();
 }
 
 AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
@@ -468,6 +486,9 @@ public:
             } else if (name == "percentile_union") {
                 auto percentile = AggregateFactory::MakePercentileUnionAggregateFunction();
                 return AggregateFactory::MakeNullableAggregateFunctionUnary<PercentileValue, IsWindowFunc>(percentile);
+            } else if (name == "hll_raw") {
+                auto hll_raw = AggregateFactory::MakeHllRawAggregateFunction<ArgPT>();
+                return AggregateFactory::MakeNullableAggregateFunctionUnary<HyperLogLog, IsWindowFunc>(hll_raw);
             }
         } else {
             if (name == "hll_raw_agg" || name == "hll_union") {
@@ -486,6 +507,8 @@ public:
                 return AggregateFactory::MakeHllNdvAggregateFunction<ArgPT>();
             } else if (name == "percentile_union") {
                 return AggregateFactory::MakePercentileUnionAggregateFunction();
+            } else if (name == "hll_raw") {
+                return AggregateFactory::MakeHllRawAggregateFunction<ArgPT>();
             }
         }
 
@@ -694,6 +717,8 @@ public:
             return AggregateFactory::MakeNtileWindowFunction();
         } else if (name == "histogram") {
             return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
+        } else if (name == "max_by") {
+            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -785,7 +810,9 @@ public:
         } else if (name == "last_value") {
             return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
         } else if (name == "histogram") {
-            return AggregateFactory::MakeHistogramAggregationFunction<ImmediateHistogramResultPT<ArgPT>>();
+            return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
+        } else if (name == "max_by") {
+            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
     }
@@ -813,6 +840,24 @@ private:
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL32, ADD_WINDOW_VERSION>(FUNCTIONNAME); \
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64, ADD_WINDOW_VERSION>(FUNCTIONNAME); \
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, ADD_WINDOW_VERSION>(FUNCTIONNAME);
+
+#define ADD_ALL_TYPE1(FUNCTIONNAME, RET_TYPE)                            \
+    add_aggregate_mapping<TYPE_BOOLEAN, RET_TYPE, true>(FUNCTIONNAME);   \
+    add_aggregate_mapping<TYPE_TINYINT, RET_TYPE, true>(FUNCTIONNAME);   \
+    add_aggregate_mapping<TYPE_SMALLINT, RET_TYPE, true>(FUNCTIONNAME);  \
+    add_aggregate_mapping<TYPE_INT, RET_TYPE, true>(FUNCTIONNAME);       \
+    add_aggregate_mapping<TYPE_BIGINT, RET_TYPE, true>(FUNCTIONNAME);    \
+    add_aggregate_mapping<TYPE_LARGEINT, RET_TYPE, true>(FUNCTIONNAME);  \
+    add_aggregate_mapping<TYPE_FLOAT, RET_TYPE, true>(FUNCTIONNAME);     \
+    add_aggregate_mapping<TYPE_DOUBLE, RET_TYPE, true>(FUNCTIONNAME);    \
+    add_aggregate_mapping<TYPE_VARCHAR, RET_TYPE, true>(FUNCTIONNAME);   \
+    add_aggregate_mapping<TYPE_CHAR, RET_TYPE, true>(FUNCTIONNAME);      \
+    add_aggregate_mapping<TYPE_DECIMALV2, RET_TYPE, true>(FUNCTIONNAME); \
+    add_aggregate_mapping<TYPE_DATETIME, RET_TYPE, true>(FUNCTIONNAME);  \
+    add_aggregate_mapping<TYPE_DATE, RET_TYPE, true>(FUNCTIONNAME);      \
+    add_aggregate_mapping<TYPE_DECIMAL32, RET_TYPE, true>(FUNCTIONNAME); \
+    add_aggregate_mapping<TYPE_DECIMAL64, RET_TYPE, true>(FUNCTIONNAME); \
+    add_aggregate_mapping<TYPE_DECIMAL128, RET_TYPE, true>(FUNCTIONNAME);
 
 AggregateFuncResolver::AggregateFuncResolver() {
     // The function should be placed by alphabetical order
@@ -853,6 +898,23 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("bitmap_union_int");
 
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("count");
+
+    ADD_ALL_TYPE1("max_by", TYPE_BOOLEAN);
+    ADD_ALL_TYPE1("max_by", TYPE_TINYINT);
+    ADD_ALL_TYPE1("max_by", TYPE_SMALLINT);
+    ADD_ALL_TYPE1("max_by", TYPE_INT);
+    ADD_ALL_TYPE1("max_by", TYPE_BIGINT);
+    ADD_ALL_TYPE1("max_by", TYPE_LARGEINT);
+    ADD_ALL_TYPE1("max_by", TYPE_FLOAT);
+    ADD_ALL_TYPE1("max_by", TYPE_DOUBLE);
+    ADD_ALL_TYPE1("max_by", TYPE_VARCHAR);
+    ADD_ALL_TYPE1("max_by", TYPE_CHAR);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMALV2);
+    ADD_ALL_TYPE1("max_by", TYPE_DATETIME);
+    ADD_ALL_TYPE1("max_by", TYPE_DATE);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL32);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL64);
+    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL128);
 
     ADD_ALL_TYPE("max", true);
     ADD_ALL_TYPE("min", true);
@@ -1052,6 +1114,8 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_aggregate_mapping<TYPE_DECIMAL32, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_VARCHAR>("histogram");
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("histogram");
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("histogram");
 
     ADD_ALL_TYPE("first_value", true);
     ADD_ALL_TYPE("last_value", true);
@@ -1115,6 +1179,23 @@ AggregateFuncResolver::AggregateFuncResolver() {
     add_object_mapping<TYPE_DECIMAL32, TYPE_BIGINT>("approx_count_distinct");
     add_object_mapping<TYPE_DECIMAL64, TYPE_BIGINT>("approx_count_distinct");
     add_object_mapping<TYPE_DECIMAL128, TYPE_BIGINT>("approx_count_distinct");
+
+    add_object_mapping<TYPE_BOOLEAN, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_TINYINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_SMALLINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_INT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_BIGINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_LARGEINT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_FLOAT, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DOUBLE, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_CHAR, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_VARCHAR, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMALV2, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DATETIME, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DATE, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL32, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL64, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL128, TYPE_HLL>("hll_raw");
 
     add_object_mapping<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx");
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");

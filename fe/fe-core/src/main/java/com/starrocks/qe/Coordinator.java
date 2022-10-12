@@ -23,13 +23,11 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.FsBroker;
@@ -41,6 +39,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Reference;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.CompressionUtils;
 import com.starrocks.common.util.Counter;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
@@ -82,11 +81,14 @@ import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.LoadEtlTask;
 import com.starrocks.thrift.InternalServiceVersion;
+import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TEsScanRange;
 import com.starrocks.thrift.TExecBatchPlanFragmentsParams;
 import com.starrocks.thrift.TExecPlanFragmentParams;
+import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TInternalScanRange;
+import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TPlanFragmentDestination;
@@ -115,7 +117,6 @@ import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
@@ -143,25 +144,26 @@ public class Coordinator {
 
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
 
-    private static final String localIP = FrontendOptions.getLocalHostAddress();
+    private static final String LOCAL_IP = FrontendOptions.getLocalHostAddress();
 
     // Random is used to shuffle instances of partitioned
-    private static final Random instanceRandom = new Random();
+    private static final Random INSTANCE_RANDOM = new Random();
     // parallel execute
     private final TUniqueId nextInstanceId;
     // Overall status of the entire query; set to the first reported fragment error
     // status or to CANCELLED, if Cancel() is called.
     Status queryStatus = new Status();
     // save of related backends of this query
-    Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
-    //backends which this query will use
+    private final Set<Long> usedBackendIDs = Sets.newConcurrentHashSet();
+    private final Map<TNetworkAddress, Long> addressToBackendID = Maps.newHashMap();
+    // backends which this query will use
     private ImmutableMap<Long, Backend> idToBackend = ImmutableMap.of();
-    //compute node which this query will use
+    // compute node which this query will use
     private ImmutableMap<Long, ComputeNode> idToComputeNode = ImmutableMap.of();
-    //if it has compute node, hasComputeNode is true
+    // if it has compute node, hasComputeNode is true
     private boolean hasComputeNode = false;
-    //when use compute node, usedComputeNode is true,
-    //if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
+    // when use compute node, usedComputeNode is true,
+    // if hasComputeNode but preferComputeNode is false and no hdfsScanNode, usedComputeNode still false
     private boolean usedComputeNode = false;
     // copied from TQueryExecRequest; constant across all fragments
     private final TDescriptorTable descTable;
@@ -223,6 +225,8 @@ public class Coordinator {
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
 
+    private final boolean usePipeline;
+
     // Resource group
     ResourceGroup resourceGroup = null;
 
@@ -267,11 +271,14 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
         this.forceScheduleLocal = context.getSessionVariable().isForceScheduleLocal();
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
-    // Used for broker load task/export task coordinator
+    // Used for broker export task coordinator
     public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
-                       List<ScanNode> scanNodes, String timezone, long startTime) {
+                       List<ScanNode> scanNodes, String timezone, long startTime,
+                       Map<String, String> sessionVariables) {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
@@ -280,6 +287,14 @@ public class Coordinator {
         this.fragments = fragments;
         this.scanNodes = scanNodes;
         this.queryOptions = new TQueryOptions();
+        if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            final TCompressionType loadCompressionType = CompressionUtils
+                    .findTCompressionByName(
+                            sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+            if (loadCompressionType != null) {
+                this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+            }
+        }
         String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
@@ -290,6 +305,46 @@ public class Coordinator {
         this.nextInstanceId = new TUniqueId();
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    // Used for broker load task coordinator
+    public Coordinator(Long jobId, TUniqueId queryId, DescriptorTable descTable, List<PlanFragment> fragments,
+                       List<ScanNode> scanNodes, String timezone, long startTime, Map<String, String> sessionVariables,
+                       ConnectContext context) {
+        this.isBlockQuery = true;
+        this.jobId = jobId;
+        this.queryId = queryId;
+        this.connectContext = context;
+        this.descTable = descTable.toThrift();
+        this.fragments = fragments;
+        this.scanNodes = scanNodes;
+        this.queryOptions = new TQueryOptions();
+        if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+            final TCompressionType loadCompressionType = CompressionUtils
+                    .findTCompressionByName(
+                            sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+            if (loadCompressionType != null) {
+                this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+            }
+        }
+        if (sessionVariables.containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
+            this.queryOptions.setEnable_replicated_storage(
+                    Boolean.parseBoolean(sessionVariables.get(SessionVariable.ENABLE_REPLICATED_STORAGE)));
+        }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
+        this.queryGlobals.setTime_zone(timezone);
+        this.needReport = true;
+        this.preferComputeNode = false;
+        this.useComputeNodeNumber = -1;
+        this.nextInstanceId = new TUniqueId();
+        nextInstanceId.setHi(queryId.hi);
+        nextInstanceId.setLo(queryId.lo + 1);
+
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
     public long getJobId() {
@@ -304,8 +359,16 @@ public class Coordinator {
         this.queryId = queryId;
     }
 
+    public void setJobId(Long jobId) {
+        this.jobId = jobId;
+    }
+
     public void setQueryType(TQueryType type) {
         this.queryOptions.setQuery_type(type);
+    }
+
+    public void setLoadJobType(TLoadJobType type) {
+        this.queryOptions.setLoad_job_type(type);
     }
 
     public Status getExecStatus() {
@@ -363,13 +426,17 @@ public class Coordinator {
         return commitInfos;
     }
 
+    public boolean isUsingBackend(Long backendID) {
+        return usedBackendIDs.contains(backendID);
+    }
+
     // Initialize
     private void prepare() {
         for (PlanFragment fragment : fragments) {
             fragmentExecParamsMap.put(fragment.getFragmentId(), new FragmentExecParams(fragment));
         }
 
-        coordAddress = new TNetworkAddress(localIP, Config.rpc_port);
+        coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         int fragmentSize = fragments.size();
         queryProfile = new RuntimeProfile("Execution Profile " + DebugUtil.printId(queryId));
@@ -585,27 +652,19 @@ public class Coordinator {
     }
 
     private void deliverExecFragments() throws Exception {
-        // Disable pipeline engine for `INSERT INTO`.
-        // TODO: remove this when load supports pipeline engine.
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                fragments.stream().allMatch(PlanFragment::canUsePipeline);
         // Only pipeline uses deliver_batch_fragments.
-        boolean enableDeliverBatchFragments = enablePipelineEngine
-                && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
+        boolean enableDeliverBatchFragments =
+                usePipeline && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
 
         if (enableDeliverBatchFragments) {
-            deliverExecBatchFragmentsRequests(enablePipelineEngine);
+            deliverExecBatchFragmentsRequests(usePipeline);
         } else {
-            deliverExecFragmentRequests(enablePipelineEngine);
+            deliverExecFragmentRequests(usePipeline);
         }
     }
 
     private void deliverExecFragmentRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
-        if (queryDeliveryTimeoutMs == 0) {
-            queryDeliveryTimeoutMs = Long.MAX_VALUE;
-        }
         lock();
         try {
             // execute all instances from up to bottom
@@ -842,9 +901,6 @@ public class Coordinator {
      */
     private void deliverExecBatchFragmentsRequests(boolean enablePipelineEngine) throws Exception {
         long queryDeliveryTimeoutMs = Math.min(queryOptions.query_timeout, queryOptions.query_delivery_timeout) * 1000L;
-        if (queryDeliveryTimeoutMs == 0) {
-            queryDeliveryTimeoutMs = Long.MAX_VALUE;
-        }
         List<List<PlanFragment>> fragmentGroups = computeTopologicalOrderFragments();
 
         lock();
@@ -1071,8 +1127,6 @@ public class Coordinator {
 
     private void setGlobalRuntimeFilterParams(FragmentExecParams topParams, TNetworkAddress mergeHost)
             throws Exception {
-        boolean enablePipelineEngine = connectContext != null &&
-                connectContext.getSessionVariable().isEnablePipelineEngine();
 
         Map<Integer, List<TRuntimeFilterProberParams>> broadcastGRFProbersMap = Maps.newHashMap();
         List<RuntimeFilterDescription> broadcastGRFList = Lists.newArrayList();
@@ -1081,7 +1135,6 @@ public class Coordinator {
         for (PlanFragment fragment : fragments) {
             fragment.collectBuildRuntimeFilters(fragment.getPlanRoot());
             fragment.collectProbeRuntimeFilters(fragment.getPlanRoot());
-            boolean usePipeline = enablePipelineEngine && fragment.canUsePipeline();
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
             for (Map.Entry<Integer, RuntimeFilterDescription> kv : fragment.getProbeRuntimeFilters().entrySet()) {
                 List<TRuntimeFilterProberParams> probeParamList = Lists.newArrayList();
@@ -1092,7 +1145,7 @@ public class Coordinator {
                     probeParamList.add(probeParam);
                 }
                 if (usePipeline && kv.getValue().isBroadcastJoin() && kv.getValue().isHasRemoteTargets()) {
-                    broadcastGRFProbersMap.put(kv.getKey(), probeParamList);
+                    broadcastGRFProbersMap.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 } else {
                     idToProbePrams.computeIfAbsent(kv.getKey(), k -> new ArrayList<>()).addAll(probeParamList);
                 }
@@ -1310,7 +1363,7 @@ public class Coordinator {
     // Cancel execution of query. This includes the execution of the local plan
     // fragment,
     // if any, as well as all plan fragments on remote nodes.
-    public void cancel() {
+    public void cancel(PPlanFragmentCancelReason cancelReason, String cancelledMessage) {
         lock();
         try {
             if (!queryStatus.ok()) {
@@ -1318,12 +1371,17 @@ public class Coordinator {
                 return;
             } else {
                 queryStatus.setStatus(Status.CANCELLED);
+                queryStatus.setErrorMsg(cancelledMessage);
             }
             LOG.warn("cancel execution of query, this is outside invoke");
-            cancelInternal(PPlanFragmentCancelReason.USER_CANCEL);
+            cancelInternal(cancelReason);
         } finally {
             unlock();
         }
+    }
+
+    public void cancel() {
+        cancel(PPlanFragmentCancelReason.USER_CANCEL, "");
     }
 
     private void cancelInternal(PPlanFragmentCancelReason cancelReason) {
@@ -1435,7 +1493,9 @@ public class Coordinator {
                             dest.fragment_instance_id = instanceExecParams.instanceId;
                             dest.server = toRpcHost(instanceExecParams.host);
                             dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
-                            dest.setPipeline_driver_sequence(driverSeq);
+                            if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                dest.setPipeline_driver_sequence(driverSeq);
+                            }
                             break;
                         }
                     }
@@ -1506,7 +1566,9 @@ public class Coordinator {
                                 dest.fragment_instance_id = instanceExecParams.instanceId;
                                 dest.server = toRpcHost(instanceExecParams.host);
                                 dest.setBrpc_server(toBrpcHost(instanceExecParams.host));
-                                dest.setPipeline_driver_sequence(driverSeq);
+                                if (driverSeq != FInstanceExecParam.ABSENT_DRIVER_SEQUENCE) {
+                                    dest.setPipeline_driver_sequence(driverSeq);
+                                }
                                 break;
                             }
                         }
@@ -1567,6 +1629,28 @@ public class Coordinator {
         return new TNetworkAddress(computeNode.getHost(), computeNode.getBrpcPort());
     }
 
+    private String backendInfosString(boolean chooseComputeNode) {
+        if (chooseComputeNode) {
+            String infoStr = "compute node: ";
+            for (Map.Entry<Long, ComputeNode> entry : this.idToComputeNode.entrySet()) {
+                Long backendID = entry.getKey();
+                ComputeNode backend = entry.getValue();
+                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(), 
+                                    backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+            }
+            return infoStr;
+        } else {
+            String infoStr = "backend: ";
+            for (Map.Entry<Long, Backend> entry : this.idToBackend.entrySet()) {
+                Long backendID = entry.getKey();
+                Backend backend = entry.getValue();
+                infoStr += String.format("[%s alive: %b inBlacklist: %b] ", backend.getHost(), 
+                                    backend.isAlive(), SimpleScheduler.isInBlacklist(backendID));
+            }
+            return infoStr;
+        }
+    }
+
     // For each fragment in fragments, computes hosts on which to run the instances
     // and stores result in fragmentExecParams.hosts.
     private void computeFragmentHosts() throws Exception {
@@ -1579,10 +1663,7 @@ public class Coordinator {
             PlanFragment fragment = fragments.get(i);
             FragmentExecParams params = fragmentExecParamsMap.get(fragment.getFragmentId());
 
-            boolean enablePipeline = connectContext != null &&
-                    connectContext.getSessionVariable().isEnablePipelineEngine() &&
-                    fragment.getPlanRoot().canUsePipeLine();
-            boolean dopAdaptionEnabled = enablePipeline &&
+            boolean dopAdaptionEnabled = usePipeline &&
                     connectContext.getSessionVariable().isPipelineDopAdaptionEnabled();
 
             // If left child is MultiCastDataFragment(only support left now), will keep same instance with child.
@@ -1605,9 +1686,10 @@ public class Coordinator {
                 }
                 if (execHostport == null) {
                     LOG.warn("DataPartition UNPARTITIONED, no scanNode Backend");
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                            + backendInfosString(usedComputeNode));
                 }
-                this.addressToBackendID.put(execHostport, backendIdRef.getRef());
+                recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
@@ -1660,7 +1742,7 @@ public class Coordinator {
                         }
                         TNetworkAddress addr = new TNetworkAddress(computeNode.getHost(), computeNode.getBePort());
                         hostSet.add(addr);
-                        this.addressToBackendID.put(addr, computeNode.getId());
+                        this.recordUsedBackend(addr, computeNode.getId());
                     }
                     //make olapScan maxParallelism equals prefer compute node number
                     maxParallelism = hostSet.size() * fragment.getParallelExecNum();
@@ -1695,7 +1777,7 @@ public class Coordinator {
                     // random select some instance
                     // get distinct host,  when parallel_fragment_exec_instance_num > 1, single host may execute several instances
                     List<TNetworkAddress> hosts = Lists.newArrayList(hostSet);
-                    Collections.shuffle(hosts, instanceRandom);
+                    Collections.shuffle(hosts, INSTANCE_RANDOM);
 
                     for (int index = 0; index < exchangeInstances; index++) {
                         FInstanceExecParam instanceParam =
@@ -1714,7 +1796,7 @@ public class Coordinator {
                 // When group by cardinality is smaller than number of backend, only some backends always
                 // process while other has no data to process.
                 // So we shuffle instances to make different backends handle different queries.
-                Collections.shuffle(params.instanceExecParams, instanceRandom);
+                Collections.shuffle(params.instanceExecParams, INSTANCE_RANDOM);
 
                 // TODO: switch to unpartitioned/coord execution if our input fragment
                 // is executed that way (could have been downgraded from distributed)
@@ -1731,10 +1813,10 @@ public class Coordinator {
             if (hasColocate || hasBucketShuffle) {
                 computeColocatedJoinInstanceParam(fragmentIdToSeqToAddressMap.get(fragment.getFragmentId()),
                         fragmentIdBucketSeqToScanRangeMap.get(fragment.getFragmentId()),
-                        parallelExecInstanceNum, pipelineDop, enablePipeline, params);
+                        parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
-                boolean assignScanRangesPerDriverSeq = enablePipeline && fragment.isAssignScanRangesPerDriverSeq();
+                boolean assignScanRangesPerDriverSeq = usePipeline && fragment.isAssignScanRangesPerDriverSeq();
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
@@ -1758,7 +1840,9 @@ public class Coordinator {
                             FInstanceExecParam instanceParam = new FInstanceExecParam(null, key, 0, params);
                             params.instanceExecParams.add(instanceParam);
 
-                            if (!assignScanRangesPerDriverSeq) {
+                            boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
+                                    enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop);
+                            if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
                                 int expectedDop = Math.max(1, Math.min(pipelineDop, scanRangeParams.size()));
@@ -1799,9 +1883,10 @@ public class Coordinator {
                     execHostport = SimpleScheduler.getBackendHost(this.idToBackend, backendIdRef);
                 }
                 if (execHostport == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                            + backendInfosString(usedComputeNode));
                 }
-                this.addressToBackendID.put(execHostport, backendIdRef.getRef());
+                this.recordUsedBackend(execHostport, backendIdRef.getRef());
                 FInstanceExecParam instanceParam = new FInstanceExecParam(null, execHostport,
                         0, params);
                 params.instanceExecParams.add(instanceParam);
@@ -1945,24 +2030,21 @@ public class Coordinator {
         return newPlan;
     }
 
-    private <K, V> V findOrInsert(HashMap<K, V> m, final K key, final V defaultVal) {
-        V value = m.get(key);
-        if (value == null) {
-            m.put(key, defaultVal);
-            value = defaultVal;
-        }
-        return value;
-    }
-
-    // weather we can overwrite the first parameter or not?
-    private List<TScanRangeParams> findOrInsert(Map<Integer, List<TScanRangeParams>> m, Integer key,
-                                                ArrayList<TScanRangeParams> defaultVal) {
-        List<TScanRangeParams> value = m.get(key);
-        if (value == null) {
-            m.put(key, defaultVal);
-            value = defaultVal;
-        }
-        return value;
+    /**
+     * This strategy assigns buckets to each driver sequence to avoid local shuffle.
+     * If the number of buckets assigned to a fragment instance is less than pipelineDop,
+     * pipelineDop will be set to num_buckets, which will reduce the degree of operator parallelism.
+     * Therefore, when there are few buckets (<=pipeline_dop/2), insert local shuffle instead of using this strategy
+     * to improve the degree of parallelism.
+     *
+     * @param scanRanges  The buckets assigned to a fragment instance.
+     * @param pipelineDop The expected pipelineDop.
+     * @return Whether using the strategy of assigning scanRanges to each driver sequence.
+     */
+    private <T> boolean enableAssignScanRangesPerDriverSeq(List<T> scanRanges, int pipelineDop) {
+        boolean enableTabletInternalParallel =
+                connectContext != null && connectContext.getSessionVariable().isEnableTabletInternalParallel();
+        return !enableTabletInternalParallel || scanRanges.size() > pipelineDop / 2;
     }
 
     public void computeColocatedJoinInstanceParam(Map<Integer, TNetworkAddress> bucketSeqToAddress,
@@ -1974,12 +2056,14 @@ public class Coordinator {
                 Maps.newHashMap();
         for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> bucketSeqAndScanRanges : bucketSeqToScanRange.entrySet()) {
             TNetworkAddress address = bucketSeqToAddress.get(bucketSeqAndScanRanges.getKey());
-
-            if (!addressToScanRanges.containsKey(address)) {
-                addressToScanRanges.put(address, Lists.newArrayList());
-            }
-            addressToScanRanges.get(address).add(bucketSeqAndScanRanges);
+            addressToScanRanges
+                    .computeIfAbsent(address, k -> Lists.newArrayList())
+                    .add(bucketSeqAndScanRanges);
         }
+
+        boolean assignPerDriverSeq =
+                enablePipeline && addressToScanRanges.values().stream()
+                        .allMatch(scanRanges -> enableAssignScanRangesPerDriverSeq(scanRanges, pipelineDop));
 
         for (Map.Entry<TNetworkAddress, List<Map.Entry<Integer, Map<Integer,
                 List<TScanRangeParams>>>>> addressScanRange : addressToScanRanges.entrySet()) {
@@ -2007,16 +2091,23 @@ public class Coordinator {
                 }
                 List<List<Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>>>> scanRangesPerDriverSeq =
                         ListUtil.splitBySize(scanRangePerInstance, expectedDop);
-                instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+
+                if (assignPerDriverSeq) {
+                    instanceParam.pipelineDop = scanRangesPerDriverSeq.size();
+                }
 
                 for (int driverSeq = 0; driverSeq < scanRangesPerDriverSeq.size(); ++driverSeq) {
                     final int finalDriverSeq = driverSeq;
                     scanRangesPerDriverSeq.get(finalDriverSeq).forEach(bucketSeqAndScanRanges -> {
-                        instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                        if (assignPerDriverSeq) {
+                            instanceParam.addBucketSeqAndDriverSeq(bucketSeqAndScanRanges.getKey(), finalDriverSeq);
+                        } else {
+                            instanceParam.addBucketSeq(bucketSeqAndScanRanges.getKey());
+                        }
 
                         bucketSeqAndScanRanges.getValue().forEach((scanId, scanRanges) -> {
                             List<TScanRangeParams> destScanRanges;
-                            if (!enablePipeline) {
+                            if (!assignPerDriverSeq) {
                                 destScanRanges = instanceParam.perNodeScanRanges
                                         .computeIfAbsent(scanId, k -> new ArrayList<>());
                             } else {
@@ -2042,6 +2133,14 @@ public class Coordinator {
         }
     }
 
+    public ImmutableCollection<ComputeNode> getSelectorComputeNodes(boolean whenUseComputeNode) {
+        if (whenUseComputeNode) {
+            return idToComputeNode.values();
+        } else {
+            return ImmutableList.copyOf(idToBackend.values());
+        }
+    }
+
     // Populates scan_range_assignment_.
     // <fragment, <server, nodeId>>
     private void computeScanRangeAssignment() throws Exception {
@@ -2058,13 +2157,13 @@ public class Coordinator {
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
                     scanNode instanceof HudiScanNode) {
-                HDFSBackendSelector selector = new HDFSBackendSelector(scanNode, locations, assignment,
-                        ScanRangeAssignType.SCAN_DATA_SIZE);
-                List<Long> scanRangesBytes = Lists.newArrayList();
-                for (TScanRangeLocations scanRangeLocations : locations) {
-                    scanRangesBytes.add(scanRangeLocations.scan_range.hdfs_scan_range.length);
+                if (connectContext != null) {
+                    queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
                 }
-                selector.setScanRangesBytes(scanRangesBytes);
+                HDFSBackendSelector selector =
+                        new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
+                                getSelectorComputeNodes(hasComputeNode),
+                                forceScheduleLocal);
                 selector.computeScanRangeAssignment();
             } else {
                 boolean hasColocate = isColocateFragment(scanNode.getFragment().getPlanRoot());
@@ -2144,10 +2243,11 @@ public class Coordinator {
             profileDoneSignal.markedCountDown(params.getFragment_instance_id(), -1L);
         }
 
-        if (params.isSetLoaded_rows()) {
+        if (params.isSetLoaded_rows() && params.isSetSink_load_bytes() && params.isSetSource_load_rows()
+                && params.isSetSource_load_bytes()) {
             GlobalStateMgr.getCurrentState().getLoadManager().updateJobPrgress(
                     jobId, params.backend_id, params.query_id, params.fragment_instance_id, params.loaded_rows,
-                    params.done);
+                    params.sink_load_bytes, params.source_load_rows, params.source_load_bytes, params.done);
         }
     }
 
@@ -2225,7 +2325,7 @@ public class Coordinator {
             return;
         }
 
-        if (!sessionVariable.isEnablePipelineEngine()) {
+        if (!usePipeline) {
             return;
         }
 
@@ -2254,6 +2354,16 @@ public class Coordinator {
             List<RuntimeProfile> instanceProfiles = fragmentProfile.getChildList().stream()
                     .map(pair -> pair.first)
                     .collect(Collectors.toList());
+
+            // Setup backend address infos
+            Set<String> backendAddresses = Sets.newHashSet();
+            instanceProfiles.forEach(instanceProfile -> {
+                backendAddresses.add(instanceProfile.getInfoString("Address"));
+                instanceProfile.removeInfoString("Address");
+            });
+            fragmentProfile.addInfoString("BackendAddresses", String.join(",", backendAddresses));
+
+            // Setup number of instance
             Counter counter = fragmentProfile.addCounter("InstanceNum", TUnit.UNIT);
             counter.setValue(instanceProfiles.size());
 
@@ -2268,6 +2378,7 @@ public class Coordinator {
             fragmentProfile.removeAllChildren();
             instanceProfile0.getChildList().forEach(pair -> {
                 RuntimeProfile pipelineProfile = pair.first;
+                foldUnnecessaryLimitOperators(pipelineProfile);
                 fragmentProfile.addChild(pipelineProfile);
             });
         }
@@ -2291,32 +2402,69 @@ public class Coordinator {
             backendNum.setValue(networkAddresses.size());
         }
 
-        // Calculate Fe time and Be time
-        boolean found = false;
-        for (int i = 0; !found && i < fragments.size(); i++) {
-            PlanFragment fragment = fragments.get(i);
-            DataSink sink = fragment.getSink();
-            if (!(sink instanceof ResultSink)) {
-                continue;
-            }
-            RuntimeProfile profile = fragmentProfiles.get(i);
+        // Calculate ExecutionTotalTime, which comprising all operator's sync time and async time
+        // We can get Operator's sync time from OperatorTotalTime, and for async time, only ScanOperator and
+        // ExchangeOperator have async operations, we can get async time from ScanTime(for ScanOperator) and
+        // NetworkTime(for ExchangeOperator)
+        long executionTime = 0;
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            for (Pair<RuntimeProfile, Boolean> pipelineProfilePair : fragmentProfile.getChildList()) {
+                RuntimeProfile pipelineProfile = pipelineProfilePair.first;
+                for (Pair<RuntimeProfile, Boolean> operatorProfilePair : pipelineProfile.getChildList()) {
+                    RuntimeProfile operatorProfile = operatorProfilePair.first;
+                    RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                    RuntimeProfile uniqueMetrics = operatorProfile.getChild("UniqueMetrics");
+                    if (commonMetrics == null || uniqueMetrics == null) {
+                        continue;
+                    }
+                    Counter operatorTotalTime = commonMetrics.getMaxCounter("OperatorTotalTime");
+                    Preconditions.checkNotNull(operatorTotalTime);
+                    executionTime += operatorTotalTime.getValue();
 
-            for (int j = 0; !found && j < profile.getChildList().size(); j++) {
-                RuntimeProfile pipelineProfile = profile.getChildList().get(j).first;
-                if (pipelineProfile.getChildList().isEmpty()) {
-                    LOG.warn("pipeline's profile miss children, profileName={}", pipelineProfile.getName());
-                    continue;
-                }
-                RuntimeProfile operatorProfile = pipelineProfile.getChildList().get(0).first;
-                if (operatorProfile.getName().contains("RESULT_SINK")) {
-                    long beTotalTime = pipelineProfile.getCounter("DriverTotalTime").getValue();
-                    Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
-                    queryProfile.getCounterTotalTime().setValue(0);
-                    executionTotalTime.setValue(beTotalTime);
-                    found = true;
+                    Counter scanTime = uniqueMetrics.getMaxCounter("ScanTime");
+                    if (scanTime != null) {
+                        executionTime += scanTime.getValue();
+                    }
+
+                    Counter networkTime = uniqueMetrics.getMaxCounter("NetworkTime");
+                    if (networkTime != null) {
+                        executionTime += networkTime.getValue();
+                    }
                 }
             }
         }
+        Counter executionTotalTime = queryProfile.addCounter("ExecutionTotalTime", TUnit.TIME_NS);
+        queryProfile.getCounterTotalTime().setValue(0);
+        executionTotalTime.setValue(executionTime);
+    }
+
+    /**
+     * Remove unnecessary LimitOperator, which has same input rows and output rows
+     * to keep the profile concise
+     */
+    private void foldUnnecessaryLimitOperators(RuntimeProfile pipelineProfile) {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (!sessionVariable.isProfileLimitFold()) {
+            return;
+        }
+
+        List<String> foldNames = Lists.newArrayList();
+        for (Pair<RuntimeProfile, Boolean> child : pipelineProfile.getChildList()) {
+            RuntimeProfile operatorProfile = child.first;
+            if (operatorProfile.getName().contains("LIMIT")) {
+                RuntimeProfile commonMetrics = operatorProfile.getChild("CommonMetrics");
+                Preconditions.checkNotNull(commonMetrics);
+                Counter pullRowNum = commonMetrics.getCounter("PullRowNum");
+                Counter pushRowNum = commonMetrics.getCounter("PushRowNum");
+                Preconditions.checkNotNull(pullRowNum);
+                Preconditions.checkNotNull(pushRowNum);
+                if (Objects.equals(pullRowNum.getValue(), pushRowNum.getValue())) {
+                    foldNames.add(operatorProfile.getName());
+                }
+            }
+        }
+
+        foldNames.forEach(pipelineProfile::removeChild);
     }
 
     /*
@@ -2363,21 +2511,12 @@ public class Coordinator {
         }
     }
 
-    // For HybridBackendSelector
-    private enum ScanRangeAssignType {
-        SCAN_RANGE_NUM,
-        SCAN_DATA_SIZE
-    }
-
-    private interface BackendSelector {
-        void computeScanRangeAssignment() throws Exception;
-    }
-
     // fragment instance exec param, it is used to assemble
     // the per-instance TPlanFragmentExecParas, as a member of
     // FragmentExecParams
     static class FInstanceExecParam {
         static final int ABSENT_PIPELINE_DOP = -1;
+        static final int ABSENT_DRIVER_SEQUENCE = -1;
 
         TUniqueId instanceId;
         TNetworkAddress host;
@@ -2396,6 +2535,10 @@ public class Coordinator {
 
         public void addBucketSeqAndDriverSeq(int bucketSeq, int driverSeq) {
             this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, driverSeq);
+        }
+
+        public void addBucketSeq(int bucketSeq) {
+            this.bucketSeqToDriverSeq.putIfAbsent(bucketSeq, ABSENT_DRIVER_SEQUENCE);
         }
 
         public FInstanceExecParam(TUniqueId id, TNetworkAddress host,
@@ -2493,6 +2636,7 @@ public class Coordinator {
                     "Instance " + DebugUtil.printId(uniqueRpcParams.params.fragment_instance_id) + " (host=" + address +
                             ")";
             this.profile = new RuntimeProfile(name);
+            this.profile.addInfoString("Address", String.format("%s:%s", address.hostname, address.port));
             this.hasCanceled = false;
             this.lastMissingHeartbeatTime = backend.getLastMissingHeartbeatTime();
         }
@@ -2736,7 +2880,7 @@ public class Coordinator {
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
-            commonParams.setFunc_version(3);
+            commonParams.setFunc_version(4);
             commonParams.setCoord(coordAddress);
 
             commonParams.setParams(new TPlanFragmentExecParams());
@@ -2956,6 +3100,13 @@ public class Coordinator {
                             .append(", shardid=").append(esScanRange.getShard_id())
                             .append("}");
                 }
+                THdfsScanRange hdfsScanRange = range.getScan_range().getHdfs_scan_range();
+                if (hdfsScanRange != null) {
+                    sb.append("{relative_path=").append(hdfsScanRange.getRelative_path())
+                            .append(", offset=").append(hdfsScanRange.getOffset())
+                            .append(", length=").append(hdfsScanRange.getLength())
+                            .append("}");
+                }
             }
             sb.append("]");
         }
@@ -3017,7 +3168,7 @@ public class Coordinator {
                 Long minAssignedBytes = Long.MAX_VALUE;
                 TScanRangeLocation minLocation = null;
                 for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    Long assignedBytes = findOrInsert(assignedBytesPerHost, location.server, 0L);
+                    Long assignedBytes = BackendSelector.findOrInsert(assignedBytesPerHost, location.server, 0L);
                     if (assignedBytes < minAssignedBytes) {
                         minAssignedBytes = assignedBytes;
                         minLocation = location;
@@ -3031,13 +3182,14 @@ public class Coordinator {
                         scanRangeLocations.getLocations(),
                         idToBackend, backendIdRef);
                 if (execHostPort == null) {
-                    throw new UserException("Backend not found. Check if any backend is down or not");
+                    throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                            + backendInfosString(false));
                 }
-                addressToBackendID.put(execHostPort, backendIdRef.getRef());
+                recordUsedBackend(execHostPort, backendIdRef.getRef());
 
-                Map<Integer, List<TScanRangeParams>> scanRanges = findOrInsert(
+                Map<Integer, List<TScanRangeParams>> scanRanges = BackendSelector.findOrInsert(
                         assignment, execHostPort, new HashMap<Integer, List<TScanRangeParams>>());
-                List<TScanRangeParams> scanRangeParamsList = findOrInsert(
+                List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
                         scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
                 // add scan range
                 TScanRangeParams scanRangeParams = new TScanRangeParams();
@@ -3064,7 +3216,7 @@ public class Coordinator {
             for (TScanRangeLocations scanRangeLocations : locations) {
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> kv : assignment.entrySet()) {
                     Map<Integer, List<TScanRangeParams>> scanRanges = kv.getValue();
-                    List<TScanRangeParams> scanRangeParamsList = findOrInsert(
+                    List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
                             scanRanges, scanNode.getId().asInt(), new ArrayList<>());
                     // add scan range
                     TScanRangeParams scanRangeParams = new TScanRangeParams();
@@ -3085,7 +3237,7 @@ public class Coordinator {
             if (bucketSeqToScanRange != null && !bucketSeqToScanRange.isEmpty()) {
                 for (Map.Entry<Integer, Map<Integer, List<TScanRangeParams>>> entry : bucketSeqToScanRange.entrySet()) {
                     for (TScanRangeLocations scanRangeLocations : locations) {
-                        List<TScanRangeParams> scanRangeParamsList = findOrInsert(
+                        List<TScanRangeParams> scanRangeParamsList = BackendSelector.findOrInsert(
                                 entry.getValue(), scanNode.getId().asInt(), new ArrayList<>());
                         // add scan range
                         TScanRangeParams scanRangeParams = new TScanRangeParams();
@@ -3130,8 +3282,7 @@ public class Coordinator {
                 //fill scanRangeParamsList
                 List<TScanRangeLocations> locations = scanNode.bucketSeq2locations.get(bucketSeq);
                 if (!bucketSeqToAddress.containsKey(bucketSeq)) {
-                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq,
-                            idToBackend, addressToBackendID);
+                    getExecHostPortForFragmentIDAndBucketSeq(locations.get(0), fragmentId, bucketSeq, idToBackend);
                 }
 
                 for (TScanRangeLocations location : locations) {
@@ -3157,9 +3308,10 @@ public class Coordinator {
                         Reference<Long> backendIdRef = new Reference<>();
                         TNetworkAddress execHostport = SimpleScheduler.getBackendHost(idToBackend, backendIdRef);
                         if (execHostport == null) {
-                            throw new UserException("Backend not found. Check if any backend is down or not");
+                            throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                                    + backendInfosString(false));
                         }
-                        addressToBackendID.put(execHostport, backendIdRef.getRef());
+                        recordUsedBackend(execHostport, backendIdRef.getRef());
                         bucketSeqToAddress.put(bucketSeq, execHostport);
                     }
                     if (!bucketSeqToScanRange.containsKey(bucketSeq)) {
@@ -3186,8 +3338,7 @@ public class Coordinator {
         // Make sure each host have average bucket to scan
         private void getExecHostPortForFragmentIDAndBucketSeq(TScanRangeLocations seqLocation,
                                                               PlanFragmentId fragmentId, Integer bucketSeq,
-                                                              ImmutableMap<Long, Backend> idToBackend,
-                                                              Map<TNetworkAddress, Long> addressToBackendID)
+                                                              ImmutableMap<Long, Backend> idToBackend)
                 throws Exception {
             Map<Long, Integer> buckendIdToBucketCountMap = fragmentIdToBackendIdBucketCountMap.get(fragmentId);
             int maxBucketNum = Integer.MAX_VALUE;
@@ -3210,172 +3361,31 @@ public class Coordinator {
             TNetworkAddress execHostPort =
                     SimpleScheduler.getHost(buckendId, seqLocation.locations, idToBackend, backendIdRef);
             if (execHostPort == null) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
+                throw new UserException("Backend not found. Check if any backend is down or not. " 
+                                        + backendInfosString(false));
             }
 
-            addressToBackendID.put(execHostPort, backendIdRef.getRef());
+            recordUsedBackend(execHostPort, backendIdRef.getRef());
             fragmentIdToSeqToAddressMap.get(fragmentId).put(bucketSeq, execHostPort);
         }
     }
 
+    private void recordUsedBackend(TNetworkAddress addr, Long backendID) {
+        usedBackendIDs.add(backendID);
+        addressToBackendID.put(addr, backendID);
+    }
+
     /**
-     * Hybrid backend selector for hive table.
-     * Support hybrid and independent deployment with datanode.
-     * <p>
-     * Assign scan ranges to backend:
-     * 1. local backend first,
-     * 2. and smallest assigned scan ranges num or scan bytes.
-     * <p>
-     * If force_schedule_local variable is set, HybridBackendSelector will force to
-     * assign scan ranges to local backend if there has one.
+     * Whether it can use pipeline engine.
+     *
+     * @param connectContext It is null for broker broker export.
+     * @param fragments      All the fragments need to execute.
+     * @return true if enabling pipeline in the session variable and all the fragments can use pipeline,
+     * otherwise false.
      */
-    private class HDFSBackendSelector implements BackendSelector {
-        // be -> assigned scans
-        // type:
-        //     SCAN_RANGE_NUM: assigned scan range num
-        //     SCAN_DATA_SIZE: assigned scan data size
-        Map<ComputeNode, Long> assignedScansPerComputeNode = Maps.newHashMap();
-        // be host -> bes
-        Multimap<String, ComputeNode> hostToBes = HashMultimap.create();
-        private final ScanNode scanNode;
-        private final List<TScanRangeLocations> locations;
-        private final FragmentScanRangeAssignment assignment;
-        private final ScanRangeAssignType assignType;
-        // for SCAN_DATA_SIZE assign type
-        private List<Long> scanRangesBytes = Lists.newArrayList();
-        private final List<Long> remoteScanRangesBytes = Lists.newArrayList();
-        // TODO: disk stats
-
-        public HDFSBackendSelector(ScanNode scanNode, List<TScanRangeLocations> locations,
-                                   FragmentScanRangeAssignment assignment, ScanRangeAssignType assignType) {
-            this.scanNode = scanNode;
-            this.locations = locations;
-            this.assignment = assignment;
-            this.assignType = assignType;
-        }
-
-        /**
-         * Must be set when using SCAN_DATA_SIZE assign type
-         *
-         * @param scanRangesBytes: has the same size with locations
-         */
-        public void setScanRangesBytes(List<Long> scanRangesBytes) {
-            this.scanRangesBytes = scanRangesBytes;
-        }
-
-        @Override
-        public void computeScanRangeAssignment() throws Exception {
-            Preconditions.checkArgument(assignType != ScanRangeAssignType.SCAN_DATA_SIZE
-                    || locations.size() == scanRangesBytes.size());
-            ImmutableCollection<ComputeNode> nodes;
-            if (hasComputeNode) {
-                usedComputeNode = true;
-                nodes = idToComputeNode.values();
-            } else {
-                List<ComputeNode> backends = Lists.newArrayList(idToBackend.values());
-                nodes = ImmutableList.copyOf(backends);
-            }
-            for (ComputeNode computeNode : nodes) {
-                if (!computeNode.isAlive() || SimpleScheduler.isInBlacklist(computeNode.getId())) {
-                    continue;
-                }
-
-                assignedScansPerComputeNode.put(computeNode, 0L);
-                hostToBes.put(computeNode.getHost(), computeNode);
-            }
-            if (hostToBes.isEmpty()) {
-                throw new UserException("Backend not found. Check if any backend is down or not");
-            }
-
-            // total scans / alive bes
-            long avgScansPerBe = -1;
-            if (!forceScheduleLocal) {
-                int numBes = assignedScansPerComputeNode.size();
-                if (assignType == ScanRangeAssignType.SCAN_DATA_SIZE) {
-                    long totalBytes = 0L;
-                    for (long scanRangeBytes : scanRangesBytes) {
-                        totalBytes += scanRangeBytes;
-                    }
-                    avgScansPerBe = totalBytes / numBes + (totalBytes % numBes == 0 ? 0 : 1);
-                } else {
-                    // SCAN_RANGE_NUM
-                    int numLocations = locations.size();
-                    avgScansPerBe = numLocations / numBes + (numLocations % numBes == 0 ? 0 : 1);
-                }
-            }
-
-            List<TScanRangeLocations> remoteScanRangeLocations = Lists.newArrayList();
-            for (int i = 0; i < locations.size(); ++i) {
-                TScanRangeLocations scanRangeLocations = locations.get(i);
-                long minAssignedScanRanges = Long.MAX_VALUE;
-                ComputeNode minBe = null;
-                for (final TScanRangeLocation location : scanRangeLocations.getLocations()) {
-                    Collection<ComputeNode> bes = hostToBes.get(location.getServer().getHostname());
-                    if (bes == null || bes.isEmpty()) {
-                        continue;
-                    }
-                    for (ComputeNode backend : bes) {
-                        long assignedScanRanges = assignedScansPerComputeNode.get(backend);
-                        if (!forceScheduleLocal && assignedScanRanges >= avgScansPerBe) {
-                            continue;
-                        }
-                        if (assignedScanRanges < minAssignedScanRanges) {
-                            minAssignedScanRanges = assignedScanRanges;
-                            minBe = backend;
-                        }
-                    }
-                }
-                if (minBe == null) {
-                    remoteScanRangeLocations.add(scanRangeLocations);
-                    if (assignType == ScanRangeAssignType.SCAN_DATA_SIZE) {
-                        remoteScanRangesBytes.add(scanRangesBytes.get(i));
-                    }
-                    continue;
-                }
-                long scansToAdd = (assignType == ScanRangeAssignType.SCAN_DATA_SIZE ? scanRangesBytes.get(i) : 1);
-                recordScanRangeAssignment(minBe, scanRangeLocations, scansToAdd);
-            }
-
-            if (remoteScanRangeLocations.isEmpty()) {
-                return;
-            }
-
-            Preconditions.checkArgument(assignType != ScanRangeAssignType.SCAN_DATA_SIZE
-                    || remoteScanRangeLocations.size() == remoteScanRangesBytes.size());
-            for (int i = 0; i < remoteScanRangeLocations.size(); ++i) {
-                TScanRangeLocations scanRangeLocations = remoteScanRangeLocations.get(i);
-                long minAssignedScanRanges = Long.MAX_VALUE;
-                ComputeNode minBe = null;
-                for (Map.Entry<ComputeNode, Long> entry : assignedScansPerComputeNode.entrySet()) {
-                    ComputeNode backend = entry.getKey();
-                    long assignedScanRanges = entry.getValue();
-                    if (assignedScanRanges < minAssignedScanRanges) {
-                        minAssignedScanRanges = assignedScanRanges;
-                        minBe = backend;
-                    }
-                }
-                long scansToAdd = (assignType == ScanRangeAssignType.SCAN_DATA_SIZE ? remoteScanRangesBytes.get(i) : 1);
-                recordScanRangeAssignment(minBe, scanRangeLocations, scansToAdd);
-            }
-        }
-
-        private void recordScanRangeAssignment(ComputeNode minBe, TScanRangeLocations scanRangeLocations,
-                                               long addedScans) {
-            TNetworkAddress minBeAddress = new TNetworkAddress(minBe.getHost(), minBe.getBePort());
-            addressToBackendID.put(minBeAddress, minBe.getId());
-
-            // update statistic
-            assignedScansPerComputeNode.put(minBe, assignedScansPerComputeNode.get(minBe) + addedScans);
-
-            // add in assignment
-            Map<Integer, List<TScanRangeParams>> scanRanges = findOrInsert(
-                    assignment, minBeAddress, new HashMap<>());
-            List<TScanRangeParams> scanRangeParamsList = findOrInsert(
-                    scanRanges, scanNode.getId().asInt(), new ArrayList<TScanRangeParams>());
-            // add scan range params
-            TScanRangeParams scanRangeParams = new TScanRangeParams();
-            scanRangeParams.scan_range = scanRangeLocations.scan_range;
-            scanRangeParamsList.add(scanRangeParams);
-        }
+    private boolean canUsePipeline(ConnectContext connectContext, List<PlanFragment> fragments) {
+        return connectContext != null &&
+                connectContext.getSessionVariable().isEnablePipelineEngine() &&
+                fragments.stream().allMatch(PlanFragment::canUsePipeline);
     }
 }

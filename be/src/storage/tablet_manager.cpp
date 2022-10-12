@@ -69,9 +69,8 @@ static void get_shutdown_tablets(std::ostream& os, void*) {
 
 bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets", get_shutdown_tablets, nullptr);
 
-TabletManager::TabletManager(MemTracker* mem_tracker, int32_t tablet_map_lock_shard_size)
-        : _mem_tracker(mem_tracker),
-          _tablets_shards(tablet_map_lock_shard_size),
+TabletManager::TabletManager(int32_t tablet_map_lock_shard_size)
+        : _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
           _last_update_stat_ms(0),
           _cur_shard(0) {
@@ -321,7 +320,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
+        TabletSharedPtr new_tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
         st = fs::create_directories(new_tablet->schema_hash_path());
         if (!st.ok()) {
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
@@ -366,6 +365,19 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
 TabletSharedPtr TabletManager::get_tablet(TTabletId tablet_id, bool include_deleted, std::string* err) {
     std::shared_lock rlock(_get_tablets_shard_lock(tablet_id));
     return _get_tablet_unlocked(tablet_id, include_deleted, err);
+}
+
+StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId tablet_id, int64_t from_version,
+                                                                     int64_t to_version) {
+    std::string err;
+    auto tablet = get_tablet(tablet_id, true, &err);
+    if (!tablet) {
+        std::string errmsg = strings::Substitute("Failed to get tablet(tablet_id=$0),reason=$1", tablet_id, err);
+        return Status::InternalError(errmsg);
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
+    return std::make_tuple(std::move(tablet), std::move(rowsets));
 }
 
 TabletSharedPtr TabletManager::_get_tablet_unlocked(TTabletId tablet_id, bool include_deleted, std::string* err) {
@@ -485,15 +497,16 @@ bool TabletManager::get_next_batch_tablets(size_t batch_size, std::vector<Tablet
     }
 }
 
-TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir) {
+TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType compaction_type, DataDir* data_dir,
+                                                              std::pair<int32_t, int32_t> tablet_shards_range) {
     int64_t now_ms = UnixMillis();
     const std::string& compaction_type_str = compaction_type == CompactionType::BASE_COMPACTION ? "base" : "cumulative";
     // only do compaction if compaction #rowset > 1
     uint32_t highest_score = 1;
     TabletSharedPtr best_tablet;
-    for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (auto [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+    for (int32_t i = tablet_shards_range.first; i < tablet_shards_range.second; i++) {
+        std::shared_lock rlock(_tablets_shards[i].lock);
+        for (auto [tablet_id, tablet_ptr] : _tablets_shards[i].tablet_map) {
             if (tablet_ptr->keys_type() == PRIMARY_KEYS) {
                 continue;
             }
@@ -503,19 +516,42 @@ TabletSharedPtr TabletManager::find_best_tablet_to_compaction(CompactionType com
             }
 
             if (tablet_ptr->data_dir()->path_hash() != data_dir->path_hash() || !tablet_ptr->is_used() ||
-                !tablet_ptr->init_succeeded() || !tablet_ptr->can_do_compaction()) {
+                !tablet_ptr->init_succeeded()) {
                 continue;
             }
 
-            int64_t last_failure_ms = tablet_ptr->last_cumu_compaction_failure_time();
-            if (compaction_type == CompactionType::BASE_COMPACTION) {
-                last_failure_ms = tablet_ptr->last_base_compaction_failure_time();
-            }
-            if (now_ms - last_failure_ms <= config::min_compaction_failure_interval_sec * 1000) {
-                VLOG(1) << "Too often to check compaction, skip it."
-                        << "compaction_type=" << compaction_type_str << ", last_failure_time_ms=" << last_failure_ms
-                        << ", tablet_id=" << tablet_ptr->tablet_id();
-                continue;
+            int64_t last_failure_ts = 0;
+            if (compaction_type == CompactionType::CUMULATIVE_COMPACTION) {
+                if (tablet_ptr->last_cumu_compaction_failure_status() == TStatusCode::NOT_FOUND) {
+                    if (now_ms - last_failure_ts <= 5 * config::cumulative_compaction_check_interval_seconds * 1000) {
+                        VLOG(1) << "Too often to schedule no suitable compaction, skip it."
+                                << "compaction_type=" << compaction_type_str
+                                << ", last_failure_timestamp=" << last_failure_ts / 1000
+                                << ", tablet_id=" << tablet_ptr->tablet_id();
+                        continue;
+                    }
+                } else {
+                    last_failure_ts = tablet_ptr->last_cumu_compaction_failure_time();
+                    if (now_ms - last_failure_ts <= config::min_cmumulative_compaction_failure_interval_sec * 1000) {
+                        VLOG(1) << "Too often to schedule failure compaction, skip it."
+                                << "compaction_type=" << compaction_type_str
+                                << ", min_cmumulative_compaction_failure_interval_sec="
+                                << config::min_cmumulative_compaction_failure_interval_sec
+                                << ", last_failure_timestamp=" << last_failure_ts / 1000
+                                << ", tablet_id=" << tablet_ptr->tablet_id();
+                        continue;
+                    }
+                }
+            } else if (compaction_type == CompactionType::BASE_COMPACTION) {
+                last_failure_ts = tablet_ptr->last_base_compaction_failure_time();
+                if (now_ms - last_failure_ts <= config::min_compaction_failure_interval_sec * 1000) {
+                    VLOG(1) << "Too often to schedule failure compaction, skip it."
+                            << "compaction_type=" << compaction_type_str
+                            << ", min_compaction_failure_interval_sec=" << config::min_compaction_failure_interval_sec
+                            << ", last_failure_timestamp=" << last_failure_ts / 1000
+                            << ", tablet_id=" << tablet_ptr->tablet_id();
+                    continue;
+                }
             }
 
             if (compaction_type == CompactionType::BASE_COMPACTION) {
@@ -633,7 +669,7 @@ Status TabletManager::load_tablet_from_meta(DataDir* data_dir, TTabletId tablet_
         tablet_meta->set_tablet_state(TABLET_RUNNING);
     }
 
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, data_dir);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, data_dir);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet_id=" << tablet_id;
         return Status::InternalError("Fail to create tablet");
@@ -702,7 +738,7 @@ Status TabletManager::load_tablet_from_dir(DataDir* store, TTabletId tablet_id, 
         return Status::NotFound("header file not exist");
     }
 
-    auto tablet_meta = TabletMeta::create(_mem_tracker);
+    auto tablet_meta = TabletMeta::create();
     if (!tablet_meta->create_from_file(meta_path).ok()) {
         LOG(WARNING) << "Fail to load tablet_meta. file_path=" << meta_path;
         return Status::InternalError("fail to create tablet meta from file");
@@ -1034,7 +1070,7 @@ Status TabletManager::_create_inital_rowset_unlocked(const TCreateTabletReq& req
         VLOG(3) << "begin to create init version. version=" << version;
         RowsetSharedPtr new_rowset;
         do {
-            RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+            RowsetWriterContext context;
             context.rowset_id = StorageEngine::instance()->next_rowset_id();
             context.tablet_uid = tablet->tablet_uid();
             context.tablet_id = tablet->tablet_id();
@@ -1133,8 +1169,8 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
         return Status::InternalError("fail to get root path shard");
     }
     // We generate a new tablet_uid for this new tablet.
-    return TabletMeta::create(_mem_tracker, normal_request, TabletUid::gen_uid(), shard_id, next_unique_id,
-                              col_idx_to_unique_id, tablet_meta);
+    return TabletMeta::create(normal_request, TabletUid::gen_uid(), shard_id, next_unique_id, col_idx_to_unique_id,
+                              tablet_meta);
 }
 
 Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
@@ -1151,12 +1187,11 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
     }
 
-    LOG(INFO) << "Start to drop tablet" << tablet_id;
+    LOG(INFO) << "Start to drop tablet " << tablet_id;
     TabletSharedPtr dropped_tablet = it->second;
     tablet_map.erase(it);
     _remove_tablet_from_partition(*dropped_tablet);
     dropped_tablet->stop_compaction();
-    LOG(INFO) << "Succeed to stop compaction of tablet " << tablet_id;
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
@@ -1184,9 +1219,8 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
             dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
+            dropped_tablet->save_meta();
         }
-
-        dropped_tablet->save_meta();
 
         std::unique_lock l(_shutdown_tablets_lock);
         _shutdown_tablets.emplace(tablet_id, std::move(drop_info));
@@ -1194,7 +1228,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         DCHECK_EQ(kKeepMetaAndFiles, flag);
     }
     dropped_tablet->deregister_tablet_from_dir();
-    LOG(INFO) << "Succeed to drop tablet" << tablet_id;
+    LOG(INFO) << "Succeed to drop tablet " << tablet_id;
     return Status::OK();
 }
 
@@ -1299,7 +1333,7 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         return Status::InternalError("tablet state is shutdown");
     }
     // DO NOT access tablet->updates() until tablet has been init()-ed.
-    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(_mem_tracker, tablet_meta, store);
+    TabletSharedPtr tablet = Tablet::create_tablet_from_meta(tablet_meta, store);
     if (tablet == nullptr) {
         LOG(WARNING) << "Fail to load tablet " << tablet_id;
         return Status::InternalError("Fail to create tablet");

@@ -37,14 +37,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
 import java.util.Set;
-import java.util.TreeSet;
 import java.util.stream.Collectors;
 
 /**
@@ -53,6 +51,7 @@ import java.util.stream.Collectors;
  * {@link com.starrocks.common.proc.CurrentQueryInfoProvider}.
  */
 public class RuntimeProfile {
+
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
     private static final Set<String> NON_MERGE_COUNTER_NAMES =
@@ -63,15 +62,14 @@ public class RuntimeProfile {
 
     private final Counter counterTotalTime;
 
-    private final Map<String, String> infoStrings = Maps.newHashMap();
-    private final List<String> infoStringsDisplayOrder = Lists.newArrayList();
+    private final Map<String, String> infoStrings = Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     // These will be hold by other thread.
     private final Map<String, Pair<Counter, String>> counterMap = Maps.newConcurrentMap();
     private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
 
-    private final Map<String, TreeSet<String>> childCounterMap = Maps.newConcurrentMap();
-    private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
+    private final Map<String, Set<String>> childCounterMap = Maps.newConcurrentMap();
+    private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newCopyOnWriteArrayList();
 
     private String name;
     private double localTimePercent;
@@ -104,6 +102,10 @@ public class RuntimeProfile {
         return childMap;
     }
 
+    public RuntimeProfile getChild(String childName) {
+        return childMap.get(childName);
+    }
+
     public void removeAllChildren() {
         childList.clear();
         childMap.clear();
@@ -123,9 +125,11 @@ public class RuntimeProfile {
             Counter newCounter = new Counter(type, 0);
             this.counterMap.put(name, Pair.create(newCounter, parentName));
 
-            TreeSet<String> childNames = childCounterMap.getOrDefault(parentName, new TreeSet<>());
+            if (!childCounterMap.containsKey(parentName)) {
+                childCounterMap.putIfAbsent(parentName, Sets.newConcurrentHashSet());
+            }
+            Set<String> childNames = childCounterMap.get(parentName);
             childNames.add(name);
-            childCounterMap.put(parentName, childNames);
             return newCounter;
         }
     }
@@ -139,7 +143,7 @@ public class RuntimeProfile {
         Pair<Counter, String> pair = counterMap.get(name);
         String parentName = pair.second;
         if (childCounterMap.containsKey(parentName)) {
-            TreeSet<String> childNames = childCounterMap.get(parentName);
+            Set<String> childNames = childCounterMap.get(parentName);
             childNames.remove(name);
         }
 
@@ -148,7 +152,7 @@ public class RuntimeProfile {
         nameQueue.offer(name);
         while (!nameQueue.isEmpty()) {
             String topName = nameQueue.poll();
-            TreeSet<String> childNames = childCounterMap.get(topName);
+            Set<String> childNames = childCounterMap.get(topName);
             if (childNames != null) {
                 for (String childName : childNames) {
                     nameQueue.offer(childName);
@@ -161,10 +165,19 @@ public class RuntimeProfile {
 
     public Counter getCounter(String name) {
         Pair<Counter, String> pair = counterMap.get(name);
-        if (pair == null) {
-            return null;
+        if (pair != null) {
+            return pair.first;
         }
-        return pair.first;
+        return null;
+    }
+
+    public Counter getMaxCounter(String name) {
+        Counter counter;
+        if ((counter = getCounter(MERGED_INFO_PREFIX_MAX + name)) != null) {
+            return counter;
+        }
+
+        return getCounter(name);
     }
 
     // Copy all the counters from src profile
@@ -187,7 +200,7 @@ public class RuntimeProfile {
                 newCounter.setValue(srcCounter.getValue());
             }
 
-            TreeSet<String> childNames = srcProfile.childCounterMap.get(name);
+            Set<String> childNames = srcProfile.childCounterMap.get(name);
             if (childNames != null) {
                 for (String childName : childNames) {
                     nameQueue.offer(Pair.create(childName, name));
@@ -278,13 +291,7 @@ public class RuntimeProfile {
             for (String key : node.info_strings_display_order) {
                 String value = nodeInfoStrings.get(key);
                 Preconditions.checkState(value != null);
-                if (this.infoStrings.containsKey(key)) {
-                    // exists then replace
-                    this.infoStrings.put(key, value);
-                } else {
-                    this.infoStrings.put(key, value);
-                    this.infoStringsDisplayOrder.add(key);
-                }
+                addInfoString(key, value);
             }
         }
 
@@ -328,7 +335,8 @@ public class RuntimeProfile {
         builder.append("\n");
 
         // 2. info String
-        for (String key : this.infoStringsDisplayOrder) {
+        for (Map.Entry<String, String> infoPair : this.infoStrings.entrySet()) {
+            String key = infoPair.getKey();
             builder.append(prefix).append("   - ").append(key).append(": ")
                     .append(this.infoStrings.get(key)).append("\n");
         }
@@ -337,8 +345,7 @@ public class RuntimeProfile {
         printChildCounters(prefix, ROOT_COUNTER, builder);
 
         // 4. children
-        for (int i = 0; i < childList.size(); i++) {
-            Pair<RuntimeProfile, Boolean> childPair = childList.get(i);
+        for (Pair<RuntimeProfile, Boolean> childPair : childList) {
             boolean indent = childPair.second;
             RuntimeProfile profile = childPair.first;
             profile.prettyPrint(builder, prefix + (indent ? "  " : ""));
@@ -356,6 +363,7 @@ public class RuntimeProfile {
             return;
         }
         List<String> childNames = Lists.newArrayList(childCounterMap.get(counterName));
+        childNames.sort(String::compareTo);
 
         // Keep MIN/MAX metrics head of other child counters
         List<String> minMaxChildNames = Lists.newArrayListWithCapacity(2);
@@ -452,16 +460,23 @@ public class RuntimeProfile {
             return;
         }
 
-        this.childMap.put(child.name, child);
+        childMap.put(child.name, child);
         Pair<RuntimeProfile, Boolean> pair = Pair.create(child, true);
-        this.childList.add(pair);
+        childList.add(pair);
+    }
+
+    public void removeChild(String childName) {
+        RuntimeProfile childProfile = childMap.remove(childName);
+        if (childProfile == null) {
+            return;
+        }
+        childList.removeIf(childPair -> childPair.first == childProfile);
     }
 
     // Because the profile of summary and child fragment is not a real parent-child relationship
     // Each child profile needs to calculate the time proportion consumed by itself
     public void computeTimeInChildProfile() {
-        childMap.values().stream().
-                forEach(child -> child.computeTimeInProfile());
+        childMap.values().forEach(RuntimeProfile::computeTimeInProfile);
     }
 
     public void computeTimeInProfile() {
@@ -476,40 +491,34 @@ public class RuntimeProfile {
         // Add all the total times in all the children
         long totalChildTime = 0;
 
-        for (int i = 0; i < this.childList.size(); ++i) {
-            totalChildTime += childList.get(i).first.getCounterTotalTime().getValue();
+        for (Pair<RuntimeProfile, Boolean> pair : this.childList) {
+            totalChildTime += pair.first.getCounterTotalTime().getValue();
         }
         long localTime = this.getCounterTotalTime().getValue() - totalChildTime;
         // Counters have some margin, set to 0 if it was negative.
         localTime = Math.max(0, localTime);
-        this.localTimePercent = Double.valueOf(localTime) / Double.valueOf(total);
+        this.localTimePercent = (double) localTime / (double) total;
         this.localTimePercent = Math.min(1.0, this.localTimePercent) * 100;
 
         // Recurse on children
-        for (int i = 0; i < this.childList.size(); i++) {
-            childList.get(i).first.computeTimeInProfile(total);
+        for (Pair<RuntimeProfile, Boolean> pair : this.childList) {
+            pair.first.computeTimeInProfile(total);
         }
     }
 
     // from bigger to smaller
     public void sortChildren() {
-        Collections.sort(this.childList, new Comparator<Pair<RuntimeProfile, Boolean>>() {
-            @Override
-            public int compare(Pair<RuntimeProfile, Boolean> profile1, Pair<RuntimeProfile, Boolean> profile2) {
-                return Long.compare(profile2.first.getCounterTotalTime().getValue(),
-                        profile1.first.getCounterTotalTime().getValue());
-            }
-        });
+        this.childList.sort((profile1, profile2) ->
+                Long.compare(profile2.first.getCounterTotalTime().getValue(),
+                        profile1.first.getCounterTotalTime().getValue()));
     }
 
     public void addInfoString(String key, String value) {
-        String target = this.infoStrings.get(key);
-        if (target == null) {
-            this.infoStrings.put(key, value);
-            this.infoStringsDisplayOrder.add(key);
-        } else {
-            this.infoStrings.put(key, value);
-        }
+        this.infoStrings.put(key, value);
+    }
+
+    public void removeInfoString(String key) {
+        infoStrings.remove(key);
     }
 
     // Copy all info strings from src profile
@@ -562,7 +571,7 @@ public class RuntimeProfile {
                         continue;
                     }
 
-                    TreeSet<String> childNames = profile.childCounterMap.get(name);
+                    Set<String> childNames = profile.childCounterMap.get(name);
                     if (childNames != null) {
                         for (String childName : childNames) {
                             nameQueue.offer(childName);

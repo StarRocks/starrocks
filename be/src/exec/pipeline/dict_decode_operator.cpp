@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exec/pipeline/dict_decode_operator.h"
 
@@ -58,6 +58,12 @@ Status DictDecodeOperator::push_chunk(RuntimeState* state, const vectorized::Chu
     }
 
     DCHECK_CHUNK(_cur_chunk);
+    return Status::OK();
+}
+
+Status DictDecodeOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _cur_chunk = nullptr;
+    _is_finished = false;
     return Status::OK();
 }
 

@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "publish_version.h"
 
@@ -35,10 +35,10 @@ struct TabletPublishVersionTask {
     int64_t max_continuous_version{0}; // max continuous version after publish is done
 };
 
-void run_publish_version_task(ThreadPoolToken* token, const TAgentTaskRequest& publish_version_task,
+void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentTaskRequest& publish_version_task,
                               TFinishTaskRequest& finish_task, std::unordered_set<DataDir*>& affected_dirs) {
     int64_t start_ts = MonotonicMillis();
-    auto& publish_version_req = publish_version_task.publish_version_req;
+    auto& publish_version_req = publish_version_task.task_req;
     int64_t transaction_id = publish_version_req.transaction_id;
 
     Span span = Tracer::Instance().start_trace_or_add_span("run_publish_version_task",

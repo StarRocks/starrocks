@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive.events;
 
@@ -9,7 +9,7 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.HiveMetaStoreTableUtils;
 import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKey;
+import com.starrocks.external.hive.HivePartitionName;
 import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -63,9 +63,10 @@ public class MetastoreEventFactory implements EventFactory {
         try {
             metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
         } catch (DdlException e) {
-            LOG.error(e.getMessage());
+            LOG.error("Filed to get meta cache on resource [{}]", resourceName, e);
         }
         if (metaCache == null) {
+            LOG.error("Meta cache is null on resource [{}]", resourceName);
             return metastoreEvents;
         }
 
@@ -83,6 +84,8 @@ public class MetastoreEventFactory implements EventFactory {
             }
 
             if (table == null) {
+                LOG.warn("Table is null on resource [{}], table [{}.{}]. Skipping notification event {}",
+                        resourceName, event.getDbName(), event.getTableName(), event);
                 continue;
             }
             metastoreEvents.addAll(get(event, metaCache, table));
@@ -93,6 +96,7 @@ public class MetastoreEventFactory implements EventFactory {
                 .collect(Collectors.toList());
 
         if (tobeProcessEvents.isEmpty()) {
+            LOG.warn("The metastore events to process is empty on resource {}", resourceName);
             return Collections.emptyList();
         }
 
@@ -100,15 +104,15 @@ public class MetastoreEventFactory implements EventFactory {
     }
 
     /**
-     * Create batch event tasks according to HivePartitionKey to facilitate subsequent parallel processing.
+     * Create batch event tasks according to HivePartitionName to facilitate subsequent parallel processing.
      * For ADD_PARTITION and DROP_PARTITION, we directly override any events before that partition.
      * For a partition, it is meaningless to process any events before the drop partition.
      */
     List<MetastoreEvent> createBatchEvents(List<MetastoreEvent> events) {
-        Map<HivePartitionKey, MetastoreEvent> batchEvents = Maps.newHashMap();
+        Map<HivePartitionName, MetastoreEvent> batchEvents = Maps.newHashMap();
         for (MetastoreEvent event : events) {
             MetastoreTableEvent metastoreTableEvent = (MetastoreTableEvent) event;
-            HivePartitionKey hivePartitionKey = metastoreTableEvent.getHivePartitionKey();
+            HivePartitionName hivePartitionKey = metastoreTableEvent.getHivePartitionKey();
             switch (event.getEventType()) {
                 case ADD_PARTITION:
                 case DROP_PARTITION:

@@ -20,14 +20,11 @@
 #include <sys/stat.h>
 #include <sys/sysmacros.h>
 #include <sys/types.h>
-#include <sys/vfs.h>
 #include <unistd.h>
 
 #include <boost/algorithm/string.hpp>
-#include <boost/algorithm/string/join.hpp>
 #include <fstream>
 #include <iostream>
-#include <sstream>
 
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"

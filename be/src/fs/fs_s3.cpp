@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "fs/fs_s3.h"
 
 #include <aws/core/Aws.h>
 #include <aws/core/auth/AWSCredentialsProvider.h>
 #include <aws/core/utils/threading/Executor.h>
+#include <aws/s3/model/CopyObjectRequest.h>
 #include <aws/s3/model/CreateBucketRequest.h>
 #include <aws/s3/model/DeleteBucketRequest.h>
 #include <aws/s3/model/DeleteObjectRequest.h>
@@ -108,21 +109,31 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     S3ClientPtr client;
     string access_key_id;
     string secret_access_key;
-    if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
-        DCHECK(opts.scan_range_params->hdfs_properties.__isset.access_key);
-        DCHECK(opts.scan_range_params->hdfs_properties.__isset.secret_key);
-        access_key_id = opts.scan_range_params->hdfs_properties.access_key;
-        secret_access_key = opts.scan_range_params->hdfs_properties.secret_key;
+    bool path_style_access = config::object_storage_endpoint_path_style_access;
+    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    if (hdfs_properties != nullptr) {
+        DCHECK(hdfs_properties->__isset.access_key);
+        DCHECK(hdfs_properties->__isset.secret_key);
+        access_key_id = hdfs_properties->access_key;
+        secret_access_key = hdfs_properties->secret_key;
     } else {
         access_key_id = config::object_storage_access_key_id;
         secret_access_key = config::object_storage_secret_access_key;
     }
     if (!access_key_id.empty() && !secret_access_key.empty()) {
         auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
-        client = std::make_shared<Aws::S3::S3Client>(credentials, config);
+        client = std::make_shared<Aws::S3::S3Client>(credentials, config,
+                                                     /* signPayloads */
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     /* useVirtualAddress */
+                                                     !path_style_access);
     } else {
         // if not cred provided, we can use default cred in aws profile.
-        client = std::make_shared<Aws::S3::S3Client>(config);
+        client = std::make_shared<Aws::S3::S3Client>(config,
+                                                     /* signPayloads */
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     /* useVirtualAddress */
+                                                     !path_style_access);
     }
 
     if (UNLIKELY(_items >= kMaxItems)) {
@@ -139,21 +150,21 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
     Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
-    if (opts.scan_range_params != nullptr && opts.scan_range_params->__isset.hdfs_properties) {
-        const THdfsProperties& hdfs_properties = opts.scan_range_params->hdfs_properties;
-        DCHECK(hdfs_properties.__isset.end_point);
-        if (hdfs_properties.__isset.end_point) {
-            config.endpointOverride = hdfs_properties.end_point;
+    const THdfsProperties* hdfs_properties = opts.hdfs_properties();
+    if (hdfs_properties != nullptr) {
+        DCHECK(hdfs_properties->__isset.end_point);
+        if (hdfs_properties->__isset.end_point) {
+            config.endpointOverride = hdfs_properties->end_point;
         }
-        if (hdfs_properties.__isset.ssl_enable && hdfs_properties.ssl_enable) {
+        if (hdfs_properties->__isset.ssl_enable && hdfs_properties->ssl_enable) {
             config.scheme = Aws::Http::Scheme::HTTPS;
         }
 
-        if (hdfs_properties.__isset.region) {
-            config.region = hdfs_properties.region;
+        if (hdfs_properties->__isset.region) {
+            config.region = hdfs_properties->region;
         }
-        if (hdfs_properties.__isset.max_connection) {
-            config.maxConnections = hdfs_properties.max_connection;
+        if (hdfs_properties->__isset.max_connection) {
+            config.maxConnections = hdfs_properties->max_connection;
         } else {
             config.maxConnections = config::object_storage_max_connection;
         }
@@ -203,6 +214,8 @@ public:
 
     Status path_exists(const std::string& path) override { return Status::NotSupported("S3FileSystem::path_exists"); }
 
+    Status list_path(const std::string& dir, std::vector<FileStatus>* result) override;
+
     Status get_children(const std::string& dir, std::vector<std::string>* file) override {
         return Status::NotSupported("S3FileSystem::get_children");
     }
@@ -237,9 +250,7 @@ public:
         return Status::NotSupported("S3FileSystem::get_file_modified_time");
     }
 
-    Status rename_file(const std::string& src, const std::string& target) override {
-        return Status::NotSupported("S3FileSystem::rename_file");
-    }
+    Status rename_file(const std::string& src, const std::string& target) override;
 
     Status link_file(const std::string& old_path, const std::string& new_path) override {
         return Status::NotSupported("S3FileSystem::link_file");
@@ -303,6 +314,37 @@ StatusOr<std::unique_ptr<WritableFile>> S3FileSystem::new_writable_file(const Wr
     return std::make_unique<OutputStreamAdapter>(std::move(ostream), fname);
 }
 
+Status S3FileSystem::rename_file(const std::string& src, const std::string& target) {
+    S3URI src_uri;
+    S3URI dest_uri;
+    if (!src_uri.parse(src)) {
+        return Status::InvalidArgument(fmt::format("Invalid src S3 URI: {}", src));
+    }
+    if (!dest_uri.parse(target)) {
+        return Status::InvalidArgument(fmt::format("Invalid target S3 URI: {}", target));
+    }
+    auto client = new_s3client(src_uri, _options);
+    Aws::S3::Model::CopyObjectRequest copy_request;
+    copy_request.WithCopySource(src_uri.bucket() + "/" + src_uri.key());
+    copy_request.WithBucket(dest_uri.bucket());
+    copy_request.WithKey(dest_uri.key());
+    Aws::S3::Model::CopyObjectOutcome copy_outcome = client->CopyObject(copy_request);
+    if (!copy_outcome.IsSuccess()) {
+        return Status::InvalidArgument(fmt::format("Fail to copy from src {} to target {}, msg: {}", src, target,
+                                                   copy_outcome.GetError().GetMessage()));
+    }
+
+    Aws::S3::Model::DeleteObjectRequest delete_request;
+    delete_request.WithBucket(src_uri.bucket()).WithKey(src_uri.key());
+    Aws::S3::Model::DeleteObjectOutcome delete_outcome = client->DeleteObject(delete_request);
+    if (!delete_outcome.IsSuccess()) {
+        return Status::InvalidArgument(
+                fmt::format("Fail to delte src {}, msg: {}", src, delete_outcome.GetError().GetMessage()));
+    }
+
+    return Status::OK();
+}
+
 StatusOr<SpaceInfo> S3FileSystem::space(const std::string& path) {
     // call `is_directory()` to check if 'path' is an valid path
     const Status status = S3FileSystem::is_directory(path).status();
@@ -363,6 +405,66 @@ Status S3FileSystem::iterate_dir(const std::string& dir, const std::function<boo
             if (!cb(name)) {
                 return Status::OK();
             }
+        }
+    } while (result.GetIsTruncated());
+    return directory_exist ? Status::OK() : Status::NotFound(dir);
+}
+
+Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* file_status) {
+    S3URI uri;
+    if (!uri.parse(dir)) {
+        return Status::InvalidArgument(fmt::format("Invalid S3 URI {}", dir));
+    }
+    if (!uri.key().empty() && !HasSuffixString(uri.key(), "/")) {
+        uri.key().reserve(uri.key().size() + 1);
+        uri.key().push_back('/');
+    }
+    // `uri.key().empty()` is true means this is a root directory.
+    bool directory_exist = uri.key().empty() ? true : false;
+    auto client = new_s3client(uri, _options);
+    Aws::S3::Model::ListObjectsV2Request request;
+    Aws::S3::Model::ListObjectsV2Result result;
+    request.WithBucket(uri.bucket()).WithPrefix(uri.key()).WithDelimiter("/");
+
+    do {
+        auto outcome = client->ListObjectsV2(request);
+        if (!outcome.IsSuccess()) {
+            return Status::IOError(fmt::format("S3: fail to list {}: {}", dir, outcome.GetError().GetMessage()));
+        }
+        result = outcome.GetResultWithOwnership();
+        request.SetContinuationToken(result.GetNextContinuationToken());
+        directory_exist |= !result.GetCommonPrefixes().empty();
+        directory_exist |= !result.GetContents().empty();
+        for (auto&& cp : result.GetCommonPrefixes()) {
+            DCHECK(HasPrefixString(cp.GetPrefix(), uri.key())) << cp.GetPrefix() << " " << uri.key();
+            DCHECK(HasSuffixString(cp.GetPrefix(), "/")) << cp.GetPrefix();
+            const auto& full_name = cp.GetPrefix();
+
+            std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
+            bool is_dir = true;
+            int64_t file_size = 0;
+            file_status->emplace_back(std::move(name), is_dir, file_size);
+        }
+        for (auto&& obj : result.GetContents()) {
+            if (obj.GetKey() == uri.key()) {
+                continue;
+            }
+            DCHECK(HasPrefixString(obj.GetKey(), uri.key()));
+
+            std::string_view obj_key(obj.GetKey());
+            bool is_dir = true;
+            int64_t file_size = 0;
+            if (obj_key.back() == '/') {
+                obj_key = std::string_view(obj_key.data(), obj_key.size() - 1);
+            } else {
+                DCHECK(obj.SizeHasBeenSet());
+                is_dir = false;
+                file_size = obj.GetSize();
+            }
+
+            std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
+
+            file_status->emplace_back(std::move(name), is_dir, file_size);
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);

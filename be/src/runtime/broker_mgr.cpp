@@ -31,7 +31,6 @@
 #include "service/backend_options.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
-#include "util/thrift_util.h"
 
 namespace starrocks {
 

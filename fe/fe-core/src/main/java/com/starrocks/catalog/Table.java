@@ -25,14 +25,15 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CreateTableStmt;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.thrift.TTableDescriptor;
 import org.apache.commons.lang.NotImplementedException;
 import org.apache.logging.log4j.LogManager;
@@ -43,8 +44,12 @@ import java.io.DataOutput;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import javax.annotation.Nullable;
 
 /**
  * Internal representation of table-related metadata. A table contains several partitions.
@@ -117,10 +122,15 @@ public class Table extends MetaObject implements Writable {
     @SerializedName(value = "comment")
     protected String comment = "";
 
+    // not serialized field
+    // record all materialized views based on this Table
+    private Set<Long> relatedMaterializedViews;
+
     public Table(TableType type) {
         this.type = type;
         this.fullSchema = Lists.newArrayList();
         this.nameToColumn = Maps.newTreeMap(String.CASE_INSENSITIVE_ORDER);
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public Table(long id, String tableName, TableType type, List<Column> fullSchema) {
@@ -141,6 +151,7 @@ public class Table extends MetaObject implements Writable {
             Preconditions.checkArgument(type == TableType.VIEW, "Table has no columns");
         }
         this.createTime = Instant.now().getEpochSecond();
+        this.relatedMaterializedViews = Sets.newConcurrentHashSet();
     }
 
     public boolean isTypeRead() {
@@ -156,6 +167,10 @@ public class Table extends MetaObject implements Writable {
     }
 
     public String getName() {
+        return name;
+    }
+
+    public String getTableIdentifier() {
         return name;
     }
 
@@ -185,6 +200,18 @@ public class Table extends MetaObject implements Writable {
 
     public boolean isNativeTable() {
         return isLocalTable() || isLakeTable();
+    }
+
+    public boolean isHiveTable() {
+        return type == TableType.HIVE;
+    }
+
+    public boolean isHudiTable() {
+        return type == TableType.HUDI;
+    }
+
+    public boolean isIcebergTable() {
+        return type == TableType.ICEBERG;
     }
 
     // for create table
@@ -341,6 +368,18 @@ public class Table extends MetaObject implements Writable {
         return null;
     }
 
+    public Partition getPartition(long partitionId) {
+        return null;
+    }
+
+    public Collection<Partition> getPartitions() {
+        return Collections.emptyList();
+    }
+
+    public Set<String> getDistributionColumnNames() {
+        return Collections.emptySet();
+    }
+
     public String getEngine() {
         if (this instanceof OlapTable) {
             return "StarRocks";
@@ -450,9 +489,10 @@ public class Table extends MetaObject implements Writable {
      * Delete this table. this method is called with the protection of the database's writer lock.
      *
      * @param replay is this a log replay operation.
-     * @return a Runnable object to be invoked after persisted the edit log and released the
-     * database's lock, null if no task need to run.
+     * @return a {@link Runnable} object that will be invoked after the table has been deleted from
+     * catalog, or null if no action need to be performed.
      */
+    @Nullable
     public Runnable delete(boolean replay) {
         return null;
     }
@@ -460,4 +500,23 @@ public class Table extends MetaObject implements Writable {
     public boolean isSupported() {
         return false;
     }
+
+    public Map<String, String> getProperties() {
+        throw new NotImplementedException();
+    }
+
+    // should call this when create materialized view
+    public void addRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.add(mvId);
+    }
+
+    // should call this when drop materialized view
+    public void removeRelatedMaterializedView(long mvId) {
+        relatedMaterializedViews.remove(mvId);
+    }
+
+    public Set<Long> getRelatedMaterializedViews() {
+        return relatedMaterializedViews;
+    }
+
 }

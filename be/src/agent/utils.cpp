@@ -21,8 +21,6 @@
 
 #include "agent/utils.h"
 
-#include <rapidjson/stringbuffer.h>
-
 #include <sstream>
 
 #include "agent/master_info.h"

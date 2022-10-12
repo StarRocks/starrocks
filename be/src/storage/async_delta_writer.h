@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
 
@@ -14,11 +14,25 @@ DIAGNOSTIC_POP
 
 #include "storage/delta_writer.h"
 
+namespace brpc {
+class Controller;
+}
+
+namespace google::protobuf {
+class Closure;
+}
+
+namespace starrocks {
+class SegmentFlushExecutor;
+class SegmentFlushToken;
+} // namespace starrocks
+
 namespace starrocks::vectorized {
 
 class AsyncDeltaWriterRequest;
 class CommittedRowsetInfo;
 class AsyncDeltaWriterCallback;
+class AsyncDeltaWriterSegmentRequest;
 
 // AsyncDeltaWriter is a wrapper on DeltaWriter to support non-blocking async write.
 // All submitted tasks will be executed in the FIFO order.
@@ -52,12 +66,19 @@ public:
     void write(const AsyncDeltaWriterRequest& req, AsyncDeltaWriterCallback* cb);
 
     // [thread-safe and wait-free]
+    void write_segment(const AsyncDeltaWriterSegmentRequest& req);
+
+    // [thread-safe and wait-free]
     void commit(AsyncDeltaWriterCallback* cb);
 
     // [thread-safe and wait-free]
     void abort(bool with_log = true);
 
     int64_t partition_id() const { return _writer->partition_id(); }
+
+    ReplicaState replica_state() const { return _writer->replica_state(); }
+
+    State get_state() const { return _writer->get_state(); }
 
 private:
     struct private_type {
@@ -80,9 +101,10 @@ private:
     Status _init();
     void _close();
 
-    std::unique_ptr<DeltaWriter> _writer;
+    std::shared_ptr<DeltaWriter> _writer;
     bthread::ExecutionQueueId<Task> _queue_id;
     std::atomic<bool> _closed;
+    std::unique_ptr<starrocks::SegmentFlushToken> _segment_flush_executor = nullptr;
 };
 
 class CommittedRowsetInfo {
@@ -90,6 +112,7 @@ public:
     const Tablet* tablet;
     const Rowset* rowset;
     const RowsetWriter* rowset_writer;
+    const ReplicateToken* replicate_token;
 };
 
 class AsyncDeltaWriterRequest {
@@ -99,6 +122,14 @@ public:
     const uint32_t* indexes = nullptr;
     uint32_t indexes_size = 0;
     bool commit_after_write = false;
+};
+
+class AsyncDeltaWriterSegmentRequest {
+public:
+    brpc::Controller* cntl;
+    const PTabletWriterAddSegmentRequest* request;
+    PTabletWriterAddSegmentResult* response;
+    google::protobuf::Closure* done;
 };
 
 class AsyncDeltaWriterCallback {

@@ -34,6 +34,7 @@ import com.starrocks.system.Backend;
 import com.starrocks.thrift.TNetworkAddress;
 import io.netty.handler.codec.http.HttpHeaders;
 import io.netty.handler.codec.http.HttpMethod;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -77,7 +78,7 @@ public class LoadAction extends RestBaseAction {
 
         // Choose a backend sequentially.
         List<Long> backendIds = GlobalStateMgr.getCurrentSystemInfo().seqChooseBackendIds(1, true, false);
-        if (backendIds == null) {
+        if (CollectionUtils.isEmpty(backendIds)) {
             throw new DdlException("No backend alive.");
         }
 

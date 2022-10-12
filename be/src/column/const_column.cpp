@@ -1,8 +1,6 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "column/const_column.h"
-
-#include <algorithm>
 
 #include "column/column_helper.h"
 #include "simd/simd.h"
@@ -33,6 +31,10 @@ void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, u
 
 void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
     append(src, index, size);
+}
+
+ColumnPtr ConstColumn::replicate(const std::vector<uint32_t>& offsets) {
+    return ConstColumn::create(this->_data->clone_shared(), offsets.back());
 }
 
 void ConstColumn::fill_default(const Filter& filter) {

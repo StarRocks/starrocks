@@ -1,15 +1,14 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.system;
 
-import com.starrocks.analysis.ModifyBackendAddressClause;
 import com.starrocks.cluster.Cluster;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ExceptionChecker;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.ast.ModifyBackendAddressClause;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -24,9 +23,9 @@ import java.net.UnknownHostException;
 import java.util.List;
 
 public class SystemInfoServiceTest {
-    
+
     SystemInfoService service;
-    
+
     @Mocked
     GlobalStateMgr globalStateMgr;
 
@@ -34,10 +33,10 @@ public class SystemInfoServiceTest {
     EditLog editLog;
 
     @Before
-    public void setUp() throws NoSuchFieldException, 
-                               SecurityException, 
-                               IllegalArgumentException, 
-                               IllegalAccessException {
+    public void setUp() throws NoSuchFieldException,
+            SecurityException,
+            IllegalArgumentException,
+            IllegalAccessException {
         service = new SystemInfoService();
         Field field = FrontendOptions.class.getDeclaredField("useFqdn");
         field.setAccessible(true);
@@ -51,7 +50,7 @@ public class SystemInfoServiceTest {
                 return globalStateMgr;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 globalStateMgr.getEditLog();
                 result = editLog;
@@ -59,17 +58,18 @@ public class SystemInfoServiceTest {
         };
         new MockUp<EditLog>() {
             @Mock
-            public void logBackendStateChange(Backend be) {}
+            public void logBackendStateChange(Backend be) {
+            }
         };
     }
-    
+
     @Test
     public void testUpdateBackendHostWithOneBe() throws Exception {
         mockFunc();
         Backend be = new Backend(100, "127.0.0.1", 1000);
         service.addBackend(be);
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
-        service.modifyBackendHost(clause);    
+        service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
     }
@@ -82,7 +82,7 @@ public class SystemInfoServiceTest {
         service.addBackend(be1);
         service.addBackend(be2);
         ModifyBackendAddressClause clause = new ModifyBackendAddressClause("127.0.0.1", "sandbox");
-        service.modifyBackendHost(clause);    
+        service.modifyBackendHost(clause);
         Backend backend = service.getBackendWithHeartbeatPort("sandbox", 1000);
         Assert.assertNotNull(backend);
     }
@@ -91,9 +91,7 @@ public class SystemInfoServiceTest {
     public void testUpdateBackendAddressNotFoundBe() throws Exception {
         Backend be = new Backend(100, "originalHost", 1000);
         service.addBackend(be);
-        ModifyBackendAddressClause clause = new ModifyBackendAddressClause(
-            "originalHost-test", "sandbox"
-        );
+        ModifyBackendAddressClause clause = new ModifyBackendAddressClause("originalHost-test", "sandbox");
         // This case will occur backend [%s] not found exception
         service.modifyBackendHost(clause);
     }
@@ -124,12 +122,7 @@ public class SystemInfoServiceTest {
                 result = new Cluster("cluster", 1);
             }
         };
-
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "starletPort has not been updated by heartbeat from this backend",
-                () -> service.dropBackend("newHost", 1000, false));
-
-
+        
         service.addBackend(be);
         be.setStarletPort(1001);
         service.dropBackend("newHost", 1000, false);
@@ -168,6 +161,7 @@ public class SystemInfoServiceTest {
 
     @Mocked
     InetAddress addr;
+
     private void mockNet() {
         new MockUp<InetAddress>() {
             @Mock
@@ -175,7 +169,7 @@ public class SystemInfoServiceTest {
                 return addr;
             }
         };
-        new Expectations(){
+        new Expectations() {
             {
                 addr.getHostAddress();
                 result = "127.0.0.1";
@@ -213,7 +207,7 @@ public class SystemInfoServiceTest {
 
     @Test
     public void testGetBackendOnlyWithHost() throws Exception {
-        
+
         Backend be = new Backend(10001, "newHost", 1000);
         be.setBePort(1001);
         service.addBackend(be);
@@ -226,7 +220,7 @@ public class SystemInfoServiceTest {
         Backend be = new Backend(10001, "newHost", 1000);
         be.setStarletPort(10001);
         service.addBackend(be);
-        long backendId = service.getBackendIdWithStarletPort("newHost",10001);
+        long backendId = service.getBackendIdWithStarletPort("newHost", 10001);
         Assert.assertEquals(be.getId(), backendId);
     }
 }

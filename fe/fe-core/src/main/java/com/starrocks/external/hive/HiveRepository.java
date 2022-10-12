@@ -1,10 +1,11 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.external.hive;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.catalog.HiveMetaStoreTableInfo;
 import com.starrocks.catalog.HiveResource;
 import com.starrocks.catalog.HudiResource;
@@ -14,6 +15,7 @@ import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.Table;
 import org.apache.logging.log4j.LogManager;
@@ -27,10 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.SynchronousQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -47,8 +47,8 @@ public class HiveRepository {
 
     HiveExternalTableCounter counter = new HiveExternalTableCounter();
 
-    Executor executor = new ThreadPoolExecutor(Config.hive_meta_cache_refresh_min_threads,
-            Integer.MAX_VALUE, 60L, TimeUnit.SECONDS, new SynchronousQueue<Runnable>());
+    Executor executor = Executors.newFixedThreadPool(100,
+            new ThreadFactoryBuilder().setNameFormat("hive-metastore-refresh-%d").build());
 
     private static final Logger LOG = LogManager.getLogger(HiveRepository.class);
     private final ExecutorService partitionDaemonExecutor =
@@ -184,6 +184,13 @@ public class HiveRepository {
                 throw new DdlException(e.getMessage());
             }
         }
+
+        Map<PartitionKey, HivePartitionStats> partitionStatsMaps = Maps.newHashMap();
+        for (int index = 0; index < partitionKeys.size(); ++index) {
+            partitionStatsMaps.put(partitionKeys.get(index), result.get(index));
+        }
+        ConnectContext.get().getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDb(),
+                hmsTable.getTable()).addPartitionsStats(partitionStatsMaps);
         return result;
     }
 

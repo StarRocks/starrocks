@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
@@ -20,6 +22,7 @@ import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -67,9 +70,11 @@ public class ShowTaskTest {
         String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
         SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, connectContext);
         Task manualTask = TaskBuilder.buildTask(submitTaskStmt, connectContext);
+        manualTask.setId(0);
         taskManager.createTask(manualTask, true);
 
         Task periodTask = new Task("test_periodical");
+        periodTask.setId(1);
         periodTask.setCreateTime(System.currentTimeMillis());
         periodTask.setDbName("test");
         periodTask.setDefinition("select 1");
@@ -85,7 +90,7 @@ public class ShowTaskTest {
         tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
         TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
         List<TTaskInfo> tasks = taskResult.getTasks();
-        Assert.assertEquals(tasks.size() , 2);
+        Assert.assertEquals(2, tasks.size());
         for (TTaskInfo task : tasks) {
             if(task.getTask_name().equals("test_periodical")) {
                 Assert.assertEquals(task.getSchedule(),"PERIODICAL (START 2020-04-21T00:00 EVERY(5 SECONDS))");
@@ -93,5 +98,46 @@ public class ShowTaskTest {
                 Assert.assertEquals(task.getSchedule(),"MANUAL");
             }
         }
+        taskManager.dropTasks(ImmutableList.of(periodTask.getId(), manualTask.getId()), false);
+    }
+
+    @Test
+    public void testShowTasksUnknownType() throws Exception {
+        FrontendServiceImpl frontendService = new FrontendServiceImpl(null);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        connectContext.setExecutionId(UUIDUtil.toTUniqueId(UUIDUtil.genUUID()));
+
+        String submitSQL = "submit task as create table temp as select count(*) as cnt from tbl1";
+        SubmitTaskStmt submitTaskStmt = (SubmitTaskStmt) UtFrameUtils.parseStmtWithNewParser(submitSQL, connectContext);
+        Task manualTask = TaskBuilder.buildTask(submitTaskStmt, connectContext);
+        manualTask.setId(0);
+        taskManager.createTask(manualTask, true);
+
+        Task unknownTask = new Task("test_unknown");
+        unknownTask.setId(1);
+        unknownTask.setCreateTime(System.currentTimeMillis());
+        unknownTask.setDbName("test");
+        unknownTask.setDefinition("select 1");
+        unknownTask.setExpireTime(0L);
+        long startTime = Utils.getLongFromDateTime(LocalDateTime.of(2020, 4, 21, 0, 0, 0));
+        TaskSchedule taskSchedule = new TaskSchedule(startTime, 5, TimeUnit.SECONDS);
+        unknownTask.setSchedule(taskSchedule);
+        unknownTask.setType(null);
+        taskManager.createTask(unknownTask, true);
+
+        UserIdentity currentUserIdentity = connectContext.getCurrentUserIdentity();
+        TGetTasksParams tGetTasksParams = new TGetTasksParams();
+        tGetTasksParams.setCurrent_user_ident(new TUserIdentity(currentUserIdentity.toThrift()));
+        TGetTaskInfoResult taskResult = frontendService.getTasks(tGetTasksParams);
+        List<TTaskInfo> tasks = taskResult.getTasks();
+        Assert.assertEquals(2, tasks.size());
+        for (TTaskInfo task : tasks) {
+            if(task.getTask_name().equals("test_unknown")) {
+                Assert.assertEquals(task.getSchedule(),"UNKNOWN");
+            } else {
+                Assert.assertEquals(task.getSchedule(),"MANUAL");
+            }
+        }
+        taskManager.dropTasks(ImmutableList.of(unknownTask.getId(), manualTask.getId()), false);
     }
 }

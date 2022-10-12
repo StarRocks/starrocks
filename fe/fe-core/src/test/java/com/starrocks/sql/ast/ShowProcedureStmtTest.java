@@ -1,12 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowDbStmt;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.ShowExecutor;
-import com.starrocks.qe.ShowResultSet;
-import com.starrocks.qe.ShowResultSetMetaData;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
@@ -19,19 +15,19 @@ public class ShowProcedureStmtTest {
     public void testNormal() throws Exception {
 
         ShowProcedureStmt stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "SHOW PROCEDURE STATUS",32).get(0);
+                "SHOW PROCEDURE STATUS", 32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW PROCEDURE STATUS", stmt.toString());
 
         stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "SHOW PROCEDURE STATUS LIKE 'abc'",32).get(0);
+                "SHOW PROCEDURE STATUS LIKE 'abc'", 32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("SHOW PROCEDURE STATUS LIKE 'abc'", stmt.toString());
 
         stmt = (ShowProcedureStmt) com.starrocks.sql.parser.SqlParser.parse(
-                "SHOW PROCEDURE STATUS where name='abc'",32).get(0);
+                "SHOW PROCEDURE STATUS where name='abc'", 32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertNotNull( stmt.toString());
+        Assert.assertNotNull(stmt.toString());
 
         stmt = new ShowProcedureStmt("abc");
         Assert.assertNotNull(stmt.getPattern());

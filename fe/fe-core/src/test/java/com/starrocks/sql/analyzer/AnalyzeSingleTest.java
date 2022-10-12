@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.StatementBase;
@@ -39,22 +39,17 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select * from t0 t where t.v1 = 1");
         analyzeFail("select * from t0 t where t0.v1 = 1");
 
-        /**
-         * Test lower and upper
-         */
+        // Test lower and upper
+
         analyzeSuccess("select V1, v2 from t0 where V3 = 1");
         analyzeFail("select * from T0");
 
-        /**
-         *  Test ambiguous reference
-         */
+        // Test ambiguous reference
         analyzeSuccess("select v1, v1 from t0");
         analyzeWithoutTestView("select * from (select v1, v1 from t0) a");
         analyzeWithoutTestView("select * from (select v1 as v, v2 as v from t0) a");
 
-        /**
-         * Test invalid reference
-         */
+        // Test invalid reference
         analyzeFail("select error from t0");
         analyzeFail("select v1 from t_error");
 
@@ -82,9 +77,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select k from (select test.t0.v1 as k from test.t0) a");
         analyzeSuccess("select v1 from (select v1 from test.t0) a");
 
-        /**
-         * Test prefix in group by
-         */
+        // Test prefix in group by
         analyzeSuccess("select v1 from t0 group by t0.v1");
         analyzeSuccess("select t0.v1 from t0 group by v1");
 
@@ -127,9 +120,7 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testCTE() {
-        /**
-         * Test CTE column name resolve
-         */
+        // Test CTE column name resolve
         analyzeSuccess("with testWith (a, b, c) as (select v1, v2, v3 from t0) select * from testWith");
         analyzeSuccess("with testWith (a, b, c) as (select v1, v2, v3 from t0) select a from testWith");
         analyzeSuccess("with testWith (a, b, c) as (select v1, v2, v3 from t0) select testWith.a, b from testWith");
@@ -139,49 +130,37 @@ public class AnalyzeSingleTest {
                 "select * from (select a + 1 as k1, b + c as k2 from testWith) temp");
         analyzeFail("with testWith (a, b, c) as (select v1, v2, v3 from t0) select v1, v2 from testWith");
 
-        /**
-         * Test CTE name resolve
-         */
+        // Test CTE name resolve
         analyzeSuccess("WITH t9 AS (SELECT * FROM t0), t0 AS (SELECT 2 FROM t9) SELECT * FROM t9");
         analyzeFail("with ta as (select * from tb), tb as (select 2 from t0) select * from ta");
         analyzeSuccess("with t0 as (select * from t1), t1 as (select * from t0) select * from t1");
         analyzeSuccess("with te as (select * from t0) select * from te as t");
 
-        /**
-         * Test anonymous cte
-         */
+        // Test anonymous cte
         analyzeSuccess("with cte1 as (select * from t0) select * from cte1");
         analyzeSuccess("with cte1 as (select * from t0), cte2 as (select * from t0) select * from cte2");
         analyzeSuccess("with cte1 as (select * from t0) select v1, v2 from cte1");
 
-        /**
-         * Test constant cte
-         */
+        // Test constant cte
         analyzeSuccess("with t as (select 1 from t0) select * from t");
         analyzeSuccess("with t0 as (select 1 from t0) select * from t0");
         analyzeSuccess("with t0 (a, b) as (select 1, 2 from t0) select a, b from t0");
 
-        /**
-         * Test Set operation
-         */
-        analyzeSuccess(
-                "with testWith (a, b, c) as (select v1, v2, v3 from t0 union select v4,v5,v6 from t1) select * from testWith");
-        analyzeSuccess(
-                "with testWith (a, b, c) as (select v1, v2, v3 from t0 except select v4,v5,v6 from t1) select * from testWith");
-        analyzeSuccess(
-                "with testWith (a, b, c) as (select v1, v2, v3 from t0 intersect select v4,v5,v6 from t1) select * from testWith");
+        // Test Set operation
+        analyzeSuccess("with testWith (a, b, c) as " +
+                "(select v1, v2, v3 from t0 union select v4,v5,v6 from t1) select * from testWith");
+        analyzeSuccess("with testWith (a, b, c) as " +
+                "(select v1, v2, v3 from t0 except select v4,v5,v6 from t1) select * from testWith");
+        analyzeSuccess("with testWith (a, b, c) as (select v1, v2, v3 from t0 intersect " +
+                "select v4,v5,v6 from t1) select * from testWith");
 
-        /**
-         * Test cte used in set
-         */
+        // Test cte used in set
         analyzeSuccess("with w as (select * from t0) select * from w union all select * from w");
         analyzeSuccess("with w as (select * from t0) select * from w except select * from w");
         analyzeSuccess("with w as (select * from t0) select * from w intersect select * from w");
         analyzeSuccess(" with w as (select * from t0) select 1 from w");
 
-        /**
-         * Test cte with different relationId
-         */
+        // Test cte with different relationId
         analyzeSuccess("with w as (select * from t0) select v1,sum(v2) from w group by v1 " +
                 "having v1 in (select v3 from w where v2 = 2)");
     }
@@ -205,16 +184,12 @@ public class AnalyzeSingleTest {
         analyzeFail("select * from t0 group by sum(v1)");
         analyzeFail("select sum(v1) / v2 FROM t0");
 
-        /**
-         * Group by expression
-         */
+        // Group by expression
         analyzeSuccess("select v1+1, sum(v2) from t0 group by v1+1");
         analyzeSuccess("SELECT - v1 AS v1 FROM t0 GROUP BY v1,v2,v3 HAVING NOT + v2 BETWEEN NULL AND v1");
         analyzeFail("select v1, sum(v2) from t0 group by v1+1");
 
-        /**
-         * Group by ordinal
-         */
+        // Group by ordinal
         analyzeSuccess("select v1, v2, sum(v3) from t0 group by 1,2");
         analyzeSuccess("select v1, 1, sum(v2) from t0 group by v1, 1");
         analyzeSuccess("select v1, 1, sum(v2) from t0 group by 1, 2");
@@ -244,9 +219,7 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testSort() {
-        /**
-         *  Simple test
-         */
+        // Simple test
         analyzeSuccess("select v1 from t0 order by v1");
         analyzeSuccess("select v1 from t0 order by v2");
         analyzeSuccess("select v1 from t0 order by v1 asc ,v2 desc");
@@ -254,9 +227,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1 from t0 order by v1, v2");
         analyzeSuccess("select v1 from t0 limit 2, 10");
 
-        /**
-         * Test output scope resolve
-         */
+        // Test output scope resolve
         analyzeSuccess("select v1 as v from t0 order by v+1");
         analyzeSuccess("select v1+1 as v from t0 order by v");
         analyzeSuccess("select v1+2 as v,* from t0 order by v+1");
@@ -265,9 +236,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select v1+1 as v from t0 group by v1+1 order by v");
         analyzeSuccess("select v1+1 as v from t0 group by v order by v");
 
-        /**
-         * Test order by with aggregation
-         */
+        // Test order by with aggregation
         analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by v1");
         analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by sum(v2)");
         analyzeSuccess("select v1, sum(v2) from t0 group by v1 order by max(v3)");
@@ -281,9 +250,7 @@ public class AnalyzeSingleTest {
         analyzeFail("select v1,sum(v2) from t0 group by v1 order by v1,max(v3),v2");
         analyzeFail("select v1, sum(v2) from t0 group by v1 order by max(error_field)");
 
-        /**
-         *  Test ambiguous reference
-         */
+        // Test ambiguous reference
         analyzeSuccess("select v1, v1 from t0 order by v1");
         analyzeFail("select v1 as v, v2 as v from t0 order by v");
         analyzeSuccess("select v1 as v, v1 as v from t0 order by v");
@@ -291,26 +258,18 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testExpression() {
-        /**
-         * Test ArithmeticExpr
-         */
+        // Test ArithmeticExpr
         analyzeSuccess("select v1 + 1 as k from t0");
         analyzeSuccess("select v1 + v2 as k from t0");
 
-        /**
-         * Test InPredicate
-         */
+        // Test InPredicate
         analyzeSuccess("select * from t0 where v1 in (1, 2)");
 
-        /**
-         * Test LIKE
-         */
+        // Test LIKE
         analyzeSuccess("select * from tall where ta like \"%a%\"");
         analyzeFail("select * from t0 where v1 kike \"starrocks%\"");
 
-        /**
-         * Test function
-         */
+        // Test function
         analyzeSuccess("select round(v1) from t0");
         analyzeFail("select error_function_name(v1) from t0");
         //        analyzeSuccess("select count(distinct v1,v2) from t0");
@@ -325,7 +284,7 @@ public class AnalyzeSingleTest {
         analyzeSuccess("select right('foo', 1)");
         analyzeSuccess("select left('foo', 1)");
 
-        /**
+        /*
          * For support mysql embedded quotation`
          * In a double-quoted string, two double-quotes are combined into one double-quote
          */
@@ -369,18 +328,18 @@ public class AnalyzeSingleTest {
                         "CASE v2 WHEN v3 THEN 1 ELSE 0 END",
                 String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess(
-                "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v")
+        query = ((QueryStatement) analyzeSuccess("select * from (select v1 as v, sum(v2) from t0 group by v1) a " +
+                "inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v")
         ).getQueryRelation();
         Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess(
-                "select * from (select v1 as v, sum(v2) from t0 group by v1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v"))
+        query = ((QueryStatement) analyzeSuccess("select * from (select v1 as v, sum(v2) from t0 group by v1) a " +
+                "inner join (select v1 as v,v2 from t0 order by v3) b on a.v = b.v"))
                 .getQueryRelation();
         Assert.assertEquals("v,sum(v2),v,v2", String.join(",", query.getColumnOutputNames()));
 
-        query = ((QueryStatement) analyzeSuccess(
-                "select * from (select v1 as tt from t0,t1) a inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v"))
+        query = ((QueryStatement) analyzeSuccess("select * from (select v1 as tt from t0,t1) a " +
+                "inner join (select v1 as v,v2 from t0 order by v3) b on a.tt = b.v"))
                 .getQueryRelation();
         Assert.assertEquals("tt,v,v2", String.join(",", query.getColumnOutputNames()));
 
@@ -436,21 +395,21 @@ public class AnalyzeSingleTest {
         StatementBase statementBase = com.starrocks.sql.parser.SqlParser.parse("select true || false from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT TRUE OR FALSE FROM default_cluster:test.t0"
-                , AST2SQL.toString(statementBase));
+        Assert.assertEquals("SELECT TRUE OR FALSE FROM test.t0",
+                AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(SqlModeHelper.MODE_PIPES_AS_CONCAT);
         statementBase = com.starrocks.sql.parser.SqlParser.parse("select 'a' || 'b' from t0",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT concat('a', 'b') FROM default_cluster:test.t0",
+        Assert.assertEquals("SELECT concat('a', 'b') FROM test.t0",
                 AST2SQL.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall WHERE ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
+                "SELECT * FROM test.tall WHERE ta LIKE (concat(concat('h', 'a', 'i'), '%'))",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -458,7 +417,7 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall WHERE (ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
+                "SELECT * FROM test.tall WHERE (ta LIKE (concat('h', 'a', 'i'))) OR TRUE",
                 AST2SQL.toString(statementBase));
 
         analyzeFail("select * from  tall where ta like concat(\"h\", \"a\", \"i\")||'%'",
@@ -468,14 +427,14 @@ public class AnalyzeSingleTest {
         statementBase = SqlParser.parse("select * from  tall order by ta",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
-        Assert.assertEquals("SELECT * FROM default_cluster:test.tall ORDER BY ta ASC NULLS LAST ",
+        Assert.assertEquals("SELECT * FROM test.tall ORDER BY ta ASC NULLS LAST ",
                 AST2SQL.toString(statementBase));
 
         statementBase = SqlParser.parse("select * from  tall order by ta desc",
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall ORDER BY ta DESC NULLS FIRST ",
+                "SELECT * FROM test.tall ORDER BY ta DESC NULLS FIRST ",
                 AST2SQL.toString(statementBase));
 
         connectContext.getSessionVariable().setSqlMode(0);
@@ -483,7 +442,7 @@ public class AnalyzeSingleTest {
                 connectContext.getSessionVariable().getSqlMode()).get(0);
         Analyzer.analyze(statementBase, connectContext);
         Assert.assertEquals(
-                "SELECT * FROM default_cluster:test.tall ORDER BY ta ASC ",
+                "SELECT * FROM test.tall ORDER BY ta ASC ",
                 AST2SQL.toString(statementBase));
     }
 
@@ -531,7 +490,8 @@ public class AnalyzeSingleTest {
 
     @Test
     public void testSetVar() {
-        StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ current_timestamp() AS time");
+        StatementBase statementBase = analyzeSuccess("SELECT /*+ SET_VAR(time_zone='Asia/Shanghai') */ " +
+                "current_timestamp() AS time");
         SelectRelation selectRelation = (SelectRelation) ((QueryStatement) statementBase).getQueryRelation();
         Assert.assertEquals("Asia/Shanghai", selectRelation.getSelectList().getOptHints().get("time_zone"));
 
@@ -545,5 +505,10 @@ public class AnalyzeSingleTest {
         String sql = "select * from test.t0 [_META_]";
         QueryStatement queryStatement = (QueryStatement) analyzeSuccess(sql);
         Assert.assertTrue(((TableRelation) ((SelectRelation) queryStatement.getQueryRelation()).getRelation()).isMetaQuery());
+    }
+
+    @Test
+    public void testSync() {
+        analyzeSuccess("sync");
     }
 }

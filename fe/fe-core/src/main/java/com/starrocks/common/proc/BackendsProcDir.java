@@ -27,7 +27,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
-import com.starrocks.alter.DecommissionBackendJob.DecommissionType;
+import com.starrocks.alter.DecommissionType;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -52,7 +52,7 @@ public class BackendsProcDir implements ProcDirInterface {
     public static final ImmutableList<String> TITLE_NAMES;
     static {
         ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
-                .add("BackendId").add("Cluster").add("IP").add("HeartbeatPort")
+                .add("BackendId").add("IP").add("HeartbeatPort")
                 .add("BePort").add("HttpPort").add("BrpcPort").add("LastStartTime").add("LastHeartbeat")
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
@@ -86,12 +86,7 @@ public class BackendsProcDir implements ProcDirInterface {
         return result;
     }
 
-    /**
-     * get backends of cluster
-     *
-     * @param clusterName
-     * @return
-     */
+    // get backends of cluster
     public static List<List<String>> getClusterBackendInfos() {
         final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentSystemInfo();
         List<List<String>> backendInfos = new LinkedList<>();
@@ -114,7 +109,6 @@ public class BackendsProcDir implements ProcDirInterface {
             watch.stop();
             List<Comparable> backendInfo = Lists.newArrayList();
             backendInfo.add(String.valueOf(backendId));
-            backendInfo.add(backend.getOwnerClusterName());
             backendInfo.add(backend.getHost());
             backendInfo.add(String.valueOf(backend.getHeartbeatPort()));
             backendInfo.add(String.valueOf(backend.getBePort()));

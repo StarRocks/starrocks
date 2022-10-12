@@ -71,17 +71,6 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker.get());
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    if (config::storage_format_version == 1) {
-        // If you upgrade from storage_format_version=1
-        // to storage_format_version=2, clone will be rejected.
-        // After upgrade, set storage_format_version=2.
-        LOG(WARNING) << "storage_format_version v2 support "
-                     << "DATE_V2, TIMESTAMP, DECIMAL_V2. "
-                     << "Before set storage_format_version=2, "
-                     << "reject the clone logic";
-        return Status::NotSupported("disable make_snapshot when storage_format_version=1");
-    }
-
     if (UNLIKELY(snapshot_path == nullptr)) {
         return Status::InvalidArgument("snapshot_path is null");
     }
@@ -223,8 +212,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
                                           TabletSchema& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
     // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports beta rowset
-    RowsetMetaSharedPtr rowset_meta(new RowsetMeta());
-    rowset_meta->init_from_pb(rs_meta_pb);
+    auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
     if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {
         return Status::RuntimeError("fail to create rowset");
@@ -234,7 +222,7 @@ Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const 
     // and the cached fd may be invalid
     RETURN_IF_ERROR(org_rowset->load());
     RowsetMetaSharedPtr org_rowset_meta = org_rowset->rowset_meta();
-    RowsetWriterContext context(kDataFormatUnknown, config::storage_format_version);
+    RowsetWriterContext context;
     context.rowset_id = rowset_id;
     context.tablet_id = org_rowset_meta->tablet_id();
     context.partition_id = org_rowset_meta->partition_id();

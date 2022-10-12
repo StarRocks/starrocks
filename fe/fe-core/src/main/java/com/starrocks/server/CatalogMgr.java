@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.server;
 
@@ -6,10 +6,12 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ExternalCatalog;
 import com.starrocks.catalog.InternalCatalog;
+import com.starrocks.catalog.Resource;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
@@ -21,6 +23,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.external.hive.HiveMetastoreApiConverter;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -34,14 +37,20 @@ import java.io.EOFException;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
+import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 public class CatalogMgr {
     private static final Logger LOG = LogManager.getLogger(CatalogMgr.class);
-    private final ConcurrentHashMap<String, Catalog> catalogs = new ConcurrentHashMap<>();
+    private final Map<String, Catalog> catalogs = new HashMap<>();
     private final ConnectorMgr connectorMgr;
     private final ReadWriteLock catalogLock = new ReentrantReadWriteLock();
 
@@ -57,10 +66,11 @@ public class CatalogMgr {
     }
 
     public void createCatalog(CreateCatalogStmt stmt) throws DdlException {
-        String type = stmt.getCatalogType();
-        String catalogName = stmt.getCatalogName();
-        String comment = stmt.getComment();
-        Map<String, String> properties = stmt.getProperties();
+        createCatalog(stmt.getCatalogType(), stmt.getCatalogName(), stmt.getComment(), stmt.getProperties());
+    }
+
+    public void createCatalog(String type, String catalogName, String comment, Map<String, String> properties)
+            throws DdlException {
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
@@ -72,15 +82,19 @@ public class CatalogMgr {
             readUnlock();
         }
 
-
         writeLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
             connectorMgr.createConnector(new ConnectorContext(catalogName, type, properties));
-            long id = GlobalStateMgr.getCurrentState().getNextId();
+            long id = isResourceMappingCatalog(catalogName) ?
+                    HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR.getNextId().asInt() :
+                    GlobalStateMgr.getCurrentState().getNextId();
             Catalog catalog = new ExternalCatalog(id, catalogName, comment, properties);
             catalogs.put(catalogName, catalog);
-            GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
+
+            if (!isResourceMappingCatalog(catalogName)) {
+                GlobalStateMgr.getCurrentState().getEditLog().logCreateCatalog(catalog);
+            }
         } finally {
             writeUnLock();
         }
@@ -100,13 +114,14 @@ public class CatalogMgr {
         try {
             connectorMgr.removeConnector(catalogName);
             catalogs.remove(catalogName);
-            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
-            GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
+            if (!isResourceMappingCatalog(catalogName)) {
+                DropCatalogLog dropCatalogLog = new DropCatalogLog(catalogName);
+                GlobalStateMgr.getCurrentState().getEditLog().logDropCatalog(dropCatalogLog);
+            }
         } finally {
             writeUnLock();
         }
     }
-
 
     // TODO @caneGuy we should put internal catalog into catalogmgr
     public boolean catalogExists(String catalogName) {
@@ -132,6 +147,11 @@ public class CatalogMgr {
         Map<String, String> config = catalog.getConfig();
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
+        }
+        if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(type)) {
+            // if catalog type is not supported, skip it
+            LOG.warn("Replay catalog encounter unknown catalog type: " + type);
+            return;
         }
 
         readLock();
@@ -168,6 +188,13 @@ public class CatalogMgr {
         }
     }
 
+    public boolean existSameUrlCatalog(String url) {
+        long hasSameUriCatalogNum =  catalogs.entrySet().stream()
+                .filter(entry -> entry.getValue().getConfig().getOrDefault(HIVE_METASTORE_URIS, "").equals(url))
+                .count();
+        return hasSameUriCatalogNum > 1;
+    }
+
     public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {
         int catalogCount = 0;
         try {
@@ -176,22 +203,47 @@ public class CatalogMgr {
             if (data != null) {
                 if (data.catalogs != null) {
                     for (Catalog catalog : data.catalogs.values()) {
-                        replayCreateCatalog(catalog);
+                        if (!isResourceMappingCatalog(catalog.getName())) {
+                            replayCreateCatalog(catalog);
+                        }
                     }
                     catalogCount = data.catalogs.size();
                 }
             }
             checksum ^= catalogCount;
             LOG.info("finished replaying CatalogMgr from image");
+
+            LOG.info("start to replay resource mapping catalog");
+            loadResourceMappingCatalog();
+            LOG.info("finished replaying resource mapping catalogs from resources");
         } catch (EOFException e) {
             LOG.info("no CatalogMgr to replay.");
         }
         return checksum;
     }
 
+    private void loadResourceMappingCatalog() throws DdlException {
+        List<Resource> resources = GlobalStateMgr.getCurrentState().getResourceMgr().getNeedMappingCatalogResources();
+        for (Resource resource : resources) {
+            Map<String, String> properties = Maps.newHashMap(resource.getProperties());
+            String type = resource.getType().name().toLowerCase(Locale.ROOT);
+            if (!NEED_MAPPING_CATALOG_RESOURCES.contains(type)) {
+                return;
+            }
+
+            String catalogName = getResourceMappingCatalogName(resource.getName(), type);
+            properties.put("type", type);
+            properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
+            createCatalog(type, catalogName, "mapping " + type + " catalog", properties);
+        }
+    }
+
     public long saveCatalogs(DataOutputStream dos, long checksum) throws IOException {
         SerializeData data = new SerializeData();
-        data.catalogs = new HashMap<>(catalogs);
+        data.catalogs = catalogs.entrySet().stream()
+                .filter(entry -> !isResourceMappingCatalog(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
         checksum ^= data.catalogs.size();
         String s = GsonUtils.GSON.toJson(data);
         Text.writeString(dos, s);
@@ -201,7 +253,6 @@ public class CatalogMgr {
     private static class SerializeData {
         @SerializedName("catalogs")
         public Map<String, Catalog> catalogs;
-
     }
 
     public List<List<String>> getCatalogsInfo() {
@@ -247,15 +298,32 @@ public class CatalogMgr {
         public ProcResult fetchResult() {
             BaseProcResult result = new BaseProcResult();
             result.setNames(CATALOG_PROC_NODE_TITLE_NAMES);
-            for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
-                Catalog catalog = entry.getValue();
-                if (catalog == null) {
-                    continue;
+            readLock();
+            try {
+                for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
+                    Catalog catalog = entry.getValue();
+                    if (catalog == null) {
+                        continue;
+                    }
+                    catalog.getProcNodeData(result);
                 }
-                catalog.getProcNodeData(result);
+            } finally {
+                readUnlock();
             }
             result.addRow(Lists.newArrayList(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, "Internal", "Internal Catalog"));
             return result;
+        }
+    }
+
+    public static class ResourceMappingCatalog {
+        public static final String RESOURCE_MAPPING_CATALOG_PREFIX = "resource_mapping_inside_catalog_";
+
+        public static boolean isResourceMappingCatalog(String catalogName) {
+            return catalogName.startsWith(RESOURCE_MAPPING_CATALOG_PREFIX);
+        }
+
+        public static String getResourceMappingCatalogName(String resourceName, String type) {
+            return RESOURCE_MAPPING_CATALOG_PREFIX + type + "_" + resourceName;
         }
     }
 }

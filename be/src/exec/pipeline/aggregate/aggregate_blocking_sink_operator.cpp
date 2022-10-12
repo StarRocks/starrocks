@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "aggregate_blocking_sink_operator.h"
 
@@ -42,10 +42,15 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
             _aggregator->set_ht_eos();
         }
     }
-    COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
+    COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
     _aggregator->sink_complete();
     return Status::OK();
+}
+
+Status AggregateBlockingSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+    _is_finished = false;
+    return _aggregator->reset_state(std::move(chunks));
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {

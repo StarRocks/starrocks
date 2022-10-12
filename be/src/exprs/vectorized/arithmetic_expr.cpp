@@ -1,6 +1,8 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/arithmetic_expr.h"
+
+#include <optional>
 
 #include "common/object_pool.h"
 #include "exprs/vectorized/arithmetic_operation.h"
@@ -9,6 +11,7 @@
 #include "exprs/vectorized/decimal_cast_expr.h"
 #include "exprs/vectorized/unary_function.h"
 #include "runtime/decimalv3.h"
+#include "util/pred_guard.h"
 
 namespace starrocks::vectorized {
 
@@ -18,11 +21,68 @@ namespace starrocks::vectorized {
                                                       \
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
+static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
+    if (!e->is_cast_expr()) {
+        return {};
+    }
+    const auto* e_child = e->get_child(0);
+    const auto& e_type = e->type();
+    const auto& e_child_type = e_child->type();
+    if (e_type.is_decimalv3_type() && e_child_type.is_decimalv3_type() && e_type.scale == e_child_type.scale) {
+        return {e_child->type().type};
+    } else {
+        return {};
+    }
+}
+
 template <PrimitiveType Type, typename OP>
 class VectorizedArithmeticExpr final : public Expr {
 public:
     DEFINE_CLASS_CONSTRUCTOR(VectorizedArithmeticExpr);
+
+    std::optional<ColumnPtr> evaluate_decimal_fast_mul(ExprContext* context, vectorized::Chunk* chunk) {
+        auto lhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[0]);
+        auto rhs_pt_opt = eliminate_trivial_cast_for_decimal_mul(_children[1]);
+        if (lhs_pt_opt.has_value() && rhs_pt_opt.has_value()) {
+            auto lhs_pt = lhs_pt_opt.value();
+            auto rhs_pt = rhs_pt_opt.value();
+            if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
+                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
+                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                return VectorizedStrictDecimalBinaryFunction<MulOp64x64_128, false>::template evaluate<
+                        TYPE_DECIMAL64, TYPE_DECIMAL64, Type>(l, r);
+            }
+            if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL64 && Type == TYPE_DECIMAL128) {
+                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
+                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
+                        TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(l, r);
+            }
+            if (lhs_pt == TYPE_DECIMAL64 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
+                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
+                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                return VectorizedStrictDecimalBinaryFunction<MulOp32x64_128, false>::template evaluate<
+                        TYPE_DECIMAL32, TYPE_DECIMAL64, Type>(r, l);
+            }
+            if (lhs_pt == TYPE_DECIMAL32 && rhs_pt == TYPE_DECIMAL32 && Type == TYPE_DECIMAL128) {
+                auto l = _children[0]->get_child(0)->evaluate(context, chunk);
+                auto r = _children[1]->get_child(0)->evaluate(context, chunk);
+                return VectorizedStrictDecimalBinaryFunction<MulOp32x32_128, false>::template evaluate<
+                        TYPE_DECIMAL32, TYPE_DECIMAL32, Type>(r, l);
+            }
+        }
+        return {};
+    }
+
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+#if defined(__x86_64__) && defined(__GNUC__)
+        if constexpr (is_mul_op<OP> && pt_is_decimal<Type>) {
+            auto opt_result = evaluate_decimal_fast_mul(context, ptr);
+            if (opt_result.has_value()) {
+                return opt_result.value();
+            }
+        }
+#endif
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         if constexpr (pt_is_decimal<Type>) {

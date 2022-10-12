@@ -21,9 +21,9 @@
 
 package com.starrocks.analysis;
 
-import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -32,6 +32,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.PartitionNames;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -71,7 +72,9 @@ import java.util.List;
  */
 public class TableRef implements ParseNode, Writable {
     private static final Logger LOG = LogManager.getLogger(TableRef.class);
+    @SerializedName(value = "name")
     protected TableName name;
+    @SerializedName(value = "partitionNames")
     private PartitionNames partitionNames = null;
     private List<Long> tabletIds = Lists.newArrayList();
 
@@ -81,6 +84,7 @@ public class TableRef implements ParseNode, Writable {
     // analysis. By convention, for table refs with multiple implicit aliases, aliases_[0]
     // contains the fully-qualified implicit alias to ensure that aliases_[0] always
     // uniquely identifies this table ref regardless of whether it has an explicit alias.
+    @SerializedName(value = "aliases")
     protected String[] aliases_;
 
     // Indicates whether this table ref is given an explicit alias,
@@ -226,10 +230,6 @@ public class TableRef implements ParseNode, Writable {
         return (joinOp == null ? JoinOperator.INNER_JOIN : joinOp);
     }
 
-    public void setJoinOp(JoinOperator op) {
-        this.joinOp = op;
-    }
-
     public void setOnClause(Expr e) {
         this.onClause = e;
     }
@@ -241,19 +241,6 @@ public class TableRef implements ParseNode, Writable {
     public void setName(TableName name) {
         this.name = name;
     }
-
-    public void setUsingClause(List<String> colNames) {
-        this.usingColNames = colNames;
-    }
-
-    public void setLeftTblRef(TableRef leftTblRef) {
-        this.leftTblRef = leftTblRef;
-    }
-
-    public void setJoinHints(ArrayList<String> hints) {
-        this.joinHints = hints;
-    }
-
 
     public void setSortHints(ArrayList<String> hints) {
         this.sortHints = hints;
@@ -294,15 +281,6 @@ public class TableRef implements ParseNode, Writable {
     }
 
     /**
-     * Return the list of table ref ids of the full sequence of table refs up to
-     * and including this one.
-     */
-    public List<TupleId> getAllTableRefIds() {
-        Preconditions.checkState(isAnalyzed);
-        return allTableRefIds_;
-    }
-
-    /**
      * Return the table ref presentation to be used in the toSql string
      */
     public String tableRefToSql() {
@@ -314,39 +292,11 @@ public class TableRef implements ParseNode, Writable {
         return name.toSql() + ((aliasSql != null) ? " " + aliasSql : "");
     }
 
-    @Override
-    public String toSql() {
-        if (joinOp == null) {
-            // prepend "," if we're part of a sequence of table refs w/o an
-            // explicit JOIN clause
-            return (leftTblRef != null ? ", " : "") + tableRefToSql();
-        }
-
-        StringBuilder output = new StringBuilder(" " + joinOpToSql() + " ");
-        if (joinHints != null && !joinHints.isEmpty()) {
-            output.append("[").append(Joiner.on(", ").join(joinHints)).append("] ");
-        }
-        output.append(tableRefToSql()).append(" ");
-        if (usingColNames != null) {
-            output.append("USING (").append(Joiner.on(", ").join(usingColNames)).append(")");
-        } else if (onClause != null) {
-            output.append("ON ").append(onClause.toSql());
-        }
-        return output.toString();
-    }
-
     public String getAlias() {
         if (!hasExplicitAlias()) {
             return name.toString();
         }
         return getUniqueAlias();
-    }
-
-    public TableName getAliasAsName() {
-        if (hasExplicitAlias()) {
-            return new TableName(null, getUniqueAlias());
-        }
-        return name;
     }
 
     /**
@@ -388,32 +338,6 @@ public class TableRef implements ParseNode, Writable {
         return !getClass().equals(TableRef.class);
     }
 
-    /**
-     * Return the list of tuple ids of the full sequence of table refs up to this one.
-     */
-    public List<TupleId> getAllTupleIds() {
-        Preconditions.checkState(isAnalyzed);
-        if (leftTblRef != null) {
-            List<TupleId> result = leftTblRef.getAllTupleIds();
-            result.add(desc.getId());
-            return result;
-        } else {
-            return Lists.newArrayList(desc.getId());
-        }
-    }
-
-    /**
-     * Set this table's context-dependent join attributes from the given table.
-     * Does not clone the attributes.
-     */
-    protected void setJoinAttrs(TableRef other) {
-        this.joinOp = other.joinOp;
-        this.joinHints = other.joinHints;
-        // this.tableHints_ = other.tableHints_;
-        this.onClause = other.onClause;
-        this.usingColNames = other.usingColNames;
-    }
-
     public void reset() {
         isAnalyzed = false;
         //  resolvedPath_ = null;
@@ -449,7 +373,7 @@ public class TableRef implements ParseNode, Writable {
         StringBuilder sb = new StringBuilder();
         sb.append(name);
         if (partitionNames != null) {
-            sb.append(partitionNames.toSql());
+            sb.append(partitionNames);
         }
         if (aliases_ != null && aliases_.length > 0) {
             sb.append(" AS ").append(aliases_[0]);

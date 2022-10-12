@@ -1,12 +1,12 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AlterDatabaseRename;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterDatabaseRename;
 
 public class AlterDatabaseRenameAnalyzer {
     public static void analyze(AlterDatabaseRename statement, ConnectContext context) {

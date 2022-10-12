@@ -1,8 +1,10 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Maps;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
@@ -12,14 +14,19 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
+    private final Set<Resource> resourceSet = new HashSet<>();
     // tableId-><dbName, table>
     private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
+    // resourceName->dbName->tableName->externalTable
+    private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new HashMap<>();
     // viewId-><dbName, view>
     private final Map<Long, Pair<String, View>> viewMap = new LinkedHashMap<>();
     // tableName->partitionName->partitionRowCount
@@ -31,8 +38,13 @@ public class QueryDumpInfo implements DumpInfo {
     private final Map<String, String> createTableStmtMap = new HashMap<>();
     // viewName->createViewStmt
     private final Map<String, String> createViewStmtMap = new LinkedHashMap<>();
+
+    private final List<String> createResourceStmtList = new ArrayList<>();
+
     private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
+    private int cachedAvgNumOfHardwareCores = -1;
+    private Map<Long, Integer> numOfHardwareCoresPerBe = Maps.newHashMap();
 
     public QueryDumpInfo(SessionVariable sessionVariable) {
         this.sessionVariable = sessionVariable;
@@ -70,6 +82,31 @@ public class QueryDumpInfo implements DumpInfo {
         addPartitionRowCount(tableName, partition, rowCount);
     }
 
+    public void setCachedAvgNumOfHardwareCores(int cores) {
+        cachedAvgNumOfHardwareCores = cores;
+    }
+
+    public int getCachedAvgNumOfHardwareCores() {
+        return this.cachedAvgNumOfHardwareCores;
+    }
+
+    public void addNumOfHardwareCoresPerBe(Map<Long, Integer> numOfHardwareCoresPerBe) {
+        this.numOfHardwareCoresPerBe.putAll(numOfHardwareCoresPerBe);
+    }
+
+    public Map<Long, Integer> getNumOfHardwareCoresPerBe() {
+        return this.numOfHardwareCoresPerBe;
+    }
+
+    @Override
+    public void addResource(Resource resource) {
+        resourceSet.add(resource);
+    }
+
+    public Set<Resource> getResourceSet() {
+        return resourceSet;
+    }
+
     @Override
     public void addView(String dbName, View view) {
         viewMap.put(view.getId(), new Pair<>(dbName, view));
@@ -82,6 +119,9 @@ public class QueryDumpInfo implements DumpInfo {
         this.partitionRowCountMap.clear();
         this.tableStatisticsMap.clear();
         this.createTableStmtMap.clear();
+        this.numOfHardwareCoresPerBe.clear();
+        this.resourceSet.clear();
+        this.hmsTableMap.clear();
         this.exceptionList.clear();
     }
 
@@ -94,6 +134,29 @@ public class QueryDumpInfo implements DumpInfo {
 
     public Map<String, Map<String, Long>> getPartitionRowCountMap() {
         return partitionRowCountMap;
+    }
+
+    public HiveMetaStoreTableDumpInfo getHMSTable(String resourceName, String dbName, String tableName) {
+        return hmsTableMap.getOrDefault(resourceName, new HashMap<>()).getOrDefault(dbName, new HashMap<>()).
+                getOrDefault(tableName, new HiveTableDumpInfo());
+    }
+
+    @Override
+    public Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> getHmsTableMap() {
+        return hmsTableMap;
+    }
+
+    @Override
+    public void addHMSTable(String resourceName, String dbName, String tableName) {
+        addHMSTable(resourceName, dbName, tableName, new HiveTableDumpInfo());
+    }
+
+    public void addHMSTable(String resourceName, String dbName, String tableName, HiveMetaStoreTableDumpInfo dumpInfo) {
+        hmsTableMap.putIfAbsent(resourceName, new HashMap<>());
+        Map<String, Map<String, HiveMetaStoreTableDumpInfo>> dbTable = hmsTableMap.get(resourceName);
+        dbTable.putIfAbsent(dbName, new HashMap<>());
+        Map<String, HiveMetaStoreTableDumpInfo> tableMap =  dbTable.get(dbName);
+        tableMap.putIfAbsent(tableName, dumpInfo);
     }
 
     @Override
@@ -141,6 +204,14 @@ public class QueryDumpInfo implements DumpInfo {
 
     public void addViewCreateStmt(String viewName, String createViewStmt) {
         createViewStmtMap.put(viewName, createViewStmt);
+    }
+
+    public void addResourceCreateStmt(String resourceCreateStmt) {
+        createResourceStmtList.add(resourceCreateStmt);
+    }
+
+    public List<String> getCreateResourceStmtList() {
+        return createResourceStmtList;
     }
 
     @Override

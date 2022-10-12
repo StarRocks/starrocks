@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.optimizer;
 
@@ -38,6 +38,8 @@ public class Group {
     private final List<GroupExpression> logicalExpressions;
     private final List<GroupExpression> physicalExpressions;
 
+    private boolean isExplored;
+
     private Statistics statistics;
     // confidence statistics record the statistics when group expression has lowest cost,
     // confidence statistics is the statistics in group with highest confidence for each physical property
@@ -56,14 +58,11 @@ public class Group {
         lowestCostExpressions = Maps.newHashMap();
         satisfyRequiredPropertyGroupExpressions = Maps.newHashMap();
         confidenceStatistics = Maps.newHashMap();
+        isExplored = false;
     }
 
     public int getId() {
         return id;
-    }
-
-    public Statistics getStatistics() {
-        return statistics;
     }
 
     public boolean hasConfidenceStatistic(PhysicalPropertySet physicalPropertySet) {
@@ -72,6 +71,18 @@ public class Group {
 
     public Statistics getConfidenceStatistic(PhysicalPropertySet physicalPropertySet) {
         return confidenceStatistics.get(physicalPropertySet);
+    }
+
+    public boolean isExplored() {
+        return isExplored;
+    }
+
+    public void setExplored() {
+        isExplored = true;
+    }
+
+    public Statistics getStatistics() {
+        return statistics;
     }
 
     public void setStatistics(Statistics statistics) {
@@ -177,10 +188,7 @@ public class Group {
                 iterator.remove();
             }
         }
-        for (Map.Entry<PhysicalPropertySet, Pair<Double, GroupExpression>> entry : needReplaceBestExpressions
-                .entrySet()) {
-            lowestCostExpressions.put(entry.getKey(), entry.getValue());
-        }
+        lowestCostExpressions.putAll(needReplaceBestExpressions);
     }
 
     public void deleteBestExpression(GroupExpression groupExpression) {
