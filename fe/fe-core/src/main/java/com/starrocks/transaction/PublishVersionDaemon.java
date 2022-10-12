@@ -373,12 +373,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
         try {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
-                Set<Long[]> relatedMvs = table.getRelatedMaterializedViews();
-                for (Long[] mvId : relatedMvs) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId[1]);
+                Set<Table.MaterializedViewId> relatedMvs = table.getRelatedMaterializedViews();
+                for (Table.MaterializedViewId mvId : relatedMvs) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getMvId());
                     if (materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), db.getTable(mvId[1]).getName(), Constants.TaskRunPriority.NORMAL.value());
+                                db.getFullName(), db.getTable(mvId.getMvId()).getName(),
+                                Constants.TaskRunPriority.NORMAL.value());
                     }
                 }
             }

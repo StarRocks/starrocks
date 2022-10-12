@@ -585,8 +585,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             return;
         }
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
-        for (Long[] mvId : tbl.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId[1]);
+        for (com.starrocks.catalog.Table.MaterializedViewId mvId : tbl.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getMvId());
             if (mv == null) {
                 LOG.warn("Ignore materialized view {} does not exists", mvId);
                 continue;

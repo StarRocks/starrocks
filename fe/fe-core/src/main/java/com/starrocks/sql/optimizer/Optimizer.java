@@ -445,31 +445,43 @@ public class Optimizer {
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
+    void getRelatedMvs(List<Table> tablesToCheck, Set<MaterializedView> mvs) {
+        Set<Table.MaterializedViewId> newMvIds = Sets.newHashSet();
+        for (Table table : tablesToCheck) {
+            Set<Table.MaterializedViewId> mvIds = table.getRelatedMaterializedViews();
+            if (mvIds != null && !mvIds.isEmpty()) {
+                newMvIds.addAll(mvIds);
+            }
+        }
+        if (newMvIds.isEmpty()) {
+            return;
+        }
+        List<Table> newMvs = Lists.newArrayList();
+        for (Table.MaterializedViewId mvId : newMvIds) {
+            Database db = context.getCatalog().getDb(mvId.getDbId());
+            if (db == null) {
+                continue;
+            }
+            Table table = db.getTable(mvId.getMvId());
+            if (table == null) {
+                continue;
+            }
+            newMvs.add(table);
+            mvs.add((MaterializedView) table);
+        }
+        getRelatedMvs(newMvs, mvs);
+    }
+
     // TODO(hkp): put it in right place
     private void registerMaterializedViews(OptExpression logicOperatorTree, OptimizerContext context)
                 throws AnalysisException {
         List<Table> tables = RewriteUtils.getAllTables(logicOperatorTree);
-        Set<Long[]> relatedMvs = Sets.newHashSet();
-        for (Table table : tables) {
-            Set<Long[]> mvs = table.getRelatedMaterializedViews();
-            if (mvs != null) {
-                relatedMvs.addAll(mvs);
-            }
-        }
-        for (Long[] mvIds : relatedMvs) {
-            Preconditions.checkState(mvIds.length == 2);
-            long dbId = mvIds[0];
-            Database db = context.getCatalog().getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-            long mvId = mvIds[1];
-            Table table = db.getTable(mvId);
-            if (table == null) {
-                continue;
-            }
-            Preconditions.checkState(table instanceof MaterializedView);
-            MaterializedView mv = (MaterializedView) table;
+
+        // include nested materialized views
+        Set<MaterializedView> relatedMvs = Sets.newHashSet();
+        getRelatedMvs(tables, relatedMvs);
+
+        for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
                 continue;
             }
