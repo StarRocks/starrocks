@@ -49,10 +49,7 @@ public class PruneAggregateColumnsRule extends TransformationRule {
                 aggOperator.getAggregations();
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregations.entrySet()) {
             if (requiredOutputColumns.contains(kv.getKey())) {
-                fillRequiredInputColumnsAndNewAggregations(kv,
-                        requiredInputColumns,
-                        newAggregations
-                );
+                fillRequiredInputColumnsAndNewAggregations(kv, requiredInputColumns, newAggregations);
             }
         }
 
@@ -62,12 +59,8 @@ public class PruneAggregateColumnsRule extends TransformationRule {
         // 2. we should at least have one aggregate function
         if (requiredInputColumns.isEmpty()) {
             Preconditions.checkState(!aggregations.isEmpty());
-            Map.Entry<ColumnRefOperator, CallOperator> kv =
-                    aggregations.entrySet().stream().findFirst().get();
-            fillRequiredInputColumnsAndNewAggregations(kv,
-                    requiredInputColumns,
-                    newAggregations
-            );
+            Map.Entry<ColumnRefOperator, CallOperator> kv = aggregations.entrySet().stream().findFirst().get();
+            fillRequiredInputColumnsAndNewAggregations(kv, requiredInputColumns, newAggregations);
         }
 
         // Change the requiredOutputColumns in context

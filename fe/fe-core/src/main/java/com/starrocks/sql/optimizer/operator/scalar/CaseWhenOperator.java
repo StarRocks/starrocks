@@ -100,6 +100,31 @@ public class CaseWhenOperator extends CallOperator {
         return arguments.get(2 * i + whenStart + 1);
     }
 
+    // return all then + else
+    public List<ScalarOperator> getAllValuesClause() {
+        List<ScalarOperator> re = Lists.newArrayList();
+        for (int i = 0; i < getWhenClauseSize(); i++) {
+            re.add(getThenClause(i));
+        }
+        if (hasElse()) {
+            re.add(getElseClause());
+        }
+        return re;
+    }
+
+    // return all case + when
+    public List<ScalarOperator> getAllConditionClause() {
+        List<ScalarOperator> re = Lists.newArrayList();
+        if (hasCase()) {
+            re.add(getCaseClause());
+        }
+        for (int i = 0; i < getWhenClauseSize(); i++) {
+            re.add(getWhenClause(i));
+        }
+
+        return re;
+    }
+
     public void setWhenClause(int i, ScalarOperator op) {
         arguments.set(2 * i + whenStart, op);
     }
