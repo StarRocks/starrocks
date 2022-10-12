@@ -3,6 +3,7 @@ package com.starrocks.sql;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.CreateMaterializedViewStmt;
 import com.starrocks.analysis.DefaultValueExpr;
@@ -66,6 +67,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class InsertPlanner {
@@ -248,6 +250,7 @@ public class InsertPlanner {
     private OptExprBuilder fillShadowColumns(ColumnRefFactory columnRefFactory, InsertStmt insertStatement,
                                              List<ColumnRefOperator> outputColumns, OptExprBuilder root,
                                              ConnectContext session) {
+        Set<Column> baseSchema = Sets.newHashSet(insertStatement.getTargetTable().getBaseSchema());
         List<Column> fullSchema = insertStatement.getTargetTable().getFullSchema();
         Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
 
@@ -269,7 +272,10 @@ public class InsertPlanner {
                 continue;
             }
 
-            if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX)) {
+            // Target column which starts with "mv" should not be treated as materialized view column when this column exists in base schema,
+            // this could be created by user.
+            if (targetColumn.isNameWithPrefix(CreateMaterializedViewStmt.MATERIALIZED_VIEW_NAME_PREFIX) &&
+                    !baseSchema.contains(targetColumn)) {
                 String originName = targetColumn.getRefColumn().getColumnName();
                 Column originColumn = fullSchema.stream()
                         .filter(c -> c.nameEquals(originName, false)).findFirst().get();

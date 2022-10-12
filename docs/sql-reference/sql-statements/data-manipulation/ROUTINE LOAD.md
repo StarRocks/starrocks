@@ -657,7 +657,3 @@ JSON data format:
 
 }
 ```
-
-## Keywords
-
-CREATE, ROUTINE, LOAD

@@ -737,8 +737,8 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         this.decommissionedReplicaPreviousState = replica.getState();
     }
 
-    public void deleteReplica(Replica replica) {
-        tablet.deleteReplicaByBackendId(replica.getBackendId());
+    public boolean deleteReplica(Replica replica) {
+        return tablet.deleteReplicaByBackendId(replica.getBackendId());
     }
 
     // database lock should be held.

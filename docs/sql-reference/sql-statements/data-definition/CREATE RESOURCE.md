@@ -68,7 +68,3 @@ Note:
         "hive.metastore.uris" = "thrift://10.10.44.98:9083"
     );
     ```
-
-## keyword
-
-CREATE RESOURCE

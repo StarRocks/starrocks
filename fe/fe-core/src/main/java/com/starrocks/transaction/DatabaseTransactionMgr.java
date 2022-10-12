@@ -130,9 +130,7 @@ public class DatabaseTransactionMgr {
     // not realtime usedQuota value to make a fast check for database data quota
     private volatile long usedQuotaDataBytes = -1;
 
-    private long lastCommitTs = 0;
-
-    private long commitTsInc = 0;
+    private long maxCommitTs = 0;
 
     private final TransactionStateListenerFactory stateListenerFactory = new TransactionStateListenerFactory();
 
@@ -431,7 +429,6 @@ public class DatabaseTransactionMgr {
             tableListString.append(table.getName());
             stateListeners.add(listener);
         }
-        transactionState.buildFinishChecker(db);
         txnSpan.setAttribute("tables", tableListString.toString());
 
         // before state transform
@@ -456,6 +453,7 @@ public class DatabaseTransactionMgr {
             // after state transform
             transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
         }
+        transactionState.prepareFinishChecker(db);
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
         Span updateCatalogAfterCommittedSpan = TraceManager.startSpan("updateCatalogAfterCommitted", txnSpan);
@@ -1046,18 +1044,8 @@ public class DatabaseTransactionMgr {
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
             return;
         }
-        // since we send publish order by commit timestamp
-        // so that we need handle timetamp fallback
-        // & same timestamp cause by granularity
-        // The probability of timestamp fallback after FE failover is small
-        // and it is not considered at present
-        long commitTs = System.currentTimeMillis();
-        if (commitTs <= lastCommitTs) {
-            commitTs = lastCommitTs + ++commitTsInc;
-        } else {
-            commitTsInc = 0;
-        }
-        lastCommitTs = commitTs;
+        // commit timestamps needs to be strictly monotonically increasing
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1098,22 +1086,12 @@ public class DatabaseTransactionMgr {
     }
 
     protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
-        // transaction state is modified during check if the transaction could committed
+        // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
             return;
         }
-        // since we send publish order by commit timestamp
-        // so that we need handle timetamp fallback
-        // & same timestamp cause by granularity
-        // The probability of timestamp fallback after FE failover is small
-        // and it is not considered at present
-        long commitTs = System.currentTimeMillis();
-        if (commitTs <= lastCommitTs) {
-            commitTs = lastCommitTs + ++commitTsInc;
-        } else {
-            commitTsInc = 0;
-        }
-        lastCommitTs = commitTs;
+        // commit timestamps needs to be strictly monotonically increasing
+        long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
         transactionState.setCommitTime(commitTs);
         // update transaction state version
         transactionState.setTransactionStatus(TransactionStatus.COMMITTED);
@@ -1168,6 +1146,8 @@ public class DatabaseTransactionMgr {
                 editLog.logInsertTransactionState(transactionState);
             }
         }
+        // it's OK if getCommitTime() returns -1
+        maxCommitTs = Math.max(maxCommitTs, transactionState.getCommitTime());
         if (!transactionState.getTransactionStatus().isFinalStatus()) {
             if (idToRunningTransactionState.put(transactionState.getTransactionId(), transactionState) == null) {
                 if (transactionState.getSourceType() == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK) {

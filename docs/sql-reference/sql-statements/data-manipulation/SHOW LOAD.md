@@ -74,7 +74,3 @@ SHOW LOAD WARNINGS ON 'url'
     curl --location-trusted -u {user}:{passwd} \
         http://{hostname}:{port}/api/{database}/_load_info?label={labelname}
     ```
-
-## keyword
-
-SHOW,LOAD

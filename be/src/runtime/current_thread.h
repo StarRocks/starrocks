@@ -229,6 +229,16 @@ private:
 
 #define SCOPED_SET_CATCHED(catched) auto VARNAME_LINENUM(catched_setter) = CurrentThreadCatchSetter(catched)
 
+#define SCOPED_SET_TRACE_INFO(driver_id, query_id, fragment_instance_id)     \
+    CurrentThread::current().set_pipeline_driver_id(driver_id);              \
+    CurrentThread::current().set_query_id(query_id);                         \
+    CurrentThread::current().set_fragment_instance_id(fragment_instance_id); \
+    auto VARNAME_LINENUM(defer) = DeferOp([] {                               \
+        CurrentThread::current().set_pipeline_driver_id(0);                  \
+        CurrentThread::current().set_query_id({});                           \
+        CurrentThread::current().set_fragment_instance_id({});               \
+    });
+
 #define TRY_CATCH_ALLOC_SCOPE_START() \
     try {                             \
         SCOPED_SET_CATCHED(true);

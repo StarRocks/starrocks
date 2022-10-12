@@ -743,7 +743,7 @@ void* PublishVersionTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         if (priority_tasks.empty() || finish_task_requests.size() > PUBLISH_VERSION_BATCH_SIZE ||
             batch_publish_latency > config::max_batch_publish_latency_ms) {
             int64_t t0 = MonotonicMillis();
-            TxnManager::flush_dirs(affected_dirs);
+            StorageEngine::instance()->txn_manager()->flush_dirs(affected_dirs);
             int64_t t1 = MonotonicMillis();
             // notify FE when all tasks of group have been finished.
             for (auto& finish_task_request : finish_task_requests) {

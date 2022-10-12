@@ -62,8 +62,6 @@ import java.util.stream.Collectors;
 public class TabletChecker extends LeaderDaemon {
     private static final Logger LOG = LogManager.getLogger(TabletChecker.class);
 
-    private static final long CHECK_INTERVAL_MS = 20 * 1000L; // 20 second
-
     private GlobalStateMgr globalStateMgr;
     private SystemInfoService infoService;
     private TabletScheduler tabletScheduler;
@@ -117,7 +115,7 @@ public class TabletChecker extends LeaderDaemon {
 
     public TabletChecker(GlobalStateMgr globalStateMgr, SystemInfoService infoService, TabletScheduler tabletScheduler,
                          TabletSchedulerStat stat) {
-        super("tablet checker", CHECK_INTERVAL_MS);
+        super("tablet checker", Config.tablet_sched_checker_interval_seconds * 1000L);
         this.globalStateMgr = globalStateMgr;
         this.infoService = infoService;
         this.tabletScheduler = tabletScheduler;

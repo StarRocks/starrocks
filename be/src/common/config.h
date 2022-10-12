@@ -802,4 +802,7 @@ CONF_Int32(internal_service_async_thread_num, "10");
 CONF_Int64(max_length_for_to_base64, "200000");
 // Used by bitmap functions
 CONF_Int64(max_length_for_bitmap_function, "1000000");
+
+CONF_mInt64(l0_l1_merge_ratio, "10");
+
 } // namespace starrocks::config

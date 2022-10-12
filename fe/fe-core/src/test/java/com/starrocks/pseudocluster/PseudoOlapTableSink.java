@@ -1,3 +1,4 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
 import com.starrocks.proto.PTabletWithPartition;
@@ -43,10 +44,15 @@ public class PseudoOlapTableSink {
         long indexId;
         long nodeId;
         List<PartitionTablet> tablets = new ArrayList<>();
+        String errMsg = null;
 
         NodeChannel(long indexId, long nodeId) {
             this.indexId = indexId;
             this.nodeId = nodeId;
+        }
+
+        public String getErrMsg() {
+            return errMsg;
         }
 
         boolean open() {
@@ -64,7 +70,10 @@ public class PseudoOlapTableSink {
             request.isVectorized = true;
             PTabletWriterOpenResult result = cluster.getBackend(nodeId).tabletWriterOpen(request);
             if (result.status.statusCode != 0) {
-                LOG.warn("open tablet writer failed: node:{} {}", nodeId, result.status.errorMsgs.get(0));
+                if (errMsg == null) {
+                    errMsg = result.status.errorMsgs.get(0);
+                }
+                LOG.warn("open tablet writer failed: node:{} {}", nodeId, errMsg);
                 return false;
             } else {
                 return true;
@@ -96,6 +105,9 @@ public class PseudoOlapTableSink {
                 });
             }
             if (result.status.statusCode != 0) {
+                if (errMsg == null) {
+                    errMsg = result.status.errorMsgs.get(0);
+                }
                 LOG.warn("close tablet writer failed: node:{} {}", nodeId, result.status.errorMsgs.get(0));
                 return false;
             } else {
@@ -109,18 +121,23 @@ public class PseudoOlapTableSink {
         // nodeId -> list of tablets with partition information
         Map<Long, NodeChannel> nodeChannels;
         Set<Long> errorNodes = new HashSet<>();
+        String errMsg;
 
         private boolean has_intolerable_failure() {
             return errorNodes.size() >= (numReplica + 1) / 2;
         }
 
         String getErrorMessage() {
-            return String.format("index:%d has intolerable failure: %s numReplica:%s", indexId, errorNodes, numReplica);
+            return String.format("index:%d has intolerable failure: %s %s numReplica:%s ", indexId, errMsg, errorNodes,
+                    numReplica);
         }
 
         boolean open() {
             for (NodeChannel ch : nodeChannels.values()) {
                 if (!ch.open()) {
+                    if (errMsg == null) {
+                        errMsg = ch.getErrMsg();
+                    }
                     errorNodes.add(ch.nodeId);
                     if (has_intolerable_failure()) {
                         return false;
@@ -139,6 +156,9 @@ public class PseudoOlapTableSink {
         boolean close() {
             for (NodeChannel ch : nodeChannels.values()) {
                 if (!ch.close()) {
+                    if (errMsg == null) {
+                        errMsg = ch.getErrMsg();
+                    }
                     errorNodes.add(ch.nodeId);
                     if (has_intolerable_failure()) {
                         return false;

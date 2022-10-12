@@ -1,6 +1,6 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
-import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.UserException;
 import com.starrocks.thrift.TFinishTaskRequest;
 import com.starrocks.thrift.TPartitionVersionInfo;
@@ -47,7 +47,8 @@ public class BeTxnManager {
         Map<Long, TxnTabletInfo> tablets = tinfo.partitions.computeIfAbsent(partitionId, k -> new HashMap<>());
         TxnTabletInfo tabletInfo = tablets.get(tablet.id);
         if (tabletInfo != null) {
-            throw new AlreadyExistsException("txn:" + txnId + " tablet:" + tablet.id + " already exists");
+            LOG.info("txn:" + txnId + " tablet:" + tablet.id + " already exists, multi node sink");
+            return;
         }
         tabletInfo = tablets.computeIfAbsent(tablet.id, id -> new TxnTabletInfo(id));
         tabletInfo.rowset = rowset;
@@ -66,7 +67,7 @@ public class BeTxnManager {
                 for (Tablet tablet : tabletsInPartition) {
                     TTabletVersionPair p = new TTabletVersionPair();
                     p.tablet_id = tablet.id;
-                    p.version = tablet.max_continuous_version();
+                    p.version = tablet.maxContinuousVersion();
                     tabletVersions.add(p);
                 }
                 continue;
@@ -80,11 +81,11 @@ public class BeTxnManager {
                 totalTablets++;
                 Tablet tablet = backend.getTabletManager().getTablet(tabletInfo.tabletId);
                 if (tablet == null) {
-                    errorTabletIds.add(tablet.id);
+                    errorTabletIds.add(tabletInfo.tabletId);
                     if (e == null) {
                         e = new UserException(
                                 "publish version failed txn:" + txnId + " partition:" + pInfo.partition_id + " tablet:" +
-                                        tablet.id + " not found");
+                                        tabletInfo.tabletId + " not found");
                     }
                 } else {
                     try {
@@ -95,7 +96,7 @@ public class BeTxnManager {
                     }
                     TTabletVersionPair p = new TTabletVersionPair();
                     p.tablet_id = tablet.id;
-                    p.version = tablet.max_continuous_version();
+                    p.version = tablet.maxContinuousVersion();
                     tabletVersions.add(p);
                 }
             }

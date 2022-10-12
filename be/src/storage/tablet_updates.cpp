@@ -1452,10 +1452,9 @@ void TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_info
               << Substitute("($0/$1/$2)", t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     VLOG(1) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
-        string msg = Substitute("actual row size changed after compaction $0 -> $1 $2", row_before, row_after,
-                                debug_string());
-        LOG(ERROR) << msg;
-        _set_error(msg);
+        string msg = Substitute("actual row size changed after compaction $0 -> $1", row_before, row_after);
+        LOG(ERROR) << msg << debug_string();
+        _set_error(msg + _debug_version_info(true));
     }
 }
 

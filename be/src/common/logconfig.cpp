@@ -84,11 +84,11 @@ static void failure_writer(const char* data, int size) {
         res = print_unique_id(buffer + res, query_id) + res;
         res = sprintf(buffer + res, ", ") + res;
         res = sprintf(buffer + res, "fragment_instance:") + res;
-        res = print_unique_id(buffer + res, query_id) + res;
+        res = print_unique_id(buffer + res, fragment_instance_id) + res;
         res = sprintf(buffer + res, "\n") + res;
-        write(STDERR_FILENO, buffer, res);
+        [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
     }
-    write(STDERR_FILENO, data, size);
+    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
     start_dump = true;
 }
 
