@@ -158,7 +158,6 @@ table: customer, rollup: customer
 preAggregation: on
 Predicates: substring(5: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10227,10229,10231,10233,10235,10237,10239,10241,10243,10245
 actualRows=0, avgRowSize=31.0
 cardinality: 7500000
 probe runtime filters:
@@ -213,7 +212,6 @@ table: customer, rollup: customer
 preAggregation: on
 Predicates: [15: C_ACCTBAL, DOUBLE, false] > 0.0, substring(14: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10227,10229,10231,10233,10235,10237,10239,10241,10243,10245
 actualRows=0, avgRowSize=23.0
 cardinality: 6815795
 column statistics:
@@ -230,7 +228,6 @@ OutPut Exchange Id: 01
 table: orders, rollup: orders
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10204,10206,10208,10210,10212,10214,10216,10218,10220,10222
 actualRows=0, avgRowSize=8.0
 cardinality: 150000000
 probe runtime filters:

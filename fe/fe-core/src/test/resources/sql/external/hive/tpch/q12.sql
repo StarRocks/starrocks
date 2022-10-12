@@ -27,7 +27,6 @@ group by
     l_shipmode
 order by
     l_shipmode ;
-
 [fragment statistics]
 PLAN FRAGMENT 0(F04)
 Output Exprs:24: l_shipmode | 28: sum | 29: sum

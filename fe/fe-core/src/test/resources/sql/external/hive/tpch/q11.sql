@@ -26,7 +26,6 @@ group by
     )
 order by
     value desc ;
-
 [fragment statistics]
 PLAN FRAGMENT 0(F13)
 Output Exprs:1: ps_partkey | 18: sum

@@ -79,7 +79,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: partsupp
 tabletRatio=10/10
-tabletList=10181,10183,10185,10187,10189,10191,10193,10195,10197,10199
 cardinality=80000000
 avgRowSize=28.0
 numNodes=0
@@ -132,7 +131,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: partsupp
 tabletRatio=10/10
-tabletList=10181,10183,10185,10187,10189,10191,10193,10195,10197,10199
 cardinality=80000000
 avgRowSize=20.0
 numNodes=0
@@ -161,7 +159,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: supplier
 tabletRatio=1/1
-tabletList=10176
 cardinality=1000000
 avgRowSize=8.0
 numNodes=0
@@ -184,7 +181,6 @@ PREDICATES: 37: N_NAME = 'PERU'
 partitions=1/1
 rollup: nation
 tabletRatio=1/1
-tabletList=10250
 cardinality=1
 avgRowSize=29.0
 numNodes=0
@@ -213,7 +209,6 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: supplier
 tabletRatio=1/1
-tabletList=10176
 cardinality=1000000
 avgRowSize=8.0
 numNodes=0
@@ -236,7 +231,6 @@ PREDICATES: 16: N_NAME = 'PERU'
 partitions=1/1
 rollup: nation
 tabletRatio=1/1
-tabletList=10250
 cardinality=1
 avgRowSize=29.0
 numNodes=0
