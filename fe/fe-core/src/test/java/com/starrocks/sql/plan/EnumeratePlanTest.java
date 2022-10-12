@@ -1,7 +1,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.FeConstants;
-import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -168,11 +167,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
                 "    cust_nation,\n" +
                 "    l_year ;";
         int planCount = getPlanCount(sql);
-<<<<<<< HEAD
-        Assert.assertEquals(96, planCount);
-=======
-        Assert.assertEquals(5, planCount);
->>>>>>> 6c3ec1c3d ([Enhancement] adjust cost model for right join of nestloopjoin (#11863))
+        Assert.assertEquals(20, planCount);
     }
 
     @Test

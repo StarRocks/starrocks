@@ -2,11 +2,7 @@
 
 package com.starrocks.sql.plan;
 
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.After;
->>>>>>> 6c3ec1c3d ([Enhancement] adjust cost model for right join of nestloopjoin (#11863))
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

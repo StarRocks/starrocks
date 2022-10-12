@@ -206,7 +206,6 @@ table: lineitem, rollup: lineitem
 preAggregation: on
 Predicates: [19: L_SHIPDATE, DATE, false] >= '1995-01-01', [19: L_SHIPDATE, DATE, false] <= '1996-12-31'
 partitionsRatio=1/1, tabletsRatio=20/20
-tabletList=10278,10280,10282,10284,10286,10288,10290,10292,10294,10296 ...
 actualRows=0, avgRowSize=32.0
 cardinality: 182702669
 probe runtime filters:
@@ -229,7 +228,6 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: 51: N_NAME IN ('IRAN', 'CANADA')
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10250
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
@@ -271,7 +269,6 @@ OutPut Exchange Id: 14
 table: supplier, rollup: supplier
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10176
 actualRows=0, avgRowSize=8.0
 cardinality: 1000000
 probe runtime filters:
@@ -291,7 +288,6 @@ table: nation, rollup: nation
 preAggregation: on
 Predicates: 46: N_NAME IN ('CANADA', 'IRAN')
 partitionsRatio=1/1, tabletsRatio=1/1
-tabletList=10250
 actualRows=0, avgRowSize=29.0
 cardinality: 25
 column statistics:
@@ -333,7 +329,6 @@ OutPut Exchange Id: 06
 table: orders, rollup: orders
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10204,10206,10208,10210,10212,10214,10216,10218,10220,10222
 actualRows=0, avgRowSize=16.0
 cardinality: 150000000
 probe runtime filters:
@@ -352,7 +347,6 @@ OutPut Exchange Id: 03
 table: customer, rollup: customer
 preAggregation: on
 partitionsRatio=1/1, tabletsRatio=10/10
-tabletList=10227,10229,10231,10233,10235,10237,10239,10241,10243,10245
 actualRows=0, avgRowSize=12.0
 cardinality: 15000000
 probe runtime filters:
