@@ -24,10 +24,23 @@
 
 #include "fs/fs_util.h"
 #include "gtest/gtest.h"
+#include "runtime/mem_tracker.h"
+#include "storage/chunk_helper.h"
+#include "storage/chunk_iterator.h"
 #include "storage/kv_store.h"
+#include "storage/olap_common.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/rowset/column_reader.h"
+#include "storage/rowset/rowset_factory.h"
+#include "storage/rowset/rowset_writer.h"
+#include "storage/rowset/rowset_writer_context.h"
+#include "storage/rowset/segment_options.h"
+#include "storage/rowset/segment_writer.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
+#include "storage/tablet_schema.h"
+#include "storage/tablet_schema_helper.h"
 #include "storage/txn_manager.h"
 
 #ifndef BE_TEST
@@ -286,6 +299,131 @@ TEST_F(TabletMgrTest, GetNextBatchTabletsTest) {
 
     size_t num = StorageEngine::instance()->_compaction_check_one_round();
     ASSERT_GE(num, 20);
+}
+
+static void create_rowset_writer_context(RowsetWriterContext* rowset_writer_context,
+                                         const std::string& schema_hash_path, const TabletSchema* tablet_schema,
+                                         int64_t start_ver, int64_t end_ver, int64_t rid) {
+    RowsetId rowset_id;
+    rowset_id.init(rid);
+    rowset_writer_context->rowset_id = rowset_id;
+    rowset_writer_context->tablet_id = 12347;
+    rowset_writer_context->tablet_schema_hash = 1111;
+    rowset_writer_context->partition_id = 10;
+    rowset_writer_context->rowset_path_prefix = schema_hash_path;
+    rowset_writer_context->rowset_state = VISIBLE;
+    rowset_writer_context->tablet_schema = tablet_schema;
+    rowset_writer_context->version.first = start_ver;
+    rowset_writer_context->version.second = end_ver;
+}
+
+static void rowset_writer_add_rows(std::unique_ptr<RowsetWriter>& writer, const TabletSchema& tablet_schema) {
+    std::vector<std::string> test_data;
+    auto schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema);
+    auto chunk = ChunkHelper::new_chunk(schema, 1024);
+    for (size_t i = 0; i < 1024; ++i) {
+        test_data.push_back("well" + std::to_string(i));
+        auto& cols = chunk->columns();
+        cols[0]->append_datum(vectorized::Datum(static_cast<int32_t>(i)));
+        Slice field_1(test_data[i]);
+        cols[1]->append_datum(vectorized::Datum(field_1));
+        cols[2]->append_datum(vectorized::Datum(static_cast<int32_t>(10000 + i)));
+    }
+    auto st = writer->add_chunk(*chunk);
+    ASSERT_TRUE(st.ok()) << st.to_string() << ", version:" << writer->version();
+}
+
+static void set_default_create_tablet_request(TCreateTabletReq* request) {
+    request->tablet_id = 12347;
+    request->__set_version(1);
+    request->tablet_schema.schema_hash = 1111;
+    request->tablet_schema.short_key_column_count = 2;
+    request->tablet_schema.keys_type = TKeysType::DUP_KEYS;
+    request->tablet_schema.storage_type = TStorageType::COLUMN;
+
+    TColumn k1;
+    k1.column_name = "k1";
+    k1.__set_is_key(true);
+    k1.column_type.type = TPrimitiveType::INT;
+    request->tablet_schema.columns.push_back(k1);
+
+    TColumn k2;
+    k2.column_name = "k2";
+    k2.__set_is_key(true);
+    k2.column_type.__set_len(64);
+    k2.column_type.type = TPrimitiveType::VARCHAR;
+    request->tablet_schema.columns.push_back(k2);
+
+    TColumn v;
+    v.column_name = "v1";
+    v.__set_is_key(false);
+    v.column_type.type = TPrimitiveType::INT;
+    v.__set_aggregation_type(TAggregationType::SUM);
+    request->tablet_schema.columns.push_back(v);
+}
+
+TEST_F(TabletMgrTest, RsVersionMapTest) {
+    // create tablet first
+    // create tablet 15007
+    TCreateTabletReq request;
+    set_default_create_tablet_request(&request);
+    auto res = StorageEngine::instance()->create_tablet(request);
+    ASSERT_TRUE(res.ok()) << res.to_string();
+    TabletManager* tablet_manager = starrocks::StorageEngine::instance()->tablet_manager();
+    TabletSharedPtr tablet = tablet_manager->get_tablet(12347);
+    ASSERT_TRUE(tablet != nullptr);
+    const TabletSchema& tablet_schema = tablet->tablet_schema();
+
+    // create rowset <2, 2>, <3, 3>, <3, 4>, <4, 4>, <4, 5>, <5, 5>, <5, 6>
+    std::vector<Version> ver_list;
+    ver_list.push_back(Version(2, 2));
+    ver_list.push_back(Version(3, 3));
+    ver_list.push_back(Version(4, 4));
+    ver_list.push_back(Version(3, 4));
+    ver_list.push_back(Version(5, 5));
+    ver_list.push_back(Version(4, 5));
+    ver_list.push_back(Version(5, 6));
+    ver_list.push_back(Version(2, 4));
+    ver_list.push_back(Version(3, 5));
+    std::vector<Version> tmp_list;
+    tablet->list_versions(&tmp_list);
+    std::string debug = "";
+    for (auto&& ver : tmp_list) {
+        debug += "(" + std::to_string(ver.first) + "," + std::to_string(ver.second) + ")";
+    }
+    std::vector<RowsetSharedPtr> to_add;
+    std::vector<RowsetSharedPtr> to_remove;
+    int64_t rid = 10000;
+    for (auto&& ver : ver_list) {
+        RowsetWriterContext rowset_writer_context;
+        create_rowset_writer_context(&rowset_writer_context, tablet->schema_hash_path(), &tablet_schema, ver.first,
+                                     ver.second, rid++);
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &rowset_writer).ok());
+
+        rowset_writer_add_rows(rowset_writer, tablet_schema);
+        rowset_writer->flush();
+        RowsetSharedPtr src_rowset = *rowset_writer->build();
+        to_add.push_back(std::move(src_rowset));
+    }
+    tablet->modify_rowsets(to_add, to_remove);
+    tmp_list.clear();
+    tablet->list_versions(&tmp_list);
+    debug = "";
+    for (auto&& ver : tmp_list) {
+        debug += "(" + std::to_string(ver.first) + "," + std::to_string(ver.second) + ")";
+    }
+    // find version
+    for (auto&& ver : ver_list) {
+        RowsetSharedPtr p = tablet->get_rowset_by_version(ver);
+        ASSERT_TRUE(p != nullptr) << debug << " not found: " << ver.first << ":" << ver.second;
+        ASSERT_TRUE(p->start_version() == ver.first);
+        ASSERT_TRUE(p->end_version() == ver.second);
+    }
+    // contain version
+    ASSERT_TRUE(!tablet->contains_version(Version(4, 4)).ok()) << debug;
+    ASSERT_TRUE(!tablet->contains_version(Version(4, 5)).ok()) << debug;
+    ASSERT_TRUE(!tablet->contains_version(Version(6, 6)).ok()) << debug;
 }
 
 } // namespace starrocks
