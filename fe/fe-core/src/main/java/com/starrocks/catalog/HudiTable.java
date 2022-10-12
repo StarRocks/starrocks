@@ -184,6 +184,10 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         }
     }
 
+    public Map<String, String> getProperties() {
+        return hudiProperties;
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);

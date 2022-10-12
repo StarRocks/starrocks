@@ -11,6 +11,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
@@ -120,7 +121,7 @@ public class TableFactory {
                 .setFullSchema(columns)
                 .setPartitionColNames(oHudiTable.getPartitionColumnNames())
                 .setDataColNames(oHudiTable.getDataColumnNames())
-                .setHudiProperties(properties)
+                .setHudiProperties(oHudiTable.getProperties())
                 .setCreateTime(oHudiTable.getCreateTime());
 
         HudiTable hudiTable = tableBuilder.build();
@@ -146,9 +147,9 @@ public class TableFactory {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!column.getPrimitiveType().name().equals(oColumn.getPrimitiveType().name())) {
-                throw new DdlException("can not convert hive external table column type [" + column.getPrimitiveType() + "] " +
-                        "to correct type [" + oColumn.getPrimitiveType() + "]");
+            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType())) {
+                throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
+                        "to correct type [" + oColumn.getType() + "]");
             }
         }
 
@@ -187,7 +188,7 @@ public class TableFactory {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!column.getPrimitiveType().name().equals(oColumn.getPrimitiveType().name())) {
+            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType())) {
                 throw new DdlException("can not convert hudi external table column type [" + column.getPrimitiveType() + "] " +
                         "to correct type [" + oColumn.getPrimitiveType() + "]");
             }
