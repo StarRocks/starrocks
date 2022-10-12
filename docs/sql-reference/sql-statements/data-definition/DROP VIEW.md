@@ -18,7 +18,3 @@ DROP VIEW [IF EXISTS]
     ```sql
     DROP VIEW IF EXISTS example_db.example_view;
     ```
-
-## keyword
-
-DROP,VIEW
