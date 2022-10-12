@@ -257,6 +257,7 @@ public class MaterializedViewRewriter {
         Map<ColumnRefOperator, ScalarOperator> queryProjectionMap =
                 getProjectionMap(queryProjection, queryExpression, targetRefFactory);
 
+        /*
         // rewrite value of queryProjectionMap by EC
         Map<ColumnRefOperator, ScalarOperator> swappedProjectionMap = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : queryProjectionMap.entrySet()) {
@@ -264,16 +265,29 @@ public class MaterializedViewRewriter {
             swappedProjectionMap.put(entry.getKey(), swappedScalarOperator);
         }
 
+         */
+
         Map<ColumnRefOperator, ScalarOperator> viewExprMap = getProjectionMap(mvProjection, mvExpression, srcRefFactory);
 
         Map<ColumnRefOperator, ScalarOperator> newProjectionMap = Maps.newHashMap();
-        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedProjectionMap.entrySet()) {
-            ScalarOperator newProjectionExpr = rewriteScalarOperator(entry.getValue(), viewExprMap, targetExpr,
-                    relationIdMap, srcRelationIdToColumns, srcRefFactory, targetRelationIdToColumns, targetRefFactory, ec);
-            if (newProjectionExpr == null) {
-                return null;
-            }
-            newProjectionMap.put(entry.getKey(), newProjectionExpr);
+
+        // key and value have the same index
+        List<ColumnRefOperator> keys = Lists.newArrayListWithCapacity(queryProjectionMap.size());
+        List<ScalarOperator> values = Lists.newArrayListWithCapacity(queryProjectionMap.size());
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : queryProjectionMap.entrySet()) {
+            keys.add(entry.getKey());
+            values.add(entry.getValue());
+        }
+
+        // rewrittenValues has the same size with values
+        List<ScalarOperator> rewrittenValues = rewriteScalarOperators(values, viewExprMap, targetExpr,
+                relationIdMap, srcRelationIdToColumns, srcRefFactory, targetRelationIdToColumns, targetRefFactory, ec);
+        if (rewrittenValues == null) {
+            return null;
+        }
+        Preconditions.checkState(rewrittenValues.size() == values.size());
+        for (int i = 0; i < keys.size(); i++) {
+            newProjectionMap.put(keys.get(i), rewrittenValues.get(i));
         }
         LogicalProjectOperator projection = new LogicalProjectOperator(newProjectionMap);
         return OptExpression.create(projection, targetExpr);
@@ -299,6 +313,7 @@ public class MaterializedViewRewriter {
         return projectionMap;
     }
 
+    /*
     private ScalarOperator rewriteScalarOperator(ScalarOperator exprToRewrite,
                                                    Map<ColumnRefOperator, ScalarOperator> viewExprMap,
                                                    OptExpression targetExpr,
@@ -317,6 +332,8 @@ public class MaterializedViewRewriter {
         Preconditions.checkState(scalarOperators.size() == 1);
         return scalarOperators.get(0);
     }
+
+     */
 
     // rewrite predicates by using target expression
     // temp:
@@ -370,7 +387,17 @@ public class MaterializedViewRewriter {
                 .stream().flatMap(List::stream).collect(Collectors.toSet());
         originalColumnSet.removeAll(materializationContext.getScanMvOutputExpressions());
         List<ScalarOperator> rewrittenExprs = Lists.newArrayList();
+
+        List<ScalarOperator> swappedExprs = Lists.newArrayList();
         for (ScalarOperator expr : exprsToRewrites) {
+            ScalarOperator swappedScalarOperator = rewriteColumnByEc(expr, ec);
+            if (swappedScalarOperator == null) {
+                return null;
+            }
+            swappedExprs.add(swappedScalarOperator);
+        }
+
+        for (ScalarOperator expr : swappedExprs) {
             ScalarOperator rewritten = replaceExprWithTarget(expr, rewrittenExprMap, mapping);
             if (!isAllExprReplaced(rewritten, originalColumnSet)) {
                 // it means there is some column that can not be rewritten by outputs of mv
