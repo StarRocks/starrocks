@@ -367,7 +367,17 @@ struct Version {
 
     bool contains(const Version& other) const { return first <= other.first && second >= other.second; }
 
-    bool operator<(const Version& rhs) const { return second < rhs.second; }
+    bool operator<(const Version& rhs) const {
+        if (second < rhs.second) {
+            return true;
+        } else if (second > rhs.second) {
+            return false;
+        } else {
+            // version with bigger first will be smaller.
+            // design this for fast search in _contains_version() in tablet.cpp.
+            return first > rhs.first;
+        }
+    }
 };
 
 typedef std::vector<Version> Versions;

@@ -240,6 +240,8 @@ public:
 
     int64_t mem_usage() { return sizeof(Tablet); }
 
+    Status contains_version(const Version& version);
+
 protected:
     void on_shutdown() override;
 
