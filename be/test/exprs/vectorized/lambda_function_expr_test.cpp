@@ -16,6 +16,8 @@
 #include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
+#include "runtime/runtime_state.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 namespace vectorized {
@@ -260,6 +262,7 @@ public:
 
 private:
     TTypeDesc int_type;
+    RuntimeState _runtime_state;
     ObjectPool _objpool;
 };
 
@@ -277,8 +280,9 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
-            exprContext._is_clone = true;
-            WARN_IF_ERROR(array_map_expr.prepare(nullptr, &exprContext), "");
+            std::vector<ExprContext*> expr_ctxs = {&exprContext};
+            ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+            ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
             auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
 
             // check LambdaFunction::prepare()
@@ -292,9 +296,6 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
-
-            WARN_IF_ERROR(array_map_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
-                          "");
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
@@ -338,7 +339,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
                 EXPECT_EQ(-110, result->get(2).get_array()[1].get_int32());
             }
 
-            exprContext.close(nullptr);
+            Expr::close(expr_ctxs, &_runtime_state);
         }
     }
 }
@@ -355,8 +356,9 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
-            exprContext._is_clone = true;
-            WARN_IF_ERROR(array_map_expr.prepare(nullptr, &exprContext), "");
+            std::vector<ExprContext*> expr_ctxs = {&exprContext};
+            ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+            ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
             auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
 
             // check LambdaFunction::prepare()
@@ -370,9 +372,6 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
-
-            WARN_IF_ERROR(array_map_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
-                          "");
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
@@ -411,7 +410,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_special_array) {
                 ASSERT_TRUE(result->is_null(2));
             }
 
-            exprContext.close(nullptr);
+            Expr::close(expr_ctxs, &_runtime_state);
         }
     }
 }
@@ -428,8 +427,9 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
             ExprContext exprContext(&array_map_expr);
-            exprContext._is_clone = true;
-            WARN_IF_ERROR(array_map_expr.prepare(nullptr, &exprContext), "");
+            std::vector<ExprContext*> expr_ctxs = {&exprContext};
+            ASSERT_OK(Expr::prepare(expr_ctxs, &_runtime_state));
+            ASSERT_OK(Expr::open(expr_ctxs, &_runtime_state));
             auto lambda = dynamic_cast<LambdaFunction*>(_lambda_func[j]);
 
             // check LambdaFunction::prepare()
@@ -443,9 +443,6 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
             } else {
                 ASSERT_TRUE(ids.empty());
             }
-
-            WARN_IF_ERROR(array_map_expr.open(nullptr, &exprContext, FunctionContext::FunctionStateScope::THREAD_LOCAL),
-                          "");
 
             ColumnPtr result = array_map_expr.evaluate(&exprContext, cur_chunk.get());
 
@@ -509,7 +506,7 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_TRUE(result->get(2).get_array().empty());
             }
 
-            exprContext.close(nullptr);
+            Expr::close(expr_ctxs, &_runtime_state);
         }
     }
 }
