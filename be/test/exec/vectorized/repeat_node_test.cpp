@@ -117,7 +117,7 @@ protected:
             }
         }
 
-        DescriptorTbl::create(&_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
+        DescriptorTbl::create(&_runtime_state, &_obj_pool, t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
         _runtime_state.set_desc_tbl(_desc_tbl);
 
