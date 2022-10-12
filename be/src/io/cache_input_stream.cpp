@@ -49,10 +49,10 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
             DCHECK(size > shift);
         }
 
-        VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", count = " << count << ", block_id = " << i
-                  << ", off = " << off << " , load_size = " << load_size << ", shift = " << shift
-                  << ", p + BLOCK_SIZE = " << (void*)(p + BLOCK_SIZE) << ", pe = " << (void*)pe << "\n"
-                  << get_stack_trace();
+        // VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", count = " << count << ", block_id = " << i
+        //           << ", off = " << off << " , load_size = " << load_size << ", shift = " << shift
+        //           << ", p + BLOCK_SIZE = " << (void*)(p + BLOCK_SIZE) << ", pe = " << (void*)pe << "\n"
+        //           << get_stack_trace();
 
         StatusOr<size_t> res;
         char* src = nullptr;
