@@ -85,6 +85,7 @@ public class LoadingTaskPlanner {
     private final boolean partialUpdate;
     private final int parallelInstanceNum;
     private final long startTime;
+    private final boolean useLocalCache;
 
     // Something useful
     // ConnectContext here is just a dummy object to avoid some NPE problem, like ctx.getDatabase()
@@ -103,7 +104,7 @@ public class LoadingTaskPlanner {
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
                               BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
                               boolean strictMode, String timezone, long timeoutS,
-                              long startTime, boolean partialUpdate) {
+                              long startTime, boolean partialUpdate, boolean useLocalCache) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -116,6 +117,7 @@ public class LoadingTaskPlanner {
         this.partialUpdate = partialUpdate;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
+        this.useLocalCache = useLocalCache;
     }
 
     public void plan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)
@@ -175,6 +177,7 @@ public class LoadingTaskPlanner {
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
         scanNode.setUseVectorizedLoad(true);
+        scanNode.setUseLocalCache(useLocalCache);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
         scanNodes.add(scanNode);
@@ -217,6 +220,7 @@ public class LoadingTaskPlanner {
                 fileStatusesList, filesAdded);
         scanNode.setLoadInfo(loadJobId, txnId, table, brokerDesc, fileGroups, strictMode, parallelInstanceNum);
         scanNode.setUseVectorizedLoad(true);
+        scanNode.setUseLocalCache(useLocalCache);
         scanNode.init(analyzer);
         scanNode.finalizeStats(analyzer);
         scanNodes.add(scanNode);
