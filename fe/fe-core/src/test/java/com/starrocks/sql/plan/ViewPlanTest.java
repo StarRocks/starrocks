@@ -4,7 +4,13 @@ package com.starrocks.sql.plan;
 
 import com.starrocks.analysis.AlterViewStmt;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.service.ExecuteEnv;
+import com.starrocks.service.FrontendServiceImpl;
+import com.starrocks.thrift.TGetTablesParams;
+import com.starrocks.thrift.TListTableStatusResult;
+import com.starrocks.thrift.TTableType;
 import com.starrocks.utframe.UtFrameUtils;
+import org.apache.thrift.TException;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -1698,5 +1704,18 @@ public class ViewPlanTest extends PlanTestBase {
         sqlPlan = getFragmentPlan(alterStmt);
         viewPlan = getFragmentPlan("select * from " + viewName);
         Assert.assertEquals(sqlPlan, viewPlan);
+    }
+
+    @Test
+    public void testListViews() throws TException {
+        ExecuteEnv instance = ExecuteEnv.getInstance();
+        FrontendServiceImpl frontendService = new FrontendServiceImpl(instance);
+        TGetTablesParams params = new TGetTablesParams();
+        params.db = "default_cluster:test";
+        params.user = "root";
+        params.user_ip = "%";
+        params.type = TTableType.VIEW;
+        TListTableStatusResult result = frontendService.listTableStatus(params);
+        Assert.assertTrue(result.tables.size() > 0);
     }
 }

@@ -1249,10 +1249,6 @@ public class PlanFragmentBuilder {
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 }
-                // set aggregate node can use local aggregate
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
-                }
 
                 // set predicate
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1306,6 +1302,10 @@ public class PlanFragmentBuilder {
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if (node.isOnePhaseAgg() && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 estimateDopOfOnePhaseAgg(inputFragment);
+            }
+            // set aggregate node can use local aggregate
+            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                aggregationNode.setColocate(true);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
@@ -2082,6 +2082,9 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
