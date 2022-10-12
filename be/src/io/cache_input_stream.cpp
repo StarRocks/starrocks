@@ -6,6 +6,7 @@
 #include "block_cache/block_cache.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
+#include "util/stack_util.h"
 
 namespace starrocks::io {
 
@@ -41,9 +42,6 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         int64_t size = std::min(BLOCK_SIZE, end - off);
         int64_t load_size = std::min(BLOCK_SIZE, _size - off);
 
-        // VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", end = " << end << ", block_id = " << i
-        //           << ", off = " << off << ", size = " << size << " , load_size = " << load_size;
-
         // handle data alignment for first block
         int64_t shift = 0;
         if (i == start_block_id) {
@@ -51,10 +49,15 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
             DCHECK(size > shift);
         }
 
+        VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", count = " << count << ", block_id = " << i
+                  << ", off = " << off << " , load_size = " << load_size << ", shift = " << shift
+                  << ", p + BLOCK_SIZE = " << (void*)(p + BLOCK_SIZE) << ", pe = " << (void*)pe << "\n"
+                  << get_stack_trace();
+
         StatusOr<size_t> res;
         char* src = nullptr;
         bool can_zero_copy = false;
-        if ((p + BLOCK_SIZE < pe) && (shift == 0)) {
+        if ((p + BLOCK_SIZE <= pe) && (shift == 0)) {
             can_zero_copy = true;
             src = p;
         } else {
