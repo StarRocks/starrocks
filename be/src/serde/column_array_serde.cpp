@@ -150,7 +150,7 @@ public:
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
-            if(sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
+            if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
                 buff = encode_integers<true>(column.raw_data(), size, buff, encode_level);
             } else {
                 buff = encode_integers<false>(column.raw_data(), size, buff, encode_level);
@@ -168,7 +168,7 @@ public:
         std::vector<T>& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
-            if(sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
+            if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
                 buff = decode_integers<true>(buff, data.data(), size);
             } else {
                 buff = decode_integers<false>(buff, data.data(), size);
@@ -565,8 +565,8 @@ public:
 private:
     uint8_t* _buff;
     uint8_t* _cur;
-    int _encode_level;
     bool _sorted;
+    int _encode_level;
 };
 
 class ColumnDeserializingVisitor final : public ColumnVisitorMutableAdapter<ColumnDeserializingVisitor> {
@@ -632,8 +632,8 @@ public:
 private:
     const uint8_t* _buff;
     const uint8_t* _cur;
-    int _encode_level;
     bool _sorted;
+    int _encode_level;
 };
 
 } // namespace

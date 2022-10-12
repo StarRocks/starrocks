@@ -65,7 +65,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
     buff = buff + 8;
 
     for (const auto& column : chunk.columns()) {
-        buff = ColumnArraySerde::serialize(*column, buff, encode_level);
+        buff = ColumnArraySerde::serialize(*column, buff, false, encode_level);
         if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
