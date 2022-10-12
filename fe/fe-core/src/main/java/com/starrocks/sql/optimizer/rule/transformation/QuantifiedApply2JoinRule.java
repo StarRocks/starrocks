@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
@@ -46,16 +47,26 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
         BinaryPredicateOperator bpo =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, ipo.getChildren());
 
+        ScalarOperator simplifiedPredicate = bpo;
+        if (bpo.getUsedColumns().isEmpty()) {
+            simplifiedPredicate = new FoldConstantsRule().visitBinaryPredicate(bpo, null);
+        } else if (bpo.getChild(0).getUsedColumns().isEmpty()) {
+            // normalize binaryPredicateOperator, e.g. 1 = tbl.v1 to tbl.v1 = 1
+            bpo.swap();
+        }
+
         // IN to SEMI-JOIN
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN
         OptExpression joinExpression;
         if (ipo.isNotIn()) {
             //@TODO: if will can filter null, use left-anti-join
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN,
-                    Utils.compoundAnd(bpo, Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
+                    Utils.compoundAnd(simplifiedPredicate,
+                            Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
         } else {
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
-                    Utils.compoundAnd(bpo, Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
+                    Utils.compoundAnd(simplifiedPredicate,
+                            Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
         }
 
         joinExpression.getInputs().addAll(input.getInputs());

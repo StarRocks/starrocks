@@ -1004,12 +1004,12 @@ public class SubqueryTest extends PlanTestBase {
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 4: v4 = 1: v1\n" +
-                    "  |  equal join conjunct: 11: cast = 1: v1");
+                    "  |  equal join conjunct: 12: cast = 1: v1");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +
-                    "  |  other predicates: CAST(8: v8 IS NOT NULL AS BIGINT) IS NOT NULL");
+                    "  |  other predicates: CAST(11: countRows IS NOT NULL AS BIGINT) IS NOT NULL");
         }
         {
             // correlated 2
@@ -1020,12 +1020,12 @@ public class SubqueryTest extends PlanTestBase {
             assertContains(plan, "  8:HASH JOIN\n" +
                     "  |  join op: INNER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 11: cast = 1: v1");
+                    "  |  equal join conjunct: 12: cast = 1: v1");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +
-                    "  |  other predicates: CAST(8: v8 IS NOT NULL AS BIGINT) IS NOT NULL");
+                    "  |  other predicates: CAST(11: countRows IS NOT NULL AS BIGINT) IS NOT NULL");
         }
         {
             // correlated 3, multi subqueries
@@ -1034,20 +1034,21 @@ public class SubqueryTest extends PlanTestBase {
                     "t0.v1 = (exists (select v7 from t2 where t2.v8 = t1.v5)) " +
                     "and t0.v2 = (not exists(select v11 from t3 where t3.v10 = t0.v1))";
             String plan = getFragmentPlan(sql);
-            assertContains(plan, "  13:HASH JOIN\n" +
-                    "  |  join op: INNER JOIN (BROADCAST)\n" +
+            System.out.println(plan);
+            assertContains(plan, "  14:HASH JOIN\n" +
+                    "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                     "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 15: cast = 1: v1");
+                    "  |  equal join conjunct: 17: cast = 1: v1");
             assertContains(plan, "  4:HASH JOIN\n" +
                     "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                     "  |  colocate: false, reason: \n" +
                     "  |  equal join conjunct: 5: v5 = 8: v8\n" +
-                    "  |  other predicates: CAST(8: v8 IS NOT NULL AS BIGINT) IS NOT NULL");
-            assertContains(plan, "  10:HASH JOIN\n" +
-                    "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
-                    "  |  colocate: false, reason: \n" +
-                    "  |  equal join conjunct: 1: v1 = 11: v10\n" +
-                    "  |  other predicates: 2: v2 = CAST(11: v10 IS NULL AS BIGINT)");
+                    "  |  other predicates: CAST(15: countRows IS NOT NULL AS BIGINT) IS NOT NULL");
+            assertContains(plan, "  |    12:HASH JOIN\n" +
+                    "  |    |  join op: LEFT OUTER JOIN (PARTITIONED)\n" +
+                    "  |    |  colocate: false, reason: \n" +
+                    "  |    |  equal join conjunct: 1: v1 = 11: v10\n" +
+                    "  |    |  other predicates: 2: v2 = CAST(16: countRows IS NULL AS BIGINT)");
         }
     }
 
