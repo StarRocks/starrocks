@@ -203,8 +203,10 @@ Status StorageEngine::start_bg_threads() {
         }
     }
 
-    _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
-    Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
+    if (!config::disable_storage_page_cache) {
+        _adjust_cache_thread = std::thread([this] { _adjust_pagecache_callback(nullptr); });
+        Thread::set_thread_name(_adjust_cache_thread, "adjust_cache");
+    }
 
     LOG(INFO) << "All backgroud threads of storage engine have started.";
     return Status::OK();
@@ -231,11 +233,11 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    GCHelper dec_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval, MonoTime::Now());
-    GCHelper inc_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval, MonoTime::Now());
+    GCHelper dec_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_seconds, MonoTime::Now());
+    GCHelper inc_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_seconds, MonoTime::Now());
     auto cache = StoragePageCache::instance();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(config::auto_adjust_pagecache_interval);
+        SLEEP_IN_BG_WORKER(config::auto_adjust_pagecache_seconds);
         if (!config::enable_auto_adjust_pagecache) {
             continue;
         }
@@ -252,7 +254,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         int64_t memory_high_level = config::memory_high_level;
         if (UNLIKELY(!(memory_urgent_level > memory_high_level && memory_high_level >= 1 &&
                        memory_urgent_level <= 100))) {
-            LOG(WARNING) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
+            LOG(ERROR) << "memory water level config is illegal: memory_urgent_level=" << memory_urgent_level
                          << " memory_high_level=" << memory_high_level;
             continue;
         }

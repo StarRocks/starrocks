@@ -62,7 +62,7 @@ CONF_mInt64(memory_high_level, "75");
 // Pagecache size adjust period, default 20, it should be between [1, 180].
 CONF_Int64(pagecache_adjuct_period, "20");
 // Sleep time in seconds between pagecache adjust iterations.
-CONF_Int64(auto_adjust_pagecache_interval, "10");
+CONF_Int64(auto_adjust_pagecache_seconds, "10");
 
 // Bound on the total amount of bytes allocated to thread caches.
 // This bound is not strict, so it is possible for the cache to go over this bound
