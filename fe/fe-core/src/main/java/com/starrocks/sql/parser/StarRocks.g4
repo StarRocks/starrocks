@@ -4,7 +4,7 @@ grammar StarRocks;
 import StarRocksLex;
 
 sqlStatements
-    : singleStatement+ EOF
+    : singleStatement* EOF
     ;
 
 singleStatement
