@@ -6,6 +6,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "exec/pipeline/operator.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
@@ -301,7 +302,23 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     return Status::OK();
 }
 
-Status Aggregator::reset_state(std::vector<vectorized::ChunkPtr>&& chunks) {
+Status Aggregator::reset_state(starrocks::RuntimeState* state, const std::vector<vectorized::ChunkPtr>& refill_chunks,
+                               pipeline::Operator* refill_op) {
+    RETURN_IF_ERROR(_reset_state(state));
+    // begin_pending_reset_state just tells the Aggregator, the chunks are intermediate type, it should call
+    // merge method of agg functions to process these chunks.
+    begin_pending_reset_state();
+    for (const auto& chunk : refill_chunks) {
+        if (chunk == nullptr || chunk->is_empty()) {
+            continue;
+        }
+        RETURN_IF_ERROR(refill_op->push_chunk(state, chunk));
+    }
+    end_pending_reset_state();
+    return Status::OK();
+}
+
+Status Aggregator::_reset_state(RuntimeState* state) {
     _is_ht_eos = false;
     _num_input_rows = 0;
     _is_sink_complete = false;

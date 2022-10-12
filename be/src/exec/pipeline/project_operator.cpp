@@ -67,7 +67,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     return Status::OK();
 }
 
-Status ProjectOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status ProjectOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
     _cur_chunk = nullptr;
 
