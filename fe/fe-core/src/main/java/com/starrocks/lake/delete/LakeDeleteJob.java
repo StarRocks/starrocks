@@ -121,6 +121,7 @@ public class LakeDeleteJob extends DeleteJob {
 
     private DeletePredicatePB createDeletePredicate(List<Predicate> conditions) {
         DeletePredicatePB deletePredicate = new DeletePredicatePB();
+        deletePredicate.version = -1; // Required but unused
         deletePredicate.binaryPredicates = Lists.newArrayList();
         deletePredicate.isNullPredicates = Lists.newArrayList();
         deletePredicate.inPredicates = Lists.newArrayList();
