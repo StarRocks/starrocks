@@ -36,4 +36,6 @@ public class StatisticsEstimateCoefficient {
     public static final double DEFAULT_ANTI_JOIN_SELECTIVITY_COEFFICIENT = 0.4;
     // default shuffle column row count limit
     public static final double DEFAULT_PRUNE_SHUFFLE_COLUMN_ROWS_LIMIT = 200000;
+    // default push down aggregate row count limit, 100w
+    public static final long DEFAULT_PUSH_DOWN_AGGREGATE_ROWS_LIMIT = 1000000;
 }

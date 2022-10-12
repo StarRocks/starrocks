@@ -45,6 +45,7 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
         ctx = UtFrameUtils.createDefaultCtx();
         Config.enable_decimal_v3 = true;
         StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr);
         starRocksAssert.withTable("CREATE TABLE `test_decimal_type6` (\n" +

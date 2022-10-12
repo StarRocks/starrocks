@@ -74,6 +74,10 @@ public final class LogicalProjectOperator extends LogicalOperator {
         return visitor.visitLogicalProject(optExpression, context);
     }
 
+    public static Builder builder() {
+        return new Builder();
+    }
+
     public static class Builder extends Operator.Builder<LogicalProjectOperator, LogicalProjectOperator.Builder> {
         private Map<ColumnRefOperator, ScalarOperator> columnRefMap;
 
