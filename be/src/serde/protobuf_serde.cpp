@@ -136,7 +136,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     }
 
     for (auto& column : columns) {
-        cur = ColumnArraySerde::deserialize(cur, column.get(), _encode_level);
+        cur = ColumnArraySerde::deserialize(cur, column.get(), false, _encode_level);
     }
 
     for (auto& col : columns) {
