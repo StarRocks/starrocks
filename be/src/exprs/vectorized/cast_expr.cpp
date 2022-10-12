@@ -361,7 +361,7 @@ static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
         auto value = viewer.value(row);
 
         BitmapValue bitmap;
-        if (bitmap.deserialize(value.data, value.size)) {
+        if (bitmap.valid_and_deserialize(value.data, value.size)) {
             builder.append(&bitmap);
         } else {
             if constexpr (AllowThrowException) {
