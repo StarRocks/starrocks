@@ -3,6 +3,7 @@
 package com.starrocks.external;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.hive.Partition;
 
@@ -32,15 +33,16 @@ public class RemoteFileOperations {
         this.enableCatalogLevelCache = enableCatalogLevelCache;
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(Collection<Partition> partitions) {
+    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions) {
         return getRemoteFiles(partitions, Optional.empty());
     }
 
-    public List<RemoteFileInfo> getRemoteFiles(Collection<Partition> partitions, Optional<String> hudiTableLocation) {
-        Map<RemotePathKey, Partition> pathKeyToPartition = partitions.stream()
-                .collect(Collectors.toMap(
-                        partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation),
-                        Function.identity()));
+    public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
+        Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+            pathKeyToPartition.put(key, partition);
+        }
 
         List<RemoteFileInfo> resultRemoteFiles = Lists.newArrayList();
         List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
@@ -83,7 +85,7 @@ public class RemoteFileOperations {
         return fillFileInfo(presentFiles, pathKeyToPartition);
     }
 
-    public List<RemoteFileInfo> getRemoteFileInfoForStats(Collection<Partition> partitions, Optional<String> hudiTableLocation) {
+    public List<RemoteFileInfo> getRemoteFileInfoForStats(List<Partition> partitions, Optional<String> hudiTableLocation) {
         if (enableCatalogLevelCache) {
             return getPresentFilesInCache(partitions, hudiTableLocation);
         } else {

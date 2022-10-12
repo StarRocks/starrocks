@@ -3,7 +3,6 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
@@ -11,6 +10,8 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.external.RemoteFileOperations;
 import com.starrocks.external.hive.HiveMetastoreOperations;
@@ -21,6 +22,7 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -90,14 +92,24 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<PartitionKey> partitionKeys) {
-        ImmutableCollection.Builder<Partition> partitions = ImmutableList.builder();
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        ImmutableList.Builder<Partition> partitions = ImmutableList.builder();
+        HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
 
         if (((HiveMetaStoreTable) table).isUnPartitioned()) {
-            partitions.add(hmsOps.getPartition(dbName, tblName, Lists.newArrayList()));
+            partitions.add(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList()));
         } else {
-            partitions.addAll(hmsOps.getPartitionByNames(table, partitionKeys).values());
+            Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionKeys);
+            for (PartitionKey partitionKey : partitionKeys) {
+                String hivePartitionName = FileUtils.makePartName(hmsTbl.getPartitionColumnNames(),
+                        PartitionUtil.fromPartitionKey(partitionKey));
+                Partition partition = existingPartitions.get(hivePartitionName);
+                if (partition != null) {
+                    partitions.add(partition);
+                } else {
+                    LOG.error("Partition {} doesn't exist", hivePartitionName);
+                    throw new StarRocksConnectorException("Partition %s doesn't exist", hivePartitionName);
+                }
+            }
         }
 
         return fileOps.getRemoteFiles(partitions.build());

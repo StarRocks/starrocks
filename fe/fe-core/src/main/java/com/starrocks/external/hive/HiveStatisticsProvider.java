@@ -131,9 +131,9 @@ public class HiveStatisticsProvider {
 
     public long getEstimatedRowCount(Table table, List<PartitionKey> partitionKeys) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        Collection<Partition> partitions = hmsTbl.isUnPartitioned() ?
-                Collections.singleton(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
-                hmsOps.getPartitionByNames(table, partitionKeys).values();
+        List<Partition> partitions = hmsTbl.isUnPartitioned() ?
+                Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
+                Lists.newArrayList(hmsOps.getPartitionByNames(table, partitionKeys).values());
 
         Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTbl.getTableLocation());
         List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions, hudiBasePath);
