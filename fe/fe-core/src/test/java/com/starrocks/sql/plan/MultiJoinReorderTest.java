@@ -182,22 +182,12 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----22:EXCHANGE"));
 
         // Right sub join tree (a)
-<<<<<<< HEAD
-        assertContains(planFragment, " 15:NESTLOOP JOIN\n" +
+        assertContains(planFragment, "  20:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----14:EXCHANGE\n" +
-                "  |    \n" +
-                "  1:OlapScanNode\n" +
-                "     TABLE: t2");
-=======
-        assertContains(planFragment, "  16:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
-                "  |  colocate: false, reason: \n" +
-                "  |  \n" +
-                "  |----15:EXCHANGE\n");
->>>>>>> 6c3ec1c3d ([Enhancement] adjust cost model for right join of nestloopjoin (#11863))
+                "  |----19:EXCHANGE\n" +
+                "  |    ");
     }
 
     @Test
