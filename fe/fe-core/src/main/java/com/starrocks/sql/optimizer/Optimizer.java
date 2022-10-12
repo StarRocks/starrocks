@@ -177,7 +177,7 @@ public class Optimizer {
 
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext,
                                              ConnectContext connectContext, boolean needMvRewrite) {
-            tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
+        tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);
         deriveLogicalProperty(tree);
 
         SessionVariable sessionVariable = rootTaskContext.getOptimizerContext().getSessionVariable();
