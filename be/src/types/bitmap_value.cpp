@@ -745,7 +745,7 @@ bool BitmapValue::deserialize(const char* src) {
     return true;
 }
 
-bool BitmapValue::deserialize(const char* src, size_t max_bytes) {
+bool BitmapValue::valid_and_deserialize(const char* src, size_t max_bytes) {
     if (!max_bytes) {
         return false;
     }

@@ -115,7 +115,7 @@ public:
     // Return false if `src` begins with unknown type code, true otherwise.
     bool deserialize(const char* src);
     // Use max_bytes to read from src safely.
-    bool deserialize(const char* src, size_t max_bytes);
+    bool valid_and_deserialize(const char* src, size_t max_bytes);
 
     // TODO limit string size to avoid OOM
     std::string to_string() const;
