@@ -183,6 +183,10 @@ Status DeltaWriter::_init() {
         }
         writer_context.partial_update_tablet_schema =
                 TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
+        if (!_tablet->tablet_schema().sort_key_idxes().empty()) {
+            LOG(WARNING) << "table with sort key do not support partial update";
+            return Status::NotSupported("table with sort key do not support partial update");
+        }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
