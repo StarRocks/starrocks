@@ -33,7 +33,6 @@ namespace starrocks {
 
 METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
-METRIC_DEFINE_UINT_GAUGE(page_cache_usage, MetricUnit::BYTES);
 METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 
 StoragePageCache* StoragePageCache::_s_instance = nullptr;
@@ -61,10 +60,6 @@ static void init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_hit_count", []() {
         page_cache_hit_count.set_value(StoragePageCache::instance()->get_hit_count());
     });
-
-    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_usage", &page_cache_usage);
-    StarRocksMetrics::instance()->metrics()->register_hook(
-            "page_cache_usage", []() { page_cache_usage.set_value(StoragePageCache::instance()->memory_usage()); });
 
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
     StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity", []() {
