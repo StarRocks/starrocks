@@ -306,22 +306,6 @@ void PlanFragmentExecutor::send_report(bool done) {
     _report_status_cb(status, profile(), done || !status.ok());
 }
 
-Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
-    VLOG_FILE << "GetNext(): instance_id=" << _runtime_state->fragment_instance_id();
-    Status status = _get_next_internal_vectorized(chunk);
-    update_status(status);
-
-    if (_done) {
-        LOG(INFO) << "Finished executing fragment query_id=" << print_id(_query_id)
-                  << " instance_id=" << print_id(_runtime_state->fragment_instance_id());
-        // Query is done, return the thread token
-        release_thread_token();
-        send_report(true);
-    }
-
-    return status;
-}
-
 Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr* chunk) {
     // If there is a empty chunk, we continue to read next chunk
     // If we set chunk to nullptr, means this fragment read done
