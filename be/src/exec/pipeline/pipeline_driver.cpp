@@ -3,6 +3,8 @@
 
 #include "exec/pipeline/pipeline_driver.h"
 
+#include <util/runtime_profile.h>
+
 #include <sstream>
 
 #include "column/chunk.h"
@@ -29,6 +31,9 @@ PipelineDriver::~PipelineDriver() noexcept {
 
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
+
+    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    SCOPED_TIMER(prepare_timer);
 
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
