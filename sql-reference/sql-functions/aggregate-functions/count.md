@@ -11,13 +11,11 @@
 
 - COUNT(expr) 返回某列中非 NULL 值的行数。
 
-- COUNT(DISTINCT expr) 返回某列去重后非NULL值的行数。
+- COUNT(DISTINCT expr) 返回某列去重后非 NULL 值的行数。
 
-该函数支持与 WHERE，GROUP BY 子句搭配使用。
+COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 实现精确去重](../../../using_starrocks/Using_bitmap.md)。
 
-COUNT DISTINCT 用于精确去重，如果需要更好的去重性能，可参考[使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)。
-
-**从2.4版本开始，StarRocks 支持 DISTINCT 去重多个字段。**
+**从 2.4 版本开始，StarRocks 支持在一条查询里使用多个 COUNT(DISTINCT)。**
 
 ## 语法
 
@@ -110,3 +108,14 @@ select count(distinct category, supplier) from test;
 ```
 
 在以上结果中，`id`为1004的组合与`id`为1002的组合重复，只统计一次；`id`为1007的组合内有NULL值，不统计。
+
+示例六：一条查询里使用多个 COUNT(DISTINCT)。
+
+```Plain
+select count(distinct country, category), count(distinct country,supplier) from test;
++-----------------------------------+-----------------------------------+
+| count(DISTINCT country, category) | count(DISTINCT country, supplier) |
++-----------------------------------+-----------------------------------+
+|                                 6 |                                 7 |
++-----------------------------------+-----------------------------------+
+```
