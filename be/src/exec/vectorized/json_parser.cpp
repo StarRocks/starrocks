@@ -41,6 +41,10 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
                                            JsonFunctions::to_json_string(doc, MAX_RAW_JSON_LEN));
                 return Status::DataQualityError(err_msg);
             }
+	    if (doc.get_raw_json_string().error() != simdjson::SUCCESS) {
+                auto err_msg = strings::Substitute("Failed to iterate document stream as object.");
+		return Status::DataQualityError(err_msg);
+            }
 
             _curr = doc.get_object();
             *row = _curr;
