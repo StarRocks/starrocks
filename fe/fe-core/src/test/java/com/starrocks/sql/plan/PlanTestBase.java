@@ -1371,6 +1371,36 @@ public class PlanTestBase {
         }
     }
 
+<<<<<<< HEAD
+=======
+    protected void assertVerbosePlanContains(String sql, String... explain) throws Exception {
+        String explainString = getVerboseExplain(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertVerbosePlanNotContains(String sql, String... explain) throws Exception {
+        String explainString = getVerboseExplain(sql);
+
+        for (String expected : explain) {
+            Assert.assertFalse("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertExceptionMessage(String sql, String message) {
+        try {
+            getFragmentPlan(sql);
+            throw new Error();
+        } catch (Exception e) {
+            Assert.assertEquals(message, e.getMessage());
+        }
+    }
+
+>>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         return globalStateMgr.getDb("test").getTable(t);
