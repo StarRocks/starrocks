@@ -772,10 +772,6 @@ public class GlobalStateMgr {
         return localMetastore;
     }
 
-    public ShardDeleter getShardDeleter() {
-        return shardDeleter;
-    }
-
     @VisibleForTesting
     public void setMetadataMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;

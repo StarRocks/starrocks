@@ -265,6 +265,8 @@ public class StarOSAgent {
         } catch (StarClientException e) {
             LOG.warn("Failed to delete shard group. error: {}", e.getMessage());
         }
+        // for debug
+        LOG.info("succ delete shard group {}", groupIds);
     }
 
     public void createShardGroup(long groupId) throws DdlException {
@@ -307,11 +309,34 @@ public class StarOSAgent {
 
     // mocked
     public Set<Long> listShardGroup() {
-        return new HashSet<>();
+        prepare();
+        List<ShardGroupInfo> shardGroupInfo = new ArrayList<>();
+        try {
+            shardGroupInfo = client.listShardGroup(serviceId);
+        } catch (StarClientException e) {
+            LOG.info("list shard group failed");
+            return new HashSet<>();
+        }
+        return shardGroupInfo.stream().map(ShardGroupInfo::getGroupId).collect(Collectors.toSet());
     }
 
     public Set<Long> listShard(long groupId) {
-        return new HashSet<>();
+        prepare();
+
+        List<Long> groupIds = new ArrayList<>();
+        groupIds.add(groupId);
+        List<List<ShardInfo>> shardInfo = new ArrayList<>();
+        try {
+            shardInfo = client.listShard(serviceId, groupIds);
+            // for debug
+            LOG.info("shardInfo.size is {}", shardInfo.size());
+            LOG.info("shardIds of group {} are {}", groupIds, shardInfo.get(0).stream().
+                    map(ShardInfo::getShardId).collect(Collectors.toList()));
+        } catch (StarClientException e) {
+            LOG.info("list shard of group {} failed", groupId);
+            return new HashSet<>();
+        }
+        return shardInfo.get(0).stream().map(ShardInfo::getShardId).collect(Collectors.toSet());
     }
 
     private List<ReplicaInfo> getShardReplicas(long shardId) throws UserException {

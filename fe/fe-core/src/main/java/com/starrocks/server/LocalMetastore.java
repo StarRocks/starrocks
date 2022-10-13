@@ -2928,7 +2928,11 @@ public class LocalMetastore implements ConnectorMetadata {
 
     public Collection<Partition> getAllPartitionsIncludeRecycleBin(OlapTable table) {
         Collection<Partition> partitions = table.getAllPartitions();
+        // for debug
+        LOG.info("partitions is {}", partitions);
         partitions.addAll(recycleBin.getPartitions(table.getId()));
+        // for debug
+        LOG.info("partitions in recycleBin is {}", recycleBin.getPartitions(table.getId()));
         return partitions;
     }
 
