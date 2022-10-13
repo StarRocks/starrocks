@@ -150,6 +150,9 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/olap_meta_chunk_source.cpp
+    pipeline/scan/olap_meta_scan_operator.cpp
+    pipeline/scan/olap_meta_scan_prepare_operator.cpp
     pipeline/scan/morsel.cpp
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
