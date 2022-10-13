@@ -24,8 +24,13 @@ package com.starrocks.ha;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.sleepycat.bind.tuple.TupleBinding;
+import com.sleepycat.je.Database;
 import com.sleepycat.je.DatabaseEntry;
+import com.sleepycat.je.Get;
+import com.sleepycat.je.LockMode;
+import com.sleepycat.je.OperationResult;
 import com.sleepycat.je.OperationStatus;
+import com.sleepycat.je.ReadOptions;
 import com.sleepycat.je.rep.MasterStateException;
 import com.sleepycat.je.rep.MemberNotFoundException;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
@@ -77,8 +82,7 @@ public class BDBHA implements HAProtocol {
 
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
-                long count = epochDb.getDb().count();
-                long myEpoch = count + 1;
+                long myEpoch = getLargestEpoch(epochDb.getDb());
                 LOG.info("start fencing, epoch number is {}", myEpoch);
                 Long key = myEpoch;
                 DatabaseEntry theKey = new DatabaseEntry();
@@ -104,6 +108,19 @@ public class BDBHA implements HAProtocol {
             }
         }
         return false;
+    }
+
+    private long getLargestEpoch(Database epochDB) {
+        DatabaseEntry key = new DatabaseEntry();
+        DatabaseEntry data = new DatabaseEntry();
+        OperationResult result = epochDB.get(null, key, data, Get.LAST,
+                new ReadOptions().setLockMode(LockMode.READ_COMMITTED));
+        if (result == null) {
+            return 1L;
+        } else {
+            TupleBinding<Long> binding = TupleBinding.getPrimitiveBinding(Long.class);
+            return binding.entryToObject(key);
+        }
     }
 
     @Override
