@@ -24,9 +24,4 @@ public class ReorderColumnsClause extends AlterTableColumnClause {
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitReorderColumnsClause(this, context);
     }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
 }

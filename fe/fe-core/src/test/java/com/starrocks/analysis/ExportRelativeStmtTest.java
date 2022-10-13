@@ -10,6 +10,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.ExportStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.system.BrokerHbResponse;
 import mockit.Expectations;
 import mockit.Mock;
@@ -47,7 +50,6 @@ public class ExportRelativeStmtTest {
         String originStmt = "EXPORT TABLE tall TO \"hdfs://hdfs_host:port/a/b/c/\" " +
                 "WITH BROKER \"broker\" (\"username\"=\"test\", \"password\"=\"test\");";
         ExportStmt stmt = (ExportStmt) analyzeSuccess(originStmt);
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertNotNull(stmt.getRedirectStatus());
         Assert.assertTrue(stmt.needAuditEncryption());
         Assert.assertNotNull(stmt.getRowDelimiter());
@@ -174,7 +176,6 @@ public class ExportRelativeStmtTest {
     public void testShowExport() {
         String originStmt = "Show Export limit 10";
         ShowExportStmt stmt = (ShowExportStmt) analyzeSuccess(originStmt);
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertNotNull(stmt.getMetaData());
         Assert.assertNotNull(stmt.getRedirectStatus());
         Assert.assertNull(stmt.getJobState());
@@ -222,7 +223,6 @@ public class ExportRelativeStmtTest {
     public void testCancelExport() {
         String originStmt = "CANCEL EXPORT FROM test WHERE queryid = \"921d8f80-7c9d-11eb-9342-acde48001122\";";
         CancelExportStmt stmt = (CancelExportStmt) analyzeSuccess(originStmt);
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertNotNull(stmt.getWhereClause());
         Assert.assertNotNull(stmt.getQueryId());
         Assert.assertNotNull(stmt.toString());

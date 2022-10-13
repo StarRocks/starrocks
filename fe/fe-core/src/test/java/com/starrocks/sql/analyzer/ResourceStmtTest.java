@@ -27,7 +27,6 @@ public class ResourceStmtTest {
     public void testCreateResource() {
         CreateResourceStmt stmt = (CreateResourceStmt) analyzeSuccess(
                 "create external resource 'spark0' PROPERTIES(\"type\"  =  \"spark\")");
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         // spark resource
         Assert.assertEquals("spark0", stmt.getResourceName());
         Assert.assertEquals(Resource.ResourceType.SPARK, stmt.getResourceType());
@@ -57,7 +56,6 @@ public class ResourceStmtTest {
     @Test
     public void testShowResourcesTest() {
         ShowResourcesStmt stmt = (ShowResourcesStmt) analyzeSuccess("Show Resources");
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertNotNull(stmt.getMetaData());
         Assert.assertNotNull(stmt.getRedirectStatus());
 
@@ -67,7 +65,6 @@ public class ResourceStmtTest {
     @Test
     public void testAlterResourceTest() {
         AlterResourceStmt stmt = (AlterResourceStmt) analyzeSuccess("alter RESOURCE hive0 SET PROPERTIES (\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\")");
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertEquals("hive0", stmt.getResourceName());
         Assert.assertEquals("thrift://10.10.44.91:9083", stmt.getProperties().get("hive.metastore.uris"));
         // bad cases: name, type, properties
@@ -79,7 +76,6 @@ public class ResourceStmtTest {
     @Test
     public void testDropResourceTest() {
         DropResourceStmt stmt = (DropResourceStmt) analyzeSuccess("Drop Resource 'hive0'");
-        Assert.assertTrue(stmt.isSupportNewPlanner());
         Assert.assertEquals("hive0", stmt.getResourceName());
         // bad case for resource name
         analyzeFail("drop resource 01hive");

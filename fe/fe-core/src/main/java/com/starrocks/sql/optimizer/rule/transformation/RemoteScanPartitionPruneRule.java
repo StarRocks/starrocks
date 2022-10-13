@@ -86,7 +86,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
                 columnToNullPartitions.put(partitionColumnRefOperator, Sets.newHashSet());
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
-            
+
             // no partition column table:
             // 1. partitionColumns is empty
             // 2. partitionKeys size = 1

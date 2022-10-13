@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -10,6 +9,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.common.MetaUtils;
 

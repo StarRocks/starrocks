@@ -4,11 +4,11 @@ package com.starrocks.analysis;
 
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
-import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;

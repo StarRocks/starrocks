@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
@@ -85,11 +84,6 @@ public class ShowCreateTableStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowCreateTableStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitShowCreateTableStatement(this, context);
     }
 }

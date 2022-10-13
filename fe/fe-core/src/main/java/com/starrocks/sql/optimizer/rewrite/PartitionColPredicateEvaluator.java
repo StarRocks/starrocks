@@ -92,7 +92,7 @@ public class PartitionColPredicateEvaluator {
             LiteralExpr literalExpr;
             try {
                 if (constantOperator.isNull()) {
-                    Type columnType  = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
+                    Type columnType = Type.fromPrimitiveType(partitionColumn.getPrimitiveType());
                     literalExpr = LiteralExpr.createInfinity(columnType, false);
                 } else {
                     literalExpr = ColumnFilterConverter.convertLiteral(constantOperator);

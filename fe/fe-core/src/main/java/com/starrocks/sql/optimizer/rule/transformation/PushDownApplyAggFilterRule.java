@@ -29,33 +29,33 @@ import java.util.Set;
 /**
  * Push down ApplyNode and AggregationNode as a whole
  * Pattern:
- *      ApplyNode
- *      /      \
- *  LEFT     Aggregation(scalar aggregation)
- *               \
- *               Filter
- *                 \
- *                 ....
+ * ApplyNode
+ * /      \
+ * LEFT     Aggregation(scalar aggregation)
+ * \
+ * Filter
+ * \
+ * ....
  * Before:
- *      ApplyNode
- *      /      \
- *  LEFT     Aggregate(scalar aggregation)
- *               \
- *               Filter
- *                 \
- *                 ....
+ * ApplyNode
+ * /      \
+ * LEFT     Aggregate(scalar aggregation)
+ * \
+ * Filter
+ * \
+ * ....
  * After:
- *      ApplyNode
- *      /      \
- *  LEFT      Filter(correlation)
- *               \
- *            Aggregate(vector aggregation, group by correlation columns)
- *                 \
- *              Project(correlation columns: expression)[optional]
- *                   \
- *               Filter(un-correlation)[optional]
- *                     \
- *                      ....
+ * ApplyNode
+ * /      \
+ * LEFT      Filter(correlation)
+ * \
+ * Aggregate(vector aggregation, group by correlation columns)
+ * \
+ * Project(correlation columns: expression)[optional]
+ * \
+ * Filter(un-correlation)[optional]
+ * \
+ * ....
  * Requirements:
  * 1. All predicate is Binary.EQ in correlation filter
  */

@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;

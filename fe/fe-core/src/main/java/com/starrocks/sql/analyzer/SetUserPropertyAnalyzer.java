@@ -2,9 +2,9 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 
 public class SetUserPropertyAnalyzer {
 

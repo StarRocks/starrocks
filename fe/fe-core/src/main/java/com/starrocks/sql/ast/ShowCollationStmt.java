@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -12,8 +11,8 @@ import com.starrocks.qe.ShowResultSetMetaData;
 /**
  * Show collation statement:
  * Acceptable syntax:
- *  SHOW COLLATION
- *     [LIKE 'pattern' | WHERE expr]
+ * SHOW COLLATION
+ * [LIKE 'pattern' | WHERE expr]
  */
 public class ShowCollationStmt extends ShowStmt {
     private static final ShowResultSetMetaData META_DATA =
@@ -53,10 +52,5 @@ public class ShowCollationStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

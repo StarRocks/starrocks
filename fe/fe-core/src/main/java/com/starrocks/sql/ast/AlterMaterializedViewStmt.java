@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 
 /**
@@ -38,10 +37,5 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAlterMaterializedViewStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

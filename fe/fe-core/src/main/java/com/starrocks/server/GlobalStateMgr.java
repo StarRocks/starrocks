@@ -33,13 +33,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -194,7 +188,10 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -204,6 +201,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -211,9 +209,11 @@ import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -1115,7 +1115,7 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.init();
             metastoreEventsProcessor.start();
         }
-        if (! usingNewPrivilege) {
+        if (!usingNewPrivilege) {
             // domain resolver
             domainResolver.start();
         }

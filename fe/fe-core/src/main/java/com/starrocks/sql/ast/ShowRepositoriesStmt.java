@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -21,10 +20,5 @@ public class ShowRepositoriesStmt extends ShowStmt {
             builder.addColumn(new Column(title, ScalarType.createVarchar(30)));
         }
         return builder.build();
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }
