@@ -233,11 +233,11 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    GCHelper dec_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_seconds, MonoTime::Now());
-    GCHelper inc_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_seconds, MonoTime::Now());
+    GCHelper dec_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval_seconds, MonoTime::Now());
+    GCHelper inc_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval_seconds, MonoTime::Now());
     auto cache = StoragePageCache::instance();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(config::auto_adjust_pagecache_seconds);
+        SLEEP_IN_BG_WORKER(config::auto_adjust_pagecache_interval_seconds);
         if (!config::enable_auto_adjust_pagecache) {
             continue;
         }
