@@ -1,4 +1,4 @@
-# Continuously load data from Apache Flink® 
+# Continuously load data from Apache Flink®
 
 This topic describes how to load data from Apache Flink® to StarRocks.
 
