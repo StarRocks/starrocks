@@ -2,11 +2,11 @@
 
 #include "serde/column_array_serde.h"
 
-#include <encode/streamvbyte.h>
-#include <encode/streamvbytedelta.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
 #include <lz4/lz4frame.h>
+#include <streamvbyte.h>
+#include <streamvbytedelta.h>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
