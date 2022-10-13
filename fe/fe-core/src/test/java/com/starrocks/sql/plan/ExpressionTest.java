@@ -151,7 +151,6 @@ public class ExpressionTest extends PlanTestBase {
     public void testExpression6() throws Exception {
         String sql = "select cast(v1 as decimal64(7,2)) + cast(v2 as decimal64(9,3)) from t0";
         String planFragment = getFragmentPlan(sql);
-        System.out.println("planFragment = " + planFragment);
         Assert.assertTrue(planFragment.contains("  1:Project\n" +
                 "  |  <slot 4> : CAST(CAST(1: v1 AS DECIMAL64(7,2)) AS DECIMAL64(10,2)) + " +
                 "CAST(CAST(2: v2 AS DECIMAL64(9,3)) AS DECIMAL64(10,3))\n"));
@@ -406,9 +405,8 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select * from test_all_type where t1a = 123 AND t1b = 999999999 AND t1d = 999999999 "
                 + "AND id_datetime = '2020-12-20 20:20:20' AND id_date = '2020-12-11' AND id_datetime = 'asdlfkja';";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("9: id_date = '2020-12-11', 8: id_datetime = '2020-12-20 20:20:20', " +
-                "4: t1d = 999999999, 1: t1a = '123', CAST(2: t1b AS INT) = 999999999, " +
-                "8: id_datetime = CAST('asdlfkja' AS DATETIME)"));
+        assertContains(plan, "8: id_datetime = '2020-12-20 20:20:20', 4: t1d = 999999999, 9: id_date = '2020-12-11', " +
+                "1: t1a = '123', CAST(2: t1b AS INT) = 999999999, 8: id_datetime = CAST('asdlfkja' AS DATETIME)");
     }
 
     @Test
@@ -433,7 +431,6 @@ public class ExpressionTest extends PlanTestBase {
         String sql = "select t2.tb from tall t1 join tall t2 " +
                 "on t1.tc = t2.tb and t2.tt = 123 and (t2.tt != 'ax') = t2.td;";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("PREDICATES: 20: tt = '123', " +
                 "CAST(20: tt != 'ax' AS BIGINT) = 14: td, 14: td = 1"));
     }

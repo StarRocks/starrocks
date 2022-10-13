@@ -105,7 +105,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         if (predicate.isNot()) {
             return ConstantOperator.createBoolean(true);
         }
-        
+
         ScalarOperator first = predicate.getChild(0).accept(this, null);
         if (first == null) {
             first = ConstantOperator.createBoolean(true);
@@ -204,7 +204,7 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
     private boolean isValueOrPrune(ScalarOperator operator) {
         return operator == null || !operator.isConstant();
     }
-    
+
     private boolean isConstantNull(ScalarOperator operator) {
         if (operator.isConstantRef()) {
             return ((ConstantOperator) operator).isNull();

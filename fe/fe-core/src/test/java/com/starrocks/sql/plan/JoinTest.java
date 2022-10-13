@@ -55,7 +55,7 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testCorssJoinWithPredicate() throws Exception {
+    public void testCrossJoinWithPredicate() throws Exception {
         String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 1: v1 = 2");
@@ -1703,24 +1703,26 @@ public class JoinTest extends PlanTestBase {
                 "address as (select 1 as user_id, 'newzland' as address_name) \n" +
                 "select * from address a right join user_info b on b.user_id=a.user_id;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  6:HASH JOIN\n" +
-                "  |  join op: RIGHT OUTER JOIN (PARTITIONED)\n" +
+        assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 8: expr = 11: expr");
-        assertContains(plan, "  4:Project\n" +
+                "  |  equal join conjunct: 11: expr = 8: expr");
+        assertContains(plan, "1:Project\n" +
                 "  |  <slot 11> : 2\n" +
                 "  |  <slot 12> : 'mike'\n" +
-                "  |  \n" +
-                "  3:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
-        assertContains(plan, "  1:Project\n" +
-                "  |  <slot 8> : 1\n" +
-                "  |  <slot 9> : 'newzland'\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
+        assertContains(plan, "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 03\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  2:EMPTYSET");
     }
 
     @Test
@@ -2513,6 +2515,8 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7), remote = false\n" +
                 "  |  cardinality: 1\n");
 
         sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
@@ -2528,6 +2532,8 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true] + [5: v8, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7 + 5: v8), remote = false\n" +
                 "  |  cardinality: 1\n");
 
         // avoid push down CrossJoin RF across ExchangeNode
@@ -2597,11 +2603,5 @@ public class JoinTest extends PlanTestBase {
                 ") ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) ) as k from t1 ) B on A.v1 = B.k ) C group by v4;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "if(5: v5 = 0, '未知'");
-    }
-
-    @Test
-    public void test() throws Exception {
-        String plan = getFragmentPlan("select v1 from t0 inner join t1 where v1 = v2 and v2 = 5");
-        System.out.println(plan);
     }
 }

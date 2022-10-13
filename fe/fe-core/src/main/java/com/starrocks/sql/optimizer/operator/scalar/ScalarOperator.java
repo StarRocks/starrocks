@@ -122,4 +122,8 @@ public abstract class ScalarOperator implements Cloneable {
     public boolean isConstantRef() {
         return this instanceof ConstantOperator;
     }
+
+    public boolean isConstantNull() {
+        return this instanceof ConstantOperator && ((ConstantOperator) this).isNull();
+    }
 }

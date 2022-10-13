@@ -5,19 +5,28 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Pulls the predicate up to a position where it cannot go any further, and generates a LogicalFilter there.
+ * This filter will be pushed down again in the subsequent predicate pushdown rule.
+ * A series of equivalence derivations and constant simplifications can be applied during pushdown.
+ */
 public class PullUpPredicateRule implements TreeRewriteRule {
 
     @Override
@@ -95,13 +104,73 @@ public class PullUpPredicateRule implements TreeRewriteRule {
 
             LogicalProjectOperator projectOperator = (LogicalProjectOperator) optExpression.getOp();
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
-                if (entry.getValue() instanceof ConstantOperator) {
+                if (entry.getValue() instanceof ConstantOperator && !((ConstantOperator) entry.getValue()).isNull()) {
                     context.columnRefToConstant.put(entry.getKey(), entry.getValue());
                 }
             }
 
             child = handleLegacyPredicate(optExpression.getOutputColumns(), child, context);
             optExpression.setChild(0, child);
+
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalTopN(OptExpression optExpression, RewriteContext context) {
+            OptExpression child = optExpression.inputAt(0);
+            child.getOp().accept(this, child, context);
+
+            LogicalTopNOperator logicalTopNOperator = (LogicalTopNOperator) optExpression.getOp();
+            List<Ordering> orderingList = new ArrayList<>();
+            for (Ordering ordering : logicalTopNOperator.getOrderByElements()) {
+                if (context.columnRefToConstant.containsKey(ordering.getColumnRef())) {
+                    orderingList.add(ordering);
+                }
+            }
+
+            logicalTopNOperator.getOrderByElements().removeAll(orderingList);
+            convertPredicateToLogicalFilter(optExpression, context);
+            return null;
+        }
+
+        @Override
+        public Void visitLogicalJoin(OptExpression optExpression, RewriteContext context) {
+            LogicalJoinOperator logicalJoinOperator = (LogicalJoinOperator) optExpression.getOp();
+
+            OptExpression leftChild = optExpression.inputAt(0);
+            RewriteContext leftChildRewriteContext = new RewriteContext();
+            leftChild.getOp().accept(this, leftChild, leftChildRewriteContext);
+            if (logicalJoinOperator.getJoinType().isRightOuterJoin()) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
+                        leftChildRewriteContext.columnRefToConstant.entrySet()) {
+                    leftChild = OptExpression.create(
+                            new LogicalFilterOperator(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), leftChild);
+                    optExpression.setChild(0, leftChild);
+                }
+                leftChildRewriteContext.columnRefToConstant.clear();
+            } else {
+                OptExpression c = handleLegacyPredicate(optExpression.getOutputColumns(), leftChild, leftChildRewriteContext);
+                optExpression.setChild(0, c);
+            }
+
+            OptExpression rightChild = optExpression.inputAt(1);
+            RewriteContext rightChildRewriteContext = new RewriteContext();
+            rightChild.getOp().accept(this, rightChild, rightChildRewriteContext);
+            if (logicalJoinOperator.getJoinType().isLeftOuterJoin()) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry :
+                        rightChildRewriteContext.columnRefToConstant.entrySet()) {
+                    rightChild = OptExpression.create(
+                            new LogicalFilterOperator(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), rightChild);
+                    optExpression.setChild(1, rightChild);
+                }
+                rightChildRewriteContext.columnRefToConstant.clear();
+            } else {
+                OptExpression c = handleLegacyPredicate(optExpression.getOutputColumns(), rightChild, rightChildRewriteContext);
+                optExpression.setChild(1, c);
+            }
+
+            context.columnRefToConstant.putAll(leftChildRewriteContext.columnRefToConstant);
+            context.columnRefToConstant.putAll(rightChildRewriteContext.columnRefToConstant);
 
             return null;
         }
@@ -158,5 +227,6 @@ public class PullUpPredicateRule implements TreeRewriteRule {
                     new LogicalFilterOperator(BinaryPredicateOperator.eq(entry.getKey(), entry.getValue())), child);
             root.setChild(0, child);
         }
+        context.columnRefToConstant.clear();
     }
 }

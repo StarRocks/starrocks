@@ -2,7 +2,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.common.util.PrintableMap;
 
 import java.util.List;
@@ -58,10 +57,5 @@ public class CreateCatalogStmt extends DdlStmt {
         }
         sb.append("PROPERTIES(").append(new PrintableMap<>(properties, " = ", true, false)).append(")");
         return sb.toString();
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

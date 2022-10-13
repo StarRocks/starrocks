@@ -54,6 +54,7 @@ import com.starrocks.common.MarkedCountDownLatch;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
@@ -79,6 +80,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 /*
@@ -506,6 +508,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
          * all tasks are finished. check the integrity.
          * we just check whether all new replicas are healthy.
          */
+        EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+        Future<Boolean> future;
+        long start;
         db.writeLock();
         try {
             OlapTable tbl = (OlapTable) db.getTable(tableId);
@@ -552,15 +557,19 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // If schema changes include fields which defined in related mv, set those mv state to inactive.
             inactiveRelatedMv(modifiedColumns, tbl);
+
+            pruneMeta();
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            start = System.nanoTime();
+            future = editLog.logAlterJobNoWait(this);
         } finally {
             db.writeUnlock();
         }
 
-        pruneMeta();
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
+        editLog.waitInfinity(start, future);
 
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("schema change job finished: {}", jobId);
         this.span.end();
     }

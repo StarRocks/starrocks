@@ -47,16 +47,14 @@ public class SelectConstTest extends PlanTestBase {
                 "  3:UNION\n" +
                 "     constant exprs: \n" +
                 "         NULL");
-        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a", "  2:Project\n" +
-                "  |  <slot 6> : 2\n" +
-                "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
-                "  |  \n" +
-                "  1:SELECT\n" +
-                "  |  predicates: TRUE\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL");
+        assertPlanContains("select v1,v2,b from t0 inner join (select 1 as a,2 as b) t on v1 = a",
+                "1:Project\n" +
+                        "  |  <slot 6> : 2\n" +
+                        "  |  <slot 7> : CAST(1 AS BIGINT)\n" +
+                        "  |  \n" +
+                        "  0:UNION\n" +
+                        "     constant exprs: \n" +
+                        "         NULL");
     }
 
     @Test
@@ -131,12 +129,5 @@ public class SelectConstTest extends PlanTestBase {
         String sql = "SELECT * FROM t0 WHERE CAST(CAST(CASE WHEN TRUE THEN -1229625855 " +
                 "WHEN false THEN 1 ELSE 2 / 3 END AS STRING ) AS BOOLEAN );";
         assertPlanContains(sql, "PREDICATES: CAST('-1229625855' AS BOOLEAN)");
-    }
-
-    @Test
-    public void test() throws Exception {
-        String sql = "select * from test.t0 inner join (select * from test.t1 where v4 = 1) t on t.v4 = t0.v1";
-        String explainString = getFragmentPlan(sql);
-        System.out.println(explainString);
     }
 }

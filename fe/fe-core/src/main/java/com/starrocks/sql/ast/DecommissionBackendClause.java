@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.alter.DecommissionType;
-import com.starrocks.sql.ast.BackendClause;
 
 import java.util.List;
 

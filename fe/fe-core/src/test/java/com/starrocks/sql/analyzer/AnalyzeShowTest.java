@@ -2,14 +2,14 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowPartitionsStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;

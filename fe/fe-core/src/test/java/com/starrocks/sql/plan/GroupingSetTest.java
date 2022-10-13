@@ -121,14 +121,14 @@ public class GroupingSetTest extends PlanTestBase {
                 ") t\n" +
                 "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         String plan = getFragmentPlan(sql1);
-        Assert.assertTrue(plan.contains("  5:Project\n" +
+        assertContains(plan, "5:Project\n" +
                 "  |  <slot 5> : 5: sum\n" +
                 "  |  <slot 7> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
-                "  |  <slot 8> : if('foo' IS NULL, 'ALL', 'foo')"));
-        Assert.assertTrue(plan.contains("2:AGGREGATE (update serialize)\n" +
+                "  |  <slot 8> : if(3: k3 IS NULL, 'ALL', 3: k3)");
+        assertContains(plan, "2:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(4: k4)\n" +
-                "  |  group by: 2: k2, 6: GROUPING_ID"));
+                "  |  group by: 1: k1, 2: k2, 3: k3, 6: GROUPING_ID");
         Assert.assertTrue(plan.contains("1:REPEAT_NODE\n" +
                 "  |  repeat: repeat 3 lines [[1], [1, 2], [1, 3], [1, 2, 3]]\n" +
                 "  |  PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL'"));
@@ -153,7 +153,6 @@ public class GroupingSetTest extends PlanTestBase {
                         ") t\n" +
                         "WHERE IF(k2 IS NULL, 'ALL', k2) = 'ALL'";
         plan = getFragmentPlan(sql2);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("3:Project\n" +
                 "  |  <slot 5> : 5: sum\n" +
                 "  |  <slot 6> : if(2: k2 IS NULL, 'ALL', 2: k2)\n" +
@@ -162,7 +161,7 @@ public class GroupingSetTest extends PlanTestBase {
         Assert.assertTrue(plan.contains("0:OlapScanNode\n" +
                 "     TABLE: tbl6\n" +
                 "     PREAGGREGATION: OFF. Reason: The key column don't support aggregate function: SUM\n" +
-                "     PREDICATES: if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL', 1: k1 = '0', 3: k3 = 'foo', 4: k4 = 1"));
+                "     PREDICATES: 3: k3 = 'foo', 1: k1 = '0', if(2: k2 IS NULL, 'ALL', 2: k2) = 'ALL', 4: k4 = 1"));
     }
 
     @Test

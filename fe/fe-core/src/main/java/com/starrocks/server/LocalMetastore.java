@@ -35,8 +35,6 @@ import com.staros.proto.ShardStorageInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
@@ -175,9 +173,11 @@ import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.SingleItemListPartitionDesc;
 import com.starrocks.sql.ast.SingleRangePartitionDesc;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.Utils;
@@ -2093,6 +2093,13 @@ public class LocalMetastore implements ConnectorMetadata {
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
+        // write quorum
+        try {
+            olapTable.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
             tabletType = PropertyAnalyzer.analyzeTabletType(properties);
@@ -3844,12 +3851,31 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logModifyInMemory(info);
     }
 
+    // The caller need to hold the db write lock
+    public void modifyTableWriteQuorum(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildWriteQuorum();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        editLog.logModifyWriteQuorum(info);
+    }
+
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
             modifyTableInMemoryMeta(db, table, properties);
         } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             modifyTableEnablePersistentIndexMeta(db, table, properties);
+        } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
+            modifyTableWriteQuorum(db, table, properties);
         }
     }
 

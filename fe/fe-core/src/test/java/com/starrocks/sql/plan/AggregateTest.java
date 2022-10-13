@@ -18,7 +18,6 @@ import org.junit.rules.ExpectedException;
 public class AggregateTest extends PlanTestBase {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
-
     @Test
     public void testHaving() throws Exception {
         String sql = "select v2 from t0 group by v2 having v2 > 0";

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -22,13 +21,9 @@ public class ShowTriggersStmt extends ShowStmt {
                     .addColumn(new Column("collation_connection", ScalarType.createVarchar(80)))
                     .addColumn(new Column("Database Collation", ScalarType.createVarchar(80)))
                     .build();
+
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

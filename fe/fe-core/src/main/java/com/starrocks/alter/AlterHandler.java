@@ -22,7 +22,6 @@
 package com.starrocks.alter;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
@@ -36,6 +35,7 @@ import com.starrocks.persist.RemoveAlterJobV2OperationLog;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterClause;
+import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.task.AlterReplicaTask;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -31,12 +30,7 @@ public class ShowProcesslistStmt extends ShowStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowProcesslistStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitShowProcesslistStatement(this, context);
     }
 
     @Override

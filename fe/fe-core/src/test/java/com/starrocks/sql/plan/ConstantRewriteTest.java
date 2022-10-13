@@ -18,34 +18,30 @@ public class ConstantRewriteTest extends PlanTestBase {
 
         sql = "select v1,v2,sum(v3) from t0 where v1 = 1 group by v1,v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "2:Project\n" +
+        assertContains(plan, "3:Project\n" +
                 "  |  <slot 1> : 1\n" +
                 "  |  <slot 2> : 2: v2\n" +
                 "  |  <slot 4> : 4: sum\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 2: v2");
 
         sql = "select v1,v2,sum(v3) from t0 where v2 = 1 group by v1,v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "2:Project\n" +
+        assertContains(plan, " 3:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 1\n" +
-                "  |  <slot 4> : 4: sum\n" +
-                "  |  \n" +
-                "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(3: v3)\n" +
-                "  |  group by: 1: v1");
+                "  |  <slot 4> : 4: sum");
 
         sql = "select v1,v2,sum(v3) from t0 where v2 = 2 and v1 = 1 group by v1,v2";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "2:Project\n" +
+        assertContains(plan, "3:Project\n" +
                 "  |  <slot 1> : 1: v1\n" +
                 "  |  <slot 2> : 2\n" +
                 "  |  <slot 4> : 4: sum\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update finalize)\n" +
+                "  2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(3: v3)\n" +
                 "  |  group by: 1: v1");
     }
@@ -102,7 +98,13 @@ public class ConstantRewriteTest extends PlanTestBase {
         assertContains(plan, "0:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 1: v1 = 4");
+                "     partitions=0/1\n" +
+                "     rollup: t0\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=2.0\n" +
+                "     numNodes=0");
 
         //Assert v4 = 4 can push down to Join left child t0 where op is right outer
         sql = "select v1, v2 from (select v1, v2 from t0) a right outer join " +
@@ -110,20 +112,26 @@ public class ConstantRewriteTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 1: v1 = 4");
 
-        //Assert v4 = 4 can't push down to Join left child t0 where op is left outer
+        //Assert v1 = 1 push down to Join left child t0 where op is left outer
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a left outer join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 4: v4 = 1");
 
-        //Assert v4 = 4 can push down to Join left child t0 where op is right outer
+        //Assert v1 = 4 can't push down to Join left child t0 where op is right outer
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a right outer join " +
                 "(select v4, v5 from t1) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "1:OlapScanNode\n" +
+        assertContains(plan, "2:OlapScanNode\n" +
                 "     TABLE: t1\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 = 1");
+                "     partitions=0/1\n" +
+                "     rollup: t1\n" +
+                "     tabletRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     cardinality=1\n" +
+                "     avgRowSize=1.0\n" +
+                "     numNodes=0");
 
         //Assert v1 = 1 push down to right when op is left semi
         sql = "select v1, v2 from (select v1, v2 from t0 where v1 = 1) a left semi join " +

@@ -5,8 +5,6 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ShowSnapshotStmt;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.Repository;
@@ -15,6 +13,8 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowSnapshotStmt;
+import com.starrocks.sql.ast.ShowStmt;
 
 public class ShowSnapshotAnalyzer {
 
@@ -28,7 +28,7 @@ public class ShowSnapshotAnalyzer {
         }
 
         @Override
-        public Void visitShowSnapshotStmt(ShowSnapshotStmt showSnapshotStmt, ConnectContext context) {
+        public Void visitShowSnapshotStatement(ShowSnapshotStmt showSnapshotStmt, ConnectContext context) {
             String repoName = showSnapshotStmt.getRepoName();
 
             Repository repo =

@@ -41,7 +41,7 @@ public class ShowTabletStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowTabletStmt(ShowTabletStmt statement, ConnectContext context) {
+        public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             boolean isShowSingleTablet = statement.isShowSingleTablet();
             if (!isShowSingleTablet && Strings.isNullOrEmpty(dbName)) {

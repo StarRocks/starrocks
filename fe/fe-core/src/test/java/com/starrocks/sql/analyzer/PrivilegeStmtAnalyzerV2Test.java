@@ -1,16 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -20,6 +20,7 @@ import org.junit.Test;
 
 public class PrivilegeStmtAnalyzerV2Test {
     static ConnectContext ctx;
+
     @BeforeClass
     public static void setUp() throws Exception {
         UtFrameUtils.setUpForPersistTest();

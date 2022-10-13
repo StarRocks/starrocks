@@ -223,7 +223,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     default:
         CHECK(false) << "unsupported keys type " << tablet_schema.keys_type;
     }
-    schema->set_compress_kind(COMPRESS_LZ4);
 
     switch (compression_type) {
     case TCompressionType::LZ4_FRAME:

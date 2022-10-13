@@ -417,7 +417,6 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchema& src_table
     TabletSchemaPB partial_tablet_schema_pb;
     partial_tablet_schema_pb.set_id(src_tablet_schema.id());
     partial_tablet_schema_pb.set_next_column_unique_id(src_tablet_schema.next_column_unique_id());
-    partial_tablet_schema_pb.set_compress_kind(src_tablet_schema.compress_kind());
     partial_tablet_schema_pb.set_num_rows_per_row_block(src_tablet_schema.num_rows_per_row_block());
     partial_tablet_schema_pb.set_num_short_key_columns(src_tablet_schema.num_short_key_columns());
     partial_tablet_schema_pb.set_keys_type(src_tablet_schema.keys_type());
@@ -478,7 +477,6 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
     }
     _num_short_key_columns = schema.num_short_key_columns();
     _num_rows_per_row_block = schema.num_rows_per_row_block();
-    _compress_kind = static_cast<uint8_t>(schema.compress_kind());
     _next_column_unique_id = schema.next_column_unique_id();
     if (schema.has_bf_fpp()) {
         _has_bf_fpp = true;
@@ -499,7 +497,6 @@ void TabletSchema::to_schema_pb(TabletSchemaPB* tablet_schema_pb) const {
     }
     tablet_schema_pb->set_num_short_key_columns(_num_short_key_columns);
     tablet_schema_pb->set_num_rows_per_row_block(_num_rows_per_row_block);
-    tablet_schema_pb->set_compress_kind(static_cast<CompressKind>(_compress_kind));
     if (_has_bf_fpp) {
         tablet_schema_pb->set_bf_fpp(_bf_fpp);
     }
@@ -611,7 +608,6 @@ bool operator==(const TabletSchema& a, const TabletSchema& b) {
     if (a._num_key_columns != b._num_key_columns) return false;
     if (a._num_short_key_columns != b._num_short_key_columns) return false;
     if (a._num_rows_per_row_block != b._num_rows_per_row_block) return false;
-    if (a._compress_kind != b._compress_kind) return false;
     if (a._next_column_unique_id != b._next_column_unique_id) return false;
     if (a._has_bf_fpp != b._has_bf_fpp) return false;
     if (a._has_bf_fpp) {
@@ -647,8 +643,7 @@ std::string TabletSchema::debug_string() const {
     }
     ss << "],keys_type=" << _keys_type << ",num_columns=" << num_columns() << ",num_key_columns=" << _num_key_columns
        << ",num_short_key_columns=" << _num_short_key_columns << ",num_rows_per_row_block=" << _num_rows_per_row_block
-       << ",compress_kind=" << _compress_kind << ",next_column_unique_id=" << _next_column_unique_id
-       << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
+       << ",next_column_unique_id=" << _next_column_unique_id << ",has_bf_fpp=" << _has_bf_fpp << ",bf_fpp=" << _bf_fpp;
     return ss.str();
 }
 

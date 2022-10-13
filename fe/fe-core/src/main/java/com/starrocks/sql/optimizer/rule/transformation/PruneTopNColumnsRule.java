@@ -29,6 +29,10 @@ public class PruneTopNColumnsRule extends TransformationRule {
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
 
+        if (topNOperator.getOrderByElements().isEmpty()) {
+            return input.getInputs();
+        }
+
         return Collections.emptyList();
     }
 }

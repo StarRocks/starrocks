@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -69,6 +70,10 @@ public class PushDownPredicateProjectRule extends TransformationRule {
         // try rewrite new predicate
         // e.g. : select 1 as b, MIN(v1) from t0 having (b + 1) != b;
         newPredicate = scalarRewriter.rewrite(newPredicate, PROJECT_REWRITE_PREDICATE_RULE);
+
+        if (Utils.transTrue2Null(newPredicate) == null) {
+            return Lists.newArrayList(child);
+        }
 
         OptExpression newFilter = new OptExpression(new LogicalFilterOperator(newPredicate));
 

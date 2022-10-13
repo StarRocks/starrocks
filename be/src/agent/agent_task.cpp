@@ -674,6 +674,8 @@ void run_update_meta_info_task(std::shared_ptr<UpdateTabletMetaInfoAgentTaskRequ
             case TTabletMetaType::INMEMORY:
                 // This property is no longer supported.
                 break;
+            case TTabletMetaType::WRITE_QUORUM:
+                break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;

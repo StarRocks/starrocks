@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -50,6 +51,12 @@ public class PruneProjectColumnsRule extends TransformationRule {
 
         // Change the requiredOutputColumns in context
         requiredOutputColumns.union(requiredInputColumns);
+
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projectOperator.getColumnRefMap().entrySet()) {
+            if (entry.getValue() instanceof ConstantOperator) {
+                requiredOutputColumns.except(Lists.newArrayList(entry.getKey()));
+            }
+        }
 
         return Lists.newArrayList(OptExpression.create(new LogicalProjectOperator(newMap), input.getInputs()));
     }

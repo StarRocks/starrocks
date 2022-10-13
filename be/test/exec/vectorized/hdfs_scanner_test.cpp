@@ -132,7 +132,7 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     return tuple_desc;
@@ -372,6 +372,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
 
@@ -438,6 +441,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
@@ -466,6 +472,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
@@ -493,6 +502,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
+
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;

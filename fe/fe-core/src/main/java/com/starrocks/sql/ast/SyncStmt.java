@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.RedirectStatus;
 
 public class SyncStmt extends DdlStmt {
@@ -12,12 +11,7 @@ public class SyncStmt extends DdlStmt {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSyncStmt(this, context);
+        return visitor.visitSyncStatement(this, context);
     }
 }

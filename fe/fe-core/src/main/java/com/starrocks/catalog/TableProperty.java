@@ -27,12 +27,14 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
+import com.starrocks.thrift.TWriteQuorumType;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -73,6 +75,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default compression type of this table.
     private TCompressionType compressionType = TCompressionType.LZ4_FRAME;
 
+    // the default write quorum
+    private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -110,6 +115,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX:
                 buildEnablePersistentIndex();
+                break;
+            case OperationType.OP_MODIFY_WRITE_QUORUM:
+                buildWriteQuorum();
                 break;
             default:
                 break;
@@ -151,6 +159,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildWriteQuorum() {
+        writeQuorum = WriteQuorum
+                .findTWriteQuorumByName(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
+                        WriteQuorum.MAJORITY));
+        return this;
+    }
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -183,6 +197,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public boolean enablePersistentIndex() {
         return enablePersistentIndex;
+    }
+
+    public TWriteQuorumType writeQuorum() {
+        return writeQuorum;
     }
 
     public TStorageFormat getStorageFormat() {
@@ -234,5 +252,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildStorageFormat();
         buildEnablePersistentIndex();
         buildCompressionType();
+        buildWriteQuorum();
     }
 }

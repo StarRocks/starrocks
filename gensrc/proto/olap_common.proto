@@ -25,14 +25,6 @@ syntax="proto2";
 package starrocks;
 option java_package = "com.starrocks.proto";
 
-// Please keep the defined value less than 256, because the enum will be casted to uint8_t in some
-// cases.
-enum CompressKind {
-    COMPRESS_NONE = 0;
-    COMPRESS_LZO = 1;
-    COMPRESS_LZ4 = 2;
-}
-
 // An internal version for primary key tablet
 // Each commit will increase this version
 //   FE's publish will increase major by 1

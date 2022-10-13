@@ -3,7 +3,6 @@
 package com.starrocks.server;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ResourceMgr;
@@ -13,6 +12,7 @@ import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.hive.HiveTableOperations;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateCatalogStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;

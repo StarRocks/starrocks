@@ -17,13 +17,13 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.proto.LockTabletMetadataRequest;
-import com.starrocks.lake.proto.LockTabletMetadataResponse;
-import com.starrocks.lake.proto.Snapshot;
-import com.starrocks.lake.proto.UnlockTabletMetadataRequest;
-import com.starrocks.lake.proto.UploadSnapshotsRequest;
-import com.starrocks.lake.proto.UploadSnapshotsResponse;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.LockTabletMetadataRequest;
+import com.starrocks.proto.LockTabletMetadataResponse;
+import com.starrocks.proto.Snapshot;
+import com.starrocks.proto.UnlockTabletMetadataRequest;
+import com.starrocks.proto.UploadSnapshotsRequest;
+import com.starrocks.proto.UploadSnapshotsResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,7 +54,8 @@ public class LakeBackupJob extends BackupJob {
 
     private Map<Long, Future<UploadSnapshotsResponse>> uploadResponses = Maps.newHashMap();
 
-    public LakeBackupJob() {}
+    public LakeBackupJob() {
+    }
 
     public LakeBackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
                          GlobalStateMgr globalStateMgr, long repoId) {

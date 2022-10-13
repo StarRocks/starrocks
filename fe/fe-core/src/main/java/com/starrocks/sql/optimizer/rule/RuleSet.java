@@ -99,7 +99,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateJoinRule
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRepeatRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateSortRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFunctionRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateToExternalTableScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
@@ -238,7 +237,6 @@ public class RuleSet {
                 // Commented out because of UTs in `ExternalTableTest.java`
                 // PushDownPredicateScanRule.MYSQL_SCAN,
                 // PushDownPredicateScanRule.JDBC_SCAN,
-                new PushDownPredicateSortRule(),
                 new PushDownPredicateAggRule(),
                 new PushDownPredicateWindowRule(),
                 new PushDownPredicateJoinRule(),

@@ -400,7 +400,9 @@ select * from (select * from (select v1, row_number() over(partition by v1) as `
 PREDICATE 4: row_number() = 1
     ANALYTIC ({4: row_number()=row_number()} [1: v1] [] ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW)
         TOP-N (order by [[1: v1 ASC NULLS FIRST]])
-            SCAN (columns[1: v1] predicate[1: v1 = 1])
+            EXCHANGE SHUFFLE[1]
+                TOP-N (order by [[1: v1 ASC NULLS FIRST]])
+                    SCAN (columns[1: v1] predicate[1: v1 = 1])
 [end]
 
 [sql]

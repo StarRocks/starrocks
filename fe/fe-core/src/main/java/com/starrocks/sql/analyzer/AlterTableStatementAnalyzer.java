@@ -21,6 +21,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -134,6 +135,13 @@ public class AlterTableStatementAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                             "Property " + PropertyAnalyzer.PROPERTIES_STORAGE_FORMAT + " should be v2");
                 }
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                if (WriteQuorum.findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) == null) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_WRITE_QUORUM + " not valid");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (DynamicPartitionUtil.checkDynamicPartitionPropertiesExist(properties)) {
                 // do nothing, dynamic properties will be analyzed in SchemaChangeHandler.process
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {

@@ -3,8 +3,6 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.gson.GsonUtils;
@@ -14,6 +12,8 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import org.apache.logging.log4j.LogManager;
@@ -58,6 +58,7 @@ public class PrivilegeManager {
 
     private Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
     private final ReentrantReadWriteLock roleLock;
+
     public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
         if (provider == null) {
@@ -359,7 +360,7 @@ public class PrivilegeManager {
         try {
             provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
             roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
-            LOG.info("replayed update role {}{}",  roleId, privilegeCollection);
+            LOG.info("replayed update role {}{}", roleId, privilegeCollection);
         } finally {
             roleWriteUnlock();
         }
@@ -392,7 +393,7 @@ public class PrivilegeManager {
             // Actually privilege collection is useless here, but we still record it for further usage
             provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
             roleIdToPrivilegeCollection.remove(roleId);
-            LOG.info("replayed dropped role {}",  roleId);
+            LOG.info("replayed dropped role {}", roleId);
         } finally {
             roleWriteUnlock();
         }
@@ -429,7 +430,7 @@ public class PrivilegeManager {
             Map.Entry<UserIdentity, UserPrivilegeCollection> entry = mapIter.next();
             UserIdentity user = entry.getKey();
             UserPrivilegeCollection collection = entry.getValue();
-            if (! globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
+            if (!globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
                 String collectionStr = GsonUtils.GSON.toJson(collection);
                 LOG.info("find invalid user {}, will remove privilegeCollection now {}",
                         entry, collectionStr);

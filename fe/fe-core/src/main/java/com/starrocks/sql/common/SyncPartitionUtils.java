@@ -57,7 +57,7 @@ public class SyncPartitionUtils {
     }
 
     public static boolean hasPartitionChange(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                      Map<String, Range<PartitionKey>> mvRangeMap) {
+                                             Map<String, Range<PartitionKey>> mvRangeMap) {
         Map<String, Range<PartitionKey>> adds = diffRange(baseRangeMap, mvRangeMap);
         if (adds != null && !adds.isEmpty()) {
             return true;
@@ -80,7 +80,7 @@ public class SyncPartitionUtils {
     }
 
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
-                                                              String granularity, PrimitiveType partitionType) {
+                                                                    String granularity, PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
         for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
             PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), granularity);
@@ -133,7 +133,7 @@ public class SyncPartitionUtils {
     }
 
     public static Map<String, Set<String>> generatePartitionRefMap(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                             Map<String, Range<PartitionKey>> dstRangeMap) {
+                                                                   Map<String, Range<PartitionKey>> dstRangeMap) {
         Map<String, Set<String>> result = Maps.newHashMap();
         for (Map.Entry<String, Range<PartitionKey>> srcEntry : srcRangeMap.entrySet()) {
             Iterator<Map.Entry<String, Range<PartitionKey>>> dstIter = dstRangeMap.entrySet().iterator();
@@ -166,8 +166,8 @@ public class SyncPartitionUtils {
 
     private static void gatherPotentialRefreshPartitionNames(Set<String> needRefreshMvPartitionNames,
                                                              Set<String> baseChangedPartitionNames,
-                                                            Map<String, Set<String>> baseToMvNameRef,
-                                                            Map<String, Set<String>> mvToBaseNameRef) {
+                                                             Map<String, Set<String>> baseToMvNameRef,
+                                                             Map<String, Set<String>> mvToBaseNameRef) {
         int curNameCount = needRefreshMvPartitionNames.size();
         Set<String> newBaseChangedPartitionNames = Sets.newHashSet();
         Set<String> newNeedRefreshMvPartitionNames = Sets.newHashSet();
@@ -298,7 +298,7 @@ public class SyncPartitionUtils {
     }
 
     public static Map<String, Range<PartitionKey>> diffRange(Map<String, Range<PartitionKey>> srcRangeMap,
-                                                      Map<String, Range<PartitionKey>> dstRangeMap) {
+                                                             Map<String, Range<PartitionKey>> dstRangeMap) {
 
         Map<String, Range<PartitionKey>> result = Maps.newHashMap();
 

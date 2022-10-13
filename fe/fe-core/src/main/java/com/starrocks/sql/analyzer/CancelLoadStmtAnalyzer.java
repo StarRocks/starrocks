@@ -31,7 +31,7 @@ public class CancelLoadStmtAnalyzer {
         }
 
         @Override
-        public Void visitCancelLoadStmt(CancelLoadStmt statement, ConnectContext context) {
+        public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
             analyzeDbName(statement, context);
             analyzeWhereClause(statement, context);
             return null;

@@ -2,14 +2,13 @@
 
 package com.starrocks.analysis;
 
-import java.util.Arrays;
-
+import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.TruncatePartitionClause;
 import org.junit.Assert;
 import org.junit.Test;
 
-import com.starrocks.alter.AlterOpType;
+import java.util.Arrays;
 
 public class TruncatePartitionClauseTest {
     
@@ -22,7 +21,5 @@ public class TruncatePartitionClauseTest {
         PartitionNames partitionNames = new PartitionNames(true, Arrays.asList("p1"));
         TruncatePartitionClause clause2 = new TruncatePartitionClause(partitionNames);
         Assert.assertEquals("p1", clause2.getPartitionNames().getPartitionNames().get(0));
-
-        Assert.assertTrue(clause2.isSupportNewPlanner());
     }
 }

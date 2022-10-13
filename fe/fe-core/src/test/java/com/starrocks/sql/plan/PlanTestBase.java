@@ -70,6 +70,7 @@ public class PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setEnableReplicationJoin(false);
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
 
         starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
                 "  `v1` bigint NULL COMMENT \"\",\n" +
@@ -1311,7 +1312,7 @@ public class PlanTestBase {
             if (!comment.trim().isEmpty()) {
                 writer.append(comment).append("\n");
             }
-            if (nthPlan == 1) {
+            if (nthPlan <= 1) {
                 writer.append("[sql]\n");
                 writer.append(sql.trim());
             }
@@ -1367,6 +1368,24 @@ public class PlanTestBase {
 
         for (String expected : explain) {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertVerbosePlanContains(String sql, String... explain) throws Exception {
+        String explainString = getVerboseExplain(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertVerbosePlanNotContains(String sql, String... explain) throws Exception {
+        String explainString = getVerboseExplain(sql);
+
+        for (String expected : explain) {
+            Assert.assertFalse("expected is: " + expected + " but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
         }
     }

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -43,11 +42,6 @@ public class DropFunctionStmt extends DdlStmt {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropFunctionStmt(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+        return visitor.visitDropFunctionStatement(this, context);
     }
 }

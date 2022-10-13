@@ -2,13 +2,13 @@
 
 package com.starrocks.persist;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 
 public class ImpersonatePrivInfoTest {
     private static final Logger LOG = LogManager.getLogger(ImpersonatePrivInfoTest.class);
+
     @Test
     public void testSerialized() throws Exception {
         UserIdentity harry = new UserIdentity("Harry", "%");

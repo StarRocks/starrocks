@@ -3,6 +3,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -22,13 +24,13 @@ public class StopRoutineLoadStmtTest {
 
     @Test
     public void testNormal() throws Exception {
-        ctx = UtFrameUtils.createDefaultCtx();
+        ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
-        StopRoutineLoadStmt stmt = new StopRoutineLoadStmt(new LabelName("testDb","label"));
+        StopRoutineLoadStmt stmt = new StopRoutineLoadStmt(new LabelName("testDb", "label"));
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("STOP ROUTINE LOAD FOR testDb.label", stmt.toSql());
+        Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
     }
 
@@ -41,5 +43,4 @@ public class StopRoutineLoadStmtTest {
         Assert.assertEquals("db_test", stmt.getDbFullName());
         Assert.assertEquals("rl_test", stmt.getName());
     }
-
 }

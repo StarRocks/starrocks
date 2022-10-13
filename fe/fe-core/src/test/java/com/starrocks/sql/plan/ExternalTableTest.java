@@ -85,7 +85,6 @@ public class ExternalTableTest extends PlanTestBase {
         sql =
                 "select * from ods_order where (order_dt = '2025-08-07' and length(order_no) > 10) and org_order_no = 'p';";
         plan = getFragmentPlan(sql);
-        System.out.println(plan);
         Assert.assertTrue(plan.contains("  1:SELECT\n" +
                 "  |  predicates: length(order_no) > 10\n" +
                 "  |  \n" +
@@ -101,18 +100,27 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select order_dt,order_no,sum(pay_st) from ods_order where order_dt = '2025-08-07' group by " +
                 "order_dt,order_no order by order_no limit 10;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("2:TOP-N\n" +
+        assertContains(plan, "4:TOP-N\n" +
                 "  |  order by: <slot 2> 2: order_no ASC\n" +
                 "  |  offset: 0\n" +
                 "  |  limit: 10\n" +
                 "  |  \n" +
-                "  1:AGGREGATE (update finalize)\n" +
-                "  |  output: sum(pay_st)\n" +
-                "  |  group by: order_dt, order_no\n" +
+                "  3:Project\n" +
+                "  |  <slot 1> : '2025-08-07'\n" +
+                "  |  <slot 2> : 2: order_no\n" +
+                "  |  <slot 8> : 8: sum\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(7: pay_st)\n" +
+                "  |  group by: 2: order_no\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : order_no\n" +
+                "  |  <slot 7> : pay_st\n" +
                 "  |  \n" +
                 "  0:SCAN MYSQL\n" +
                 "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+                "     Query: SELECT `order_dt`, `order_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')");
     }
 
     @Test
@@ -120,16 +128,19 @@ public class ExternalTableTest extends PlanTestBase {
         String sql = "select order_dt,order_no,sum(pay_st) from ods_order join test_all_type on order_no = t1a where " +
                 "order_dt = '2025-08-07' group by order_dt,order_no order by order_no limit 10;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("3:HASH JOIN\n" +
+        assertContains(plan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: order_no = 8: t1a\n" +
+                "  |  equal join conjunct: 2: order_no = 8: t1a\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
+                "  |----3:EXCHANGE\n" +
                 "  |    \n" +
+                "  1:Project\n" +
+                "  |  <slot 2> : order_no\n" +
+                "  |  <slot 7> : pay_st\n" +
+                "  |  \n" +
                 "  0:SCAN MYSQL\n" +
-                "     TABLE: `ods_order`\n" +
-                "     Query: SELECT `order_dt`, `order_no`, `pay_st` FROM `ods_order` WHERE (order_dt = '2025-08-07')"));
+                "     TABLE: `ods_order`");
     }
 
     @Test
@@ -231,7 +242,6 @@ public class ExternalTableTest extends PlanTestBase {
 
         queryStr = "select * from jointest t1, mysql_table t2, mysql_table t3 where t1.k1 = t3.k1";
         explainString = getFragmentPlan(queryStr);
-        System.out.println(explainString);
         Assert.assertFalse(explainString.contains("INNER JOIN (BUCKET_SHUFFLE))"));
         Assert.assertTrue(explainString.contains("4:SCAN MYSQL"));
     }

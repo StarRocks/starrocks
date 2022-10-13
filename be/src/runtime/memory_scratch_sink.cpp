@@ -59,6 +59,8 @@ Status MemoryScratchSink::prepare_exprs(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_output_expr, &_output_expr_ctxs));
     // Prepare the exprs to run.
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
+
+    RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
     // Prepare id_to_col_name map
     _prepare_id_to_col_name_map();
     // generate the arrow schema
