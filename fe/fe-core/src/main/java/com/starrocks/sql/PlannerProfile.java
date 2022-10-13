@@ -61,6 +61,7 @@ public class PlannerProfile {
     }
 
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
+    private final Map<String, Long> counters = new ConcurrentHashMap<>();
 
     public PlannerProfile() {
     }
@@ -85,6 +86,16 @@ public class PlannerProfile {
         ScopedTimer t = p.getOrCreateScopedTimer(name);
         t.start();
         return t;
+    }
+
+    public static void addCounter(String name, long value) {
+        // to avoid null.
+        PlannerProfile p = DEFAULT_INSTANCE;
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            p = ctx.getPlannerProfile();
+        }
+        p.counters.put(name, p.counters.getOrDefault(name, 0L) + value);
     }
 
     private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
@@ -119,17 +130,28 @@ public class PlannerProfile {
     }
 
     public void buildTimers(RuntimeProfile parent) {
-        List<String> keys = new ArrayList<>(timers.keySet());
-        Collections.sort(keys);
 
         Map<String, RuntimeProfile> profilers = new HashMap<>();
         profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(timers.keySet());
+        Collections.sort(keys);
         for (String key : keys) {
             String prefix = getKeyPrefix(key);
             String name = key.substring(prefix.length());
             RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
             ScopedTimer t = timers.get(key);
             p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), t.getTotalCount()));
+        }
+
+        keys = new ArrayList<>(counters.keySet());
+        Collections.sort(keys);
+        for (String key : keys) {
+            String prefix = getKeyPrefix(key);
+            String name = key.substring(prefix.length());
+            RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
+            Long value = counters.get(key);
+            p.addInfoString(name, String.format("%d", value));
         }
     }
 

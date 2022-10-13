@@ -20,6 +20,7 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.THdfsScanRange;
@@ -314,6 +315,8 @@ public class HDFSBackendSelector implements BackendSelector {
 
         // update statistic
         long addedScans = scanRangeLocations.scan_range.hdfs_scan_range.length;
+        String host = node.getHost().replace('.', '-') + "@" + node.getHeartbeatPort();
+        PlannerProfile.addCounter("HdfsBackendSelector." + host, addedScans);
         assignedScansPerComputeNode.put(node, assignedScansPerComputeNode.get(node) + addedScans);
 
         // add in assignment
