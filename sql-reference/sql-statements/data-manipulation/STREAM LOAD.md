@@ -20,7 +20,11 @@ http://fe_host:http_port/api/{db}/{table}/_stream_load
 
 用户可以通过 HTTP 的 Header 部分来传入导入参数。
 
-### 参数解析
+- 当前支持 HTTP **分块上传**和**非分块上传**两种方式。如果使用非分块上传方式，必须使用请求头字段 `Content-Length` 来标示待上传内容的长度，从而保证数据完整性。
+
+  > 说明：使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
+
+- 建议在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
 
 **label:**
 
