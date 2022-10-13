@@ -19,15 +19,15 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.lake.Utils;
-import com.starrocks.lake.proto.BinaryPredicatePB;
-import com.starrocks.lake.proto.DeleteDataRequest;
-import com.starrocks.lake.proto.DeleteDataResponse;
-import com.starrocks.lake.proto.DeletePredicatePB;
-import com.starrocks.lake.proto.InPredicatePB;
-import com.starrocks.lake.proto.IsNullPredicatePB;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.MultiDeleteInfo;
+import com.starrocks.proto.BinaryPredicatePB;
+import com.starrocks.proto.DeleteDataRequest;
+import com.starrocks.proto.DeleteDataResponse;
+import com.starrocks.proto.DeletePredicatePB;
+import com.starrocks.proto.InPredicatePB;
+import com.starrocks.proto.IsNullPredicatePB;
 import com.starrocks.qe.QueryStateException;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
@@ -121,6 +121,7 @@ public class LakeDeleteJob extends DeleteJob {
 
     private DeletePredicatePB createDeletePredicate(List<Predicate> conditions) {
         DeletePredicatePB deletePredicate = new DeletePredicatePB();
+        deletePredicate.version = -1; // Required but unused
         deletePredicate.binaryPredicates = Lists.newArrayList();
         deletePredicate.isNullPredicates = Lists.newArrayList();
         deletePredicate.inPredicates = Lists.newArrayList();
