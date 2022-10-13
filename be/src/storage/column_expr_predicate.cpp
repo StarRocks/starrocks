@@ -75,7 +75,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     // and others will be some cast exprs from one type to another
     // eg. [x as int >= 10]  [string->int] <- column(x as string)
     TRY_CATCH_ALLOC_SCOPE_START()
-    for (int i = _expr_ctxs.size() - 1; i >= 0; i--) {
+    for (size_t i = _expr_ctxs.size() - 1; i >= 0; i--) {
         ExprContext* ctx = _expr_ctxs[i];
         chunk.update_column(bits, _slot_desc->id());
         ASSIGN_OR_RETURN(bits, ctx->evaluate(&chunk));

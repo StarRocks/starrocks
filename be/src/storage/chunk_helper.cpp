@@ -166,9 +166,9 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
 
 template <typename T>
 struct ColumnDeleter {
-    ColumnDeleter(uint32_t chunk_size) : chunk_size(chunk_size) {}
+    ColumnDeleter(size_t chunk_size) : chunk_size(chunk_size) {}
     void operator()(vectorized::Column* ptr) const { vectorized::return_column<T>(down_cast<T*>(ptr), chunk_size); }
-    uint32_t chunk_size;
+    size_t chunk_size;
 };
 
 template <typename T, bool force>
@@ -263,7 +263,7 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::Schema
 
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const vectorized::Schema& schema,
                                        const starrocks::TabletSchema& tschema, vectorized::Chunk* chunk) {
-    size_t num_rows = chunk->num_rows();
+    uint32_t num_rows = static_cast<uint32_t>(chunk->num_rows());
     for (auto field_index : char_column_indexes) {
         vectorized::Column* column = chunk->get_column_by_index(field_index).get();
         vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
@@ -423,7 +423,7 @@ Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
     // Cut the input chunk into pieces if larger than desired
     for (size_t start = 0; start < input_rows;) {
         size_t remain_rows = input_rows - start;
-        int need_rows = 0;
+        size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
             TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
