@@ -546,7 +546,7 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
         } finally {
             db.writeUnlock();
         }
