@@ -1294,7 +1294,7 @@ public class PlanTestBase {
     }
 
     public void runFileUnitTest(String filename) {
-        runFileUnitTest(filename, true);
+        runFileUnitTest(filename, false);
     }
 
     public static String format(String result) {
@@ -1371,8 +1371,6 @@ public class PlanTestBase {
         }
     }
 
-<<<<<<< HEAD
-=======
     protected void assertVerbosePlanContains(String sql, String... explain) throws Exception {
         String explainString = getVerboseExplain(sql);
 
@@ -1400,7 +1398,6 @@ public class PlanTestBase {
         }
     }
 
->>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
     public Table getTable(String t) {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         return globalStateMgr.getDb("test").getTable(t);
