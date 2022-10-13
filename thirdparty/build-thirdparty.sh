@@ -357,7 +357,7 @@ build_snappy() {
     ${BUILD_SYSTEM} install
     if [ -f $TP_INSTALL_DIR/lib64/libsnappy.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib
-        cp $TP_INSTALL_DIR/lib64/libsnappy.a $/lib/libsnappy.a
+        cp $TP_INSTALL_DIR/lib64/libsnappy.a $TP_INSTALL_DIR/lib/libsnappy.a
     fi
 
     #build for libarrow.a
