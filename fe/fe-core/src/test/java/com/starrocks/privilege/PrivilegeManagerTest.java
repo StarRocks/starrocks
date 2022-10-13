@@ -9,12 +9,16 @@ import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.ShowExecutor;
+import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.ShowDbStmt;
+import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -23,13 +27,17 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class PrivilegeManagerTest {
     private ConnectContext ctx;
     private static final String DB_NAME = "db";
     private static final String TABLE_NAME_1 = "tbl1";
+    private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
 
     @Before
     public void setUp() throws Exception {
@@ -43,6 +51,7 @@ public class PrivilegeManagerTest {
         String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         starRocksAssert.withDatabase(DB_NAME);
+        starRocksAssert.withDatabase(DB_NAME + "1");
         for (int i = 0; i < 2; ++ i) {
             starRocksAssert.withTable("create table db.tbl" + i + createTblStmtStr);
         }
@@ -61,7 +70,6 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testTable() throws Exception {
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         ctx.setCurrentUserIdentity(testUser);
         ctx.setQualifiedUser(testUser.getQualifiedUser());
 
@@ -156,7 +164,6 @@ public class PrivilegeManagerTest {
     public void testPersist() throws Exception {
         GlobalStateMgr masterGlobalStateMgr = ctx.getGlobalStateMgr();
         PrivilegeManager masterManager = masterGlobalStateMgr.getPrivilegeManager();
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
 
         UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
         UtFrameUtils.PseudoImage emptyImage = new UtFrameUtils.PseudoImage();
@@ -306,7 +313,6 @@ public class PrivilegeManagerTest {
     @Test
     public void testRemoveInvalidateObject() throws Exception {
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         // 1. add validate entry: select on db.tbl1 to test_user
         String sql = "grant select on db.tbl1 to test_user";
@@ -332,17 +338,26 @@ public class PrivilegeManagerTest {
         // 6. add invalidate entry: create_table, drop on invalidatedb
         objects = Arrays.asList(new DbPEntryObject(-1));
         manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
-        // 7. add valid entry:
+        // 7. add valid entry: ALL databases
         objects = Arrays.asList(new DbPEntryObject(DbPEntryObject.ALL_DATABASE_ID));
         manager.grantToUser(grantDbStmt.getTypeId(), grantDbStmt.getActionList(), objects, false, testUser);
+        // 8. add valid user
+        sql = "grant impersonate on root to test_user";
+        GrantPrivilegeStmt grantUserStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        manager.grant(grantUserStmt);
+        // 8. add invalidate entry: bad user
+        objects = Arrays.asList(new UserPEntryObject(UserIdentity.createAnalyzedUserIdentWithIp("bad", "%")));
+        manager.grantToUser(grantUserStmt.getTypeId(), grantUserStmt.getActionList(), objects, false, testUser);
 
         // check before clean up:
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));
         int numUser = manager.userToPrivilegeCollection.size();
         int numTablePEntries = manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantTableStmt.getTypeId()).size();
-        int numDbPentires = manager.userToPrivilegeCollection.get(testUser).
+        int numDbPEntires = manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size();
+        int numUserPEntires = manager.userToPrivilegeCollection.get(testUser).
+                typeToPrivilegeEntryList.get(grantUserStmt.getTypeId()).size();
 
         manager.removeInvalidObject();
 
@@ -351,8 +366,10 @@ public class PrivilegeManagerTest {
         Assert.assertEquals(numUser - 1, manager.userToPrivilegeCollection.size());
         Assert.assertEquals(numTablePEntries - 2, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantTableStmt.getTypeId()).size());
-        Assert.assertEquals(numDbPentires - 1, manager.userToPrivilegeCollection.get(testUser).
+        Assert.assertEquals(numDbPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size());
+        Assert.assertEquals(numUserPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
+                typeToPrivilegeEntryList.get(grantUserStmt.getTypeId()).size());
     }
 
     @Test
@@ -411,7 +428,6 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testImpersonate() throws Exception {
-        UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
 
         ctx.setCurrentUserIdentity(testUser);
@@ -434,5 +450,82 @@ public class PrivilegeManagerTest {
         Assert.assertFalse(manager.canExecuteAs(ctx, UserIdentity.ROOT));
     }
 
+    @Test
+    public void testShowDbsTables() throws Exception {
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+
+        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user user_with_table_priv", ctx);
+        ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+        String sql = "grant select on db.tbl1 to user_with_table_priv";
+        GrantPrivilegeStmt grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        manager.grant(grantTableStmt);
+        UserIdentity userWithTablePriv = UserIdentity.createAnalyzedUserIdentWithIp("user_with_table_priv", "%");
+
+        createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create user user_with_db_priv", ctx);
+        ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
+        sql = "grant drop on db to user_with_db_priv";
+        grantTableStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        manager.grant(grantTableStmt);
+        UserIdentity userWithDbPriv = UserIdentity.createAnalyzedUserIdentWithIp("user_with_db_priv", "%");
+
+
+        // show tables in db:
+        // root can see two tables
+        ShowTableStmt showTableStmt = new ShowTableStmt("db", false, null);
+        ShowExecutor executor = new ShowExecutor(ctx, showTableStmt);
+        ShowResultSet resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("tbl0", resultSet.getString(0));
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("tbl1", resultSet.getString(0));
+        Assert.assertFalse(resultSet.next());
+
+        // user with table priv can only see tbl1
+        ctx.setCurrentUserIdentity(userWithTablePriv);
+        executor = new ShowExecutor(ctx, showTableStmt);
+        resultSet = executor.execute();
+        Assert.assertTrue(resultSet.next());
+        Assert.assertEquals("tbl1", resultSet.getString(0));
+        Assert.assertFalse(resultSet.next());
+
+        // show databases
+        ShowDbStmt showDbStmt = new ShowDbStmt(null);
+
+        // root can see db && db1
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        executor = new ShowExecutor(ctx, showDbStmt);
+        resultSet = executor.execute();
+        Set<String> set = new HashSet<>();
+        while (resultSet.next()) {
+            set.add(resultSet.getString(0));
+        }
+        Assert.assertTrue(set.contains("db"));
+        Assert.assertTrue(set.contains("db1"));
+
+        // user with table priv can only see db
+        ctx.setCurrentUserIdentity(userWithTablePriv);
+        executor = new ShowExecutor(ctx, showDbStmt);
+        resultSet = executor.execute();
+        set.clear();
+        while (resultSet.next()) {
+            set.add(resultSet.getString(0));
+        }
+        Assert.assertTrue(set.contains("db"));
+        Assert.assertFalse(set.contains("db1"));
+
+        // user with table priv can only see db
+        ctx.setCurrentUserIdentity(userWithDbPriv);
+        executor = new ShowExecutor(ctx, showDbStmt);
+        resultSet = executor.execute();
+        set.clear();
+        while (resultSet.next()) {
+            set.add(resultSet.getString(0));
+        }
+        Assert.assertTrue(set.contains("db"));
+        Assert.assertFalse(set.contains("db1"));
+    }
 
 }
