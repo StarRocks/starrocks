@@ -17,13 +17,13 @@
 
 package com.starrocks.http.action;
 
-import com.starrocks.analysis.SetType;
 import com.starrocks.common.Config;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.VariableMgr;
+import com.starrocks.sql.ast.SetType;
 import io.netty.handler.codec.http.HttpMethod;
 
 import java.util.HashMap;

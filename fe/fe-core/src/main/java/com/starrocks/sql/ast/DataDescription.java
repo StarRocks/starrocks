@@ -14,7 +14,6 @@ import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.ImportColumnDesc;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SlotRef;

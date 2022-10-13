@@ -55,7 +55,7 @@ public class JoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testCorssJoinWithPredicate() throws Exception {
+    public void testCrossJoinWithPredicate() throws Exception {
         String sql = "SELECT * from t0 join test_all_type where t0.v1 = 2;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "PREDICATES: 1: v1 = 2");
@@ -2513,6 +2513,8 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7), remote = false\n" +
                 "  |  cardinality: 1\n");
 
         sql = "select * from t0 join t2 on t0.v1 + t2.v7 < 2";
@@ -2528,6 +2530,8 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
                 "  |  join op: INNER JOIN\n" +
                 "  |  other join predicates: [1: v1, BIGINT, true] < [4: v7, BIGINT, true] + [5: v8, BIGINT, true]\n" +
+                "  |  build runtime filters:\n" +
+                "  |  - filter_id = 0, build_expr = (4: v7 + 5: v8), remote = false\n" +
                 "  |  cardinality: 1\n");
 
         // avoid push down CrossJoin RF across ExchangeNode

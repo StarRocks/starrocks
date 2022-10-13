@@ -27,19 +27,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BinaryPredicate;
-import com.starrocks.analysis.HelpStmt;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.ShowExportStmt;
-import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.ShowRestoreStmt;
-import com.starrocks.analysis.ShowRolesStmt;
-import com.starrocks.analysis.ShowRoutineLoadStmt;
-import com.starrocks.analysis.ShowRoutineLoadTaskStmt;
-import com.starrocks.analysis.ShowSmallFilesStmt;
-import com.starrocks.analysis.ShowSnapshotStmt;
-import com.starrocks.analysis.ShowSqlBlackListStmt;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.backup.AbstractJob;
@@ -103,6 +91,7 @@ import com.starrocks.sql.ast.AdminShowConfigStmt;
 import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.DescribeStmt;
+import com.starrocks.sql.ast.HelpStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowAlterStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -124,8 +113,10 @@ import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
 import com.starrocks.sql.ast.ShowEnginesStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
 import com.starrocks.sql.ast.ShowFunctionsStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowIndexStmt;
 import com.starrocks.sql.ast.ShowLoadStmt;
@@ -137,9 +128,18 @@ import com.starrocks.sql.ast.ShowProcesslistStmt;
 import com.starrocks.sql.ast.ShowRepositoriesStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
+import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.ShowRolesStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+import com.starrocks.sql.ast.ShowRoutineLoadTaskStmt;
+import com.starrocks.sql.ast.ShowSmallFilesStmt;
+import com.starrocks.sql.ast.ShowSnapshotStmt;
+import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
+import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
@@ -1195,7 +1195,7 @@ public class ShowExecutor {
                 if (table == null) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_TABLE_ERROR, showStmt.getTableName());
                 }
-                if (!table.isLocalTable()) {
+                if (!table.isNativeTable()) {
                     ErrorReport.reportAnalysisException(ErrorCode.ERR_NOT_OLAP_TABLE, showStmt.getTableName());
                 }
 

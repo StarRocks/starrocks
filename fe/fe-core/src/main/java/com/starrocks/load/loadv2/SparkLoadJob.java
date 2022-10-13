@@ -466,7 +466,7 @@ public class SparkLoadJob extends BulkLoadJob {
                         }
 
                         hasLoadPartitions = true;
-                        int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId);
+                        int quorumReplicaNum = table.getPartitionInfo().getQuorumNum(partitionId, table.writeQuorum());
 
                         List<MaterializedIndex> indexes = partition.getMaterializedIndices(IndexExtState.ALL);
                         for (MaterializedIndex index : indexes) {

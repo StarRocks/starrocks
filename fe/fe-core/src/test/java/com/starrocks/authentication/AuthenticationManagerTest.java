@@ -2,9 +2,6 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.mysql.MysqlPassword;
@@ -14,6 +11,9 @@ import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;

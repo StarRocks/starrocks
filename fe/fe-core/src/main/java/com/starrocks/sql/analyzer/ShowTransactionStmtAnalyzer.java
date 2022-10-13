@@ -5,12 +5,12 @@ import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.ShowTransactionStmt;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.ShowTransactionStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -19,22 +19,22 @@ public class ShowTransactionStmtAnalyzer {
     public static void analyze(ShowTransactionStmt statement, ConnectContext context) {
         new ShowTransactionStmtAnalyzerVisitor().visit(statement, context);
     }
-    
+
     static class ShowTransactionStmtAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
-        
+
         private static final Logger LOG = LogManager.getLogger(ShowTransactionStmtAnalyzerVisitor.class);
-        
+
         public void analyze(ShowTransactionStmt statement, ConnectContext context) {
             visit(statement, context);
         }
 
         @Override
-        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext context) {
+        public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext context) {
             analyzeDbName(statement, context);
             analyzeWhereClause(statement, context);
             return null;
         }
-        
+
         private void analyzeDbName(ShowTransactionStmt statement, ConnectContext context) {
             String dbName = statement.getDbName();
             if (Strings.isNullOrEmpty(dbName)) {
@@ -45,12 +45,12 @@ public class ShowTransactionStmtAnalyzer {
             }
             statement.setDbName(dbName);
         }
-        
+
         private void analyzeWhereClause(ShowTransactionStmt statement, ConnectContext context) {
             Expr whereClause = statement.getWhereClause();
             analyzeSubPredicate(statement, whereClause);
         }
-        
+
         private void analyzeSubPredicate(ShowTransactionStmt statement, Expr subExpr) {
             if (subExpr == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
@@ -75,7 +75,7 @@ public class ShowTransactionStmtAnalyzer {
                     valid = false;
                     break;
                 }
-                
+
                 // left child
                 if (!(subExpr.getChild(0) instanceof SlotRef)) {
                     valid = false;
@@ -101,7 +101,7 @@ public class ShowTransactionStmtAnalyzer {
 
                 valid = true;
             } while (false);
-            
+
             if (!valid) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
                         "Where clause should looks like: ID = $transaction_id");

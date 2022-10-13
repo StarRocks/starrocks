@@ -51,6 +51,11 @@ StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
 StoragePageCache::~StoragePageCache() {}
 
 void StoragePageCache::set_capacity(size_t capacity) {
+#ifndef BE_TEST
+    // set_capacity may free memory, so we switch to Pagecache's own memtracker.
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(_mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
     _cache->set_capacity(capacity);
 }
 

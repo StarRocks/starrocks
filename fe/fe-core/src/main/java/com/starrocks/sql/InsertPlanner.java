@@ -61,6 +61,7 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
+import com.starrocks.thrift.TWriteQuorumType;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -155,8 +156,11 @@ public class InsertPlanner {
 
             DataSink dataSink;
             if (insertStmt.getTargetTable() instanceof OlapTable) {
+                OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
+                TWriteQuorumType writeQuorum = olapTable.writeQuorum();
+
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                        insertStmt.getTargetPartitionIds(), canUsePipeline);
+                        insertStmt.getTargetPartitionIds(), canUsePipeline, writeQuorum);
                 // At present, we only support dop=1 for olap table sink.
                 // because tablet writing needs to know the number of senders in advance
                 // and guaranteed order of data writing

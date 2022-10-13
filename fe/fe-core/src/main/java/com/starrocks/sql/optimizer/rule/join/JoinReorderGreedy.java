@@ -113,7 +113,7 @@ public class JoinReorderGreedy extends JoinOrder {
             // For each atom, choose at least one group info to return.
             for (BitSet levelOneGroup : levelOneGroups) {
                 List<GroupInfo> candidateGroups = groupInfos.stream().filter(
-                        groupInfo -> groupInfo.atoms.intersects(levelOneGroup) && !bestGroupInfos.contains(groupInfo)).
+                                groupInfo -> groupInfo.atoms.intersects(levelOneGroup) && !bestGroupInfos.contains(groupInfo)).
                         collect(Collectors.toList());
                 // Get best group info from candidate group info
                 if (!candidateGroups.isEmpty()) {

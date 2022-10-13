@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableRef;
 
 import java.util.List;
@@ -55,10 +54,5 @@ public class AdminRepairTableStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitAdminRepairTableStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

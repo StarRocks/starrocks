@@ -2,11 +2,11 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Database;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

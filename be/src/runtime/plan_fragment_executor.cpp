@@ -92,7 +92,8 @@ Status PlanFragmentExecutor::prepare(const TExecPlanFragmentParams& request) {
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     DCHECK(request.__isset.desc_tbl);
-    RETURN_IF_ERROR(DescriptorTbl::create(obj_pool(), request.desc_tbl, &desc_tbl, _runtime_state->chunk_size()));
+    RETURN_IF_ERROR(DescriptorTbl::create(_runtime_state, obj_pool(), request.desc_tbl, &desc_tbl,
+                                          _runtime_state->chunk_size()));
     _runtime_state->set_desc_tbl(desc_tbl);
 
     // set up plan
@@ -304,22 +305,6 @@ void PlanFragmentExecutor::send_report(bool done) {
     // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
     // be waiting for a final report and profile.
     _report_status_cb(status, profile(), done || !status.ok());
-}
-
-Status PlanFragmentExecutor::get_next(vectorized::ChunkPtr* chunk) {
-    VLOG_FILE << "GetNext(): instance_id=" << _runtime_state->fragment_instance_id();
-    Status status = _get_next_internal_vectorized(chunk);
-    update_status(status);
-
-    if (_done) {
-        LOG(INFO) << "Finished executing fragment query_id=" << print_id(_query_id)
-                  << " instance_id=" << print_id(_runtime_state->fragment_instance_id());
-        // Query is done, return the thread token
-        release_thread_token();
-        send_report(true);
-    }
-
-    return status;
 }
 
 Status PlanFragmentExecutor::_get_next_internal_vectorized(vectorized::ChunkPtr* chunk) {

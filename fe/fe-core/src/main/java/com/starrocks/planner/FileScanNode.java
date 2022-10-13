@@ -30,7 +30,7 @@ import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.SlotDescriptor;

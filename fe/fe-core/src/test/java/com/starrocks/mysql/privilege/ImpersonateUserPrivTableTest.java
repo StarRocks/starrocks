@@ -2,12 +2,12 @@
 
 package com.starrocks.mysql.privilege;
 
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

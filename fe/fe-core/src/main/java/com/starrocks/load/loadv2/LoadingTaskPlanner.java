@@ -61,6 +61,7 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -100,10 +101,12 @@ public class LoadingTaskPlanner {
     private TupleDescriptor tupleDesc;
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
 
+    private Map<String, String> sessionVariables = null;
+
     public LoadingTaskPlanner(Long loadJobId, long txnId, long dbId, OlapTable table,
-                              BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-                              boolean strictMode, String timezone, long timeoutS,
-                              long startTime, boolean partialUpdate) {
+            BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+            boolean strictMode, String timezone, long timeoutS,
+            long startTime, boolean partialUpdate, Map<String, String> sessionVariables) {
         this.loadJobId = loadJobId;
         this.txnId = txnId;
         this.dbId = dbId;
@@ -116,6 +119,7 @@ public class LoadingTaskPlanner {
         this.partialUpdate = partialUpdate;
         this.parallelInstanceNum = Config.load_parallel_instance_num;
         this.startTime = startTime;
+        this.sessionVariables = sessionVariables;
     }
 
     public void plan(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded)
@@ -181,11 +185,14 @@ public class LoadingTaskPlanner {
         descTable.computeMemLayout();
 
         // 2. Olap table sink
+        TWriteQuorumType writeQuorum = table.writeQuorum();
+
         List<Long> partitionIds = getAllPartitionIds();
         // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, parallelInstanceNum <= 1);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, parallelInstanceNum <= 1, writeQuorum);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
+
 
         // 3. Plan fragment
         PlanFragment sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
@@ -246,9 +253,11 @@ public class LoadingTaskPlanner {
         scanFragment.setOutputPartition(dataPartition);
 
         // 4. Olap table sink
+        TWriteQuorumType writeQuorum = table.writeQuorum();
+
         List<Long> partitionIds = getAllPartitionIds();
         // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, parallelInstanceNum <= 1);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, parallelInstanceNum <= 1, writeQuorum);
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 

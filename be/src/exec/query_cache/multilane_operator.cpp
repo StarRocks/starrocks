@@ -171,7 +171,7 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const vectorized::Chun
         _passthrough_lane_id = lane_it->lane_id;
         auto& lane = _lanes[_passthrough_lane_id];
         if (lane.processor->is_finished()) {
-            RETURN_IF_ERROR(lane.processor->reset_state({}));
+            RETURN_IF_ERROR(lane.processor->reset_state(state, {}));
         }
         lane.last_chunk_received = false;
         lane.eof_sent = false;
@@ -262,7 +262,8 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
     }
 }
 
-Status MultilaneOperator::reset_lane(LaneOwnerType lane_owner, std::vector<vectorized::ChunkPtr>&& chunks) {
+Status MultilaneOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner,
+                                     const std::vector<vectorized::ChunkPtr>& chunks) {
     auto lane_id = _lane_arbiter->must_acquire_lane(lane_owner);
     _owner_to_lanes.erase(lane_owner);
     _owner_to_lanes[lane_owner] = lane_id;
@@ -272,7 +273,7 @@ Status MultilaneOperator::reset_lane(LaneOwnerType lane_owner, std::vector<vecto
     lane.lane_owner = lane_owner;
     lane.last_chunk_received = false;
     lane.eof_sent = false;
-    return lane.processor->reset_state(std::move(chunks));
+    return lane.processor->reset_state(state, chunks);
 }
 
 MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, OperatorFactoryPtr factory, size_t num_lanes)

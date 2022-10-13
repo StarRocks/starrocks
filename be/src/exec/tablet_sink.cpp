@@ -134,6 +134,12 @@ Status NodeChannel::init(RuntimeState* state) {
         _add_batch_closures.emplace_back(closure);
     }
 
+    if (_parent->_write_quorum_type == TWriteQuorumType::ONE) {
+        _write_quorum_type = WriteQuorumTypePB::ONE;
+    } else if (_parent->_write_quorum_type == TWriteQuorumType::ALL) {
+        _write_quorum_type = WriteQuorumTypePB::ALL;
+    }
+
     // for get global_dict
     _runtime_state = state;
 
@@ -163,6 +169,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_lake_tablet(_parent->_is_lake_table);
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
+    request.set_write_quorum(_write_quorum_type);
     for (auto& tablet : _index_tablets_map[index_id]) {
         auto ptablet = request.add_tablets();
         ptablet->Swap(&tablet);
@@ -721,11 +728,18 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
     }
+    _write_quorum_type = _parent->_write_quorum_type;
     return Status::OK();
 }
 
 bool IndexChannel::has_intolerable_failure() {
-    return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
+    if (_write_quorum_type == TWriteQuorumType::ALL) {
+        return _failed_channels.size() > 0;
+    } else if (_write_quorum_type == TWriteQuorumType::ONE) {
+        return _failed_channels.size() >= _parent->_num_repicas;
+    } else {
+        return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
+    }
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
@@ -747,6 +761,9 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _keys_type = table_sink.keys_type;
+    if (table_sink.__isset.write_quorum_type) {
+        _write_quorum_type = table_sink.write_quorum_type;
+    }
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));

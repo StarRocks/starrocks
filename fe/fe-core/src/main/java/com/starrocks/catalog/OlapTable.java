@@ -69,6 +69,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -1631,6 +1632,23 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public TWriteQuorumType writeQuorum() {
+        if (tableProperty != null) {
+            return tableProperty.writeQuorum();
+        }
+        return TWriteQuorumType.MAJORITY;
+    }
+
+    public void setWriteQuorum(String writeQuorum) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
+                        writeQuorum);
+        tableProperty.buildWriteQuorum();
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {

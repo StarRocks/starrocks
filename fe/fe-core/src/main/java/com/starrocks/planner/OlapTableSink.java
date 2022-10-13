@@ -72,12 +72,14 @@ import com.starrocks.thrift.TOlapTableSchemaParam;
 import com.starrocks.thrift.TOlapTableSink;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.TransactionState;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -96,21 +98,25 @@ public class OlapTableSink extends DataSink {
     private TDataSink tDataSink;
 
     private boolean enablePipelineLoad;
+    private TWriteQuorumType writeQuorum;
 
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds) {
-        this(dstTable, tupleDescriptor, partitionIds, true);
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+            TWriteQuorumType writeQuorum) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum);
     }
 
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, boolean enablePipelineLoad) {
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, boolean enablePipelineLoad, TWriteQuorumType writeQuorum) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
         this.partitionIds = partitionIds;
         this.clusterId = dstTable.getClusterId();
         this.enablePipelineLoad = enablePipelineLoad;
+        this.writeQuorum = writeQuorum;
     }
 
-    public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS) throws AnalysisException {
+    public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
+            throws AnalysisException {
         TOlapTableSink tSink = new TOlapTableSink();
         tSink.setLoad_id(loadId);
         tSink.setTxn_id(txnId);
@@ -124,6 +130,7 @@ public class OlapTableSink extends DataSink {
         tSink.setLoad_channel_timeout_s(loadChannelTimeoutS);
         tSink.setIs_lake_table(dstTable.isLakeTable());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
+        tSink.setWrite_quorum_type(writeQuorum);
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);
@@ -325,9 +332,10 @@ public class OlapTableSink extends DataSink {
         TOlapTableLocationParam locationParam = new TOlapTableLocationParam();
         // BE id -> path hash
         Multimap<Long, Long> allBePathsMap = HashMultimap.create();
+        Map<Long, Long> bePrimaryMap = new HashMap<>();
         for (Long partitionId : partitionIds) {
             Partition partition = table.getPartition(partitionId);
-            int quorum = table.getPartitionInfo().getQuorumNum(partition.getId());
+            int quorum = table.getPartitionInfo().getQuorumNum(partition.getId(), table.writeQuorum());
             for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.ALL)) {
                 for (Tablet tablet : index.getTablets()) {
                     if (table.isLakeTable()) {
@@ -345,9 +353,22 @@ public class OlapTableSink extends DataSink {
                                             + tablet.getId() + ", backends: " +
                                             Joiner.on(",").join(localTablet.getBackends()));
                         }
-                        // replicas[0] will be the primary replica
+
                         List<Long> replicas = Lists.newArrayList(bePathsMap.keySet());
-                        Collections.shuffle(replicas);
+                        int lowUsageIndex = 0;
+                        for (int i = 0; i < replicas.size(); i++) {
+                            Long backendID = replicas.get(i);
+                            if (!bePrimaryMap.containsKey(backendID)) {
+                                bePrimaryMap.put(backendID, Long.valueOf(0));
+                            }
+                            if (bePrimaryMap.get(backendID) < bePrimaryMap.get(replicas.get(lowUsageIndex))) {
+                                lowUsageIndex = i;
+                            }
+                        }
+                        bePrimaryMap.put(replicas.get(lowUsageIndex), bePrimaryMap.get(replicas.get(lowUsageIndex)) + 1);
+                        // replicas[0] will be the primary replica
+                        Collections.swap(replicas, 0, lowUsageIndex);
+
                         locationParam
                                 .addToTablets(
                                         new TTabletLocation(tablet.getId(), replicas));

@@ -18,6 +18,7 @@ public class LambdaFunctionExpr extends Expr {
     public LambdaFunctionExpr(List<Expr> arguments) {
         this.children.addAll(arguments);
     }
+
     public LambdaFunctionExpr(LambdaFunctionExpr rhs) {
         super(rhs);
     }

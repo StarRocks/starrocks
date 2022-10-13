@@ -25,7 +25,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.KeysType;

@@ -4,7 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.OutFileClause;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.StatementBase;
 
 public class QueryStatement extends StatementBase {
     private final QueryRelation queryRelation;
@@ -39,10 +38,5 @@ public class QueryStatement extends StatementBase {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

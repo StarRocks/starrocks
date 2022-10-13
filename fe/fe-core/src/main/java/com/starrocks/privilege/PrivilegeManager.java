@@ -3,8 +3,6 @@
 package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.DropRoleStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.gson.GsonUtils;
@@ -14,6 +12,8 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
@@ -64,6 +64,7 @@ public class PrivilegeManager {
 
     protected Map<Long, RolePrivilegeCollection> roleIdToPrivilegeCollection;
     private final ReentrantReadWriteLock roleLock;
+
     public PrivilegeManager(GlobalStateMgr globalStateMgr, AuthorizationProvider provider) {
         this.globalStateMgr = globalStateMgr;
         if (provider == null) {
@@ -541,7 +542,7 @@ public class PrivilegeManager {
             Map.Entry<UserIdentity, UserPrivilegeCollection> entry = mapIter.next();
             UserIdentity user = entry.getKey();
             UserPrivilegeCollection collection = entry.getValue();
-            if (! globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
+            if (!globalStateMgr.getAuthenticationManager().doesUserExist(user)) {
                 String collectionStr = GsonUtils.GSON.toJson(collection);
                 LOG.info("find invalid user {}, will remove privilegeCollection now {}",
                         entry, collectionStr);

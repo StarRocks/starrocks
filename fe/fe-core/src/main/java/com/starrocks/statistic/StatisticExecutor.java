@@ -4,7 +4,6 @@ package com.starrocks.statistic;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
@@ -18,6 +17,7 @@ import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TResultBatch;

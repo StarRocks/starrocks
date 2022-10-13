@@ -3,8 +3,6 @@
 package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -16,6 +14,8 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -252,7 +252,7 @@ public class AuthenticationManager {
 
     /**
      * Use new image format by SRMetaBlockWriter/SRMetaBlockReader
-     *
+     * <p>
      * +------------------+
      * |     header       |
      * +------------------+

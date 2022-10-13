@@ -24,7 +24,6 @@ package com.starrocks.load.loadv2;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.LoadStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
@@ -36,6 +35,7 @@ import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.thrift.TUniqueId;
