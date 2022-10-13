@@ -44,6 +44,7 @@ import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlan;
 import com.starrocks.thrift.TPlanNode;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -639,10 +640,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected String debugString() {
         // not using Objects.toStrHelper because
-        StringBuilder output = new StringBuilder();
-        output.append("preds=" + Expr.debugString(conjuncts));
-        output.append(" limit=" + limit);
-        return output.toString();
+        String output = "preds=" + Expr.debugString(conjuncts) +
+                " limit=" + limit;
+        return output;
     }
 
     protected String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
@@ -711,10 +711,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         // RuntimeFilter can only be pushed into multicast fragment iff.
         // this runtime filter is applied to all consumers. It's quite hard to do
         // thorough analysis, so we disable it for safety.
-        if (fragment_ instanceof MultiCastPlanFragment) {
-            return false;
-        }
-        return true;
+        return !(fragment_ instanceof MultiCastPlanFragment);
     }
 
     public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {
@@ -758,9 +755,8 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         return candidates;
     }
 
-    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(
-            List<Expr> partitionByExprs) {
-        if (partitionByExprs.isEmpty()) {
+    public Optional<List<List<Expr>>> canPushDownRuntimeFilterCrossExchange(List<Expr> partitionByExprs) {
+        if (CollectionUtils.isEmpty(partitionByExprs)) {
             return Optional.of(Lists.newArrayList());
         }
 
@@ -791,7 +787,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
                     break;
                 }
             } else {
-                for (List<Expr> candidateOfPartitionByExprs: candidatePartitionByExprs) {
+                for (List<Expr> candidateOfPartitionByExprs : candidatePartitionByExprs) {
                     if (node.pushDownRuntimeFilters(description, probeExpr, candidateOfPartitionByExprs)) {
                         accept = true;
                         break;
@@ -825,15 +821,16 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         List<Expr> probeExprCandidates = optProbeExprCandidates.get();
         List<List<Expr>> partitionByExprsCandidates = optPartitionByExprsCandidates.get();
 
-        for (Expr candidateOfProbeExpr: probeExprCandidates) {
+        for (Expr candidateOfProbeExpr : probeExprCandidates) {
             if (partitionByExprsCandidates.isEmpty()) {
                 if (children.get(childIdx).pushDownRuntimeFilters(description, candidateOfProbeExpr,
                         Lists.newArrayList())) {
                     return true;
                 }
             } else {
-                for (List<Expr> candidateOfPartitionByExprs: partitionByExprsCandidates) {
-                    if (children.get(childIdx).pushDownRuntimeFilters(description, candidateOfProbeExpr, candidateOfPartitionByExprs)) {
+                for (List<Expr> candidateOfPartitionByExprs : partitionByExprsCandidates) {
+                    if (children.get(childIdx)
+                            .pushDownRuntimeFilters(description, candidateOfProbeExpr, candidateOfPartitionByExprs)) {
                         return true;
                     }
                 }
