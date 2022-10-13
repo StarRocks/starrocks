@@ -21,9 +21,7 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 3: v3 < 6: v3\n" +
                 "  |  \n" +
-                "  |----2:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode\n"));
+                "  |----2:EXCHANGE\n"));
     }
 
     @Test
@@ -80,9 +78,7 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 < 4: v1\n" +
                 "  |  \n" +
-                "  |----3:EXCHANGE\n" +
-                "  |    \n" +
-                "  1:EXCHANGE"));
+                "  |----3:EXCHANGE\n"));
 
         // full join
         planFragment = getFragmentPlan("select * from t0 a full join t0 b on a.v1 < b.v1");
@@ -96,4 +92,56 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "  1:EXCHANGE"));
     }
 
+<<<<<<< HEAD
+=======
+    @Test
+    public void testUnsupportedNLJoin() {
+        String sql = "select v1 from t0 where 1 IN ((SELECT v4 FROM t1, t2, t3 WHERE CASE WHEN true " +
+                "THEN (CAST(((((-1710265121)%(1583445171)))%(CAST(v1 AS INT ) )) AS STRING ) )  " +
+                "BETWEEN (v4) AND (v5)   " +
+                "WHEN CASE  WHEN  (v3) >= ( v1 )  THEN  (v9) = (v10)   " +
+                "WHEN false THEN NULL ELSE false END THEN true  WHEN false THEN false ELSE " +
+                "CASE WHEN (((((331435726)/(599089901)))%(((-1103769432)/(1943795037)))))  " +
+                "BETWEEN (((((468244514)%(2000495251)))/(560246333))) AND (((CAST(v8 AS INT ) )/(170534098))) " +
+                "THEN (NOT (true)) WHEN NULL THEN (DAYOFMONTH('1969-12-30')) IN (154771541, NULL, 91180822) END END));";
+
+        Assert.assertThrows(SemanticException.class, () -> getFragmentPlan(sql));
+    }
+
+    @Test
+    public void testRuntimeFilter() throws Exception {
+        String sql = "select * from t0 where t0.v1 > (select max(v1) from t0 )";
+        assertVerbosePlanContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 > b.v1";
+        assertVerbosePlanContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 < b.v1";
+        assertVerbosePlanContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 < 100";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 in (1,2,3)";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 != b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 < a.v1 + b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 + b.v1 < 5";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where 1 < a.v1 + b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 + 1 < b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+
+        sql = "select * from t0 a join t0 b where a.v1 + b.v1 < b.v1";
+        assertVerbosePlanNotContains(sql, "  |  build runtime filters:");
+    }
+>>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
 }

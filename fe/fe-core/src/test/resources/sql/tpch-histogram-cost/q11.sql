@@ -65,7 +65,13 @@ OutPut Exchange Id: 29
 |
 26:NESTLOOP JOIN
 |  join op: CROSS JOIN
+<<<<<<< HEAD
 |  other predicates: [21: sum, DOUBLE, true] > [43: expr, DOUBLE, true]
+=======
+|  other join predicates: [21: sum, DOUBLE, true] > [43: expr, DOUBLE, true]
+|  build runtime filters:
+|  - filter_id = 4, build_expr = (43: expr), remote = false
+>>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
 |  cardinality: 1600000
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 1600000.0] ESTIMATE
@@ -79,6 +85,8 @@ OutPut Exchange Id: 29
 |  aggregate: sum[([20: expr, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [1: PS_PARTKEY, INT, false]
 |  cardinality: 3200000
+|  probe runtime filters:
+|  - filter_id = 4, probe_expr = (21: sum)
 |  column statistics:
 |  * PS_PARTKEY-->[1.0, 2.0E7, 0.0, 8.0, 3200000.0] ESTIMATE
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 8.0, 99864.0] ESTIMATE

@@ -105,7 +105,7 @@ OutPut Exchange Id: 15
 |  join op: RIGHT ANTI JOIN (PARTITIONED)
 |  equal join conjunct: [22: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
 |  build runtime filters:
-|  - filter_id = 0, build_expr = (1: C_CUSTKEY), remote = true
+|  - filter_id = 1, build_expr = (1: C_CUSTKEY), remote = true
 |  output columns: 5, 6
 |  cardinality: 1500000
 |  column statistics:
@@ -140,7 +140,13 @@ OutPut Exchange Id: 11
 |
 9:NESTLOOP JOIN
 |  join op: CROSS JOIN
+<<<<<<< HEAD
 |  other predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
+=======
+|  other join predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
+|  build runtime filters:
+|  - filter_id = 0, build_expr = (19: avg), remote = false
+>>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
 |  cardinality: 3750000
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3750000.0] ESTIMATE
@@ -158,6 +164,8 @@ Predicates: substring(5: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', 
 partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=31.0
 cardinality: 7500000
+probe runtime filters:
+- filter_id = 0, probe_expr = (6: C_ACCTBAL)
 column statistics:
 * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 7500000.0] ESTIMATE
 * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
@@ -221,7 +229,7 @@ partitionsRatio=1/1, tabletsRatio=10/10
 actualRows=0, avgRowSize=8.0
 cardinality: 150000000
 probe runtime filters:
-- filter_id = 0, probe_expr = (22: O_CUSTKEY)
+- filter_id = 1, probe_expr = (22: O_CUSTKEY)
 column statistics:
 * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 [end]
