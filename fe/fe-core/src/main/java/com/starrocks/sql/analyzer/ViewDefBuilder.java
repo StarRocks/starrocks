@@ -33,6 +33,10 @@ public class ViewDefBuilder {
         return new ViewDefBuilderVisitor(false).visit(statement);
     }
 
+    public static String build(ParseNode expr) {
+        return new ViewDefBuilderVisitor(false).visit(expr);
+    }
+
     private static class ViewDefBuilderVisitor extends AST2SQL.SQLBuilder {
 
         private final boolean simple;
