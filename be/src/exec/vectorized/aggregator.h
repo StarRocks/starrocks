@@ -173,7 +173,6 @@ public:
     int64_t num_pass_through_rows() { return _num_pass_through_rows; }
     void set_aggr_phase(AggrPhase aggr_phase) { _aggr_phase = aggr_phase; }
     AggrPhase get_aggr_phase() { return _aggr_phase; }
-    Status reset_state(std::vector<vectorized::ChunkPtr>&& chunks);
 
     TStreamingPreaggregationMode::type streaming_preaggregation_mode() { return _streaming_preaggregation_mode; }
     const vectorized::AggHashMapVariant& hash_map_variant() { return _hash_map_variant; }
@@ -228,6 +227,14 @@ public:
     Status check_has_error();
 
     void set_aggr_mode(AggrMode aggr_mode) { _aggr_mode = aggr_mode; }
+    // reset_state is used to clear the internal state of the Aggregator, then it can process new tablet, in
+    // multi-version cache, we should refill the chunks (i.e.partial-hit result) from the stale cache back to
+    // the pre-cache agg, after that, the incremental rowsets are read out and merged with these partial state
+    // to produce the final result that will be populated into the cache.
+    // refill_chunk: partial-hit result of stale version.
+    // refill_op: pre-cache agg operator, Aggregator's holder.
+    Status reset_state(RuntimeState* state, const std::vector<vectorized::ChunkPtr>& refill_chunks,
+                       pipeline::Operator* refill_op);
 
 #ifdef NDEBUG
     static constexpr size_t two_level_memory_threshold = 33554432; // 32M, L3 Cache
@@ -330,6 +337,7 @@ protected:
     AggrPhase _aggr_phase = AggrPhase1;
     AggrMode _aggr_mode = AM_DEFAULT;
     bool _is_passthrough = false;
+    bool _is_pending_reset_state = false;
     std::vector<uint8_t> _streaming_selection;
 
     bool _has_udaf = false;
@@ -522,12 +530,20 @@ protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     bool _use_intermediate_as_input() {
-        return ((_aggr_mode == AM_BLOCKING_POST_CACHE) || (_aggr_mode == AM_STREAMING_POST_CACHE)) && !_is_passthrough;
+        if (is_pending_reset_state()) {
+            DCHECK(_aggr_mode == AM_BLOCKING_PRE_CACHE || _aggr_mode == AM_STREAMING_PRE_CACHE);
+            return true;
+        } else {
+            return ((_aggr_mode == AM_BLOCKING_POST_CACHE) || (_aggr_mode == AM_STREAMING_POST_CACHE)) &&
+                   !_is_passthrough;
+        }
     }
 
     bool _use_intermediate_as_output() {
         return _aggr_mode == AM_STREAMING_PRE_CACHE || _aggr_mode == AM_BLOCKING_PRE_CACHE || !_needs_finalize;
     }
+
+    Status _reset_state(RuntimeState* state);
 
     // initial const columns for i'th FunctionContext.
     Status _evaluate_const_columns(int i);
@@ -547,6 +563,10 @@ protected:
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
     bool is_passthrough() const { return _is_passthrough; }
+
+    void begin_pending_reset_state() { _is_pending_reset_state = true; }
+    void end_pending_reset_state() { _is_pending_reset_state = false; }
+    bool is_pending_reset_state() { return _is_pending_reset_state; }
 
     void _reset_exprs();
     Status _evaluate_exprs(vectorized::Chunk* chunk);

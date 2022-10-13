@@ -506,21 +506,24 @@ public class Alter {
                 }
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = alterClause.getProperties();
-                // currently, only in memory property and enable persistent index property could reach here
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
-                        properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX));
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
                 if (olapTable.isLakeTable()) {
-                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index");
+                    throw new DdlException("Lake table not support alter in_memory or enable_persistent_index or write_quorum");
                 }
 
                 if (properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName,
                             properties, TTabletMetaType.INMEMORY);
-                } else {
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
                             TTabletMetaType.ENABLE_PERSISTENT_INDEX);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.WRITE_QUORUM);
                 }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());

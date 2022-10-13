@@ -2093,6 +2093,13 @@ public class LocalMetastore implements ConnectorMetadata {
                         false);
         olapTable.setEnablePersistentIndex(enablePersistentIndex);
 
+        // write quorum
+        try {
+            olapTable.setWriteQuorum(PropertyAnalyzer.analyzeWriteQuorum(properties));
+        } catch (AnalysisException e) {
+            throw new DdlException(e.getMessage());
+        }
+
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
             tabletType = PropertyAnalyzer.analyzeTabletType(properties);
@@ -3844,12 +3851,31 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logModifyInMemory(info);
     }
 
+    // The caller need to hold the db write lock
+    public void modifyTableWriteQuorum(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildWriteQuorum();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        editLog.logModifyWriteQuorum(info);
+    }
+
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
             modifyTableInMemoryMeta(db, table, properties);
         } else if (metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
             modifyTableEnablePersistentIndexMeta(db, table, properties);
+        } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
+            modifyTableWriteQuorum(db, table, properties);
         }
     }
 

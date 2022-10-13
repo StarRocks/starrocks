@@ -38,7 +38,7 @@ public:
     bool need_input() const override;
     Status set_finished(starrocks::RuntimeState* state) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
-    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
 
 private:
     MapFunc _map_func;
@@ -65,11 +65,7 @@ public:
     Reducer(double init_value, ReduceFunc reduce_func, size_t output_num_rows);
     ~Reducer() = default;
     void close(starrocks::RuntimeState* state) override{};
-    Status reset_state() {
-        _sink_is_finished = false;
-        _source_is_finished = false;
-        return Status::OK();
-    }
+    Status reset_state(RuntimeState* state, const Chunks& chunks, pipeline::Operator* op);
 
     void set_result(double result) { _result = result; }
     double result() const { return _result; }
@@ -116,7 +112,7 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override {
         return Status::NotSupported("Not implement");
     }
-    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
 
 private:
@@ -143,7 +139,7 @@ public:
         return Status::NotSupported("Not implement");
     }
     StatusOr<vectorized::ChunkPtr> pull_chunk(starrocks::RuntimeState* state) override;
-    Status reset_state(std::vector<ChunkPtr>&& chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& chunks) override;
     Status set_finishing(starrocks::RuntimeState* state) override;
     Status set_finished(starrocks::RuntimeState* state) override;
 

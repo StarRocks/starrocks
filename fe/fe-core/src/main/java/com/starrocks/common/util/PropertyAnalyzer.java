@@ -88,6 +88,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -444,6 +446,22 @@ public class PropertyAnalyzer {
             return CompressionUtils.getCompressTypeByName(compressionType);
         } else {
             throw new AnalysisException("unknown compression type: " + compressionType);
+        }
+    }
+
+    // analyzeWriteQuorum will parse the write quorum from properties
+    public static String analyzeWriteQuorum(Map<String, String> properties) throws AnalysisException {
+        String writeQuorum;
+        if (properties == null || !properties.containsKey(PROPERTIES_WRITE_QUORUM)) {
+            return WriteQuorum.MAJORITY;
+        }
+        writeQuorum = properties.get(PROPERTIES_WRITE_QUORUM);
+        properties.remove(PROPERTIES_WRITE_QUORUM);
+
+        if (WriteQuorum.findTWriteQuorumByName(writeQuorum) != null) {
+            return writeQuorum;
+        } else {
+            throw new AnalysisException("unknown write quorum: " + writeQuorum);
         }
     }
 
