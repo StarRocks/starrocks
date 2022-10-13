@@ -255,6 +255,11 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     size_t degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
+    if (config::interpolate_local_passthrough) {
+        operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(
+                runtime_state(), operators_with_sink, degree_of_parallelism, true);
+    }
+
     auto should_cache = context->should_interpolate_cache_operator(operators_with_sink[0], id());
     auto operators_generator = [this, should_cache, &context](bool post_cache) {
         // shared by sink operator factory and source operator factory
