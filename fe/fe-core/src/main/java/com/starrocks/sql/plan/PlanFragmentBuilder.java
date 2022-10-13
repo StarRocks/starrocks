@@ -1121,29 +1121,6 @@ public class PlanFragmentBuilder {
             return true;
         }
 
-<<<<<<< HEAD
-=======
-        /**
-         * Remove ExchangeNode between AggNode and ScanNode for the single backend.
-         * <p>
-         * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
-         * which contains two steps:
-         * 1. Ignore the network cost for ExchangeNode when estimating cost model.
-         * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
-         * <p>
-         * Specifically, transfer
-         * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
-         * -      *inputFragment         sourceFragment
-         * to
-         * (AggNode->[ProjectNode->]ScanNode)
-         * -      *sourceFragment
-         * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
-         *
-         * @param inputFragment The input fragment to match the above pattern.
-         * @param context       The context of building fragment, which contains all the fragments.
-         * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
-         */
->>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
         private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
             if (ConnectContext.get() == null) {
                 return inputFragment;
@@ -1625,61 +1602,7 @@ public class PlanFragmentBuilder {
         public PlanFragment visitPhysicalNestLoopJoin(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
             PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
-<<<<<<< HEAD
             return visitPhysicalJoin(leftFragment, rightFragment, optExpr, context);
-=======
-
-            List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
-            List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
-            List<Expr> probePartitionByExprs = Lists.newArrayList();
-            DistributionSpec leftDistributionSpec =
-                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
-            DistributionSpec rightDistributionSpec =
-                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
-            if (leftDistributionSpec instanceof HashDistributionSpec &&
-                    rightDistributionSpec instanceof HashDistributionSpec) {
-                probePartitionByExprs =
-                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
-                                context);
-            }
-
-            NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
-                    leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
-                    null, node.getJoinType(), Lists.newArrayList(), joinOnConjuncts);
-
-            joinNode.setLimit(node.getLimit());
-            joinNode.computeStatistics(optExpr.getStatistics());
-            joinNode.addConjuncts(conjuncts);
-            joinNode.setProbePartitionByExprs(probePartitionByExprs);
-
-            // Connect parent and child fragment
-            rightFragment.getPlanRoot().setFragment(leftFragment);
-
-            // Currently, we always generate new fragment for PhysicalDistribution.
-            // So we need to remove exchange node only fragment for Join.
-            context.getFragments().remove(rightFragment);
-
-            // Move leftFragment to end, it depends on all of its children
-            context.getFragments().remove(leftFragment);
-            context.getFragments().add(leftFragment);
-
-            leftFragment.setPlanRoot(joinNode);
-            if (!rightFragment.getChildren().isEmpty()) {
-                // right table isn't value operator
-                leftFragment.addChild(rightFragment.getChild(0));
-            }
-
-            if (!(joinNode.getChild(1) instanceof ExchangeNode)) {
-                joinNode.setReplicated(true);
-            }
-
-            if (shouldBuildGlobalRuntimeFilter()) {
-                joinNode.buildRuntimeFilters(runtimeFilterIdIdGenerator);
-            }
-
-            leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-            return leftFragment;
->>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
         }
 
         @Override

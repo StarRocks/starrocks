@@ -140,13 +140,9 @@ OutPut Exchange Id: 11
 |
 9:NESTLOOP JOIN
 |  join op: CROSS JOIN
-<<<<<<< HEAD
-|  other predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
-=======
 |  other join predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
 |  build runtime filters:
 |  - filter_id = 0, build_expr = (19: avg), remote = false
->>>>>>> 8e11b64bc ([Enhancement] Build runtime filter for scalar NestLoopJoin (#11827))
 |  cardinality: 3750000
 |  column statistics:
 |  * C_CUSTKEY-->[1.0, 1.5E7, 0.0, 8.0, 3750000.0] ESTIMATE
