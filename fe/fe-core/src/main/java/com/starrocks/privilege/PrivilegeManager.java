@@ -300,8 +300,6 @@ public class PrivilegeManager {
             if (manager.checkSystemAction(collection, PrivilegeTypes.SystemActions.ADMIN)) {
                 return true;
             }
-            LOG.info("check admin fails: {} {}",
-                    context.getCurrentUserIdentity(), collection.typeToPrivilegeEntryList.get(manager.systemTypeId));
             // 2. check for any action in table
             PEntryObject tableObject = manager.provider.generateObject(
                     PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
