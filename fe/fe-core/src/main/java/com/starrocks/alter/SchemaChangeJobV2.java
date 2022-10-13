@@ -543,15 +543,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // all partitions are good
             onFinished(tbl);
+
+            pruneMeta();
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         } finally {
             db.writeUnlock();
         }
 
-        pruneMeta();
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         LOG.info("schema change job finished: {}", jobId);
     }
 
