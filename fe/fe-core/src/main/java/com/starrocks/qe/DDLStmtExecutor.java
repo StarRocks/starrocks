@@ -2,32 +2,8 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.analysis.AlterLoadStmt;
-import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.CancelExportStmt;
-import com.starrocks.analysis.CreateFileStmt;
-import com.starrocks.analysis.CreateRepositoryStmt;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropFileStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.FunctionName;
-import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.LoadStmt;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.RestoreStmt;
-import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.StopRoutineLoadStmt;
-import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -45,50 +21,74 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.RestoreStmt;
+import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.StatisticExecutor;
 import com.starrocks.statistic.StatsConstants;
@@ -171,7 +171,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateFunctionStmt(CreateFunctionStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateFunctionStatement(CreateFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 FunctionName name = stmt.getFunctionName();
                 Database db = context.getGlobalStateMgr().getDb(name.getDb());
@@ -184,7 +184,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitDropFunctionStmt(DropFunctionStmt stmt, ConnectContext context) {
+        public ShowResultSet visitDropFunctionStatement(DropFunctionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
 
                 FunctionName name = stmt.getFunctionName();
@@ -214,7 +214,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitDropTableStmt(DropTableStmt stmt, ConnectContext context) {
+        public ShowResultSet visitDropTableStatement(DropTableStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().dropTable(stmt);
             });
@@ -302,7 +302,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitLoadStmt(LoadStmt stmt, ConnectContext context) {
+        public ShowResultSet visitLoadStatement(LoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 EtlJobType jobType = stmt.getEtlJobType();
                 if (jobType == EtlJobType.UNKNOWN) {
@@ -319,7 +319,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCancelLoadStmt(CancelLoadStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCancelLoadStatement(CancelLoadStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLoadManager().cancelLoadJob(stmt);
             });
@@ -375,7 +375,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 if (stmt instanceof CreateUserStmt) {
                     if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
@@ -466,7 +466,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitSetUserPropertyStmt(SetUserPropertyStmt stmt, ConnectContext context) {
+        public ShowResultSet visitSetUserPropertyStatement(SetUserPropertyStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getAuth().updateUserProperty(stmt);
             });
@@ -474,7 +474,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterSystemStmt(AlterSystemStmt stmt, ConnectContext context) {
+        public ShowResultSet visitAlterSystemStatement(AlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterCluster(stmt);
             });
@@ -482,7 +482,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCancelAlterSystemStmt(CancelAlterSystemStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCancelAlterSystemStatement(CancelAlterSystemStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().cancelAlterCluster(stmt);
             });
@@ -490,7 +490,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt stmt, ConnectContext context) {
+        public ShowResultSet visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().alterDatabaseQuota(stmt);
             });
@@ -506,7 +506,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitRecoverDbStmt(RecoverDbStmt stmt, ConnectContext context) {
+        public ShowResultSet visitRecoverDbStatement(RecoverDbStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().recoverDatabase(stmt);
             });
@@ -522,7 +522,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitRecoverPartitionStmt(RecoverPartitionStmt stmt, ConnectContext context) {
+        public ShowResultSet visitRecoverPartitionStatement(RecoverPartitionStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().recoverPartition(stmt);
             });
@@ -538,7 +538,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitBackupStmt(BackupStmt stmt, ConnectContext context) {
+        public ShowResultSet visitBackupStatement(BackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().backup(stmt);
             });
@@ -546,7 +546,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitRestoreStmt(RestoreStmt stmt, ConnectContext context) {
+        public ShowResultSet visitRestoreStatement(RestoreStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().restore(stmt);
             });
@@ -554,7 +554,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCancelBackupStmt(CancelBackupStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCancelBackupStatement(CancelBackupStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().cancelBackup(stmt);
             });
@@ -562,7 +562,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitCreateRepositoryStmt(CreateRepositoryStmt stmt, ConnectContext context) {
+        public ShowResultSet visitCreateRepositoryStatement(CreateRepositoryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getBackupHandler().createRepository(stmt);
             });
@@ -570,7 +570,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitDropRepositoryStmt(DropRepositoryStmt stmt, ConnectContext context) {
+        public ShowResultSet visitDropRepositoryStatement(DropRepositoryStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getBackupHandler().dropRepository(stmt);
             });
@@ -578,7 +578,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitSyncStmt(SyncStmt stmt, ConnectContext context) {
+        public ShowResultSet visitSyncStatement(SyncStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
             });
             return null;
@@ -775,7 +775,7 @@ public class DDLStmtExecutor {
         }
 
         @Override
-        public ShowResultSet visitSubmitTaskStmt(SubmitTaskStmt stmt, ConnectContext context) {
+        public ShowResultSet visitSubmitTaskStatement(SubmitTaskStmt stmt, ConnectContext context) {
             try {
                 return context.getGlobalStateMgr().getTaskManager().handleSubmitTaskStmt(stmt);
             } catch (UserException e) {

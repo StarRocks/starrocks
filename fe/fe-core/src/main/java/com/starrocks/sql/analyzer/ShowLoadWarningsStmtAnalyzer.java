@@ -42,7 +42,7 @@ public class ShowLoadWarningsStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowLoadWarningsStmt(ShowLoadWarningsStmt statement, ConnectContext context) {
+        public Void visitShowLoadWarningsStatement(ShowLoadWarningsStmt statement, ConnectContext context) {
             String rawUrl = statement.getRawUrl();
             if (rawUrl != null) {
                 analyzeUrl(statement, context);

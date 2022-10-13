@@ -729,6 +729,7 @@ public class EditLog {
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
+                case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                     ModifyTablePropertyOperationLog modifyTablePropertyOperationLog =
                             (ModifyTablePropertyOperationLog) journal.getData();
@@ -955,12 +956,7 @@ public class EditLog {
     protected void logEdit(short op, Writable writable) {
         long start = System.nanoTime();
         Future<Boolean> task = submitLog(op, writable, -1);
-        boolean result = waitInfinity(task);
-        // for now if journal writer fails, it will exit directly, so this function should always return true.
-        assert (result == true);
-        if (MetricRepo.isInit) {
-            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - start) / 1000000);
-        }
+        waitInfinity(start, task);
     }
 
     /**
@@ -1006,22 +1002,30 @@ public class EditLog {
 
     /**
      * wait for JournalWriter commit all logs
-     * return true if JournalWriter wrote log successfully
-     * return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
-     * will simplely exit the whole process
      */
-    private boolean waitInfinity(Future<Boolean> task) {
+    public void waitInfinity(long startTime, Future<Boolean> task) {
+        boolean result;
         int cnt = 0;
         while (true) {
             try {
                 if (cnt != 0) {
                     Thread.sleep(1000);
                 }
-                return task.get();
+                // return true if JournalWriter wrote log successfully
+                // return false if JournalWriter wrote log failed, which WON'T HAPPEN for now because on such scenerio JournalWriter
+                // will simplely exit the whole process
+                result = task.get();
+                break;
             } catch (InterruptedException | ExecutionException e) {
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
+        }
+
+        // for now if journal writer fails, it will exit directly, so this property should always be true.
+        assert (result);
+        if (MetricRepo.isInit) {
+            MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTime) / 1000000);
         }
     }
 
@@ -1428,6 +1432,10 @@ public class EditLog {
         logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
     }
 
+    public Future<Boolean> logAlterJobNoWait(AlterJobV2 alterJob) {
+        return submitLog(OperationType.OP_ALTER_JOB_V2, alterJob, -1);
+    }
+
     public void logBatchAlterJob(BatchAlterJobPersistInfo batchAlterJobV2) {
         logEdit(OperationType.OP_BATCH_ADD_ROLLUP, batchAlterJobV2);
     }
@@ -1450,6 +1458,10 @@ public class EditLog {
 
     public void logModifyEnablePersistentIndex(ModifyTablePropertyOperationLog info) {
         logEdit(OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX, info);
+    }
+
+    public void logModifyWriteQuorum(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_MODIFY_WRITE_QUORUM, info);
     }
 
     public void logReplaceTempPartition(ReplacePartitionOperationLog info) {

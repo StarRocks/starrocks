@@ -49,6 +49,7 @@ public class ReplayFromDumpTest {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setJoinImplementationMode("auto");
         connectContext.getSessionVariable().setEnableLocalShuffleAgg(false);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert = new StarRocksAssert(connectContext);
         FeConstants.runningUnitTest = true;
     }
@@ -56,6 +57,7 @@ public class ReplayFromDumpTest {
     @Before
     public void before() {
         BackendCoreStat.reset();
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @AfterClass
@@ -141,14 +143,14 @@ public class ReplayFromDumpTest {
     }
 
     private Pair<QueryDumpInfo, String> getPlanFragment(String dumpJsonStr, SessionVariable sessionVariable,
-                                                        TExplainLevel level)
-            throws Exception {
+                                                        TExplainLevel level) throws Exception {
         QueryDumpInfo queryDumpInfo = getDumpInfoFromJson(dumpJsonStr);
         if (sessionVariable != null) {
             queryDumpInfo.setSessionVariable(sessionVariable);
         }
         queryDumpInfo.getSessionVariable().setOptimizerExecuteTimeout(30000);
         queryDumpInfo.getSessionVariable().setEnableLocalShuffleAgg(false);
+        queryDumpInfo.getSessionVariable().setCboPushDownAggregateMode(-1);
         return new Pair<>(queryDumpInfo,
                 UtFrameUtils.getNewPlanAndFragmentFromDump(connectContext, queryDumpInfo).second.
                         getExplainString(level));
@@ -219,7 +221,7 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
@@ -671,12 +673,11 @@ public class ReplayFromDumpTest {
     public void testParHiveTPCH08UsingCatalog() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_catalog"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("18:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  29:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [18: l_partkey, INT, true] = [1: p_partkey, INT, true]\n" +
+                "  |  equal join conjunct: [33: o_orderkey, INT, true] = [17: l_orderkey, INT, true]\n" +
                 "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (1: p_partkey), remote = false\n" +
-                "  |  output columns: 17, 19, 22, 23\n" +
-                "  |  cardinality: 2174338"));
+                "  |  - filter_id = 6, build_expr = (17: l_orderkey), remote = false\n" +
+                "  |  output columns: 22, 23, 37, 55\n"));
     }
 }

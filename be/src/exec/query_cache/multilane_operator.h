@@ -60,7 +60,7 @@ public:
 
     void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
 
-    Status reset_lane(LaneOwnerType lane_id, std::vector<vectorized::ChunkPtr>&& chunks);
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<vectorized::ChunkPtr>& chunks);
 
 private:
     StatusOr<vectorized::ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);

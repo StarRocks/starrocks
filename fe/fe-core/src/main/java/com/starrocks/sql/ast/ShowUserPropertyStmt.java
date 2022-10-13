@@ -3,8 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.SetUserPropertyVar;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.AnalysisException;
@@ -13,7 +11,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.UserPropertyProcNode;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.AstVisitor;
 
 import java.util.List;
 
@@ -76,12 +73,7 @@ public class ShowUserPropertyStmt extends ShowStmt {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitShowUserPropertyStmt(this, context);
+        return visitor.visitShowUserPropertyStatement(this, context);
     }
 }

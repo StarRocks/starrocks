@@ -81,8 +81,7 @@ public abstract class LogicalSetOperator extends LogicalOperator {
             return (B) this;
         }
 
-        public B setChildOutputColumns(
-                List<List<ColumnRefOperator>> childOutputColumns) {
+        public B setChildOutputColumns(List<List<ColumnRefOperator>> childOutputColumns) {
             this.childOutputColumns = childOutputColumns;
             return (B) this;
         }

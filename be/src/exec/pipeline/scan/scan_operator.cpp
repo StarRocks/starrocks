@@ -394,10 +394,16 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 return Status::OK();
             } else if (acquire_result == query_cache::AR_PROBE) {
                 auto hit = _cache_operator->probe_cache(lane_owner, version);
-                RETURN_IF_ERROR(_cache_operator->reset_lane(lane_owner));
-                if (hit) {
+                RETURN_IF_ERROR(_cache_operator->reset_lane(state, lane_owner));
+                if (!hit) {
+                    break;
+                }
+                auto cached_version = _cache_operator->cached_version(lane_owner);
+                DCHECK(cached_version <= version);
+                if (cached_version == version) {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
                 } else {
+                    morsel->set_from_version(cached_version + 1);
                     break;
                 }
             } else if (acquire_result == query_cache::AR_SKIP) {

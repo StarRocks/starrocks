@@ -3,8 +3,8 @@
 package com.starrocks.lake;
 
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.proto.DeleteTabletRequest;
-import com.starrocks.lake.proto.DeleteTabletResponse;
+import com.starrocks.proto.DeleteTabletRequest;
+import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;

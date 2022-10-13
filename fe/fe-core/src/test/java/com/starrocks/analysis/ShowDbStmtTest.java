@@ -123,20 +123,16 @@ public class ShowDbStmtTest {
     public void testNormal() throws UserException, AnalysisException {
         final Analyzer analyzer = AccessTestUtil.fetchBlockAnalyzer();
         ShowDbStmt stmt = new ShowDbStmt(null);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertNull(stmt.getPattern());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
 
         stmt = new ShowDbStmt("abc");
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals("abc", stmt.getPattern());
         Assert.assertEquals(1, stmt.getMetaData().getColumnCount());
         Assert.assertEquals("Database", stmt.getMetaData().getColumn(0).getName());
-
-        stmt = new ShowDbStmt(null, "hive_catalog_1");
-        stmt.analyze(analyzer);
-        Assert.assertEquals("hive_catalog_1", stmt.getCatalogName());
 
         stmt = new ShowDbStmt(null, null, null);
         ShowExecutor executor = new ShowExecutor(ctx, stmt);

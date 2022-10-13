@@ -3,14 +3,14 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -36,7 +36,7 @@ public class AlterRoutineLoadAnalyzer {
         Preconditions.checkArgument(context.getDatabase().equalsIgnoreCase(dbName)
                         || context.getDatabase().equalsIgnoreCase(""),
                 "session's dbname not equal lable's dbname", context.getDatabase(), dbName);
-        LabelName labelName = new LabelName(dbName,  statement.getLabel());
+        LabelName labelName = new LabelName(dbName, statement.getLabel());
         statement.setLabelName(labelName);
         try {
             FeNameFormat.checkCommonName(NAME_TYPE, labelName.getLabelName());

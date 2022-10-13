@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;

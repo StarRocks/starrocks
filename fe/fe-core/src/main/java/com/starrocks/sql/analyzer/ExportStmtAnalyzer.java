@@ -4,14 +4,10 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BrokerDesc;
-import com.starrocks.analysis.CancelExportStmt;
-import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.OrderByElement;
-import com.starrocks.analysis.ShowExportStmt;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.FsBroker;
@@ -26,7 +22,11 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CancelExportStmt;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 
 import java.util.ArrayList;
@@ -209,7 +209,7 @@ public class ExportStmtAnalyzer {
             return null;
         }
 
-        private UUID analyzeQueryID(Expr whereExpr,  SemanticException exception) {
+        private UUID analyzeQueryID(Expr whereExpr, SemanticException exception) {
             if (!(whereExpr.getChild(1) instanceof StringLiteral)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, exception.getMessage());
             }
@@ -242,7 +242,7 @@ public class ExportStmtAnalyzer {
                     ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, exception.getMessage());
                 }
             } else {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, exception.getMessage());;
+                ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, exception.getMessage());
             }
         }
     }

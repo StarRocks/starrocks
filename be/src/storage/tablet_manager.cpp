@@ -375,6 +375,7 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId t
         std::string errmsg = strings::Substitute("Failed to get tablet(tablet_id=$0),reason=$1", tablet_id, err);
         return Status::InternalError(errmsg);
     }
+    std::shared_lock rlock(tablet->get_header_lock());
     std::vector<RowsetSharedPtr> rowsets;
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
     return std::make_tuple(std::move(tablet), std::move(rowsets));

@@ -74,6 +74,7 @@ private:
 
     const std::string& _sql_join_conjuncts;
     const std::vector<ExprContext*>& _join_conjuncts;
+
     const std::vector<ExprContext*>& _conjunct_ctxs;
     const std::shared_ptr<NLJoinContext>& _cross_join_context;
 

@@ -23,12 +23,7 @@ package com.starrocks.backup;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.CreateRepositoryStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.catalog.BrokerMgr;
@@ -48,6 +43,13 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.BackupRestoreAnalyzer;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
+import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
@@ -328,8 +330,8 @@ public class BackupHandlerTest {
         RestoreStmt restoreStmt = new RestoreStmt(new LabelName(CatalogMocker.TEST_DB_NAME, "ss2"), "repo", tblRefs2,
                 properties);
         try {
-            restoreStmt.analyzeProperties();
-        } catch (AnalysisException e2) {
+            BackupRestoreAnalyzer.analyze(restoreStmt, new ConnectContext());
+        } catch (SemanticException e2) {
             e2.printStackTrace();
             Assert.fail();
         }

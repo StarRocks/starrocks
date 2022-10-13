@@ -784,7 +784,7 @@ public class DatabaseTransactionMgr {
                     }
 
                     List<MaterializedIndex> allIndices = txn.getPartitionLoadedTblIndexes(tableId, partition);
-                    int quorumNum = partitionInfo.getQuorumNum(partitionId);
+                    int quorumNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
                     int replicaNum = partitionInfo.getReplicationNum(partitionId);
                     for (MaterializedIndex index : allIndices) {
                         for (Tablet tablet : index.getTablets()) {
@@ -828,7 +828,13 @@ public class DatabaseTransactionMgr {
                                     && !unfinishedBackends.isEmpty()
                                     && currentTs
                                     - txn.getCommitTime() < Config.quorom_publish_wait_time_ms) {
-                                return false;
+
+                                // if all unfinished backends already down through heartbeat detect, we don't need to wait anymore
+                                for (Long backendID : unfinishedBackends) {
+                                    if (globalStateMgr.getCurrentSystemInfo().checkBackendAlive(backendID)) {
+                                        return false;
+                                    }
+                                }
                             }
                         }
                     }
@@ -918,7 +924,7 @@ public class DatabaseTransactionMgr {
                         continue;
                     }
 
-                    int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId);
+                    int quorumReplicaNum = partitionInfo.getQuorumNum(partitionId, table.writeQuorum());
 
                     List<MaterializedIndex> allIndices =
                             transactionState.getPartitionLoadedTblIndexes(tableId, partition);

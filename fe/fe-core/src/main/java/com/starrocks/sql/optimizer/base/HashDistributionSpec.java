@@ -160,6 +160,6 @@ public class HashDistributionSpec extends DistributionSpec {
 
     @Override
     public String toString() {
-        return hashDistributionDesc.getSourceType().toString() + hashDistributionDesc.toString();
+        return hashDistributionDesc.getSourceType().toString() + hashDistributionDesc;
     }
 }

@@ -33,13 +33,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -107,6 +101,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.consistency.ConsistencyChecker;
@@ -193,7 +188,10 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -203,6 +201,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -210,9 +209,11 @@ import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -233,6 +234,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
@@ -1113,7 +1115,7 @@ public class GlobalStateMgr {
             metastoreEventsProcessor.init();
             metastoreEventsProcessor.start();
         }
-        if (! usingNewPrivilege) {
+        if (!usingNewPrivilege) {
             // domain resolver
             domainResolver.start();
         }
@@ -2127,6 +2129,13 @@ public class GlobalStateMgr {
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
+            // write quorum
+            if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                        .append("\" = \"");
+                sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+            }
+
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
                     .append("\" = \"");
@@ -2140,27 +2149,32 @@ public class GlobalStateMgr {
 
             // storage media
             Map<String, String> properties = olapTable.getTableProperty().getProperties();
-            if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
-                sb.append("\n");
-            } else {
+
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)
                         .append("\" = \"");
                 sb.append(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)).append("\"");
-                sb.append("\n");
             }
 
             if (table.getType() == TableType.OLAP_EXTERNAL) {
                 ExternalOlapTable externalOlapTable = (ExternalOlapTable) table;
                 // properties
-                sb.append("\"host\" = \"").append(externalOlapTable.getSourceTableHost()).append("\",\n");
-                sb.append("\"port\" = \"").append(externalOlapTable.getSourceTablePort()).append("\",\n");
-                sb.append("\"user\" = \"").append(externalOlapTable.getSourceTableUser()).append("\",\n");
-                sb.append("\"password\" = \"").append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
-                        .append("\",\n");
-                sb.append("\"database\" = \"").append(externalOlapTable.getSourceTableDbName()).append("\",\n");
-                sb.append("\"table\" = \"").append(externalOlapTable.getSourceTableName()).append("\"\n");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("host\" = \"")
+                        .append(externalOlapTable.getSourceTableHost()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("port\" = \"")
+                        .append(externalOlapTable.getSourceTablePort()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("user\" = \"")
+                        .append(externalOlapTable.getSourceTableUser()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("password\" = \"")
+                        .append(hidePassword ? "" : externalOlapTable.getSourceTablePassword())
+                        .append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("database\" = \"")
+                        .append(externalOlapTable.getSourceTableDbName()).append("\"");
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append("table\" = \"")
+                        .append(externalOlapTable.getSourceTableName()).append("\"");
             }
-            sb.append(")");
+
+            sb.append("\n)");
         } else if (table.getType() == TableType.MYSQL) {
             MysqlTable mysqlTable = (MysqlTable) table;
             if (!Strings.isNullOrEmpty(table.getComment())) {

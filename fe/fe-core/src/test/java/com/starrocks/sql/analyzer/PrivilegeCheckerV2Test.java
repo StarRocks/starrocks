@@ -2,13 +2,13 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -101,6 +101,7 @@ public class PrivilegeCheckerV2Test {
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
     }
+
     @Test
     public void testTableSelectDeleteInsert() throws Exception {
         verifyGrantRevoke(

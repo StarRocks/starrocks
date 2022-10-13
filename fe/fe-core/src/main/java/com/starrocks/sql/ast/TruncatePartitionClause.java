@@ -7,6 +7,7 @@ import com.starrocks.alter.AlterOpType;
 public class TruncatePartitionClause extends AlterTableClause {
 
     private PartitionNames partitionNames;
+
     public TruncatePartitionClause(AlterOpType opType) {
         super(opType);
     }
@@ -25,8 +26,5 @@ public class TruncatePartitionClause extends AlterTableClause {
         return visitor.visitTruncatePartitionClause(this, context);
     }
 
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
+
 }

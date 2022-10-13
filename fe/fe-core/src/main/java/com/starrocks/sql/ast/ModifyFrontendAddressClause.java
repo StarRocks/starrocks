@@ -3,14 +3,12 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.ha.FrontendNodeType;
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.FrontendClause;
 
 public class ModifyFrontendAddressClause extends FrontendClause {
 
     protected String srcHost;
     protected String destHost;
-    
+
     public ModifyFrontendAddressClause(String hostPort, FrontendNodeType role) {
         super(hostPort, role);
     }
@@ -20,7 +18,7 @@ public class ModifyFrontendAddressClause extends FrontendClause {
         this.srcHost = srcHost;
         this.destHost = destHost;
     }
-    
+
     public String getSrcHost() {
         return srcHost;
     }

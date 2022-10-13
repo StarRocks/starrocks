@@ -1,7 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.FunctionSearchDesc;
@@ -15,6 +14,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -36,7 +36,7 @@ public class DropStmtAnalyzer {
         }
 
         @Override
-        public Void visitDropTableStmt(DropTableStmt statement, ConnectContext context) {
+        public Void visitDropTableStatement(DropTableStmt statement, ConnectContext context) {
             MetaUtils.normalizationTableName(context, statement.getTableNameObject());
             String dbName = statement.getDbName();
             // check database
@@ -90,7 +90,7 @@ public class DropStmtAnalyzer {
         }
 
         @Override
-        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             try {
                 // analyze function name
                 FunctionName functionName = statement.getFunctionName();
