@@ -67,6 +67,11 @@ public class ColocateTableBalancer extends LeaderDaemon {
 
     private static ColocateTableBalancer INSTANCE = null;
 
+    /**
+     * Only for unit test purpose.
+     */
+    public static boolean disableRepairPrecedence = false;
+
     public static ColocateTableBalancer getInstance() {
         if (INSTANCE == null) {
             INSTANCE = new ColocateTableBalancer(CHECK_INTERVAL_MS);
@@ -216,11 +221,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 continue;
             }
 
+            Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
             // Won't make new relocation decision if there is still colocate relocation tasks in schedule.
             // We want the previous relocation decision is handled completely before new decision is made, so
             // this won't trigger concurrent relocation decision and may mess up the scheduling.
             Long inScheduleTabletNum = group2InScheduleTabletNum.get(groupId);
-            if (inScheduleTabletNum != null && inScheduleTabletNum >= 1L) {
+            if (inScheduleTabletNum != null && inScheduleTabletNum >= 1L && unavailableBeIdsInGroup.isEmpty()) {
                 LOG.info("colocate group {} still has {} tablets in schedule, won't make new relocation decision",
                         groupId, inScheduleTabletNum);
                 ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
@@ -232,7 +238,6 @@ public class ColocateTableBalancer extends LeaderDaemon {
             }
 
             stat.counterColocateBalanceRound.incrementAndGet();
-            Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
             List<Long> availableBeIds = getAvailableBeIds(infoService);
             List<List<Long>> balancedBackendsPerBucketSeq = Lists.newArrayList();
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
@@ -461,7 +466,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 }
             }
 
-            if (!hasUnavailableBe && !unavailableBeIds.isEmpty() && isChanged) {
+            if (!disableRepairPrecedence && !hasUnavailableBe && !unavailableBeIds.isEmpty() && isChanged) {
                 // repair task should take precedence over balance task.
                 // If there are unavailable backends, and we have made relocation decision to drain all tablets from
                 // those backends, we will stop here and won't do any further balance work.

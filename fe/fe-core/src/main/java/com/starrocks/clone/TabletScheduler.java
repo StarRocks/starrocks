@@ -206,6 +206,10 @@ public class TabletScheduler extends LeaderDaemon {
         currentSlotPerPathConfig = cappedVal;
 
         ImmutableMap<Long, Backend> backends = infoService.getIdToBackend();
+        if (backends == null) {
+            return false;
+        }
+
         for (Backend backend : backends.values()) {
             if (!backend.hasPathHash() && backend.isAlive()) {
                 // when upgrading, backend may not get path info yet. so return false and wait for next round.
@@ -746,8 +750,9 @@ public class TabletScheduler extends LeaderDaemon {
                 if (st != TabletStatus.COLOCATE_MISMATCH) {
                     colocateTableIndex.setBackendsSetByIdxForGroup(ctx.getColocateGroupId(),
                             ctx.getTabletOrderIdx(), lastBackendsSet);
-                    LOG.info("all current backends are available for tablet {}, reset backend set to: {}" +
-                            " for colocate group {}, before backend set: {}", ctx.getTabletId(), lastBackendsSet,
+                    LOG.info("all current backends are available for tablet {}, bucket index: {}, reset backend set to: {}" +
+                            " for colocate group {}, before backend set: {}", ctx.getTabletId(),
+                            ctx.getTabletOrderIdx(), lastBackendsSet,
                             ctx.getColocateGroupId(), currentBackendsSet);
                 }
             }
