@@ -82,7 +82,7 @@ public class BDBHA implements HAProtocol {
 
         for (int i = 0; i < RETRY_TIME; i++) {
             try {
-                long myEpoch = getLargestEpoch(epochDb.getDb());
+                long myEpoch = getLargestEpoch(epochDb.getDb()) + 1;
                 LOG.info("start fencing, epoch number is {}", myEpoch);
                 Long key = myEpoch;
                 DatabaseEntry theKey = new DatabaseEntry();
@@ -116,7 +116,7 @@ public class BDBHA implements HAProtocol {
         OperationResult result = epochDB.get(null, key, data, Get.LAST,
                 new ReadOptions().setLockMode(LockMode.READ_COMMITTED));
         if (result == null) {
-            return 1L;
+            return 0L;
         } else {
             TupleBinding<Long> binding = TupleBinding.getPrimitiveBinding(Long.class);
             return binding.entryToObject(key);
