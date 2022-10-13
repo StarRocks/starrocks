@@ -24,6 +24,7 @@ package com.starrocks.analysis;
 import com.starrocks.common.UserException;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LoadStmt;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -45,10 +46,10 @@ public class LoadStmtTest {
                         "(DATA INFILE(\"hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file\") INTO TABLE `t0`)");
         DataDescription dataDescription = stmt.getDataDescriptions().get(0);
         Assert.assertEquals("test", stmt.getLabel().getDbName());
+        Assert.assertEquals("testLabel", stmt.getLabel().getLabelName());
         Assert.assertFalse(dataDescription.isLoadFromTable());
         Assert.assertTrue(dataDescription.isHadoopLoad());
         Assert.assertNull(stmt.getProperties());
-        Assert.assertEquals("`test`.`testLabel`", stmt.getLabel().toString());
         Assert.assertEquals(
                 "[DATA INFILE ('hdfs://hdfs_host:hdfs_port/user/starRocks/data/input/file') INTO TABLE t0]",
                 stmt.getDataDescriptions().toString());

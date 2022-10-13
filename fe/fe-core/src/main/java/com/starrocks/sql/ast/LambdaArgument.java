@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 package com.starrocks.sql.ast;
+
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
@@ -12,13 +13,16 @@ import com.starrocks.thrift.TExprNode;
 public class LambdaArgument extends Expr {
     private String name;
     private boolean nullable;
+
     public LambdaArgument(String name) {
         this.name = name;
     }
+
     public LambdaArgument(LambdaArgument rhs) {
         super(rhs);
         name = rhs.getName();
     }
+
     public String getName() {
         return name;
     }

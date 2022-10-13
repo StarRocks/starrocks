@@ -18,7 +18,6 @@ public class ShowWarningStmtTest {
                 "SHOW WARNINGS",32).get(0);
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
         Assert.assertEquals(-1L, stmt.getLimitNum());
-        Assert.assertTrue(stmt.isSupportNewPlanner());
 
         stmt = (ShowWarningStmt) com.starrocks.sql.parser.SqlParser.parse(
                 "SHOW WARNINGS LIMIT 10",32).get(0);

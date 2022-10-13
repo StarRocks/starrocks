@@ -2,9 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Strings;
-import com.starrocks.analysis.CreateRepositoryStmt;
-import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
 import com.starrocks.backup.Repository;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.AnalysisException;
@@ -14,6 +11,9 @@ import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
+import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
 
 public class RepositoryAnalyzer {
 
@@ -31,7 +31,7 @@ public class RepositoryAnalyzer {
         }
 
         @Override
-        public Void visitCreateRepositoryStmt(CreateRepositoryStmt createRepositoryStmt, ConnectContext context) {
+        public Void visitCreateRepositoryStatement(CreateRepositoryStmt createRepositoryStmt, ConnectContext context) {
             String repoName = createRepositoryStmt.getName();
             checkRepoName(repoName);
 
@@ -64,7 +64,7 @@ public class RepositoryAnalyzer {
         }
 
         @Override
-        public Void visitDropRepositoryStmt(DropRepositoryStmt dropRepositoryStmt, ConnectContext context) {
+        public Void visitDropRepositoryStatement(DropRepositoryStmt dropRepositoryStmt, ConnectContext context) {
             String repoName = dropRepositoryStmt.getRepoName();
             checkRepoName(repoName);
             Repository repo =
@@ -81,12 +81,6 @@ public class RepositoryAnalyzer {
         if (Strings.isNullOrEmpty(repoName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Repository does not empty");
         }
-
-        try {
-            FeNameFormat.checkCommonName("repository", repoName);
-        } catch (AnalysisException e) {
-            throw new SemanticException(e.getMessage());
-        }
+        FeNameFormat.checkCommonName("repository", repoName);
     }
-
 }

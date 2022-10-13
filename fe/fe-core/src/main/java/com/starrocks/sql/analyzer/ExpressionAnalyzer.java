@@ -33,7 +33,6 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.PlaceHolderExpr;
 import com.starrocks.analysis.Predicate;
-import com.starrocks.analysis.SetType;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
@@ -60,6 +59,7 @@ import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.LambdaArgument;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.ast.SetType;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -790,7 +790,7 @@ public class ExpressionAnalyzer {
                         node.getParams().isStar() ? "*" : Joiner.on(", ")
                                 .join(Arrays.stream(argumentTypes).map(Type::toSql).collect(Collectors.toList())));
             }
-                    
+
             if (DecimalV3FunctionAnalyzer.DECIMAL_AGG_FUNCTION.contains(fnName)) {
                 Type argType = node.getChild(0).getType();
                 // stddev/variance always use decimal128(38,9) to computing result.
@@ -819,9 +819,9 @@ public class ExpressionAnalyzer {
                 if (returnType.isDecimalV3() && commonType.isValid()) {
                     returnType = commonType;
                 }
-                
+
                 if (FunctionSet.MAX_BY.equals(fnName)) {
-                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(), 
+                    AggregateFunction newFn = new AggregateFunction(fn.getFunctionName(),
                             Arrays.asList(argumentTypes), returnType,
                             Type.VARCHAR, fn.hasVarArgs());
                     newFn.setFunctionId(fn.getFunctionId());
@@ -834,7 +834,7 @@ public class ExpressionAnalyzer {
                     fn = newFn;
                     return fn;
                 }
-                
+
                 ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
                         fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
                         ((ScalarFunction) fn).getPrepareFnSymbol(),

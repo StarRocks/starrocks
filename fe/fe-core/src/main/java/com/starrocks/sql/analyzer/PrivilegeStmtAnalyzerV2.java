@@ -2,10 +2,6 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationManager;
@@ -21,9 +17,15 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.StatementBase;
 
 public class PrivilegeStmtAnalyzerV2 {
-    private PrivilegeStmtAnalyzerV2() {}
+    private PrivilegeStmtAnalyzerV2() {
+    }
+
     public static void analyze(StatementBase statement, ConnectContext session) {
         new PrivilegeStatementAnalyzerVisitor().analyze(statement, session);
     }
@@ -72,7 +74,7 @@ public class PrivilegeStmtAnalyzerV2 {
         }
 
         @Override
-        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), stmt instanceof AlterUserStmt);
 
             if (stmt.getAuthPlugin() == null) {

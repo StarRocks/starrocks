@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 public class DropAnalyzeJobStmt extends DdlStmt {
     private final long id;
 
@@ -13,10 +11,5 @@ public class DropAnalyzeJobStmt extends DdlStmt {
 
     public long getId() {
         return id;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }
