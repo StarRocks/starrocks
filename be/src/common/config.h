@@ -704,7 +704,7 @@ CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
 CONF_String(object_storage_endpoint, "");
 // Tencent cos needs to add region information
-CONF_String(object_storage_region, "");
+CONF_String(object_storage_region, "aws-global");
 CONF_Int64(object_storage_max_connection, "102400");
 // Acccess object storage using https.
 // this options is applicable only if `object_storage_endpoint` is not specified.

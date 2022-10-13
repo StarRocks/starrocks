@@ -74,16 +74,6 @@ public:
 
     S3ClientPtr new_client(const ClientConfiguration& config, const FSOptions& opts);
 
-    static ClientConfiguration& getClientConfig() {
-        // We cached config here and make a deep copy each time.Since aws sdk has changed the
-        // Aws::Client::ClientConfiguration default constructor to search for the region
-        // (where as before 1.8 it has been hard coded default of "us-east-1").
-        // Part of that change is looking through the ec2 metadata, which can take a long time.
-        // For more details, please refer https://github.com/aws/aws-sdk-cpp/issues/1440
-        static ClientConfiguration instance;
-        return instance;
-    }
-
 private:
     S3ClientFactory();
 
@@ -149,7 +139,14 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
 }
 
 static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const FSOptions& opts) {
-    Aws::Client::ClientConfiguration config = S3ClientFactory::getClientConfig();
+    Aws::Client::ClientConfiguration config = {
+            .endpoint = uri.endpoint().empty() ? config::object_storage_endpoint : uri.endpoint(),
+            .region = config::object_storage_region,
+            .maxConnextions = config::object_storage_max_connection,
+            .scheme = config::object_storage_endpoint_use_https ? Aws::Http::Scheme::HTTPS
+                                                                : config.scheme = Aws::Http::Scheme::HTTP,
+    };
+
     const THdfsProperties* hdfs_properties = opts.hdfs_properties();
     if (hdfs_properties != nullptr) {
         DCHECK(hdfs_properties->__isset.end_point);
@@ -168,21 +165,8 @@ static std::shared_ptr<Aws::S3::S3Client> new_s3client(const S3URI& uri, const F
         } else {
             config.maxConnections = config::object_storage_max_connection;
         }
-    } else {
-        if (!uri.endpoint().empty()) {
-            config.endpointOverride = uri.endpoint();
-        } else if (!config::object_storage_endpoint.empty()) {
-            config.endpointOverride = config::object_storage_endpoint;
-        } else if (config::object_storage_endpoint_use_https) {
-            config.scheme = Aws::Http::Scheme::HTTPS;
-        } else {
-            config.scheme = Aws::Http::Scheme::HTTP;
-        }
-        if (!config::object_storage_region.empty()) {
-            config.region = config::object_storage_region;
-        }
-        config.maxConnections = config::object_storage_max_connection;
     }
+
     return S3ClientFactory::instance().new_client(config, opts);
 }
 
