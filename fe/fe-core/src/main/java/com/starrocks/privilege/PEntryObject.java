@@ -11,7 +11,7 @@ import java.util.Objects;
  * interface is hard to serialized/deserialized using GSON
  * to simplify the implementation, the base class PEntryObject contains one data field called `id`.
  */
-public class PEntryObject {
+public class PEntryObject implements Cloneable {
     @SerializedName(value = "i")
     protected long id;
 
@@ -41,4 +41,8 @@ public class PEntryObject {
         return true;
     }
 
+    @Override
+    public Object clone() {
+        return null;
+    }
 }

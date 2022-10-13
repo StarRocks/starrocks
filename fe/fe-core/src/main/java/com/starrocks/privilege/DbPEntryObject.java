@@ -42,4 +42,9 @@ public class DbPEntryObject extends PEntryObject {
     public boolean validate(GlobalStateMgr globalStateMgr) {
         return globalStateMgr.getDbIncludeRecycleBin(this.id) != null;
     }
+
+    @Override
+    public Object clone() {
+        return new DbPEntryObject(id);
+    }
 }

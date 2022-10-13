@@ -76,4 +76,16 @@ public class ActionSetTest {
         Assert.assertTrue(res.isEmpty());
         Assert.assertEquals(0L, res.bitSet);
     }
+
+    @Test
+    public void testClone() {
+        ActionSet set1 = new ActionSet(Arrays.asList(SELECT, INSERT));
+        ActionSet set2 = (ActionSet) set1.clone();
+        set2.add(new ActionSet(Arrays.asList(DELETE)));
+        Assert.assertEquals(6, set1.bitSet);
+        Assert.assertEquals(14, set2.bitSet);
+        set1.remove(new ActionSet(Arrays.asList(INSERT)));
+        Assert.assertEquals(2, set1.bitSet);
+        Assert.assertEquals(14, set2.bitSet);
+    }
 }

@@ -11,6 +11,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -147,6 +148,20 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("cannot find db: dbx"));
         }
+
+        CreateRoleStmt createRoleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "create role test_role", ctx);
+        globalStateMgr.getPrivilegeManager().createRole(createRoleStmt);
+
+        sql = "grant select on table db1.tbl1 to role test_role";
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+
+        sql = "grant select on table db1.tbl1 to role xxx";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Can not grant/revoke to role: cannot find role"));
+        }
     }
 
     @Test
@@ -163,7 +178,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (AnalysisException e) {
-            Assert.assertTrue(e.getMessage().contains("user 'test'@'10.1.1.1' not exist!"));
+            Assert.assertTrue(e.getMessage().contains("cannot find user 'test'@'10.1.1.1'!"));
         }
 
         sql = "drop user test";
@@ -215,7 +230,20 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("Can not drop role bad_role: cannot find role"));
+            Assert.assertTrue(e.getMessage().contains("Can not drop role: cannot find role bad_role"));
+        }
+
+        sql = "grant test_role to test_user";
+        GrantRoleStmt grantRoleStmt = (GrantRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals("test_role", grantRoleStmt.getRole());
+        Assert.assertEquals("'test_user'@'%'", grantRoleStmt.getUserIdent().toString());
+
+        sql = "grant ___ to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid role format"));
         }
     }
 }

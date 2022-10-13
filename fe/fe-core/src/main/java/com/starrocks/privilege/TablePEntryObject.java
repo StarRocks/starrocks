@@ -56,4 +56,9 @@ public class TablePEntryObject extends PEntryObject {
         }
         return globalStateMgr.getTableIncludeRecycleBin(db, this.id) != null;
     }
+
+    @Override
+    public Object clone() {
+        return new TablePEntryObject(databaseId, id);
+    }
 }

@@ -412,10 +412,18 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                if (stmt instanceof GrantRoleStmt) {
-                    context.getGlobalStateMgr().getAuth().grantRole((GrantRoleStmt) stmt);
+                if (context.getGlobalStateMgr().isUsingNewPrivilege()) {
+                    if (stmt instanceof GrantRoleStmt) {
+                        context.getGlobalStateMgr().getPrivilegeManager().grantRole((GrantRoleStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getPrivilegeManager().revokeRole((RevokeRoleStmt) stmt);
+                    }
                 } else {
-                    context.getGlobalStateMgr().getAuth().revokeRole((RevokeRoleStmt) stmt);
+                    if (stmt instanceof GrantRoleStmt) {
+                        context.getGlobalStateMgr().getAuth().grantRole((GrantRoleStmt) stmt);
+                    } else {
+                        context.getGlobalStateMgr().getAuth().revokeRole((RevokeRoleStmt) stmt);
+                    }
                 }
             });
             return null;

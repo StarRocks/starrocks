@@ -20,23 +20,28 @@ public class PrivilegeCollection {
     @SerializedName("m")
     protected Map<Short, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
 
-    static class PrivilegeEntry {
+    static class PrivilegeEntry implements Cloneable {
         @SerializedName(value = "a")
-        private ActionSet actionSet;
+        protected ActionSet actionSet;
         @SerializedName(value = "o")
-        private PEntryObject object;
+        protected PEntryObject object;
         @SerializedName(value = "g")
-        private boolean isGrant;
+        protected boolean isGrant;
 
         public PrivilegeEntry(ActionSet actionSet, PEntryObject object, boolean isGrant) {
             this.actionSet = actionSet;
             this.object = object;
             this.isGrant = isGrant;
         }
+
+        @Override
+        public Object clone() {
+            return new PrivilegeEntry((ActionSet) actionSet.clone(), (PEntryObject) object.clone(), isGrant);
+        }
     }
 
     /**
-     * find matching entry: object + isGrant
+     * find exact matching entry: object + isGrant
      */
     private PrivilegeEntry findEntry(List<PrivilegeEntry> privilegeEntryList, PEntryObject object, boolean isGrant) {
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
@@ -77,30 +82,35 @@ public class PrivilegeCollection {
         typeToPrivilegeEntryList.computeIfAbsent(type, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PEntryObject object : objects) {
-            PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
-            PrivilegeEntry oppositeEntry = findEntry(privilegeEntryList, object, !isGrant);
-            if (oppositeEntry == null) {
-                // intend to grant with grant option, and there's no matching entry that grant without grant option
-                // or intend to grant without grant option, and there's no matching entry that grant with grant option
-                // either way it's simpler
-                addAction(privilegeEntryList, entry, actionSet, object, isGrant);
+            grantObjectToList(actionSet, object, isGrant, privilegeEntryList);
+        }
+    }
+
+    private void grantObjectToList(
+            ActionSet actionSet, PEntryObject object, boolean isGrant, List<PrivilegeEntry> privilegeEntryList) {
+        PrivilegeEntry entry = findEntry(privilegeEntryList, object, isGrant);
+        PrivilegeEntry oppositeEntry = findEntry(privilegeEntryList, object, !isGrant);
+        if (oppositeEntry == null) {
+            // intend to grant with grant option, and there's no matching entry that grant without grant option
+            // or intend to grant without grant option, and there's no matching entry that grant with grant option
+            // either way it's simpler
+            addAction(privilegeEntryList, entry, actionSet, object, isGrant);
+        } else {
+            if (isGrant) {
+                // intend to grant with grant option, and there's already an entry that grant without grant option
+                // we should remove the entry and create a new one or added to the matching one
+                removeAction(privilegeEntryList, oppositeEntry, actionSet);
+                addAction(privilegeEntryList, entry, actionSet, object, true);
             } else {
-                if (isGrant) {
-                    // intend to grant with grant option, and there's already an entry that grant without grant option
-                    // we should remove the entry and create a new one or added to the matching one
-                    removeAction(privilegeEntryList, oppositeEntry, actionSet);
-                    addAction(privilegeEntryList, entry, actionSet, object, true);
-                } else {
-                    // intend to grant without grant option, and there's already an entry that grant with grant option
-                    // we should check for each action, for those that's not in the existing entry
-                    // we should create a new entry or add to the matching one
-                    ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
-                    if (! remaining.isEmpty()) {
-                        addAction(privilegeEntryList, entry, remaining, object, false);
-                    }
+                // intend to grant without grant option, and there's already an entry that grant with grant option
+                // we should check for each action, for those that's not in the existing entry
+                // we should create a new entry or add to the matching one
+                ActionSet remaining = oppositeEntry.actionSet.difference(actionSet);
+                if (! remaining.isEmpty()) {
+                    addAction(privilegeEntryList, entry, remaining, object, false);
                 }
             }
-        } // for object in objects
+        }
     }
 
     public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
@@ -190,5 +200,27 @@ public class PrivilegeCollection {
                 listIter.remove();
             }
         }
+    }
+
+    public void merge(PrivilegeCollection other) {
+        for (Map.Entry<Short, List<PrivilegeEntry>> typeEntry : other.typeToPrivilegeEntryList.entrySet()) {
+            short typeId = typeEntry.getKey();
+            ArrayList<PrivilegeEntry> otherList = (ArrayList<PrivilegeEntry>) typeEntry.getValue();
+            if (!typeToPrivilegeEntryList.containsKey(typeId)) {
+                // deep copy here
+                List<PrivilegeEntry> clonedList = new ArrayList<>();
+                for (PrivilegeEntry entry : otherList) {
+                    clonedList.add((PrivilegeEntry) entry.clone());
+                }
+                //typeToPrivilegeEntryList.put(typeId, (ArrayList<PrivilegeEntry>) otherList.clone());
+                typeToPrivilegeEntryList.put(typeId, clonedList);
+            } else {
+                List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);
+                for (PrivilegeEntry entry : otherList) {
+                    grantObjectToList(entry.actionSet, entry.object, entry.isGrant, typeList);
+                } // for privilege entry in other.list
+            }
+        } // for typeId, privilegeEntryList in other
+
     }
 }

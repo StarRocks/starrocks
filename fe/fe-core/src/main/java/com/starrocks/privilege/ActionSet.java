@@ -6,7 +6,7 @@ import com.google.gson.annotations.SerializedName;
 
 import java.util.List;
 
-public class ActionSet {
+public class ActionSet implements Cloneable {
     @SerializedName(value = "b")
     protected long bitSet = 0;
 
@@ -14,6 +14,11 @@ public class ActionSet {
         for (Action action : actions) {
             bitSet |= (1L << action.getId());
         }
+    }
+
+    @Override
+    public Object clone() {
+        return new ActionSet(bitSet);
     }
 
     /**
