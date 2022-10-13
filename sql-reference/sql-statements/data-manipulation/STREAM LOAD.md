@@ -19,7 +19,8 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 本文以 curl 工具为例介绍如何使用 Stream Load 导入数据。除了使用 curl 工具，您还可以通过其他支持 HTTP 协议的工具或语言提交导入作业以导入数据。导入相关的参数位于 HTTP 请求的请求头。传入这些导入相关的参数时，需要注意以下几点：
 
 - 当前支持 HTTP **分块上传**和**非分块上传**两种方式。如果使用非分块上传方式，必须使用请求头字段 `Content-Length` 来标示待上传内容的长度，从而保证数据完整性。
-  - > 说明：使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
+
+  > 说明：使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
 
 - 建议在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
 
