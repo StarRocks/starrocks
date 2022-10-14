@@ -120,7 +120,7 @@ inline size_t find_zero(const std::vector<int8_t>& list, size_t start) {
 }
 
 inline size_t find_zero(const std::vector<uint8_t>& list, size_t start, size_t count) {
-    return find_byte<uint8_t>(list, start, count);
+    return find_byte<uint8_t>(list, start, count, 0);
 }
 
 inline bool contain_zero(const std::vector<uint8_t>& list) {

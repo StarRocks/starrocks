@@ -38,7 +38,7 @@ static bool _support_join_type(TJoinOp::type join_type) {
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
     case TJoinOp::LEFT_SEMI_JOIN:
-    case TJoinOp::RIGHT_SEMI_JOIN:
+    case TJoinOp::LEFT_ANTI_JOIN:
         return true;
     default:
         return false;

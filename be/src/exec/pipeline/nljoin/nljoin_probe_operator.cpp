@@ -201,7 +201,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     vectorized::FilterPtr filter;
-    bool apply_filter = !_is_left_semi_join() || _num_build_chunks() == 0;
+    bool apply_filter = (!_is_left_semi_join() && !_is_left_anti_join()) || _num_build_chunks() == 0;
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
         RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter, apply_filter));
@@ -244,12 +244,12 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     }
 
     if ((_is_left_semi_join() || _is_left_anti_join()) && !_probe_row_semianti_emited) {
-        if (!filter) {
-            filter = std::make_shared<vectorized::Filter>(1);
+        if (!filter && chunk->num_rows() > 0) {
+            filter = std::make_shared<vectorized::Filter>(chunk->num_rows(), 0);
             if (_is_left_semi_join()) {
-                filter->assign(1, 1);
+                (*filter)[0] = 1;
             } else {
-                filter->assign(1, 0);
+                (*filter)[0] = 0;
             }
         }
         if (_num_build_chunks() == 1) {
@@ -263,11 +263,13 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
                                                             : SIMD::find_zero(*filter, i, num_build_rows);
                 if (first_matched + 1 < i + num_build_rows) {
                     auto start = filter->begin() + first_matched + 1;
-                    auto end = filter->begin() + first_matched + num_build_rows;
+                    auto end = filter->begin() + i + num_build_rows;
+                    std::fill(start, end, 0);
                     if (_is_left_anti_join()) {
                         (*filter)[first_matched] = 1;
                     }
-                    std::fill(start, end, 0);
+                } else if (_is_left_anti_join()) {
+                    std::fill(filter->begin() + i, filter->begin() + i + num_build_rows, 0);
                 }
             }
         } else {
@@ -281,6 +283,8 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
                     (*filter)[first_matched] = 1;
                 }
                 _probe_row_semianti_emited = true;
+            } else if (_is_left_anti_join()) {
+                std::fill(filter->begin(), filter->end(), 0);
             }
         }
         chunk->filter(*filter);
