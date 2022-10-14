@@ -727,7 +727,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 return num;
             }
         } else {
-            return 1;
+            return Integer.MAX_VALUE;
         }
     }
 

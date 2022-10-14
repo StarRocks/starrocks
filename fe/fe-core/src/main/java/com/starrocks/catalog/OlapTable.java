@@ -865,6 +865,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return idToPartition.values();
     }
 
+    public int getNumberOfPartitions() {
+        return idToPartition.size();
+    }
+
     // get only temp partitions
     public Collection<Partition> getTempPartitions() {
         return tempPartitions.getAllPartitions();

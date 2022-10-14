@@ -106,6 +106,13 @@ public class TabletScheduler extends LeaderDaemon {
     private static final int MAX_SLOT_PER_PATH = 64;
     private static final int MIN_SLOT_PER_PATH = 2;
 
+    /**
+     * If the number of tablets which have finished scheduling is less than the
+     * (total number of tablets per bucket in colocate group) * COLOCATE_BACKEND_RESET_RATIO,
+     * the cost of backends reset is considered relatively cheap, we will do backend reset optimization.
+     */
+    private static final double COLOCATE_BACKEND_RESET_RATIO = 0.3;
+
     /*
      * Tablet is added to pendingTablets as well it's id in allTabletIds.
      * TabletScheduler will take tablet from pendingTablets but will not remove it's id from allTabletIds when
@@ -743,7 +750,8 @@ public class TabletScheduler extends LeaderDaemon {
             }
 
             int num = ColocateTableBalancer.getInstance().getScheduledTabletNumForBucket(ctx);
-            if (num == 0) {
+            int totalTabletsPerBucket = colocateTableIndex.getNumOfTabletsPerBucket(ctx.getColocateGroupId());
+            if (num <= totalTabletsPerBucket * COLOCATE_BACKEND_RESET_RATIO) {
                 TabletStatus st = ctx.getTablet().getColocateHealthStatus(visibleVersion, replicaNum, lastBackendsSet);
                 if (st != TabletStatus.COLOCATE_MISMATCH) {
                     colocateTableIndex.setBackendsSetByIdxForGroup(ctx.getColocateGroupId(),
