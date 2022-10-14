@@ -4,6 +4,7 @@
 
 #include "exec/data_sink.h"
 #include "exec/file_builder.h"
+#include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
@@ -17,8 +18,11 @@ namespace pipeline {
 class ExportSinkIOBuffer final : public SinkIOBuffer {
 public:
     ExportSinkIOBuffer(const TExportSink& t_export_sink, std::vector<ExprContext*>& output_expr_ctxs,
-                       int32_t num_sinkers)
-            : SinkIOBuffer(num_sinkers), _t_export_sink(t_export_sink), _output_expr_ctxs(output_expr_ctxs) {}
+                       int32_t num_sinkers, FragmentContext* fragment_ctx)
+            : SinkIOBuffer(num_sinkers),
+              _t_export_sink(t_export_sink),
+              _output_expr_ctxs(output_expr_ctxs),
+              _fragment_ctx(fragment_ctx) {}
 
     ~ExportSinkIOBuffer() override = default;
 
@@ -36,6 +40,7 @@ private:
     TExportSink _t_export_sink;
     const std::vector<ExprContext*> _output_expr_ctxs;
     std::unique_ptr<FileBuilder> _file_builder;
+    FragmentContext* _fragment_ctx;
 };
 
 Status ExportSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
@@ -80,8 +85,8 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::
         int query_timeout = _state->query_options().query_timeout;
         int timeout_ms = query_timeout > 3600 ? 3600000 : query_timeout * 1000;
         if (Status status = _open_file_writer(timeout_ms); !status.ok()) {
-            set_io_status(status);
             close(_state);
+            _fragment_ctx->cancel(status);
             return;
         }
     }
@@ -92,8 +97,8 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::
         return;
     }
     if (Status status = _file_builder->add_chunk(chunk.get()); !status.ok()) {
-        set_io_status(status);
         close(_state);
+        _fragment_ctx->cancel(status);
         return;
     }
 }
@@ -191,7 +196,8 @@ Status ExportSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
-    _export_sink_buffer = std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _num_sinkers);
+    _export_sink_buffer =
+            std::make_shared<ExportSinkIOBuffer>(_t_export_sink, _output_expr_ctxs, _num_sinkers, _fragment_ctx);
     return Status::OK();
 }
 

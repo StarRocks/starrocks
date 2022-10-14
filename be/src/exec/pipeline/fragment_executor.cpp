@@ -718,7 +718,8 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto output_expr = export_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
-                context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop);
+                context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop,
+                fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 

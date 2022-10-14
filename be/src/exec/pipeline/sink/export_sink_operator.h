@@ -15,6 +15,7 @@ class RowDescriptor;
 namespace pipeline {
 
 class ExportSinkIOBuffer;
+class FragmentContext;
 
 class ExportSinkOperator : public Operator {
 public:
@@ -52,11 +53,12 @@ private:
 class ExportSinkOperatorFactory final : public OperatorFactory {
 public:
     ExportSinkOperatorFactory(int32_t id, const TExportSink& t_export_sink, std::vector<TExpr> t_output_expr,
-                              int32_t num_sinkers)
+                              int32_t num_sinkers, FragmentContext* fragment_ctx)
             : OperatorFactory(id, "export_sink", Operator::s_pseudo_plan_node_id_for_export_sink),
               _t_export_sink(t_export_sink),
               _t_output_expr(t_output_expr),
-              _num_sinkers(num_sinkers) {}
+              _num_sinkers(num_sinkers),
+              _fragment_ctx(fragment_ctx) {}
 
     ~ExportSinkOperatorFactory() override = default;
 
@@ -78,6 +80,7 @@ private:
     std::shared_ptr<ExportSinkIOBuffer> _export_sink_buffer;
 
     RuntimeProfile* _profile = nullptr;
+    FragmentContext* _fragment_ctx = nullptr;
 };
 
 } // namespace pipeline
