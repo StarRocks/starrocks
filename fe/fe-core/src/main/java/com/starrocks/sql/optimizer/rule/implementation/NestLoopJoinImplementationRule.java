@@ -30,8 +30,7 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
 
     // Only choose NestLoopJoin for such scenarios, which HashJoin could not handle
     // 1. No equal-conjuncts in join clause
-    // 2. JoinType is INNER/CROSS/OUTER
-    // TODO need support SEMI/ANTI JOIN
+    // 2. JoinType is INNER/CROSS/OUTER/LEFT ANTI/LEFT SEMI
     @Override
     public boolean check(final OptExpression input, OptimizerContext context) {
         List<BinaryPredicateOperator> eqPredicates = extractEqPredicate(input, context);
@@ -48,7 +47,7 @@ public class NestLoopJoinImplementationRule extends JoinImplementationRule {
     }
 
     private boolean supportJoinType(JoinOperator joinType) {
-        return joinType.isCrossJoin() || joinType.isInnerJoin() || joinType.isOuterJoin();
+        return joinType.isCrossJoin() || joinType.isInnerJoin() || joinType.isOuterJoin() || joinType.isLeftSemiAntiJoin();
     }
 
     @Override
