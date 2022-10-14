@@ -113,9 +113,6 @@ public class HiveRemoteFileIO implements RemoteFileIO {
         return new RemoteFileBlockDesc(offset,
                 length,
                 replicaHostIds,
-                // TODO get storageId through blockStorageLocation.getVolumeIds()
-                // because this function is a rpc call, we give a fake value now.
-                // Set it to real value, when planner needs this param.
                 new long[] {UNKNOWN_STORAGE_ID},
                 this);
     }
