@@ -206,7 +206,7 @@ Status MemTable::finalize() {
                     _result_chunk = upserts;
                 }
             }
-            if (_keys_type == KeysType::PRIMARY_KEYS && !_vectorized_schema->sort_key_idxes().empty()) {
+            if (_keys_type == KeysType::PRIMARY_KEYS) {
                 std::vector<ColumnId> primary_key_idxes(_vectorized_schema->num_key_fields());
                 for (ColumnId i = 0; i < _vectorized_schema->num_key_fields(); ++i) {
                     primary_key_idxes[i] = i;

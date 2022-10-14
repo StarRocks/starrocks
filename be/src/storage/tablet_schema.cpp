@@ -475,9 +475,16 @@ void TabletSchema::_init_from_pb(const TabletSchemaPB& schema) {
             _num_key_columns++;
         }
     }
-    _sort_key_idxes.reserve(schema.sort_key_idxes_size());
-    for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
-        _sort_key_idxes.push_back(schema.sort_key_idxes(i));
+    if (schema.sort_key_idxes().empty()) {
+        _sort_key_idxes.reserve(_num_key_columns);
+        for (auto i = 0; i < _num_key_columns; ++i) {
+            _sort_key_idxes.push_back(i);
+        }
+    } else {
+        _sort_key_idxes.reserve(schema.sort_key_idxes_size());
+        for (auto i = 0; i < schema.sort_key_idxes_size(); ++i) {
+            _sort_key_idxes.push_back(schema.sort_key_idxes(i));
+        }
     }
     _num_short_key_columns = schema.num_short_key_columns();
     _num_rows_per_row_block = schema.num_rows_per_row_block();

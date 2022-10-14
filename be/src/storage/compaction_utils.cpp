@@ -78,25 +78,9 @@ uint32_t CompactionUtils::get_segment_max_rows(int64_t max_segment_file_size, in
     return max_segment_rows;
 }
 
-void CompactionUtils::split_column_into_groups(size_t num_columns, size_t num_key_columns,
+void CompactionUtils::split_column_into_groups(size_t num_columns, const std::vector<ColumnId>& sort_key_idxes,
                                                int64_t max_columns_per_group,
                                                std::vector<std::vector<uint32_t>>* column_groups) {
-    std::vector<uint32_t> key_columns;
-    for (size_t i = 0; i < num_key_columns; ++i) {
-        key_columns.emplace_back(i);
-    }
-    column_groups->emplace_back(std::move(key_columns));
-    for (size_t i = num_key_columns; i < num_columns; ++i) {
-        if ((i - num_key_columns) % max_columns_per_group == 0) {
-            column_groups->emplace_back();
-        }
-        column_groups->back().emplace_back(i);
-    }
-}
-
-void CompactionUtils::split_column_into_groups_sort_key(size_t num_columns, const std::vector<ColumnId> sort_key_idxes,
-                                                        int64_t max_columns_per_group,
-                                                        std::vector<std::vector<uint32_t>>* column_groups) {
     column_groups->emplace_back(sort_key_idxes);
     std::vector<ColumnId> all_columns;
     for (ColumnId i = 0; i < num_columns; ++i) {

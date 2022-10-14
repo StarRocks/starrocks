@@ -8,11 +8,11 @@ namespace starrocks::vectorized {
 
 #ifdef BE_TEST
 
-Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, std::vector<ColumnId>{}) {}
+Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, {}) {}
 
 #endif
 
-Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
+Schema::Schema(Fields fields, KeysType keys_type, const std::vector<ColumnId>& sort_key_idxes)
         : _fields(std::move(fields)),
           _sort_key_idxes(sort_key_idxes),
           _name_to_index_append_buffer(nullptr),
@@ -116,6 +116,7 @@ void Schema::append(const FieldPtr& field) {
     }
 }
 
+// it's not being used, especially in sort key scenario, so do not handle this case
 void Schema::insert(size_t idx, const FieldPtr& field) {
     DCHECK_LT(idx, _fields.size());
 
@@ -132,6 +133,7 @@ void Schema::insert(size_t idx, const FieldPtr& field) {
     _build_index_map(_fields);
 }
 
+// it's not being used, especially in sort key scenario, so do not handle this case
 void Schema::remove(size_t idx) {
     DCHECK_LT(idx, _fields.size());
     _num_keys -= _fields[idx]->is_key();
@@ -157,9 +159,7 @@ void Schema::remove(size_t idx) {
 
 const FieldPtr& Schema::field(size_t idx) const {
     DCHECK_GE(idx, 0);
-    if (_sort_key_idxes.empty()) {
-        DCHECK_LT(idx, _fields.size());
-    }
+    DCHECK_LT(idx, _fields.size());
     return _fields[idx];
 }
 
