@@ -142,6 +142,8 @@ public:
 
     Status delete_shutdown_tablet(int64_t tablet_id);
 
+    Status delete_shutdown_tablet_before_clone(int64_t tablet_id);
+
     MemTracker* tablet_meta_mem_tracker() { return _mem_tracker; }
 
     // return true if all tablets visited
