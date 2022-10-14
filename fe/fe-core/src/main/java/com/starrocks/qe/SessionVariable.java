@@ -664,7 +664,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
-    private int cboPushDownAggregateMode = 0;
+    private int cboPushDownAggregateMode = -1;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
