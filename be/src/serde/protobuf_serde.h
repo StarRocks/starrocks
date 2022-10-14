@@ -14,22 +14,55 @@ class RowDescriptor;
 }
 
 namespace starrocks::serde {
+constexpr double EncodeRatioLimit = 0.95;
+constexpr uint32_t EncodeSamplingNum = 5;
+
+class EncodeContext {
+public:
+    EncodeContext(const int col_num, const int encode_level);
+    // update encode_level for each column
+    void update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte);
+
+    int get_encode_level(const int col_id) {
+        DCHECK(_session_encode_level != 0);
+        return _column_encode_level[col_id];
+    }
+
+    int get_session_encode_level() {
+        DCHECK(_session_encode_level != 0);
+        return _session_encode_level;
+    }
+
+    void set_encode_levels_in_pb(ChunkPB* const res);
+
+private:
+    // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
+    void _adjust(const int col_id);
+    const int _session_encode_level;
+    uint64_t _times = 0;
+    uint64_t _frequency = 64;
+    std::vector<uint64_t> _raw_bytes, _encoded_bytes;
+    std::vector<uint32_t> _column_encode_level;
+};
 
 class ProtobufChunkDeserializer;
 
 class ProtobufChunkSerde {
 public:
-    static int64_t max_serialized_size(const vectorized::Chunk& chunk, const int encode_level = 0);
+    static int64_t max_serialized_size(const vectorized::Chunk& chunk,
+                                       std::shared_ptr<EncodeContext> context = nullptr);
 
     // Write the contents of |chunk| to ChunkPB
-    static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk, const int encode_level = 0);
+    static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk,
+                                       std::shared_ptr<EncodeContext> context = nullptr);
 
     // Like `serialize()` but leave the following fields of ChunkPB unfilled:
     //  - slot_id_map()
     //  - tuple_id_map()
     //  - is_nulls()
     //  - is_consts()
-    static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk, const int encode_level = 0);
+    static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk,
+                                                    std::shared_ptr<EncodeContext> context = nullptr);
 
     // REQUIRE: the following fields of |chunk_pb| must be non-empty:
     //  - slot_id_map()
@@ -46,6 +79,7 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_consts;
     vectorized::Chunk::SlotHashMap slot_id_to_index;
     vectorized::Chunk::TupleHashMap tuple_id_to_index;
+    std::vector<int32_t> encode_level;
 };
 
 class ProtobufChunkDeserializer {

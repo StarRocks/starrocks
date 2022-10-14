@@ -139,7 +139,7 @@ public:
     static int64_t max_serialized_size(const vectorized::FixedLengthColumnBase<T>& column, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
-            return sizeof(uint64_t) + streamvbyte_max_compressedbytes((size + 3) / 4.0);
+            return sizeof(uint64_t) + std::max(size, streamvbyte_max_compressedbytes((size + 3) / 4.0));
         } else {
             return sizeof(uint64_t) + size;
         }
@@ -189,12 +189,12 @@ public:
         int64_t res = sizeof(T) * 2;
         int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
         if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint64_t) + streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0);
+            res += sizeof(uint64_t) + std::max(offsets_size, streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0));
         } else {
             res += offsets_size;
         }
         if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
-            res += sizeof(uint64_t) + LZ4_compressBound(bytes.size());
+            res += sizeof(uint64_t) + std::max(bytes.size(), LZ4_compressBound(bytes.size()));
         } else {
             res += bytes.size();
         }

@@ -69,7 +69,7 @@ Status RowsetUpdateState::_do_load(Tablet* tablet, Rowset* rowset) {
         std::vector<uint8_t> read_buffer(file_size);
         RETURN_IF_ERROR(read_file->read_at_fully(0, read_buffer.data(), read_buffer.size()));
         auto col = pk_column->clone();
-        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get(), false, 0) == nullptr) {
+        if (serde::ColumnArraySerde::deserialize(read_buffer.data(), col.get()) == nullptr) {
             return Status::InternalError("column deserialization failed");
         }
         _deletes.emplace_back(std::move(col));

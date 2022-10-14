@@ -699,7 +699,6 @@ Status DataStreamSender::serialize_chunk(const vectorized::Chunk* src, ChunkPB* 
     }
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
-    dst->set_encode_level(_encode_level);
 
     size_t uncompressed_size = dst->uncompressed_size();
 

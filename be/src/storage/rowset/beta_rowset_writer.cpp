@@ -362,9 +362,9 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
     auto flush_del_file = [&](const vectorized::Column& deletes) {
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
                                              _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
-        size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes, 0);
+        size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
         std::vector<uint8_t> content(sz);
-        if (serde::ColumnArraySerde::serialize(deletes, content.data(), false, 0) == nullptr) {
+        if (serde::ColumnArraySerde::serialize(deletes, content.data()) == nullptr) {
             return Status::InternalError("deletes column serialize failed");
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));

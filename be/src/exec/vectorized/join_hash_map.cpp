@@ -137,7 +137,7 @@ void SerializedJoinProbeFunc::lookup_init(const JoinHashTableItems& table_items,
     // allocate memory for serialize key columns
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
-        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column, 0);
+        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = probe_state->probe_pool->allocate(serialize_size);
 

@@ -605,17 +605,18 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_level);
+            _encode_context = std::make_shared<serde::EncodeContext>(src->columns().size(), _encode_level);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_level);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
     }
-    dst->set_encode_level(_encode_level);
+    _encode_context->set_encode_levels_in_pb(dst);
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
     const size_t uncompressed_size = dst->uncompressed_size();

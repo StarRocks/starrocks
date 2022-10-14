@@ -16,6 +16,7 @@
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -187,6 +188,8 @@ private:
     const std::vector<int32_t>& _output_columns;
 
     std::unique_ptr<Shuffler> _shuffler;
+
+    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {
