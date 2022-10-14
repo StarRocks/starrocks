@@ -215,8 +215,10 @@ public class RuntimeProfileTest {
         Assert.assertEquals(2000000000L, mergedTime1.getValue());
         Counter mergedMinOfTime1 = mergedProfile.getCounter("__MIN_OF_time1");
         Counter mergedMaxOfTime1 = mergedProfile.getCounter("__MAX_OF_time1");
-        Assert.assertNull(mergedMinOfTime1);
-        Assert.assertNull(mergedMaxOfTime1);
+        Assert.assertNotNull(mergedMinOfTime1);
+        Assert.assertNotNull(mergedMaxOfTime1);
+        Assert.assertEquals(2000000000L, mergedMinOfTime1.getValue());
+        Assert.assertEquals(2000000000L, mergedMaxOfTime1.getValue());
 
         Counter mergedTime2 = mergedProfile.getCounter("time2");
         Assert.assertEquals(1000000000L, mergedTime2.getValue());
