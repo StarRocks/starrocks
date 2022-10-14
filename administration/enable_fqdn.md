@@ -18,7 +18,7 @@ StarRocks v2.4 之前版本仅支持通过 IP 地址访问每个节点。即便�
 
 如需建立启用 FQDN 访问的新集群，您需要安装 StarRocks v2.4.0 或更高版本。有关如何安装 StarRocks 的详细说明，请参阅 [手动部署 StarRocks](../quick_start/Deploy.md)。
 
-在 StarRocks 2.4 或更高版本中，新集群中的 FE 节点在启动时默认启用 FQDN 访问。
+新集群中的 FE 节点在启动时默认启用 IP 地址访问。
 
 新集群中的 BE 节点将通过 FE 元数据中定义的 `BE Address` 判定使用 FQDN 或 IP 地址标识自身。例如，如果 `BE Address` 记录了一个 BE 节点的 FQDN，则该 BE 节点使用这个 FQDN 来标识自身。
 
