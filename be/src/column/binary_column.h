@@ -285,14 +285,17 @@ public:
 
     std::string debug_string() const override {
         std::stringstream ss;
-        ss << "[";
         size_t size = this->size();
-        for (size_t i = 0; i < size; i++) {
-            if (i == size - 1) {
-                ss << debug_item(i);
-            } else {
-                ss << debug_item(i) << ", ";
-            }
+        if (size == 0) {
+            return "[]";
+        }
+
+        ss << "[";
+        for (size_t i = 0; i < size - 1; i++) {
+            ss << debug_item(i) << ", ";
+        }
+        if (size > 0) {
+            ss << debug_item(size - 1);
         }
         ss << "]";
         return ss.str();
