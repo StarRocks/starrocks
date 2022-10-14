@@ -294,7 +294,7 @@ public class CatalogMgr {
             try {
                 for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
                     Catalog catalog = entry.getValue();
-                    if (catalog == null) {
+                    if (catalog == null || isResourceMappingCatalog(catalog.getName())) {
                         continue;
                     }
                     catalog.getProcNodeData(result);
