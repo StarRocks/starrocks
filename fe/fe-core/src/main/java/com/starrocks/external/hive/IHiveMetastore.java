@@ -35,6 +35,5 @@ public interface IHiveMetastore {
     }
 
     default void invalidateAll() {
-
     }
 }

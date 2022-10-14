@@ -51,8 +51,6 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResource
 public class HudiTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(HudiTable.class);
 
-    private static final String PROPERTY_MISSING_MSG =
-            "Hudi %s is null. Please add properties('%s'='xxx') when create table";
     private static final String JSON_KEY_HUDI_DB = "database";
     private static final String JSON_KEY_HUDI_TABLE = "table";
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
@@ -66,9 +64,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
     public static final String HUDI_TABLE_INPUT_FOAMT = "hudi.table.input.format";
     public static final String HUDI_TABLE_COLUMN_NAMES = "hudi.table.column.names";
     public static final String HUDI_TABLE_COLUMN_TYPES = "hudi.table.column.types";
-    public static final String HUDI_DB = "database";
-    public static final String HUDI_TABLE = "table";
-    public static final String HUDI_RESOURCE = "resource";
 
     public static final String COW_INPUT_FORMAT = "org.apache.hudi.hadoop.HoodieParquetInputFormat";
     public static final String COW_INPUT_FORMAT_LEGACY = "com.uber.hoodie.hadoop.HoodieInputFormat";

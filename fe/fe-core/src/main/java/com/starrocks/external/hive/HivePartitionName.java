@@ -13,6 +13,7 @@ public class HivePartitionName {
     private final String tableName;
     private final List<String> partitionValues;
 
+    // does not participate in hashCode/equals
     // partition name eg: "year=2020/month=10/day=10"
     private final Optional<String> partitionNames;
 

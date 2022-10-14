@@ -47,7 +47,7 @@ public class MetadataMgr {
                     ConnectContext.get().getQueryId().toString() : null;
             if (queryId != null) {
                 QueryMetadatas queryMetadatas = metadataByQueryId.computeIfAbsent(queryId, ignored -> new QueryMetadatas());
-                return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName));
+                return Optional.ofNullable(queryMetadatas.getConnectorMetadata(catalogName, queryId));
             } else {
                 return Optional.of(connectorMgr.getConnector(catalogName).getMetadata());
             }
@@ -62,6 +62,7 @@ public class MetadataMgr {
             if (queryMetadatas != null) {
                 queryMetadatas.metadatas.values().forEach(ConnectorMetadata::clear);
                 metadataByQueryId.remove(queryId);
+                LOG.info("Succeed to deregister query level connector metadata on query id: {}", queryId);
             }
         }
     }
@@ -154,7 +155,7 @@ public class MetadataMgr {
         public QueryMetadatas() {
         }
 
-        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName) {
+        public synchronized ConnectorMetadata getConnectorMetadata(String catalogName, String queryId) {
             if (metadatas.containsKey(catalogName)) {
                 return metadatas.get(catalogName);
             }
@@ -166,6 +167,7 @@ public class MetadataMgr {
             }
             ConnectorMetadata connectorMetadata = connector.getMetadata();
             metadatas.put(catalogName, connectorMetadata);
+            LOG.info("Succeed to register query level connector metadata [catalog:{}, queryId: {}]", catalogName, queryId);
             return connectorMetadata;
         }
     }

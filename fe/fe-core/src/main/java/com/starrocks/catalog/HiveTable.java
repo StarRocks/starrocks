@@ -74,8 +74,6 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResource
 public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final Logger LOG = LogManager.getLogger(HiveTable.class);
 
-    public static final String PROPERTY_MISSING_MSG =
-            "Hive %s is null. Please add properties('%s'='xxx') when create table";
     private static final String JSON_KEY_HIVE_DB = "hiveDb";
     private static final String JSON_KEY_HIVE_TABLE = "hiveTable";
     private static final String JSON_KEY_RESOURCE_NAME = "resourceName";
@@ -83,12 +81,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
     private static final String JSON_KEY_PART_COLUMN_NAMES = "partColumnNames";
     private static final String JSON_KEY_DATA_COLUMN_NAMES = "dataColumnNames";
     private static final String JSON_KEY_HIVE_PROPERTIES = "hiveProperties";
-    private static final String JSON_KEY_SR_DB_NAME = "srDbName";
-
-    public static final String HIVE_DB = "database";
-    public static final String HIVE_TABLE = "table";
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
-    public static final String HIVE_RESOURCE = "resource";
 
     private String catalogName;
     private String hiveDbName;
