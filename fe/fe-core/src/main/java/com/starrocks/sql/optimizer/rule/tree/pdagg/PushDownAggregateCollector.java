@@ -212,6 +212,11 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return visit(optExpression, context);
         }
 
+        // none group by don't push down
+        if (aggregate.getGroupingKeys().isEmpty()) {
+            return visit(optExpression, context);
+        }
+
         context = new AggregatePushDownContext();
         context.setAggregator(aggregate);
         return processChild(optExpression, context);
@@ -474,7 +479,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         LOG.debug("Push down aggregation[" + aggStr + "]" +
                 " group by[" + groupStr + "]," +
-                " check statistics high[" + high.size() +
+                " check statistics rows[" + statistics.getOutputRowCount() +
+                "] high[" + high.size() +
                 "] mid[" + medium.size() +
                 "] low[" + lower.size() +
                 "] cartesian[" + lowerCartesian +
@@ -492,7 +498,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         if (high.isEmpty() && medium.isEmpty()) {
             if (lowerCartesian <= statistics.getOutputRowCount() || lower.size() <= 2) {
                 return true;
-            } else if (lower.size() <= 4 && lowerCartesian < lowerUpper) {
+            } else if (lower.size() <= 3 && lowerCartesian < lowerUpper) {
                 return true;
             } else {
                 return sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG;
@@ -507,13 +513,13 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return false;
         }
 
-        // 3. high cardinality < 2 and lower cardinality <= 3
-        if (high.size() == 1 && lower.size() <= 3) {
+        // 3. high cardinality < 2 and lower cardinality < 2
+        if (high.size() == 1 && lower.size() <= 2) {
             return sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_HIGH_CARDINALITY_AGG;
         }
 
         // 4. medium cardinality <= 2
-        if (lower.size() <= 3) {
+        if (lower.size() <= 2) {
             if (sessionVariable.getCboPushDownAggregateMode() >= 2) {
                 return true;
             }
