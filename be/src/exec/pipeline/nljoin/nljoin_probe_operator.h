@@ -63,8 +63,12 @@ private:
     Status _permute_right_join(RuntimeState* state);
     void _permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
+
+    // Join type check
     bool _is_left_join() const;
     bool _is_right_join() const;
+    bool _is_left_semi_join() const;
+    bool _is_left_anti_join() const;
 
 private:
     const TJoinOp::type _join_op;
@@ -83,18 +87,19 @@ private:
     mutable ChunkAccumulator _output_accumulator;
 
     // Build states
-    int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
+    size_t _curr_build_chunk_index = 0;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     mutable std::vector<uint8_t> _self_build_match_flag;
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;
-    bool _probe_row_matched = false;  // For multi build-chunk, whether this probe row matched any join conjuncts
-    bool _probe_row_finished = false; // For multi build-chunk, whether this probe row is the last
-    size_t _probe_row_start = 0;      // Start index of current chunk
-    size_t _probe_row_current = 0;    // End index of current chunk
+    bool _probe_row_matched = false;         // For multi build-chunk, whether this probe row matched any join conjuncts
+    bool _probe_row_finished = false;        // For multi build-chunk, whether this probe row is the last
+    bool _probe_row_semianti_emited = false; // Guarantee emit probe row only once for semi-join
+    size_t _probe_row_start = 0;             // Start index of current chunk
+    size_t _probe_row_current = 0;           // End index of current chunk
 
     // Counters
     RuntimeProfile::Counter* _permute_rows_counter = nullptr;

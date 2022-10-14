@@ -4,6 +4,7 @@
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/vectorized_fwd.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -146,6 +147,14 @@ bool NLJoinProbeOperator::_is_right_join() const {
     return _join_op == TJoinOp::RIGHT_OUTER_JOIN || _join_op == TJoinOp::FULL_OUTER_JOIN;
 }
 
+bool NLJoinProbeOperator::_is_left_semi_join() const {
+    return _join_op == TJoinOp::LEFT_SEMI_JOIN;
+}
+
+bool NLJoinProbeOperator::_is_left_anti_join() const {
+    return _join_op == TJoinOp::LEFT_ANTI_JOIN;
+}
+
 int NLJoinProbeOperator::_num_build_chunks() const {
     return _cross_join_context->num_build_chunks();
 }
@@ -192,9 +201,10 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
 
 Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     vectorized::FilterPtr filter;
+    bool apply_filter = !_is_left_semi_join() || _num_build_chunks() == 0;
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
-        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter));
+        RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_join_conjuncts, chunk.get(), &filter, apply_filter));
         DCHECK(!!filter);
         // The filter has not been assigned if no rows matched
         if (chunk->num_rows() == 0) {
@@ -231,6 +241,49 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
                 }
             }
         }
+    }
+
+    if ((_is_left_semi_join() || _is_left_anti_join()) && !_probe_row_semianti_emited) {
+        if (!filter) {
+            filter = std::make_shared<vectorized::Filter>(1);
+            if (_is_left_semi_join()) {
+                filter->assign(1, 1);
+            } else {
+                filter->assign(1, 0);
+            }
+        }
+        if (_num_build_chunks() == 1) {
+            // Multiple probe rows and single build chunk
+            // Iterate the probe chunk and find the first matched row
+            size_t num_build_rows = _cross_join_context->num_build_rows();
+            DCHECK_GE(filter->size(), num_build_rows);
+            DCHECK_LE(_probe_row_start, _probe_row_current);
+            for (size_t i = 0; i < filter->size(); i += num_build_rows) {
+                size_t first_matched = _is_left_semi_join() ? SIMD::find_nonzero(*filter, i, num_build_rows)
+                                                            : SIMD::find_zero(*filter, i, num_build_rows);
+                if (first_matched + 1 < i + num_build_rows) {
+                    auto start = filter->begin() + first_matched + 1;
+                    auto end = filter->begin() + first_matched + num_build_rows;
+                    if (_is_left_anti_join()) {
+                        (*filter)[first_matched] = 1;
+                    }
+                    std::fill(start, end, 0);
+                }
+            }
+        } else {
+            // Single probe row, just find the first matched row
+            size_t first_matched = _is_left_semi_join() ? SIMD::find_nonzero(*filter, 0) : SIMD::find_zero(*filter, 0);
+            if (first_matched < filter->size()) {
+                auto start = filter->begin() + first_matched + 1;
+                auto end = filter->end();
+                std::fill(start, end, 0);
+                if (_is_left_anti_join()) {
+                    (*filter)[first_matched] = 1;
+                }
+                _probe_row_semianti_emited = true;
+            }
+        }
+        chunk->filter(*filter);
     }
 
     if (_is_right_join()) {
@@ -279,7 +332,9 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
             return chunk;
         }
 
-        while (_curr_build_chunk_index < _num_build_chunks()) {
+        // For SEMI/ANTI JOIN, the probe-row could be skipped once find matched/unmatched
+        // Otherwise accumulate more build chunks into a larger chunk
+        while (!_probe_row_semianti_emited && _curr_build_chunk_index < _num_build_chunks()) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(_curr_build_chunk_index + 1);
             if (chunk->num_rows() >= state->chunk_size()) {
@@ -288,6 +343,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
         }
         _probe_row_matched = false;
         _probe_row_finished = false;
+        _probe_row_semianti_emited = false;
         _move_build_chunk_index(0);
     }
     return chunk;
@@ -432,6 +488,7 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::Ch
     _probe_row_current = 0;
     _probe_row_matched = false;
     _probe_row_finished = false;
+    _probe_row_semianti_emited = false;
     _move_build_chunk_index(0);
 
     return Status::OK();

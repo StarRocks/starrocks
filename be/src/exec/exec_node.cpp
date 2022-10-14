@@ -604,7 +604,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectori
 }
 
 Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                vectorized::FilterPtr* filter_ptr) {
+                                vectorized::FilterPtr* filter_ptr, bool apply_filter) {
     // No need to do expression if none rows
     DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
@@ -652,7 +652,9 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
         }
     }
 
-    chunk->filter(*raw_filter);
+    if (apply_filter) {
+        chunk->filter(*raw_filter);
+    }
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
