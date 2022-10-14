@@ -6,6 +6,7 @@
 #include "agent/master_info.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/workgroup/work_group.h"
+#include "gutil/stl_util.h"
 #include "runtime/client_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/data_stream_mgr.h"
@@ -37,6 +38,9 @@ QueryContext::~QueryContext() {
         SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker.get());
         _fragment_mgr.reset();
     }
+
+    // clear the detailed table-level statistics
+    STLClearObject(&_cur_scan_stats_items);
 
     // Accounting memory usage during QueryContext's destruction should not use query-level MemTracker, but its released
     // in the mid of QueryContext destruction, so use process-level memory tracker
@@ -104,6 +108,14 @@ Status QueryContext::init_query(workgroup::WorkGroup* wg) {
 
 void QueryContext::set_query_trace(std::shared_ptr<starrocks::debug::QueryTrace> query_trace) {
     std::call_once(_query_trace_init_flag, [this, &query_trace]() { _query_trace = std::move(query_trace); });
+}
+
+void QueryContext::add_cur_scan_stats_item(const QueryStatisticsItemPB& stats_item) {
+    _cur_scan_rows_num += stats_item.scan_rows();
+    _cur_scan_bytes += stats_item.scan_bytes();
+    if (stats_item.table_id() > 0 && (stats_item.scan_rows() > 0 || stats_item.scan_bytes() > 0)) {
+        _cur_scan_stats_items.emplace_back(stats_item);
+    }
 }
 
 QueryContextManager::QueryContextManager(size_t log2_num_slots)

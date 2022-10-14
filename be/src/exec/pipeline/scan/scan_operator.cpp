@@ -57,6 +57,7 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _morsels_counter = ADD_COUNTER(_unique_metrics, "MorselsCount", TUnit::UNIT);
     _buffer_unplug_counter = ADD_COUNTER(_unique_metrics, "BufferUnplugCount", TUnit::UNIT);
     _submit_task_counter = ADD_COUNTER(_unique_metrics, "SubmitTaskCount", TUnit::UNIT);
+    _set_scan_table_id(state);
 
     RETURN_IF_ERROR(do_prepare(state));
 
@@ -216,6 +217,27 @@ int64_t ScanOperator::global_rf_wait_timeout_ns() const {
     }
 
     return 1000'000L * global_rf_collector->scan_wait_timeout_ms();
+}
+
+QueryStatisticsItemPB ScanOperator::get_scan_stats_item() {
+    QueryStatisticsItemPB stats_item;
+    stats_item.set_scan_bytes(_last_scan_bytes.exchange(0));
+    stats_item.set_scan_rows(_last_scan_rows_num.exchange(0));
+    stats_item.set_table_id(_scan_table_id);
+    return stats_item;
+}
+
+void ScanOperator::_set_scan_table_id(RuntimeState* state) {
+    vectorized::OlapScanNode* scan_node = dynamic_cast<vectorized::OlapScanNode*>(_scan_node);
+    if (nullptr == scan_node) {
+        return;
+    }
+    const TOlapScanNode& thrift_olap_scan_node = scan_node->thrift_olap_scan_node();
+    const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
+    if (nullptr == tuple_desc) {
+        return;
+    }
+    _scan_table_id = tuple_desc->table_desc()->table_id();
 }
 
 Status ScanOperator::_try_to_trigger_next_scan(RuntimeState* state) {

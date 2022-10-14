@@ -101,10 +101,10 @@ public:
     void incr_cpu_cost(int64_t cost) { _cur_cpu_cost_ns += cost; }
     int64_t cpu_cost() const { return _cur_cpu_cost_ns; }
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
-    void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
     int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
-    void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
     int64_t get_scan_bytes() const { return _cur_scan_bytes; }
+    void add_cur_scan_stats_item(const QueryStatisticsItemPB& stats_item);
+    const std::vector<QueryStatisticsItemPB>& get_cur_scan_stats_items() { return _cur_scan_stats_items; };
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -147,6 +147,7 @@ private:
     std::atomic<int64_t> _cur_cpu_cost_ns = 0;
     std::atomic<int64_t> _cur_scan_rows_num = 0;
     std::atomic<int64_t> _cur_scan_bytes = 0;
+    std::vector<QueryStatisticsItemPB> _cur_scan_stats_items;
 
     int64_t _scan_limit = 0;
 };

@@ -45,15 +45,12 @@ public:
 
     void set_returned_rows(int64_t num_rows) { this->returned_rows = num_rows; }
 
-    void add_stats_item(QueryStatisticsItemPB& stats_item) {
-        this->_stats_items.emplace_back(stats_item);
+    void add_stats_item(const QueryStatisticsItemPB& stats_item) {
+        if (stats_item.table_id() > 0 && (stats_item.scan_rows() > 0 || stats_item.scan_bytes() > 0)) {
+            this->_stats_items.emplace_back(stats_item);
+        }
         this->scan_rows += stats_item.scan_rows();
         this->scan_bytes += stats_item.scan_bytes();
-    }
-
-    void add_scan_stats(int64_t scan_rows, int64_t scan_bytes) {
-        this->scan_rows += scan_rows;
-        this->scan_bytes += scan_bytes;
     }
 
     void add_cpu_costs(int64_t cpu_ns) { this->cpu_ns += cpu_ns; }
