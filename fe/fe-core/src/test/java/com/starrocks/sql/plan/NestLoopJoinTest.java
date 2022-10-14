@@ -105,7 +105,7 @@ public class NestLoopJoinTest extends PlanTestBase {
     }
 
     @Test
-    public void testUnsupportedNLJoin() throws Exception {
+    public void testSemiNLJoin() throws Exception {
         String sql = "select v1 from t0 where 1 IN ((SELECT v4 FROM t1, t2, t3 WHERE CASE WHEN true " +
                 "THEN (CAST(((((-1710265121)%(1583445171)))%(CAST(v1 AS INT ) )) AS STRING ) )  " +
                 "BETWEEN (v4) AND (v5)   " +
@@ -131,6 +131,10 @@ public class NestLoopJoinTest extends PlanTestBase {
                 "NESTLOOP JOIN");
         assertPlanContains("select * from t0,t1 where abs(1) - 1 not in (select v7 + 1 from t2,t3 where t0.v1 = 1 and t1.v4 = 2)",
                 "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 left semi join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 left anti join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 right semi join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
+        assertPlanContains("select * from t0 right anti join t1 on t0.v1 < t1.v4", "NESTLOOP JOIN");
     }
 
     @Test

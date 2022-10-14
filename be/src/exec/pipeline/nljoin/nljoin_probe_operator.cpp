@@ -199,7 +199,22 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
     return chunk;
 }
 
-Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
+void NLJoinProbeOperator::iterate_enumerate_chunk(ChunkPtr chunk, std::function<void(bool, size_t, size_t)> call) {
+    if (_num_build_chunks() == 1) {
+        call(false, 0, chunk->num_rows());
+    } else {
+        size_t num_build_rows = _cross_join_context->num_build_rows();
+        for (size_t i = 0; i < chunk->num_rows(); i += num_build_rows) {
+            call(true, i, num_build_rows);
+        }
+    }
+}
+
+Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
+    if (_probe_row_semianti_emited) {
+        chunk.reset();
+        return Status::OK();
+    }
     vectorized::FilterPtr filter;
     bool apply_filter = (!_is_left_semi_join() && !_is_left_anti_join()) || _num_build_chunks() == 0;
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
@@ -243,7 +258,7 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
         }
     }
 
-    if ((_is_left_semi_join() || _is_left_anti_join()) && !_probe_row_semianti_emited) {
+    if ((_is_left_semi_join() || _is_left_anti_join())) {
         if (!filter && chunk->num_rows() > 0) {
             filter = std::make_shared<vectorized::Filter>(chunk->num_rows(), 0);
             if (_is_left_semi_join()) {
@@ -252,41 +267,20 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
                 (*filter)[0] = 0;
             }
         }
-        if (_num_build_chunks() == 1) {
-            // Multiple probe rows and single build chunk
-            // Iterate the probe chunk and find the first matched row
-            size_t num_build_rows = _cross_join_context->num_build_rows();
-            DCHECK_GE(filter->size(), num_build_rows);
-            DCHECK_LE(_probe_row_start, _probe_row_current);
-            for (size_t i = 0; i < filter->size(); i += num_build_rows) {
-                size_t first_matched = _is_left_semi_join() ? SIMD::find_nonzero(*filter, i, num_build_rows)
-                                                            : SIMD::find_zero(*filter, i, num_build_rows);
-                if (first_matched + 1 < i + num_build_rows) {
-                    auto start = filter->begin() + first_matched + 1;
-                    auto end = filter->begin() + i + num_build_rows;
-                    std::fill(start, end, 0);
-                    if (_is_left_anti_join()) {
-                        (*filter)[first_matched] = 1;
-                    }
-                } else if (_is_left_anti_join()) {
-                    std::fill(filter->begin() + i, filter->begin() + i + num_build_rows, 0);
-                }
-            }
-        } else {
-            // Single probe row, just find the first matched row
-            size_t first_matched = _is_left_semi_join() ? SIMD::find_nonzero(*filter, 0) : SIMD::find_zero(*filter, 0);
-            if (first_matched < filter->size()) {
-                auto start = filter->begin() + first_matched + 1;
-                auto end = filter->end();
-                std::fill(start, end, 0);
+        iterate_enumerate_chunk(chunk, [&](bool complete_probe_row, size_t start, size_t end) {
+            size_t first_matched = _is_left_semi_join() ? SIMD::find_nonzero(*filter, start, end - start)
+                                                        : SIMD::find_zero(*filter, start, end - start);
+            if (first_matched + 1 < end) {
+                // Keep only the first matched/unmatched row, throw away other rows
+                std::fill(filter->begin() + first_matched + 1, filter->begin() + end, 0);
                 if (_is_left_anti_join()) {
                     (*filter)[first_matched] = 1;
                 }
                 _probe_row_semianti_emited = true;
             } else if (_is_left_anti_join()) {
-                std::fill(filter->begin(), filter->end(), 0);
+                std::fill(filter->begin() + start, filter->begin() + end, 0);
             }
-        }
+        });
         chunk->filter(*filter);
     }
 
