@@ -396,7 +396,8 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
         _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
     }
     _last_state = _tmp_agg_states[chunk_size - 1];
-
+    DCHECK(!_group_by_columns[0]->empty());
+    DCHECK(!_last_columns[0]->empty());
     return Status::OK();
 }
 
