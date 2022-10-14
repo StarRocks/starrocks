@@ -163,19 +163,29 @@ public class HiveMetaClient {
         }
     }
 
-    public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionValues) {
+    /**
+     * Both 'getPartitionByNames' and 'getPartitionColumnStatistics' could throw exception or no response
+     * when querying too many partitions at present. Due to statistics don't affect accuracy, user could adjust
+     * session variable 'hive_partition_stats_sample_size' to ensure 'getPartitionColumnStat' normal return.
+     * But "getPartitionByNames" interface must return the full contents due to the need to get partition file information.
+     * So we resend request "getPartitionByNames" when an exception occurs.
+     */
+    public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
+        List<Partition> partitions;
         try (AutoCloseClient client = getClient()) {
-            List<Partition> partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionValues);
-            if (partitions.size() != partitionValues.size()) {
+            partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
+            if (partitions.size() != partitionNames.size()) {
                 LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
-                        partitionValues.size(), dbName, tblName, partitions.size());
+                        partitionNames.size(), dbName, tblName, partitions.size());
             }
-            return partitions;
+        } catch (TTransportException te) {
+            partitions = getPartitionsWithRetry(dbName, tblName, partitionNames, 1);
         } catch (Exception e) {
             LOG.error("Failed to get partitions on {}.{}", dbName, tblName, e);
             throw new StarRocksConnectorException("Failed to get partitions on [%s.%s] from meta store: %s",
                     dbName, tblName, e.getMessage());
         }
+        return partitions;
     }
 
     public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
@@ -209,11 +219,11 @@ public class HiveMetaClient {
      * We solve this problem by get partitions information multiple times.
      * Each retry reduces the number of partitions fetched by half until only one partition is fetched at a time.
      * @return Hive table partitions
-     * @throws DdlException If there is an exception with only one partition at a time when get partition,
+     * @throws StarRocksConnectorException If there is an exception with only one partition at a time when get partition,
      * then we determine that there is a bug with the user's hive metastore.
      */
     private List<Partition> getPartitionsWithRetry(String dbName, String tableName,
-                                                   List<String> partNames, int retryNum) throws DdlException {
+                                                   List<String> partNames, int retryNum) throws StarRocksConnectorException {
         int subListSize = (int) Math.pow(2, retryNum);
         int subListNum = partNames.size() / subListSize;
         List<List<String>> partNamesList = Lists.partition(partNames, subListNum);
@@ -233,12 +243,12 @@ public class HiveMetaClient {
             if (subListNum > 1) {
                 return getPartitionsWithRetry(dbName, tableName, partNames, retryNum + 1);
             } else {
-                throw new DdlException(String.format("" +
-                        "Failed to getPartitionsByNames on [%s.%s] with slice size is %d", dbName, tableName, subListNum));
+                throw new StarRocksConnectorException("Failed to getPartitionsByNames on [%s.%s] with slice size is %d",
+                        dbName, tableName, subListNum);
             }
         } catch (Exception e) {
-            throw new DdlException(String.format("Failed to getPartitionsNames on [%s.%s], msg: %s",
-                    dbName, tableName, e.getMessage()));
+            throw new StarRocksConnectorException("Failed to getPartitionsNames on [%s.%s], msg: %s",
+                    dbName, tableName, e.getMessage());
         }
     }
 
