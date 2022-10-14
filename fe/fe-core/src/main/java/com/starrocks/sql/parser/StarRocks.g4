@@ -913,7 +913,7 @@ showResourceStatement
     ;
 
 classifier
-    : '(' expression (',' expression)* ')'
+    : '(' expressionList ')'
     ;
 
 // ------------------------------------------- Function ----------------------------------------------------
@@ -1410,7 +1410,7 @@ subquery
     ;
 
 rowConstructor
-     :'(' expression (',' expression)* ')'
+     :'(' expressionList ')'
      ;
 
 sortItem
@@ -1436,10 +1436,10 @@ fromClause
     ;
 
 groupingElement
-    : ROLLUP '(' (expression (',' expression)*)? ')'                                    #rollup
-    | CUBE '(' (expression (',' expression)*)? ')'                                      #cube
+    : ROLLUP '(' (expressionList)? ')'                                                  #rollup
+    | CUBE '(' (expressionList)? ')'                                                    #cube
     | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'                              #multipleGroupingSets
-    | expression (',' expression)*                                                      #singleGroupingSet
+    | expressionList                                                                    #singleGroupingSet
     ;
 
 groupingSet
@@ -1476,7 +1476,7 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
-    | qualifiedName '(' expression (',' expression)* ')'
+    | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
@@ -1571,6 +1571,10 @@ expression
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
+expressionList
+    : expression (',' expression)*
+    ;
+
 booleanExpression
     : predicate                                                                           #booleanExpressionDefault
     | booleanExpression IS NOT? NULL                                                      #isNull
@@ -1583,7 +1587,7 @@ predicate
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' expression (',' expression)* ')'                                        #inList
+    : NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
@@ -1623,7 +1627,7 @@ primaryExpression
     | CONVERT '(' expression ',' type ')'                                                 #convert
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
+    | arrayType? '[' (expressionList)? ']'                                                #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
