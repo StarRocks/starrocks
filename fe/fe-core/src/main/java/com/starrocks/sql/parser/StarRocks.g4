@@ -195,8 +195,6 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
-
-    //  Repository Satement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -223,6 +221,9 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+
+    //Unsupported Statement
+    | unsupportedStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -1370,6 +1371,13 @@ setExprOrDefault
 
 setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
+    ;
+
+unsupportedStatement
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
+    | BEGIN WORK?
+    | COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    | ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
     ;
 
 // ------------------------------------------- Query Statement ---------------------------------------------------------
