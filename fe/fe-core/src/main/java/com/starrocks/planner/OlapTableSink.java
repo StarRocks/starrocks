@@ -28,6 +28,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
@@ -62,6 +63,7 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TNodeInfo;
 import com.starrocks.thrift.TNodesInfo;
 import com.starrocks.thrift.TOlapTableIndexSchema;
@@ -77,6 +79,8 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -298,12 +302,27 @@ public class OlapTableSink extends DataSink {
         return partitionParam;
     }
 
+    private List<TExprNode> LiteralExprsToTExprNodes(List<LiteralExpr> values){
+        return values.stream()
+                .map(value -> value.treeToThrift().getNodes().get(0))
+                .collect(Collectors.toList());
+    }
+
     private void setListPartitionValues(ListPartitionInfo listPartitionInfo, Partition partition,
                                         TOlapTablePartition tPartition){
-        List<List<String>> multiValues = listPartitionInfo.getIdToMultiValues().get(partition.getId());
-        List<String> values = listPartitionInfo.getIdToValues().get(partition.getId());
-        tPartition.setMultiValues(multiValues);
-        tPartition.setValues(values);
+        List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
+        if(multiValues != null && multiValues.size() > 0){
+            List<List<TExprNode>> multiValueExprNodes = new ArrayList<>(multiValues.size());
+            for(List<LiteralExpr> values : multiValues){
+                multiValueExprNodes.add(this.LiteralExprsToTExprNodes(values));
+            }
+            tPartition.setMultiValues(multiValueExprNodes);
+        }
+
+        List<LiteralExpr> values = listPartitionInfo.getLiteralExprValues().get(partition.getId());
+        if (values != null && values.size() > 0){
+            tPartition.setValues(this.LiteralExprsToTExprNodes(values));
+        }
     }
 
     private void setRangeKeys(RangePartitionInfo rangePartitionInfo, Partition partition,
