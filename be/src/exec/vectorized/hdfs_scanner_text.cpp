@@ -272,7 +272,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 if (!_converters[j]->read_string(column, field, options)) {
                     LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
                                  << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
-                    error_msg = strings::Substitute("CSV parse column [$0] failed, more details plz see be log.",
+                    error_msg = strings::Substitute("CSV parse column [$0] failed, more details please see be log.",
                                                     _scanner_params.materialize_slots[j]->debug_string());
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;

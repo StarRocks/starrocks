@@ -287,7 +287,7 @@ public:
         std::stringstream ss;
         ss << "[";
         size_t size = this->size();
-        for(size_t i = 0; i < size; i++) {
+        for (size_t i = 0; i < size; i++) {
             if (i == size - 1) {
                 ss << debug_item(i);
             } else {
