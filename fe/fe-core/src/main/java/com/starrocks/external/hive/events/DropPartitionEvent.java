@@ -5,12 +5,7 @@ package com.starrocks.external.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Table;
-import com.starrocks.external.Utils;
-import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKeysKey;
-import com.starrocks.external.hive.HivePartitionName;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.DropPartitionMessage;
 import org.apache.logging.log4j.LogManager;
@@ -31,7 +26,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     private final List<Column> partCols;
 
     private DropPartitionEvent(NotificationEvent event,
-                               HiveMetaCache metaCache,
+                               CacheUpdateProcessor metaCache,
                                Map<String, String> droppedPartition,
                                List<Column> partCols) {
         super(event, metaCache);
@@ -47,8 +42,8 @@ public class DropPartitionEvent extends MetastoreTableEvent {
             Preconditions.checkState(!partCols.isEmpty());
             this.partCols = partCols;
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(new HivePartitionName(dbName, tblName, Table.TableType.HIVE,
-                    Lists.newArrayList(droppedPartition.values())));
+            // TODO(stephen): refactor this function
+            // hivePartitionKeys.add(new HivePartitionName(dbName, tblName, Table.TableType.HIVE, Lists.newArrayList(droppedPartition.values())));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(
                     debugString("Could not parse drop event message. "), ex);
@@ -56,7 +51,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                    HiveMetaCache metaCache,
+                                                    CacheUpdateProcessor metaCache,
                                                     List<Column> partCols) {
         DropPartitionMessage dropPartitionMessage =
                 MetastoreEventsProcessor.getMessageDeserializer()
@@ -98,11 +93,10 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         try {
-            HivePartitionKeysKey partitionKeysKey =
-                    new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
-            PartitionKey partitionKey =
-                    Utils.createPartitionKey(Lists.newArrayList(droppedPartition.values()), partCols);
-            cache.dropPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
+            // TODO(stephen): refactor this function
+            // HivePartitionKeysKey partitionKeysKey = new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
+            // PartitionKey partitionKey = PartitionUtil.createPartitionKey(Lists.newArrayList(droppedPartition.values()), partCols);
+            // cache.dropPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

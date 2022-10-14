@@ -7,11 +7,9 @@ import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ProcResultUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
-import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -57,11 +55,8 @@ public class ExternalTablesProcDir implements ProcDirInterface {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Preconditions.checkNotNull(metadataMgr);
         List<String> tables = null;
-        try {
-            tables = metadataMgr.listTableNames(catalogName, dbName);
-        } catch (DdlException e) {
-            throw new SemanticException(String.format("Get external tables error: %s", e.getMessage()));
-        }
+        tables = metadataMgr.listTableNames(catalogName, dbName);
+
         // get info
         List<List<Comparable>> tableInfos = new ArrayList<List<Comparable>>();
         for (String tableName : tables) {

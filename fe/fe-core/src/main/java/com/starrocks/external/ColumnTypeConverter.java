@@ -8,6 +8,9 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.avro.LogicalType;
+import org.apache.avro.LogicalTypes;
+import org.apache.avro.Schema;
 
 import java.util.Arrays;
 import java.util.List;
@@ -22,7 +25,7 @@ public class ColumnTypeConverter {
     public static final String MAP_PATTERN = "^map<([0-9a-z<>(),:]+)>";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
-    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "MAP", "UNIONTYPE");
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("STRUCT", "BINARY", "UNIONTYPE");
 
     public static Type fromHiveType(String hiveType) {
         String typeUpperCase = getTypeKeyword(hiveType).toUpperCase();
@@ -68,14 +71,14 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case "ARRAY":
-                Type type = convertToArrayType(hiveType);
+                Type type = fromHiveTypeToArrayType(hiveType);
                 if (type.isArrayType()) {
                     return type;
                 } else {
                     return Type.UNKNOWN_TYPE;
                 }
             case "MAP":
-                Type mapType = convertToMapType(hiveType);
+                Type mapType = fromHiveTypeToMapType(hiveType);
                 if (mapType.isMapType()) {
                     return mapType;
                 } else {
@@ -92,6 +95,93 @@ public class ColumnTypeConverter {
             int[] parts = getPrecisionAndScale(hiveType);
             return ScalarType.createUnifiedDecimalType(parts[0], parts[1]);
         }
+    }
+
+    // this func targets at convert hudi column type(avroSchema) to starrocks column type(primitiveType)
+    public static Type fromHudiType(Schema avroSchema) {
+        Schema.Type columnType = avroSchema.getType();
+        LogicalType logicalType = avroSchema.getLogicalType();
+        PrimitiveType primitiveType = null;
+        boolean isConvertedFailed = false;
+
+        switch (columnType) {
+            case BOOLEAN:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INT:
+                if (logicalType instanceof LogicalTypes.Date) {
+                    primitiveType = PrimitiveType.DATE;
+                } else if (logicalType instanceof LogicalTypes.TimeMillis) {
+                    primitiveType = PrimitiveType.TIME;
+                } else {
+                    primitiveType = PrimitiveType.INT;
+                }
+                break;
+            case LONG:
+                if (logicalType instanceof LogicalTypes.TimeMicros) {
+                    primitiveType = PrimitiveType.TIME;
+                } else if (logicalType instanceof LogicalTypes.TimestampMillis
+                        || logicalType instanceof LogicalTypes.TimestampMicros) {
+                    primitiveType = PrimitiveType.DATETIME;
+                } else {
+                    primitiveType = PrimitiveType.BIGINT;
+                }
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case STRING:
+                return ScalarType.createDefaultString();
+            case ARRAY:
+                Type type = fromHudiTypeToArrayType(avroSchema);
+                if (type.isArrayType()) {
+                    return type;
+                } else {
+                    isConvertedFailed = false;
+                    break;
+                }
+            case FIXED:
+            case BYTES:
+                if (logicalType instanceof LogicalTypes.Decimal) {
+                    int precision = 0;
+                    int scale = 0;
+                    if (avroSchema.getObjectProp("precision") instanceof Integer) {
+                        precision = (int) avroSchema.getObjectProp("precision");
+                    }
+                    if (avroSchema.getObjectProp("scale") instanceof Integer) {
+                        scale = (int) avroSchema.getObjectProp("scale");
+                    }
+                    return ScalarType.createUnifiedDecimalType(precision, scale);
+                } else {
+                    primitiveType = PrimitiveType.VARCHAR;
+                    break;
+                }
+            case UNION:
+                List<Schema> nonNullMembers = avroSchema.getTypes().stream()
+                        .filter(schema -> !Schema.Type.NULL.equals(schema.getType()))
+                        .collect(Collectors.toList());
+
+                if (nonNullMembers.size() == 1) {
+                    return fromHudiType(nonNullMembers.get(0));
+                } else {
+                    isConvertedFailed = true;
+                    break;
+                }
+            case ENUM:
+            case MAP:
+            default:
+                isConvertedFailed = true;
+                break;
+        }
+
+        if (isConvertedFailed) {
+            primitiveType = PrimitiveType.UNKNOWN_TYPE;
+        }
+
+        return ScalarType.createType(primitiveType);
     }
 
     public static String getTypeKeyword(String type) {
@@ -115,7 +205,7 @@ public class ColumnTypeConverter {
     }
 
     // Array string like "Array<Array<int>>"
-    public static Type convertToArrayType(String typeStr) {
+    public static Type fromHiveTypeToArrayType(String typeStr) {
         if (!HIVE_UNSUPPORTED_TYPES.stream().filter(typeStr.toUpperCase()::contains).collect(Collectors.toList())
                 .isEmpty()) {
             return Type.UNKNOWN_TYPE;
@@ -123,10 +213,10 @@ public class ColumnTypeConverter {
         Matcher matcher = Pattern.compile(ARRAY_PATTERN).matcher(typeStr.toLowerCase(Locale.ROOT));
         Type itemType;
         if (matcher.find()) {
-            if (convertToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
+            if (fromHiveTypeToArrayType(matcher.group(1)).equals(Type.UNKNOWN_TYPE)) {
                 itemType = Type.UNKNOWN_TYPE;
             } else {
-                itemType = new ArrayType(convertToArrayType(matcher.group(1)));
+                itemType = new ArrayType(fromHiveTypeToArrayType(matcher.group(1)));
             }
         } else {
             itemType = fromHiveType(typeStr);
@@ -162,7 +252,7 @@ public class ColumnTypeConverter {
     }
 
     // Map string like map<keytype, valuetype>
-    public static Type convertToMapType(String typeStr) {
+    public static Type fromHiveTypeToMapType(String typeStr) {
         String[] kv = getKeyValueStr(typeStr);
         return new MapType(fromHiveType(kv[0]), fromHiveType(kv[1]));
     }
@@ -185,4 +275,59 @@ public class ColumnTypeConverter {
         throw new StarRocksConnectorException("Failed to get varchar length at " + typeStr);
     }
 
+    private static ArrayType fromHudiTypeToArrayType(Schema typeSchema) {
+        return new ArrayType(fromHudiType(typeSchema.getElementType()));
+    }
+
+    public static boolean validateHiveColumnType(Type type, Type otherType) {
+        if (type == null || otherType == null) {
+            return false;
+        }
+
+        if (type == Type.UNKNOWN_TYPE || otherType == Type.UNKNOWN_TYPE) {
+            return false;
+        }
+
+        if (type.isArrayType()) {
+            if (otherType.isArrayType()) {
+                return validateHiveColumnType(((ArrayType) type).getItemType(), ((ArrayType) otherType).getItemType());
+            } else {
+                return false;
+            }
+        }
+
+        if (type.isMapType()) {
+            if (otherType.isMapType()) {
+                return validateHiveColumnType(((MapType) type).getKeyType(), ((MapType) otherType).getKeyType()) &&
+                        validateHiveColumnType(((MapType) type).getValueType(), ((MapType) otherType).getValueType());
+            } else {
+                return false;
+            }
+        }
+
+        PrimitiveType primitiveType = type.getPrimitiveType();
+        PrimitiveType otherPrimitiveType = otherType.getPrimitiveType();
+        switch (primitiveType) {
+            case TINYINT:
+            case SMALLINT:
+            case INT:
+            case BIGINT:
+            case FLOAT:
+            case DOUBLE:
+            case DATETIME:
+            case DATE:
+            case BOOLEAN:
+            case CHAR:
+                return primitiveType == otherPrimitiveType;
+            case VARCHAR:
+                return otherPrimitiveType == PrimitiveType.CHAR || otherPrimitiveType == PrimitiveType.VARCHAR;
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return otherPrimitiveType.isDecimalOfAnyVersion();
+            default:
+                return false;
+        }
+    }
 }

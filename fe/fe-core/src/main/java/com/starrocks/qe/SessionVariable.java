@@ -261,7 +261,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In most cases, the partition statistics obtained from the hive metastore are empty.
     // Because we get partition statistics asynchronously for the first query of a table or partition,
     // if the gc of any service is caused, you can set the value to 100 for testing.
-    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "3000";
+    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";

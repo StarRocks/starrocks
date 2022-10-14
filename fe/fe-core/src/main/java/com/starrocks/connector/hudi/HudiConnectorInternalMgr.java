@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.connector.hive;
+package com.starrocks.connector.hudi;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
@@ -12,8 +12,8 @@ import com.starrocks.external.hive.CachingHiveMetastore;
 import com.starrocks.external.hive.CachingHiveMetastoreConf;
 import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.HiveRemoteFileIO;
 import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.external.hudi.HudiRemoteFileIO;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
@@ -24,14 +24,14 @@ import java.util.concurrent.Executors;
 
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
-public class HiveConnectorInternalMgr {
+public class HudiConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
     private final boolean enableMetastoreCache;
-    private final CachingHiveMetastoreConf hmsConf;
+    private CachingHiveMetastoreConf hmsConf;
 
     private final boolean enableRemoteFileCache;
-    private final CachingRemoteFileConf remoteFileConf;
+    private CachingRemoteFileConf remoteFileConf;
 
     private ExecutorService refreshHiveMetastoreExecutor;
     private ExecutorService refreshRemoteFileExecutor;
@@ -40,7 +40,7 @@ public class HiveConnectorInternalMgr {
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
 
-    public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
+    public HudiConnectorInternalMgr(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
         this.properties = properties;
         this.enableMetastoreCache = Boolean.parseBoolean(properties.getOrDefault("enable_metastore_cache", "true"));
@@ -91,14 +91,14 @@ public class HiveConnectorInternalMgr {
     public RemoteFileIO createRemoteFileIO() {
         // TODO(stephen): Abstract the creator class to construct RemoteFiloIO
         Configuration configuration = new Configuration();
-        RemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
+        RemoteFileIO remoteFileIO = new HudiRemoteFileIO(configuration);
 
         RemoteFileIO baseRemoteFileIO;
         if (!enableRemoteFileCache) {
             baseRemoteFileIO = remoteFileIO;
         } else {
             refreshRemoteFileExecutor = Executors.newCachedThreadPool(
-                    new ThreadFactoryBuilder().setNameFormat("hive-remote-files-refresh-%d").build());
+                    new ThreadFactoryBuilder().setNameFormat("hudi-remote-files-refresh-%d").build());
             baseRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                     remoteFileIO,
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
@@ -121,7 +121,7 @@ public class HiveConnectorInternalMgr {
     public ExecutorService getPullRemoteFileExecutor() {
         if (pullRemoteFileExecutor == null) {
             pullRemoteFileExecutor = Executors.newFixedThreadPool(loadRemoteFileMetadataThreadNum,
-                    new ThreadFactoryBuilder().setNameFormat("pull-hive-remote-files-%d").build());
+                    new ThreadFactoryBuilder().setNameFormat("pull-hudi-remote-files-%d").build());
         }
 
         return pullRemoteFileExecutor;

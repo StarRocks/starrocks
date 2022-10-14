@@ -3,7 +3,7 @@
 package com.starrocks.external.hive.events;
 
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.external.hive.HiveMetaCache;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 
 import java.util.List;
@@ -23,6 +23,6 @@ public interface EventFactory {
      * @throws MetastoreNotificationException If the hmsEvent information cannot be parsed.
      */
     List<MetastoreEvent> get(NotificationEvent hmsEvent,
-                             HiveMetaCache metaCache,
+                             CacheUpdateProcessor metaCache,
                              HiveTable table) throws MetastoreNotificationException;
 }

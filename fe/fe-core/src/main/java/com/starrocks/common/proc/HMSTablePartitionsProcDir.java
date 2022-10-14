@@ -6,13 +6,13 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
-import com.starrocks.external.Utils;
-import org.apache.hadoop.hive.common.FileUtils;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+
+import java.util.List;
 
 /*
  * SHOW PROC /dbs/dbId/tableId/partitions
@@ -36,16 +36,17 @@ public class HMSTablePartitionsProcDir implements ProcDirInterface {
 
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
-        // partitionColumns is empty means table is unPartitioned
-        if (hmsTable.getPartitionColumnNames().isEmpty()) {
+
+        if (hmsTable.isUnPartitioned()) {
             result.addRow(Lists.newArrayList(hmsTable.getTableName()));
         } else {
             try {
-                for (PartitionKey partitionKey : hmsTable.getPartitionKeys().keySet()) {
-                    result.addRow(Lists.newArrayList(FileUtils.makePartName(hmsTable.getPartitionColumnNames(),
-                            Utils.getPartitionValues(partitionKey))));
+                List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                        .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+                for (String partitionName : partitionNames) {
+                    result.addRow(Lists.newArrayList(partitionName));
                 }
-            } catch (DdlException e) {
+            } catch (StarRocksConnectorException e) {
                 LOG.warn("Get table partitions failed", e);
                 throw new AnalysisException("get table partitions failed: " + e.getMessage());
             }
