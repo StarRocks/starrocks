@@ -724,8 +724,6 @@ public class TabletScheduler extends LeaderDaemon {
      * If some tablets belongs to the same bucket are already scheduled based on the new backend sequence,
      * we won't try to skip the current scheduling and reset the backend sequence because this will cause the tablets
      * which have finished scheduling to be scheduled again.
-     *
-     * @return true, if we can skip the schedule, otherwise false
      */
     private void trySkipRelocateSchedAndResetBackendSeq(TabletSchedCtx ctx, long visibleVersion, short replicaNum,
                                                         Set<Long> currentBackendsSet) {

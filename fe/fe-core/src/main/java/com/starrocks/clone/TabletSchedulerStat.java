@@ -114,7 +114,7 @@ public class TabletSchedulerStat {
     public AtomicLong counterReplicaColocateMismatch = new AtomicLong(0L);
     @StatField("num of colocate replica redundant")
     public AtomicLong counterReplicaColocateRedundant = new AtomicLong(0L);
-    @StatField("num of ")
+    @StatField("num of colocate balancer running round")
     public AtomicLong counterColocateBalanceRound = new AtomicLong(0L);
 
     private TabletSchedulerStat lastSnapshot = null;

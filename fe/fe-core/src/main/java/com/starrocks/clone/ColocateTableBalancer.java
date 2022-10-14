@@ -243,7 +243,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
             if (relocateAndBalance(groupId, unavailableBeIdsInGroup, availableBeIds, colocateIndex, infoService,
                     statistic, balancedBackendsPerBucketSeq)) {
                 group2ColocateRelocationInfo.put(groupId,
-                        new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty() ? true : false,
+                        new ColocateRelocationInfo(!unavailableBeIdsInGroup.isEmpty(),
                                 colocateIndex.getBackendsPerBucketSeq(groupId), Maps.newHashMap()));
                 colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 ColocatePersistInfo info =
