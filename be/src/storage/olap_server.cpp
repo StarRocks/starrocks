@@ -233,13 +233,13 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    GCHelper dec_advisor(config::pagecache_adjust_period, config::auto_adjust_pagecache_interval_seconds,
-                         MonoTime::Now());
-    GCHelper inc_advisor(config::pagecache_adjust_period, config::auto_adjust_pagecache_interval_seconds,
-                         MonoTime::Now());
+    int64_t cur_period = config::pagecache_adjust_period;
+    int64_t cur_interval = config::auto_adjust_pagecache_interval_seconds;
+    std::unique_ptr<GCHelper> dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
+    std::unique_ptr<GCHelper> inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
     auto cache = StoragePageCache::instance();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
-        SLEEP_IN_BG_WORKER(config::auto_adjust_pagecache_interval_seconds);
+        SLEEP_IN_BG_WORKER(cur_interval);
         if (!config::enable_auto_adjust_pagecache) {
             continue;
         }
@@ -248,6 +248,15 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         }
         MemTracker* memtracker = ExecEnv::GetInstance()->process_mem_tracker();
         if (memtracker == nullptr || !memtracker->has_limit() || cache == nullptr) {
+            continue;
+        }
+        if (UNLIKELY(cur_period != config::pagecache_adjust_period ||
+                     cur_interval != config::auto_adjust_pagecache_interval_seconds)) {
+            cur_period = config::pagecache_adjust_period;
+            cur_interval = config::auto_adjust_pagecache_interval_seconds;
+            dec_advisor.reset(new GCHelper(cur_period, cur_interval, MonoTime::Now()));
+            inc_advisor.reset(new GCHelper(cur_period, cur_interval, MonoTime::Now()));
+            // We re-initialized advisor, just continue.
             continue;
         }
 
@@ -260,7 +269,6 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
                        << " memory_high_level=" << memory_high_level;
             continue;
         }
-        
 
         int64_t memory_urgent = memtracker->limit() * memory_urgent_level / 100;
         int64_t delta_urgent = memtracker->consumption() - memory_urgent;
@@ -268,14 +276,14 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
         if (delta_urgent > 0) {
             // Memory usage exceeds memory_urgent_level, reduce size immediately.
             cache->adjust_capacity(-delta_urgent, kcacheMinSize);
-            size_t bytes_to_dec = dec_advisor.bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
+            size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), memory_urgent - memory_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
             continue;
         }
 
         int64_t delta_high = memtracker->consumption() - memory_high;
         if (delta_high > 0) {
-            size_t bytes_to_dec = dec_advisor.bytes_should_gc(MonoTime::Now(), delta_high);
+            size_t bytes_to_dec = dec_advisor->bytes_should_gc(MonoTime::Now(), delta_high);
             evict_pagecache(cache, static_cast<int64_t>(bytes_to_dec), _bg_worker_stopped);
         } else {
             int64_t max_cache_size = std::max(ExecEnv::GetInstance()->get_storage_page_cache_size(), kcacheMinSize);
@@ -284,7 +292,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
                 continue;
             }
             int64_t delta_cache = std::min(max_cache_size - cur_cache_size, std::abs(delta_high));
-            size_t bytes_to_inc = inc_advisor.bytes_should_gc(MonoTime::Now(), delta_cache);
+            size_t bytes_to_inc = inc_advisor->bytes_should_gc(MonoTime::Now(), delta_cache);
             if (bytes_to_inc > 0) {
                 cache->adjust_capacity(bytes_to_inc);
             }
