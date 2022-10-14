@@ -104,16 +104,6 @@ public class HiveMetaClient {
         }
     }
 
-    public Table getTable(String dbName, String tableName) {
-        try (AutoCloseClient client = getClient()) {
-            return client.hiveClient.getTable(dbName, tableName);
-        } catch (Exception e) {
-            LOG.error("Failed to get table [{}.{}]", dbName, tableName, e);
-            throw new StarRocksConnectorException("get hive table [%s.%s] from meta store failed: %s",
-                    dbName, tableName, e.getMessage());
-        }
-    }
-
     public List<String> getAllDatabaseNames() {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getAllDatabases();
@@ -133,6 +123,16 @@ public class HiveMetaClient {
         }
     }
 
+    public List<String> getPartitionKeys(String dbName, String tableName) {
+        try (AutoCloseClient client = getClient()) {
+            return client.hiveClient.listPartitionNames(dbName, tableName, (short) -1);
+        } catch (Exception e) {
+            LOG.error("Failed to get partitionKeys on {}.{}", dbName, tableName, e);
+            throw new StarRocksConnectorException("Failed to get partition keys on [%s.%s] from meta store: %s",
+                    dbName, tableName, e.getMessage());
+        }
+    }
+
     public Database getDb(String dbName) {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getDatabase(dbName);
@@ -143,12 +143,12 @@ public class HiveMetaClient {
         }
     }
 
-    public List<String> getPartitionKeys(String dbName, String tableName) {
+    public Table getTable(String dbName, String tableName) {
         try (AutoCloseClient client = getClient()) {
-            return client.hiveClient.listPartitionNames(dbName, tableName, (short) -1);
+            return client.hiveClient.getTable(dbName, tableName);
         } catch (Exception e) {
-            LOG.error("Failed to get partitionKeys on {}.{}", dbName, tableName, e);
-            throw new StarRocksConnectorException("Failed to get partition keys on [%s.%s] from meta store: %s",
+            LOG.error("Failed to get table [{}.{}]", dbName, tableName, e);
+            throw new StarRocksConnectorException("get hive table [%s.%s] from meta store failed: %s",
                     dbName, tableName, e.getMessage());
         }
     }
