@@ -11,6 +11,7 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -218,5 +219,32 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Can not drop role bad_role: cannot find role"));
         }
+    }
+
+    @Test
+    public void testSetRole() throws Exception {
+        String sql = "set role 'role1', 'role2'";
+        SetRoleStmt setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(2, setRoleStmt.getRoles().size());
+        Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
+        Assert.assertEquals("role2", setRoleStmt.getRoles().get(1));
+        Assert.assertFalse(setRoleStmt.isAll());
+
+        sql = "set role 'role1'";
+        setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(1, setRoleStmt.getRoles().size());
+        Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
+        Assert.assertFalse(setRoleStmt.isAll());
+
+        sql = "set role all";
+        setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertNull(setRoleStmt.getRoles());
+        Assert.assertTrue(setRoleStmt.isAll());
+
+        sql = "set role all except 'role1'";
+        setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(1, setRoleStmt.getRoles().size());
+        Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
+        Assert.assertTrue(setRoleStmt.isAll());
     }
 }

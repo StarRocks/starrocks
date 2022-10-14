@@ -20,6 +20,7 @@ import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 public class PrivilegeStmtAnalyzerV2 {
@@ -151,6 +152,12 @@ public class PrivilegeStmtAnalyzerV2 {
                 exception.initCause(e);
                 throw exception;
             }
+            return null;
+        }
+
+        @Override
+        public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
+            // TODO: check if role belong to user
             return null;
         }
 

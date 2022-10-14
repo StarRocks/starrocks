@@ -78,6 +78,7 @@ import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
@@ -278,6 +279,11 @@ public class Analyzer {
         @Override
         public Void visitSetStatement(SetStmt setStmt, ConnectContext session) {
             SetStmtAnalyzer.analyze(setStmt, session);
+            return null;
+        }
+
+        @Override
+        public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
             return null;
         }
 
