@@ -122,7 +122,9 @@ public:
 
     ReplicaState replica_state() const { return _replica_state; }
 
-    State get_state() const { return _state.load(std::memory_order_acquire); }
+    State get_state() const;
+
+    Status get_err_status() const;
 
 private:
     DeltaWriter(const DeltaWriterOptions& opt, MemTracker* parent, StorageEngine* storage_engine);
@@ -137,9 +139,12 @@ private:
 
     void _reset_mem_table();
 
-    void _set_state(State state) { _state.store(state, std::memory_order_release); }
+    void _set_state(State state, Status st);
 
-    std::atomic<State> _state;
+    State _state;
+    Status _err_status;
+    mutable std::mutex _state_lock;
+
     ReplicaState _replica_state;
     DeltaWriterOptions _opt;
     MemTracker* _mem_tracker;
