@@ -51,8 +51,8 @@ enum TQueryType {
 }
 
 enum TLoadJobType {
-    Broker,
-    Spark,
+    BROKER,
+    SPARK,
     INSERT_QUERY,
     INSERT_VALUES
 }
