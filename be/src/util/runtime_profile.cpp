@@ -1133,29 +1133,12 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             }
             counter0->set(merged_value);
 
-            bool update_min_max = false;
-            if (already_merged) {
-                update_min_max = true;
-            } else {
-                // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-                const auto diff = max_value - min_value;
-                if (is_average_type(counter0->type())) {
-                    if ((diff > 5'000'000L && diff > merged_value / 5.0)) {
-                        update_min_max = true;
-                    }
-                } else {
-                    // All sum type counters will have extra info (min value and max value)
-                    update_min_max = true;
-                }
-            }
-            if (update_min_max) {
-                auto* min_counter =
-                        profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name), type, name);
-                auto* max_counter =
-                        profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name), type, name);
-                min_counter->set(min_value);
-                max_counter->set(max_value);
-            }
+            auto* min_counter =
+                    profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name), type, name);
+            auto* max_counter =
+                    profile0->add_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MAX, name), type, name);
+            min_counter->set(min_value);
+            max_counter->set(max_value);
         }
     }
 
