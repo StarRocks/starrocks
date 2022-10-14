@@ -61,22 +61,22 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
     /**
      * @todo: support constant in sub-query
      * e.g.
-     *   select v0, 1 in (select v0 from t0) from t1
-     *
+     * select v0, 1 in (select v0 from t0) from t1
+     * <p>
      * transform to:
-     *   select t1.v0,
-     *       case
-     *           when countRows is null then false;
-     *           when v1.t0 is null then null,
-     *           when d.v0 is null then null
-     *           when d.v0 is not null then true
-     *       else false
-     *       end
-     *   from t1 cross join (
-     *       select distinct v0, count(*) as countRows
-     *       from t0
-     *       where v0 = 1 or v0 is null
-     *       order by v0 desc limit 1) d;
+     * select t1.v0,
+     * case
+     * when countRows is null then false;
+     * when v1.t0 is null then null,
+     * when d.v0 is null then null
+     * when d.v0 is not null then true
+     * else false
+     * end
+     * from t1 cross join (
+     * select distinct v0, count(*) as countRows
+     * from t0
+     * where v0 = 1 or v0 is null
+     * order by v0 desc limit 1) d;
      */
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
@@ -161,38 +161,38 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          * In:
          * before: select t0.v1, t0.v2 in (select t1.v2 from t1 where t0.v3 = t1.v3) from t0;
          * after: with xx as (select t1.v2, t1.v3 from t1)
-         *        select t0.v1,
-         *             case
-         *                 // t1 empty table and without where clause `t0.v3 = t1.v3`, then t1Rows may be 0
-         *                 // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false
-         *                 // `any_or_null in (empty) -> false`
-         *                 when t1Rows = 0 or t1Rows is null then false
-         *                 // `null in (any_or_null...) -> null`
-         *                 when t0.v2 is null then null
-         *                 // `a in (a, [any_or_null...]) -> true`
-         *                 when t1d.v2 is not null then true
-         *                 // `a in (null, [not_a_or_null...]) -> null`
-         *                 when v2NotNulls < t1Rows then null
-         *                 // `a in (not_a...) -> false`, not_a cannot be null
-         *                 else false
-         *             end
-         *         from t0
-         *              left outer join (select xx.v2, xx.v3 from xx group by xx.v2, xx.v3) as t1d
-         *                              on t0.v2= t1d.v2 and t0.v3 = t1d.v3
-         *              left outer join (select v3, count(*) as t1Rows, count(xx.v2) as v2NotNulls from xx group by xx.v3) as t1c
-         *                              on t1c.v3 = t0.v3
-         *
-         *                                           CTEAnchor
-         *                                          /        \
-         *                                    CTEProduce     Project
-         *    Apply(t0.v2 in t1.v2)              /               \
-         *    /          \          ===>     Project         left/cross join
-         *   t0          t1                   /              /          \
-         *                                Filter         Left join       Agg(count)
-         *                                 /             /       \           \
-         *                               t1            t0     Agg(distinct)  CTEConsume
-         *                                                         \
-         *                                                        CTEConsume
+         * select t0.v1,
+         * case
+         * // t1 empty table and without where clause `t0.v3 = t1.v3`, then t1Rows may be 0
+         * // t1 empty table, if t1Rows is null, means the result of join correlation predicate must be false
+         * // `any_or_null in (empty) -> false`
+         * when t1Rows = 0 or t1Rows is null then false
+         * // `null in (any_or_null...) -> null`
+         * when t0.v2 is null then null
+         * // `a in (a, [any_or_null...]) -> true`
+         * when t1d.v2 is not null then true
+         * // `a in (null, [not_a_or_null...]) -> null`
+         * when v2NotNulls < t1Rows then null
+         * // `a in (not_a...) -> false`, not_a cannot be null
+         * else false
+         * end
+         * from t0
+         * left outer join (select xx.v2, xx.v3 from xx group by xx.v2, xx.v3) as t1d
+         * on t0.v2= t1d.v2 and t0.v3 = t1d.v3
+         * left outer join (select v3, count(*) as t1Rows, count(xx.v2) as v2NotNulls from xx group by xx.v3) as t1c
+         * on t1c.v3 = t0.v3
+         * <p>
+         * CTEAnchor
+         * /        \
+         * CTEProduce     Project
+         * Apply(t0.v2 in t1.v2)              /               \
+         * /          \          ===>     Project         left/cross join
+         * t0          t1                   /              /          \
+         * Filter         Left join       Agg(count)
+         * /             /       \           \
+         * t1            t0     Agg(distinct)  CTEConsume
+         * \
+         * CTEConsume
          */
         public OptExpression transform() {
             check();

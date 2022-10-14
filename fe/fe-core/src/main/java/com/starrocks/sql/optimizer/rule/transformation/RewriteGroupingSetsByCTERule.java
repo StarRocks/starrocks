@@ -73,7 +73,7 @@ public class RewriteGroupingSetsByCTERule extends TransformationRule {
         List<OptExpression> children = new ArrayList<>();
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
         LogicalRepeatOperator repeatOperator = (LogicalRepeatOperator) repeatOpt.getOp();
-        for (int i = 0;  i < repeatOperator.getRepeatColumnRef().size(); i++) {
+        for (int i = 0; i < repeatOperator.getRepeatColumnRef().size(); i++) {
             // create cte consume, cte output columns
             // output column -> old input column.
             List<ColumnRefOperator> groupingSetKeys = repeatOperator.getRepeatColumnRef().get(i);

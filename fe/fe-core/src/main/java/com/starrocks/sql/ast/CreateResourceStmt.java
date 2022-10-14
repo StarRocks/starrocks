@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.catalog.Resource.ResourceType;
 
 import java.util.Map;
@@ -41,11 +40,6 @@ public class CreateResourceStmt extends DdlStmt {
     // only used for UT
     public void setResourceType(ResourceType type) {
         this.resourceType = type;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
     @Override

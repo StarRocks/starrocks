@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 
 public class RecoverPartitionStmt extends DdlStmt {
@@ -31,12 +30,7 @@ public class RecoverPartitionStmt extends DdlStmt {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitRecoverPartitionStmt(this, context);
+        return visitor.visitRecoverPartitionStatement(this, context);
     }
 }

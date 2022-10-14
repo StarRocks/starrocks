@@ -63,8 +63,16 @@ public:
         return std::tuple<int64_t, int64_t>{0L, 0L};
     }
 
+    // from_version is used when reading incremental rowsets. in default, from_version = 0 means all of the rowsets
+    // will be read out. In multi-version cache mechanism, when probing the cache and finding that cached result has
+    // stale version, then incremental rowsets in the version range from the cached version till required version
+    // should be read out and merged with the cache result, here from_version is cached version.
+    void set_from_version(int64_t from_version) { _from_version = from_version; }
+    int64_t from_version() { return _from_version; }
+
 private:
     int32_t _plan_node_id;
+    int64_t _from_version = 0;
 };
 
 class ScanMorsel : public Morsel {

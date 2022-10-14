@@ -25,8 +25,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AlterLoadStmt;
-import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.Config;
 import com.starrocks.common.DataQualityException;
@@ -47,7 +45,9 @@ import com.starrocks.load.Load;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
@@ -207,7 +207,7 @@ public class LoadManager implements Writable {
 
 
     public long registerLoadJob(String label, String dbName, long tableId, EtlJobType jobType,
-                                      long createTimestamp, long estimateScanRows, TLoadJobType type)
+                                long createTimestamp, long estimateScanRows, TLoadJobType type)
             throws UserException {
 
         // get db id

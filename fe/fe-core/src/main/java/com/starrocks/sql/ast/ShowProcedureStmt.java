@@ -3,7 +3,7 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ShowStmt;
+import com.starrocks.analysis.Predicate;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -33,9 +33,11 @@ public class ShowProcedureStmt extends ShowStmt {
     }
 
     public ShowProcedureStmt(Expr where) {
-        this.where = where;
+        setPredicate((Predicate) where);
     }
-    public ShowProcedureStmt() {}
+
+    public ShowProcedureStmt() {
+    }
 
 
     @Override
@@ -45,28 +47,5 @@ public class ShowProcedureStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
-    }
-
-    @Override
-    public String toSql() {
-        StringBuilder sb = new StringBuilder("SHOW PROCEDURE STATUS");
-
-        if (pattern != null) {
-            sb.append(" LIKE '").append(pattern).append("'");
-        }
-        if (where != null) {
-            sb.append(" WHERE '").append(where).append("'");
-        }
-        return sb.toString();
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
-    public String toString() {
-        return toSql();
     }
 }

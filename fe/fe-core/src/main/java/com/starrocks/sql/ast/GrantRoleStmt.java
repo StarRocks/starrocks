@@ -11,9 +11,4 @@ public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
     public GrantRoleStmt(String role, UserIdentity userIdent) {
         super(role, userIdent, "GRANT", "TO");
     }
-    
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
 }

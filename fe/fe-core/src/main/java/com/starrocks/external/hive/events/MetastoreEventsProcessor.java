@@ -15,7 +15,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
@@ -52,7 +51,7 @@ import javax.annotation.Nullable;
  * Metastore clients like Apache Hive or Apache Spark configured to talk with the same metastore.
  * <p>
  * This class is used to poll metastore for such events at a given frequency. By observing
- * such events, we can take appropriate action on the {@link com.starrocks.external.hive.HiveMetaCache}
+ * such events, we can take appropriate action on the {@link com.starrocks.external.hive.CachingHiveMetastore}
  * (refresh/invalidate/add/remove) so that represents the latest information
  * available in metastore. We keep track of the last synced event id in each polling
  * iteration so the next batch can be requested appropriately. The current batch size is
@@ -86,9 +85,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     // event factory which is used to get or create MetastoreEvents
     private final MetastoreEventFactory metastoreEventFactory;
 
-    // hive repository to get hive client or hive cache.
-    private final HiveRepository hiveRepository;
-
     // resource => syncedEventId
     private final Map<String, Long> lastSyncedEventIds = Maps.newHashMap();
 
@@ -101,9 +97,8 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     // External catalog's resource
     private final List<String> externalCatalogResources = Lists.newArrayList();
 
-    public MetastoreEventsProcessor(HiveRepository hiveRepository) {
+    public MetastoreEventsProcessor() {
         super(MetastoreEventsProcessor.class.getName(), Config.hms_events_polling_interval_ms);
-        this.hiveRepository = hiveRepository;
         this.metastoreEventFactory = new MetastoreEventFactory();
     }
 
@@ -210,7 +205,8 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         Long lastSyncedEventId = null;
         try {
             LOG.info("Start to pull events on resource [{}]", resourceName);
-            HiveMetaClient client = hiveRepository.getClient(resourceName);
+            // TODO(stephen): refactor auto sync hive metadata cache
+            HiveMetaClient client = null;
             if (client == null) {
                 LOG.warn("Client is null when pulling events on resource [{}]", resourceName);
                 return Collections.emptyList();
@@ -325,7 +321,8 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
                     continue;
                 }
                 try {
-                    table.refreshTableColumnStats();
+                    // TODO(stephen): refactor auto sync hive metadata cache
+                    // table.refreshTableColumnStats();
                 } catch (Exception e) {
                     LOG.warn("Failed to refresh table column statistic on [resource: {}, db: {}, table: {}].",
                             resource, dbName, table, e);

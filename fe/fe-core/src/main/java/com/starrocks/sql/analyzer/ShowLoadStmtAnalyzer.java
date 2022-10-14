@@ -45,7 +45,7 @@ public class ShowLoadStmtAnalyzer {
         }
 
         @Override
-        public Void visitShowLoadStmt(ShowLoadStmt statement, ConnectContext context) {
+        public Void visitShowLoadStatement(ShowLoadStmt statement, ConnectContext context) {
             analyzeDbName(statement, context);
             analyzeWhereClause(statement, context);
             analyzeOrderByElements(statement, context);

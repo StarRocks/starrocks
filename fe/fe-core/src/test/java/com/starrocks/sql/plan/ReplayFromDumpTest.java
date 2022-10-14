@@ -221,7 +221,7 @@ public class ReplayFromDumpTest {
     public void testTPCDS54() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds54"));
         // Check the size of the left and right tables
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("49:NESTLOOP JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  49:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  other join predicates: cast([934: d_month_seq, INT, true] as BIGINT) <= [1017: expr, BIGINT, true]\n" +
                 "  |  cardinality: 18262\n" +
@@ -607,77 +607,5 @@ public class ReplayFromDumpTest {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 16: c_0_0 = 1: c_0_0\n" +
                 "  |  other join predicates: if(16: c_0_0 != 1: c_0_0, 4: c_0_3, 18: c_0_3) = '1969-12-28'"));
-    }
-
-    @Test
-    public void testHiveTPCH02UsingResource() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:ANALYTIC\n" +
-                "  |  functions: [, min[([20: ps_supplycost, DECIMAL64(15,2), true]); args: DECIMAL64; " +
-                "result: DECIMAL64(15,2); args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: p_partkey, INT, true]"));
-    }
-
-    @Test
-    public void testHiveTPCH08UsingResource() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_resource"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("30:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [33: o_orderkey, INT, true] = [17: l_orderkey, INT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 6, build_expr = (17: l_orderkey), remote = true\n" +
-                "  |  output columns: 22, 23, 37, 55\n" +
-                "  |  cardinality: 2403381"));
-    }
-
-    @Test
-    public void testHiveTwoTableJoin() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_table_join"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("0:HdfsScanNode\n" +
-                "     TABLE: parttbl\n" +
-                "     PARTITION PREDICATES: 3: date = '2022-08-15'\n" +
-                "     partitions=1/3\n" +
-                "     avgRowSize=9.0\n" +
-                "     numNodes=0\n" +
-                "     cardinality: 1\n" +
-                "     column statistics: \n" +
-                "     * c0-->[1.0, 2.0, 0.0, 4.0, 1.0] ESTIMATE\n" +
-                "     * date-->[-Infinity, Infinity, 0.0, 5.0, 1.0] ESTIMATE"));
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("2:HdfsScanNode\n" +
-                "     TABLE: parttbl\n" +
-                "     PARTITION PREDICATES: 6: date <= '2022-08-16'\n" +
-                "     partitions=2/3\n" +
-                "     avgRowSize=8.0\n" +
-                "     numNodes=0\n" +
-                "     cardinality: 1\n" +
-                "     column statistics: \n" +
-                "     * c1-->[-Infinity, Infinity, 0.0, 3.0, 1.0] ESTIMATE\n" +
-                "     * date-->[-Infinity, Infinity, 0.0, 5.0, 1.0] ESTIMATE"));
-    }
-
-    @Test
-    public void testParHiveTPCH02UsingCatalog() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch02_catalog"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:ANALYTIC\n" +
-                "  |  functions: [, min[([20: ps_supplycost, DECIMAL64(15,2), true]); args: DECIMAL64; " +
-                "result: DECIMAL64(15,2); args nullable: true; result nullable: true], ]\n" +
-                "  |  partition by: [1: p_partkey, INT, true]"));
-
-    }
-
-    @Test
-    public void testParHiveTPCH08UsingCatalog() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/hive_tpch08_catalog"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  29:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
-                "  |  equal join conjunct: [33: o_orderkey, INT, true] = [17: l_orderkey, INT, true]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 6, build_expr = (17: l_orderkey), remote = false\n" +
-                "  |  output columns: 22, 23, 37, 55\n"));
     }
 }

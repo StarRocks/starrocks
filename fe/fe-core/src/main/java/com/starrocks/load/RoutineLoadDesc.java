@@ -23,11 +23,11 @@ package com.starrocks.load;
 
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ImportColumnDesc;
-import com.starrocks.analysis.ImportColumnsStmt;
-import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 
 import java.util.ArrayList;

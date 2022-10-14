@@ -3,12 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
@@ -31,7 +26,12 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.StatementBase;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -250,7 +250,7 @@ public class PrivilegeStmtAnalyzer {
             }
         }
 
-        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
             /*
              * IDENTIFIED BY
@@ -296,7 +296,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), session, false);
+            analyseUser(stmt.getUserIdentity(), session, false);
             return null;
         }
 

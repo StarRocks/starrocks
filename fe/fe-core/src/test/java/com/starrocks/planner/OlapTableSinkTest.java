@@ -54,6 +54,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -65,6 +66,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 
 public class OlapTableSinkTest {
@@ -123,7 +125,7 @@ public class OlapTableSinkTest {
             result = partition;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
@@ -160,7 +162,7 @@ public class OlapTableSinkTest {
             result = p1;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(p1.getId()), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         try {
             sink.complete();
@@ -183,7 +185,7 @@ public class OlapTableSinkTest {
             result = null;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(unknownPartId), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
         LOG.info("sink is {}", sink.toThrift());
@@ -256,7 +258,7 @@ public class OlapTableSinkTest {
             }
         };
 
-        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId));
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY);
         TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
         System.out.println(param);
 
@@ -268,5 +270,95 @@ public class OlapTableSinkTest {
         Assert.assertEquals(3, nodes.size());
         Collections.sort(nodes);
         Assert.assertEquals(Lists.newArrayList(backendId, backendId + 1, backendId + 2), nodes);
+    }
+
+    @Test
+    public void testReplicatedStorageWithLocalTablet(@Mocked GlobalStateMgr globalStateMgr,
+            @Mocked SystemInfoService systemInfoService) {
+        long dbId = 1L;
+        long tableId = 2L;
+        long partitionId = 3L;
+        long indexId = 4L;
+        long tabletId = 5L;
+        long replicaId = 10L;
+        long backendId = 20L;
+
+        // Columns
+        List<Column> columns = new ArrayList<Column>();
+        Column k1 = new Column("k1", Type.INT, true, null, "", "");
+        columns.add(k1);
+        columns.add(new Column("k2", Type.BIGINT, true, null, "", ""));
+        columns.add(new Column("v", Type.BIGINT, false, AggregateType.SUM, "0", ""));
+
+        MaterializedIndex index = new MaterializedIndex(indexId, MaterializedIndex.IndexState.NORMAL);
+
+        for (int i = 0; i < 9; i++) {
+            // Replica
+            Replica replica1 = new Replica(replicaId, backendId, Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica2 = new Replica(replicaId + 1, backendId + 1, Replica.ReplicaState.NORMAL, 1, 0);
+            Replica replica3 = new Replica(replicaId + 2, backendId + 2, Replica.ReplicaState.NORMAL, 1, 0);
+
+            // Tablet
+            LocalTablet tablet = new LocalTablet(tabletId);
+            tablet.addReplica(replica1);
+            tablet.addReplica(replica2);
+            tablet.addReplica(replica3);
+
+            // Index
+            TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 0, TStorageMedium.SSD);
+            index.addTablet(tablet, tabletMeta);
+        }
+
+        // Partition info and distribution info
+        DistributionInfo distributionInfo = new HashDistributionInfo(1, Lists.newArrayList(k1));
+        PartitionInfo partitionInfo = new SinglePartitionInfo();
+        partitionInfo.setDataProperty(partitionId, new DataProperty(TStorageMedium.SSD));
+        partitionInfo.setIsInMemory(partitionId, false);
+        partitionInfo.setTabletType(partitionId, TTabletType.TABLET_TYPE_DISK);
+        partitionInfo.setReplicationNum(partitionId, (short) 3);
+
+        // Partition
+        Partition partition = new Partition(partitionId, "p1", index, distributionInfo);
+
+        // Table
+        OlapTable table = new OlapTable(tableId, "t1", columns, KeysType.AGG_KEYS, partitionInfo, distributionInfo);
+        Deencapsulation.setField(table, "baseIndexId", indexId);
+        table.addPartition(partition);
+        table.setIndexMeta(indexId, "t1", columns, 0, 0, (short) 3, TStorageType.COLUMN, KeysType.AGG_KEYS);
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentSystemInfo();
+                result = systemInfoService;
+                systemInfoService.checkExceedDiskCapacityLimit((Multimap<Long, Long>) any, anyBoolean);
+                result = Status.OK;
+                GlobalStateMgr.getCurrentState();
+                result = globalStateMgr;
+                globalStateMgr.getOrCreateSystemInfo(anyInt);
+                result = systemInfoService;
+                systemInfoService.checkBackendAlive(anyLong);
+                result = true;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(table, null, Lists.newArrayList(partitionId), TWriteQuorumType.MAJORITY);
+        TOlapTableLocationParam param = (TOlapTableLocationParam) Deencapsulation.invoke(sink, "createLocation", table);
+        System.out.println(param);
+
+        // Check
+        List<TTabletLocation> locations = param.getTablets();
+        Assert.assertEquals(9, locations.size());
+
+        HashMap<Long, Integer> beCount = new HashMap<>();
+        for (TTabletLocation location : locations) {
+            List<Long> nodes = location.getNode_ids();
+            Assert.assertEquals(3, nodes.size());
+
+            beCount.put(nodes.get(0), beCount.getOrDefault(nodes.get(0), 0) + 1);
+        }
+        
+        for (Integer v : beCount.values()) {
+            Assert.assertEquals(3, v.longValue());
+        }
     }
 }

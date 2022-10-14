@@ -6,6 +6,7 @@ import com.starrocks.persist.EditLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CancelExportStmt;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;

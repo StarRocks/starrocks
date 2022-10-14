@@ -56,6 +56,7 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -155,8 +156,10 @@ public class StreamLoadPlanner {
         descTable.computeMemLayout();
 
         // create dest sink
+        TWriteQuorumType writeQuorum = destTable.writeQuorum();
+
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds);
+        OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum);
         olapTableSink.init(loadId, streamLoadTask.getTxnId(), db.getId(), streamLoadTask.getTimeout());
         olapTableSink.complete();
 
@@ -203,6 +206,7 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         queryOptions.setLoad_transmission_compression_type(streamLoadTask.getTransmisionCompressionType());
         queryOptions.setEnable_replicated_storage(streamLoadTask.getEnableReplicatedStorage());
+
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
         if (streamLoadTask.getLoadParallelRequestNum() != 0 && !destTable.isLakeTable()) {
@@ -223,9 +227,11 @@ public class StreamLoadPlanner {
         queryGlobals.setTime_zone(streamLoadTask.getTimezone());
         params.setQuery_globals(queryGlobals);
 
-        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {}", loadId, streamLoadTask.getTxnId(),
+        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", loadId,
+                streamLoadTask.getTxnId(),
                 queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type(), streamLoadTask.getEnableReplicatedStorage());
+                queryOptions.getLoad_transmission_compression_type(), streamLoadTask.getEnableReplicatedStorage(),
+                writeQuorum);
         return params;
     }
 

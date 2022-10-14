@@ -4,9 +4,9 @@ package com.starrocks.sql.plan;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import org.junit.After;
 import org.junit.AfterClass;

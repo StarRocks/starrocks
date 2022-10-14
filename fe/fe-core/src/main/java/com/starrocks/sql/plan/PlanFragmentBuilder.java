@@ -1131,12 +1131,12 @@ public class PlanFragmentBuilder {
 
         /**
          * Remove ExchangeNode between AggNode and ScanNode for the single backend.
-         *
+         * <p>
          * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
          * which contains two steps:
          * 1. Ignore the network cost for ExchangeNode when estimating cost model.
          * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
-         *
+         * <p>
          * Specifically, transfer
          * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
          * -      *inputFragment         sourceFragment
@@ -1146,7 +1146,7 @@ public class PlanFragmentBuilder {
          * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
          *
          * @param inputFragment The input fragment to match the above pattern.
-         * @param context The context of building fragment, which contains all the fragments.
+         * @param context       The context of building fragment, which contains all the fragments.
          * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
          */
         private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
@@ -1659,6 +1659,17 @@ public class PlanFragmentBuilder {
 
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
             List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
@@ -1667,6 +1678,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.addConjuncts(conjuncts);
+            joinNode.setProbePartitionByExprs(probePartitionByExprs);
 
             // Connect parent and child fragment
             rightFragment.getPlanRoot().setFragment(leftFragment);

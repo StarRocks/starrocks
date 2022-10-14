@@ -2,8 +2,8 @@
 
 package com.starrocks.load;
 
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.qe.OriginStatement;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -35,9 +35,9 @@ public class RoutineLoadDescTest {
         // set partitions and check
         desc.setPartitionNames(originLoad.getPartitionNames());
         Assert.assertEquals("COLUMNS TERMINATED BY ';', " +
-                "ROWS TERMINATED BY '\n', " +
-                "COLUMNS(`a`, `b`, `c` = 1), " +
-                "TEMPORARY PARTITION(`p1`, `p2`)",
+                        "ROWS TERMINATED BY '\n', " +
+                        "COLUMNS(`a`, `b`, `c` = 1), " +
+                        "TEMPORARY PARTITION(`p1`, `p2`)",
                 desc.toSql());
         // set where and check
         desc.setWherePredicate(originLoad.getWherePredicate());

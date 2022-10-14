@@ -55,7 +55,7 @@ public class LambdaFunctionOperator extends ScalarOperator {
 
     @Override
     public String toString() {
-        return "(" + refColumns.toString() + "->" + lambdaExpr.toString()  + ")";
+        return "(" + refColumns.toString() + "->" + lambdaExpr.toString() + ")";
     }
 
     @Override

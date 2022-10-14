@@ -2,12 +2,12 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SetExecutor;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Test;
