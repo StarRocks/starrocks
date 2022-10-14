@@ -183,7 +183,7 @@ struct TUploadReq {
     4: optional map<string, string> broker_prop
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    5: optional bool use_broker = false
+    5: optional bool use_broker
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -197,7 +197,7 @@ struct TDownloadReq {
     4: optional map<string, string> broker_prop
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    5: optional bool use_broker = false
+    5: optional bool use_broker
     // hdfs_read_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
