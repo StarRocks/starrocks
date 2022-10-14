@@ -322,6 +322,7 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UnionRelation;
 import com.starrocks.sql.ast.UnitBoundary;
 import com.starrocks.sql.ast.UnitIdentifier;
+import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -2466,7 +2467,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowExportStmt(catalog, whereExpr, orderByElements, le);
     }
 
-    // ----------------------------------------------- Plugin Statement ------------------------------------------------
+    // ------------------------------------------------- Plugin Statement --------------------------------------------------------
 
     @Override
     public ParseNode visitInstallPluginStatement(StarRocksParser.InstallPluginStatementContext context) {
@@ -2481,7 +2482,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new UninstallPluginStmt(pluginPath);
     }
 
-    // ----------------------------------------------- File Statement --------------------------------------------------
+    // ------------------------------------------------- File Statement ----------------------------------------------------------
 
     @Override
     public ParseNode visitCreateFileStatement(StarRocksParser.CreateFileStatementContext context) {
@@ -2525,7 +2526,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new ShowSmallFilesStmt(catalog);
     }
 
-    // ------------------------------------------- Set Statement -------------------------------------------------------
+    // ------------------------------------------------- Set Statement -----------------------------------------------------------
 
     @Override
     public ParseNode visitSetUserPropertyStatement(StarRocksParser.SetUserPropertyStatementContext context) {
@@ -2625,7 +2626,14 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SetTransaction();
     }
 
-    // ----------------------------------------------  Alter Clause ----------------------------------------------------
+    // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
+
+    @Override
+    public ParseNode visitUnsupportedStatement(StarRocksParser.UnsupportedStatementContext context) {
+        return new UnsupportedStmt();
+    }
+
+    // ----------------------------------------------  Alter Clause --------------------------------------------------------------
 
     // ---------Alter system clause---------
     @Override
