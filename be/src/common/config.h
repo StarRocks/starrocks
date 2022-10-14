@@ -60,7 +60,7 @@ CONF_mInt64(memory_urgent_level, "85");
 // the Pagecache slowly, it should be between [1, memory_urgent_level).
 CONF_mInt64(memory_high_level, "75");
 // Pagecache size adjust period, default 20, it should be between [1, 180].
-CONF_Int64(pagecache_adjuct_period, "20");
+CONF_Int64(pagecache_adjust_period, "20");
 // Sleep time in seconds between pagecache adjust iterations.
 CONF_Int64(auto_adjust_pagecache_interval_seconds, "10");
 

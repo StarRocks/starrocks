@@ -233,9 +233,9 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
 #ifdef GOOGLE_PROFILER
     ProfilerRegisterThread();
 #endif
-    GCHelper dec_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval_seconds,
+    GCHelper dec_advisor(config::pagecache_adjust_period, config::auto_adjust_pagecache_interval_seconds,
                          MonoTime::Now());
-    GCHelper inc_advisor(config::pagecache_adjuct_period, config::auto_adjust_pagecache_interval_seconds,
+    GCHelper inc_advisor(config::pagecache_adjust_period, config::auto_adjust_pagecache_interval_seconds,
                          MonoTime::Now());
     auto cache = StoragePageCache::instance();
     while (!_bg_worker_stopped.load(std::memory_order_consume)) {
@@ -260,6 +260,7 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
                        << " memory_high_level=" << memory_high_level;
             continue;
         }
+        
 
         int64_t memory_urgent = memtracker->limit() * memory_urgent_level / 100;
         int64_t delta_urgent = memtracker->consumption() - memory_urgent;
