@@ -287,11 +287,12 @@ public:
         std::stringstream ss;
         ss << "[";
         size_t size = this->size();
-        for (int i = 0; i < size - 1; ++i) {
-            ss << debug_item(i) << ", ";
-        }
-        if (size > 0) {
-            ss << debug_item(size - 1);
+        for(size_t i = 0; i < size; i++) {
+            if (i == size - 1) {
+                ss << debug_item(i);
+            } else {
+                ss << debug_item(i) << ", ";
+            }
         }
         ss << "]";
         return ss.str();
