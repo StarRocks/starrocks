@@ -36,7 +36,6 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
-import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -57,7 +56,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TInternalScanRange;
@@ -243,18 +241,6 @@ public class OlapScanNode extends ScanNode {
         cardinality = cardinality == -1 ? 0 : cardinality;
     }
 
-    private List<Long> listPartitionPrune(ListPartitionInfo listPartitionInfo) {
-        PartitionPruner partitionPruner = new ListPartitionForOlapPruner(
-                listPartitionInfo.getLiteralExprValues(),listPartitionInfo.getMultiLiteralExprValues(),
-                listPartitionInfo.getPartitionColumns(), columnFilters);
-        try {
-            return partitionPruner.prune();
-        } catch (AnalysisException e) {
-            LOG.warn("PartitionPrune Failed. ", e);
-        }
-        return null;
-    }
-
     private Collection<Long> partitionPrune(RangePartitionInfo partitionInfo, PartitionNames partitionNames)
             throws AnalysisException {
         Map<Long, Range<PartitionKey>> keyRangeById = null;
@@ -392,10 +378,7 @@ public class OlapScanNode extends ScanNode {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo.getType() == PartitionType.RANGE) {
             selectedPartitionIds = partitionPrune((RangePartitionInfo) partitionInfo, partitionNames);
-        } else if (partitionInfo.getType() == PartitionType.LIST) {
-            selectedPartitionIds =
-                    listPartitionPrune((ListPartitionInfo) partitionInfo);
-        }else {
+        } else {
             selectedPartitionIds = null;
         }
         if (selectedPartitionIds == null) {

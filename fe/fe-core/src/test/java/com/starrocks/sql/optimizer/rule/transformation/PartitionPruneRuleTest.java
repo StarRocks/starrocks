@@ -44,7 +44,7 @@ import java.util.Map;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 
-public class PartitionPruneRuleTest {
+public class PartitionPruneRuleTest{
     @Test
     public void transform1(@Mocked OlapTable olapTable, @Mocked RangePartitionInfo partitionInfo) {
         FeConstants.runningUnitTest = true;
@@ -274,13 +274,17 @@ public class PartitionPruneRuleTest {
         ColumnRefOperator column = columnRefFactory.create("province", ScalarType.STRING, false);
         Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
         scanColumnMap.put(column, new Column("province", Type.STRING, false));
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+        columnMetaToColRefMap.put(new Column(column.getName(), column.getType()),
+                new ColumnRefOperator(1, column.getType(), column.getName(), false));
 
         BinaryPredicateOperator binaryPredicateOperator =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column,
                         ConstantOperator.createVarchar("guangdong"));
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator);
+
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);
@@ -352,16 +356,22 @@ public class PartitionPruneRuleTest {
         scanColumnMap.put(column1, new Column("dt", Type.DATE, false));
         scanColumnMap.put(column2, new Column("province", Type.STRING, false));
 
+        Map<Column, ColumnRefOperator> columnMetaToColRefMap = new HashMap<>();
+        columnMetaToColRefMap.put(new Column(column1.getName(), column1.getType()),
+                new ColumnRefOperator(1, column1.getType(), column1.getName(), false));
+        columnMetaToColRefMap.put(new Column(column2.getName(), column2.getType()),
+                new ColumnRefOperator(2, column2.getType(), column2.getName(), false));
+
         BinaryPredicateOperator binaryPredicateOperator1 =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column1,
                         ConstantOperator.createDate(LocalDateTime.of(2022, 4, 2, 0, 0, 0)));
         BinaryPredicateOperator binaryPredicateOperator2 =
                 new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, column2,
-                        ConstantOperator.createVarchar("beijing"));
+                        ConstantOperator.createVarchar("shanghai"));
 
         ScalarOperator predicate = Utils.compoundAnd(binaryPredicateOperator1, binaryPredicateOperator2);
         LogicalOlapScanOperator operator =
-                new LogicalOlapScanOperator(olapTable, scanColumnMap, Maps.newHashMap(), null, -1, predicate);
+                new LogicalOlapScanOperator(olapTable, scanColumnMap, columnMetaToColRefMap, null, -1, predicate);
 
         Partition part1 = new Partition(10001L, "p1", null, null);
         Partition part2 = new Partition(10002L, "p2", null, null);
@@ -421,11 +431,9 @@ public class PartitionPruneRuleTest {
                 rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), columnRefFactory)).get(0);
 
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
-        assertEquals(2, selectPartitionIds.size());
+        assertEquals(1, selectPartitionIds.size());
         long actual1 = selectPartitionIds.get(0);
-        long actual2 = selectPartitionIds.get(1);
         assertEquals(10001L, actual1);
-        assertEquals(10002L, actual2);
     }
 
 }
