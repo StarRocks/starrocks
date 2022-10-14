@@ -1,106 +1,23 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.external.hive;
+package com.starrocks.external;
 
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MapType;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.external.ColumnTypeConverter;
-import com.starrocks.external.HiveMetaStoreTableUtils;
 import org.apache.avro.Schema;
-import org.apache.hadoop.hive.common.StatsSetupConst;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.List;
-import java.util.Map;
-
-import static com.starrocks.external.ColumnTypeConverter.convertToArrayType;
-import static com.starrocks.external.ColumnTypeConverter.convertToMapType;
+import static com.starrocks.external.ColumnTypeConverter.fromHiveTypeToArrayType;
+import static com.starrocks.external.ColumnTypeConverter.fromHiveTypeToMapType;
+import static com.starrocks.external.ColumnTypeConverter.fromHudiType;
 import static com.starrocks.external.ColumnTypeConverter.getPrecisionAndScale;
-import static com.starrocks.external.Utils.createPartitionKey;
-import static com.starrocks.external.Utils.getPartitionValues;
-import static com.starrocks.external.Utils.getRowCount;
-import static com.starrocks.external.Utils.getSuffixName;
-import static com.starrocks.external.Utils.getTotalSize;
 
-public class UtilsTest {
-    private List<Column> partColumns = Lists.newArrayList(new Column("k1", Type.INT),
-            new Column("k2", ScalarType.createVarcharType(10)),
-            new Column("k3", Type.DOUBLE),
-            new Column("k4", Type.INT));
-
-    @Test
-    public void testCreatePartitionKey() throws Exception {
-        PartitionKey partitionKey =
-                createPartitionKey(Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE),
-                        partColumns);
-        Assert.assertEquals("(\"1\", \"a\", \"3.0\", \"NULL\")", partitionKey.toSql());
-    }
-
-    @Test
-    public void testGetPartitionValues() throws Exception {
-        List<String> values = Lists.newArrayList("1", "a", "3.0", HiveMetaClient.PARTITION_NULL_VALUE);
-        PartitionKey partitionKey = createPartitionKey(values, partColumns);
-        Assert.assertEquals(values, getPartitionValues(partitionKey, false));
-
-        List<Column> partColumns1 = Lists.newArrayList(new Column("k1", Type.DATE), new Column("k2", Type.BOOLEAN));
-        PartitionKey partitionKey1 = createPartitionKey(Lists.newArrayList("2021-01-01", "false"), partColumns1);
-        List<String> partValues1 = getPartitionValues(partitionKey1, false);
-        Assert.assertEquals("2021-01-01", partValues1.get(0));
-        Assert.assertEquals("false", partValues1.get(1));
-    }
-
-    @Test
-    public void testGetRowCount() {
-        Map<String, String> params = Maps.newHashMap();
-        Assert.assertEquals(-1L, getRowCount(params));
-
-        params.put(StatsSetupConst.ROW_COUNT, "10");
-        Assert.assertEquals(10L, getRowCount(params));
-    }
-
-    @Test
-    public void testGetTotalSize() {
-        Map<String, String> params = Maps.newHashMap();
-        Assert.assertEquals(-1L, getTotalSize(params));
-
-        params.put(StatsSetupConst.TOTAL_SIZE, "10");
-        Assert.assertEquals(10L, getTotalSize(params));
-    }
-
-    @Test
-    public void testGetSuffixName() {
-        Assert.assertEquals("file", getSuffixName("/path/", "/path/file"));
-        Assert.assertEquals("file", getSuffixName("/path", "/path/file"));
-    }
-
-    @Test(expected = IllegalArgumentException.class)
-    public void testGetSuffixNameIllegal() {
-        getSuffixName("/path//", "/path/file");
-    }
-
-    @Test
-    public void testGetPartitionValuesFromPath() {
-        String path = "hdfs://127.0.0.1:10000/path/a=1/b=2/c=3";
-        Assert.assertEquals(Lists.newArrayList("1", "2", "3"),
-                getPartitionValues(path, Lists.newArrayList("a", "b", "c")));
-    }
-
-    @Test(expected = StarRocksConnectorException.class)
-    public void testGetPartitionValuesFromIllegalPath() {
-        String path = "hdfs://127.0.0.1:10000/path/1/2/3";
-        Assert.assertEquals(Lists.newArrayList("1", "2", "3"),
-                getPartitionValues(path, Lists.newArrayList("a", "b", "c")));
-    }
+public class ColumnTypeConverterTest {
 
     @Test
     public void testDecimalString() {
@@ -164,29 +81,29 @@ public class UtilsTest {
     }
 
     @Test
-    public void testArrayString() throws DdlException {
+    public void testArrayString() {
         ScalarType itemType = ScalarType.createType(PrimitiveType.DATE);
         ArrayType arrayType = new ArrayType(new ArrayType(itemType));
         String typeStr = "Array<Array<date>>";
-        Type resType = convertToArrayType(typeStr);
+        Type resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
         itemType = ScalarType.createDefaultString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
-        resType = convertToArrayType(typeStr);
+        resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
         itemType = ScalarType.createType(PrimitiveType.INT);
         arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
         typeStr = "array<Array<Array<int>>>";
-        resType = convertToArrayType(typeStr);
+        resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
         itemType = ScalarType.createType(PrimitiveType.BIGINT);
         arrayType = new ArrayType(new ArrayType(new ArrayType(itemType)));
         typeStr = "array<Array<Array<bigint>>>";
-        resType = convertToArrayType(typeStr);
+        resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
         itemType = ScalarType.createUnifiedDecimalType(4, 2);
@@ -199,54 +116,54 @@ public class UtilsTest {
     }
 
     @Test
-    public void testMapString() throws DdlException {
+    public void testMapString() {
         ScalarType keyType = ScalarType.createType(PrimitiveType.TINYINT);
         ScalarType valueType = ScalarType.createType(PrimitiveType.SMALLINT);
         MapType mapType = new MapType(keyType, valueType);
         String typeStr = "map<tinyint,smallint>";
-        Type resType = convertToMapType(typeStr);
+        Type resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.INT);
         valueType = ScalarType.createType(PrimitiveType.INT);
         mapType = new MapType(keyType, valueType);
         typeStr = "Map<INT,INTEGER>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.FLOAT);
         valueType = ScalarType.createType(PrimitiveType.DOUBLE);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<float,double>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createUnifiedDecimalType(10, 7);
         valueType = ScalarType.createType(PrimitiveType.DATETIME);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<decimal(10,7),timestamp>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.DATE);
         valueType = ScalarType.createDefaultString();
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createVarcharType(10);
         valueType = ScalarType.createCharType(5);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<varchar(10),char(5)>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.BOOLEAN);
         valueType = ScalarType.createVarcharType(10);
         mapType = new MapType(keyType, valueType);
         typeStr = "map<boolean,varchar(10)>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createCharType(10);
@@ -254,7 +171,7 @@ public class UtilsTest {
         ArrayType vType = new ArrayType(itemType);
         mapType = new MapType(keyType, vType);
         typeStr = "map<char(10),array<int>>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createCharType(10);
@@ -264,12 +181,12 @@ public class UtilsTest {
         MapType mValueType = new MapType(inKeyType, inValueType);
         mapType = new MapType(keyType, mValueType);
         typeStr = "map<char(10),map<int,array<timestamp>>>";
-        resType = convertToMapType(typeStr);
+        resType = fromHiveTypeToMapType(typeStr);
         Assert.assertEquals(mapType, resType);
     }
 
     @Test
-    public void testCharString() throws DdlException {
+    public void testCharString() {
         Type charType = ScalarType.createCharType(100);
         String typeStr = "char(100)";
         Type resType = ColumnTypeConverter.fromHiveType(typeStr);
@@ -281,7 +198,7 @@ public class UtilsTest {
     }
 
     @Test
-    public void testVarcharString() throws DdlException {
+    public void testVarcharString() {
         Type varcharType = ScalarType.createVarcharType(100);
         String typeStr = "varchar(100)";
         Type resType = ColumnTypeConverter.fromHiveType(typeStr);
@@ -303,33 +220,28 @@ public class UtilsTest {
     }
 
     @Test
-    public void testArraySchema() throws DdlException {
-        Schema unionSchema = null;
-        Schema arraySchema = null;
+    public void testArraySchema() {
+        Schema unionSchema;
+        Schema arraySchema;
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(unionSchema),
-                ScalarType.createType(PrimitiveType.INT));
+        Assert.assertEquals(fromHudiType(unionSchema), ScalarType.createType(PrimitiveType.INT));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.INT));
         arraySchema = Schema.createArray(unionSchema);
         Schema.createArray(unionSchema);
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
-                new ArrayType(ScalarType.createType(PrimitiveType.INT)));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.INT)));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BOOLEAN));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
-                new ArrayType(ScalarType.createType(PrimitiveType.BOOLEAN)));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.BOOLEAN)));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.STRING));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
-                new ArrayType(ScalarType.createDefaultString()));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createDefaultString()));
 
         unionSchema = Schema.createUnion(Schema.create(Schema.Type.BYTES));
         arraySchema = Schema.createArray(unionSchema);
-        Assert.assertEquals(HiveMetaStoreTableUtils.convertHudiTableColumnType(arraySchema),
-                new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
+        Assert.assertEquals(fromHudiType(arraySchema), new ArrayType(ScalarType.createType(PrimitiveType.VARCHAR)));
     }
 }

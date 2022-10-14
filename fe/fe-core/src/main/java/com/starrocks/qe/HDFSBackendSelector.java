@@ -74,14 +74,14 @@ public class HDFSBackendSelector implements BackendSelector {
             if (scanNode instanceof HdfsScanNode) {
                 HdfsScanNode node = (HdfsScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
-                basePath = node.getHiveTable().getHdfsPath();
+                basePath = node.getHiveTable().getTableLocation();
             } else if (scanNode instanceof IcebergScanNode) {
                 IcebergScanNode node = (IcebergScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
             } else if (scanNode instanceof HudiScanNode) {
                 HudiScanNode node = (HudiScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
-                basePath = node.getHudiTable().getHudiBasePath();
+                basePath = node.getHudiTable().getTableLocation();
             } else {
                 Preconditions.checkState(false);
             }

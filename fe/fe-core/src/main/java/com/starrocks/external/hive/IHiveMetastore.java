@@ -24,7 +24,17 @@ public interface IHiveMetastore {
 
     Map<String, Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames);
 
-    HivePartitionStatistics getTableStatistics(String dbName, String tblName);
+    HivePartitionStats getTableStatistics(String dbName, String tblName);
 
-    Map<String, HivePartitionStatistics> getPartitionStatistics(Table table, List<String> partitions);
+    Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
+
+    default void refreshTable(String hiveDbName, String hiveTblName) {
+    }
+
+    default void refreshPartition(List<HivePartitionName> partitionNames) {
+    }
+
+    default void invalidateAll() {
+
+    }
 }

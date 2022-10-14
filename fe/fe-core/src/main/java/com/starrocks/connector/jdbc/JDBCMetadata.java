@@ -9,6 +9,7 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -27,13 +28,13 @@ public class JDBCMetadata implements ConnectorMetadata {
     private Map<String, String> properties;
     private JDBCSchemaResolver schemaResolver;
 
-    public JDBCMetadata(Map<String, String> properties) throws DdlException {
+    public JDBCMetadata(Map<String, String> properties) {
         this.properties = properties;
         try {
             Class.forName(properties.get(JDBCResource.DRIVER_CLASS));
         } catch (ClassNotFoundException e) {
             LOG.warn(e.getMessage());
-            throw new DdlException("doesn't find class: " + e.getMessage());
+            throw new StarRocksConnectorException("doesn't find class: " + e.getMessage());
         }
         if (properties.get(JDBCResource.DRIVER_CLASS).toLowerCase().contains("mysql")) {
             schemaResolver = new MysqlSchemaResolver();
@@ -41,7 +42,7 @@ public class JDBCMetadata implements ConnectorMetadata {
             schemaResolver = new PostgresSchemaResolver();
         } else {
             LOG.warn("{} not support yet", properties.get(JDBCResource.DRIVER_CLASS));
-            throw new DdlException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
+            throw new StarRocksConnectorException(properties.get(JDBCResource.DRIVER_CLASS) + " not support yet");
         }
     }
 
@@ -51,13 +52,13 @@ public class JDBCMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() throws DdlException {
+    public List<String> listDbNames() {
         try (Connection connection = getConnection()) {
             return schemaResolver.listSchemas(connection).stream()
                     .map(String::toLowerCase)
                     .collect(Collectors.toList());
         } catch (SQLException e) {
-            throw new DdlException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 
@@ -69,13 +70,13 @@ public class JDBCMetadata implements ConnectorMetadata {
             } else {
                 return null;
             }
-        } catch (DdlException e) {
+        } catch (StarRocksConnectorException e) {
             return null;
         }
     }
 
     @Override
-    public List<String> listTableNames(String dbName) throws DdlException {
+    public List<String> listTableNames(String dbName) {
         try (Connection connection = getConnection()) {
             try (ResultSet resultSet = schemaResolver.getTables(connection, dbName)) {
                 ImmutableList.Builder<String> list = ImmutableList.builder();
@@ -86,7 +87,7 @@ public class JDBCMetadata implements ConnectorMetadata {
                 return list.build();
             }
         } catch (SQLException e) {
-            throw new DdlException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 
