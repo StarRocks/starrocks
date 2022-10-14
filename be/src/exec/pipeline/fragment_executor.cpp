@@ -371,6 +371,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
         const auto& tsink = request.output_sink();
+        if (tsink.type == TDataSinkType::RESULT_SINK) {
+            _query_ctx->set_result_sink(true);
+        }
         RowDescriptor row_desc;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
                                                    request.sender_id(), row_desc, &datasink));

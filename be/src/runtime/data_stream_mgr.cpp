@@ -56,7 +56,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
     DCHECK(pass_through_chunk_buffer != nullptr);
     std::shared_ptr<DataStreamRecvr> recvr(
             new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline,
+                                buffer_size, profile, sub_plan_query_statistics_recvr, is_pipeline,
                                 degree_of_parallelism, keep_order, pass_through_chunk_buffer));
 
     uint32_t bucket = get_bucket(fragment_instance_id);
