@@ -128,6 +128,7 @@
       + [SHOW FULL COLUMNS](/sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](/sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
       + [SHOW PLUGINS](/sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md)
+      + [SHOW PROCESSLIST](/sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW TABLE STATUS](/sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
       + [SHOW FILE](/sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [UNINSTALL PLUGIN](/sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
