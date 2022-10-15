@@ -271,18 +271,19 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
             exit(-1);
         }
-#ifndef USE_STAROS
-        _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
-#else
+#if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_location_provider = new lake::StarletLocationProvider();
-#endif
         _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+#elif defined(BE_TEST)
+        _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+#endif
 
         // agent_server is not needed for cn
         _agent_server = new AgentServer(this);
         _agent_server->init_or_die();
 
-#ifndef BE_TEST
+#if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_tablet_manager->start_gc();
 #endif
     }
@@ -449,7 +450,9 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_schema_change_mem_tracker);
     SAFE_DELETE(_compaction_mem_tracker);
 
-    _lake_tablet_manager->prune_metacache();
+    if (_lake_tablet_manager != nullptr) {
+        _lake_tablet_manager->prune_metacache();
+    }
 
     SAFE_DELETE(_bloom_filter_index_mem_tracker);
     SAFE_DELETE(_bitmap_index_mem_tracker);

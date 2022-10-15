@@ -78,7 +78,23 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
     std::vector<std::string> txn_logs;
     std::unordered_set<std::string> segments;
 
+<<<<<<< HEAD
     auto iter_st = fs->iterate_dir(std::string(root_location), [&](std::string_view name) {
+=======
+    // List segment
+    auto iter_st = fs->iterate_dir(segment_root_location, [&](std::string_view name) {
+        if (LIKELY(is_segment(name))) {
+            segments.emplace(name);
+        }
+        return true;
+    });
+    if (!iter_st.ok() && !iter_st.is_not_found()) {
+        return iter_st;
+    }
+
+    // List tablet meatadata
+    iter_st = fs->iterate_dir(metadata_root_location, [&](std::string_view name) {
+>>>>>>> 34044411e ([BugFix][Lake] Should not run gc if BE not built with --use-staros (#12157))
         if (is_tablet_metadata(name)) {
             tablet_metadatas.emplace_back(name);
         } else if (is_txn_log(name)) {
