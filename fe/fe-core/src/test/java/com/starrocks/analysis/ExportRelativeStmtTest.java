@@ -2,10 +2,6 @@ package com.starrocks.analysis;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.load.ExportMgr;
-import com.starrocks.persist.EditLog;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Analyzer;
@@ -14,10 +10,6 @@ import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.system.BrokerHbResponse;
-import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -34,7 +26,6 @@ import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
  * [Cancel | Show ] Export stmt
  */
 public class ExportRelativeStmtTest {
-
     @BeforeClass
     public static void beforeClass() throws Exception {
         AnalyzeTestUtil.init();
@@ -239,32 +230,5 @@ public class ExportRelativeStmtTest {
         } catch (SemanticException e) {
             e.printStackTrace();
         }
-
     }
-
-    @Test
-    public void testCancelExportHandler(
-            @Mocked GlobalStateMgr globalStateMgr, @Mocked ExportMgr exportMgr, @Mocked EditLog editLog) {
-        new MockUp<ConnectContext>() {
-            @Mock
-            GlobalStateMgr getGlobalStateMgr() {
-                return globalStateMgr;
-            }
-        };
-
-        new Expectations() {
-            {
-                globalStateMgr.getExportMgr();
-                minTimes = 0;
-                result = exportMgr;
-            }
-        };
-
-        try {
-            DDLStmtExecutor.execute(new CancelExportStmt("repo", null), new ConnectContext());
-        } catch (Exception ex) {
-            Assert.fail();
-        }
-    }
-
 }
