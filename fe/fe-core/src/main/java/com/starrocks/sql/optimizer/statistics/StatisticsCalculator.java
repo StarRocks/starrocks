@@ -726,7 +726,7 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
                 }
             }
         }
-        return rowCount;
+        return Math.max(1, rowCount);
     }
 
     @Override
