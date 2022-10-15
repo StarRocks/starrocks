@@ -4,7 +4,7 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.RedirectStatus;
 
-public class EmptyStmt extends StatementBase {
+public class EmptyStmt extends UnsupportedStmt {
     @Override
     public RedirectStatus getRedirectStatus() {
         return RedirectStatus.NO_FORWARD;

@@ -6,7 +6,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.external.Utils;
+import com.starrocks.external.PartitionUtil;
 import org.apache.hadoop.hive.common.FileUtils;
 
 import java.util.List;
@@ -14,12 +14,15 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.google.common.base.Preconditions.checkState;
+import static com.starrocks.external.PartitionUtil.executeInNewThread;
 
 public class HiveMetastoreOperations {
     private final CachingHiveMetastore metastore;
+    private final boolean enableCatalogLevelCache;
 
-    public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore) {
+    public HiveMetastoreOperations(CachingHiveMetastore cachingHiveMetastore, boolean enableCatalogLevelCache) {
         this.metastore = cachingHiveMetastore;
+        this.enableCatalogLevelCache = enableCatalogLevelCache;
     }
 
     public List<String> getAllDatabaseNames() {
@@ -52,37 +55,44 @@ public class HiveMetastoreOperations {
         List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
                 .map(partitionKey ->
-                        FileUtils.makePartName(partitionColumnNames, Utils.getPartitionValues(partitionKey)))
+                        FileUtils.makePartName(partitionColumnNames, PartitionUtil.fromPartitionKey(partitionKey)))
                 .collect(Collectors.toList());
 
         return metastore.getPartitionsByNames(dbName, tblName, partitionNames);
     }
 
-    public HivePartitionStatistics getTableStatistics(String dbName, String tblName) {
+    public HivePartitionStats getTableStatistics(String dbName, String tblName) {
         return metastore.getTableStatistics(dbName, tblName);
     }
 
-    public Map<String, HivePartitionStatistics> getPartitionStatistics(Table table, List<String> partitionNames) {
+    public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
         String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
         String dbName = ((HiveMetaStoreTable) table).getDbName();
         String tblName = ((HiveMetaStoreTable) table).getTableName();
-        List<NewHivePartitionName> hivePartitionNames = partitionNames.stream()
-                .map(partitionName -> NewHivePartitionName.of(dbName, tblName, partitionName))
+        List<HivePartitionName> hivePartitionNames = partitionNames.stream()
+                .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
                 .peek(hivePartitionName -> checkState(hivePartitionName.getPartitionNames().isPresent(),
                         "partition name is missing"))
                 .collect(Collectors.toList());
 
-        Map<String, HivePartitionStatistics> presentPartitionStatsInCache =
-                metastore.getPresentPartitionsStatistics(hivePartitionNames);
+        Map<String, HivePartitionStats> partitionStats;
+        if (enableCatalogLevelCache) {
+            partitionStats = metastore.getPresentPartitionsStatistics(hivePartitionNames);
+            if (partitionStats.size() == partitionNames.size()) {
+                return partitionStats;
+            }
 
-        if (presentPartitionStatsInCache.size() == partitionNames.size()) {
-            return presentPartitionStatsInCache;
+            String backgroundThreadName = String.format("background-get-partitions-statistics-%s-%s-%s",
+                    catalogName, dbName, tblName);
+            executeInNewThread(backgroundThreadName, () -> metastore.getPartitionStatistics(table, partitionNames));
+        } else {
+            partitionStats = metastore.getPartitionStatistics(table, partitionNames);
         }
 
-        String backgroundThreadName = String.format("background-get-partitions-statistics-%s-%s-%s",
-                catalogName, dbName, tblName);
-        Utils.executeInNewThread(backgroundThreadName, () -> metastore.getPartitionStatistics(table, partitionNames));
+        return partitionStats;
+    }
 
-        return presentPartitionStatsInCache;
+    public void invalidateAll() {
+        metastore.invalidateAll();
     }
 }

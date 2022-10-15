@@ -94,6 +94,12 @@ std::string type_to_string(PrimitiveType t) {
     return "";
 }
 
+std::string type_to_string_v2(PrimitiveType t) {
+    // change OBJECT to BITMAP for better display
+    std::string raw_str = type_to_string(t);
+    return raw_str == "OBJECT" ? "BITMAP" : raw_str;
+}
+
 std::string type_to_odbc_string(PrimitiveType t) {
     // ODBC driver requires types in lower case
     switch (t) {

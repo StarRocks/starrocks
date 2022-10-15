@@ -5,7 +5,6 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -24,8 +23,19 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @BeforeClass
     public static void setUp() throws Exception {
-        UtFrameUtils.setUpForPersistTest();
+        UtFrameUtils.createMinStarRocksCluster();
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
+        UtFrameUtils.setUpForPersistTest();
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        StarRocksAssert starRocksAssert = new StarRocksAssert(ctx);
+        // create db1.tbl0, db1.tbl1
+        String createTblStmtStr = "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
+                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+        starRocksAssert.withDatabase("db1");
+        for (int i = 0; i < 2; ++ i) {
+            starRocksAssert.withTable("create table db1.tbl" + i + createTblStmtStr);
+        }
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);
@@ -72,37 +82,31 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testGrantRevokeSelectTableDbPrivilege() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        UtFrameUtils.addMockBackend(10002);
-        UtFrameUtils.addMockBackend(10003);
-        String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
-        StarRocksAssert starRocksAssert = new StarRocksAssert(UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT));
-        starRocksAssert.withDatabase("db1");
-        starRocksAssert.withTable(createTblStmtStr);
-        GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        starRocksAssert.getCtx().setRemoteIP("localhost");
-
-        CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
-                "create user test", ctx);
-        globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
-
-        String sql = "grant select on db1.tbl1 to test";
+        String sql = "grant select on db1.tbl1 to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant select,insert,delete on db1.tbl1 to test";
+        sql = "grant select,insert,delete on db1.tbl1 to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "grant select,insert_priv,delete on table db1.tbl1 to test";
+        sql = "grant select,insert,delete on db1.tbl1 to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table on database db1 from test";
+        sql = "grant select,insert_priv,delete on table db1.tbl1 to test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke create_table,drop on db1 from test";
+        sql = "revoke create_table on database db1 from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
-        sql = "revoke select on db1 from test";
+        sql = "revoke create_table,drop on database db1 from test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant ALL on table db1.tbl0, db1.tbl1 to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant ALL on db1.tbl0, db1.tbl0 to test_user with grant option";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "revoke select on database db1 from test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -110,7 +114,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("invalid action SELECT for DATABASE"));
         }
 
-        sql = "grant insert on table dbx to test";
+        sql = "grant insert on table dbx to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -118,7 +122,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have two"));
         }
 
-        sql = "grant insert on dbx.tblxx to test";
+        sql = "grant insert on dbx.tblxx to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -126,7 +130,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("cannot find db: dbx"));
         }
 
-        sql = "grant insert on db1.tblxx to test";
+        sql = "grant insert on db1.tblxx to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -134,7 +138,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("cannot find table tblxx in db db1"));
         }
 
-        sql = "grant drop on database db1.tbl1 to test";
+        sql = "grant drop on database db1.tbl1 to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -142,7 +146,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
         }
 
-        sql = "grant drop on dbx to test";
+        sql = "grant drop on database dbx to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
@@ -246,5 +250,102 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals(1, setRoleStmt.getRoles().size());
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
         Assert.assertTrue(setRoleStmt.isAll());
+    }
+
+    @Test
+    public void testGrantRevokeAll() throws Exception {
+        String sql = "grant select on ALL tables in all databases to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        sql = "revoke select on ALL tables in all databases from test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant select on ALL tables in database db1 to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        sql = "revoke select on ALL tables in database db1 from test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant create_table on ALL databases to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        sql = "revoke create_table on ALL databases from test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant create_table on ALL database to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid plural privilege type DATABASE"));
+        }
+
+        sql = "grant create_table on ALL tables to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with database"));
+        }
+
+        sql = "revoke select on ALL tables IN ALL tables IN all databases from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for tables"));
+        }
+
+        sql = "revoke select on ALL tables IN ALL tables from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL TABLES must be restricted with ALL DATABASES instead of ALL TABLES"));
+        }
+
+        sql = "grant create_table on ALL databases in database db1 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for databases! only support ON ALL DATABASES"));
+        }
+
+    }
+
+    @Test
+    public void testGrantRevokeImpersonate() throws Exception {
+        String sql = "grant impersonate on root to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant impersonate on root to test_user with grant option";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "revoke impersonate on 'root'@'%' from test_user with grant option";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "grant impersonate on user 'root'@'%', 'test_user'@'%' to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "revoke impersonate on user root, test_user from test_user with grant option";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        sql = "revoke impersonate on user root, 'test_user'@'%' from test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("grant impersonate on xxx to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("user 'xxx'@'%' not exist!"));
+        }
+    }
+
+    @Test
+    public void testGrantSystem() throws Exception {
+        try {
+            UtFrameUtils.parseStmtWithNewParser("grant grant on system to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
+        }
     }
 }

@@ -354,8 +354,12 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    public R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
-        return visitShowStatement(statement, context);
+    public R visitKillStatement(KillStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
+    public R visitSyncStatement(SyncStmt statement, C context) {
+        return visitStatement(statement, context);
     }
 
     // ---------------------------------------- Cluster Management Statement -------------------------------------------
@@ -564,6 +568,10 @@ public abstract class AstVisitor<R, C> {
         return visitDDLStatement(statement, context);
     }
 
+    public R visitShowSnapshotStatement(ShowSnapshotStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
+
     public R visitCreateRepositoryStatement(CreateRepositoryStmt statement, C context) {
         return visitDDLStatement(statement, context);
     }
@@ -632,21 +640,19 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
-    // --------------------------------------- Other statement ---------------------------------------------------------
+    // ------------------------------------------  Set Statement -----------------------------------------------------------------
+
+    public R visitSetStatement(SetStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
 
     public R visitSetUserPropertyStatement(SetUserPropertyStmt statement, C context) {
         return visitStatement(statement, context);
     }
 
-    public R visitKillStatement(KillStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
+    // ------------------------------------------- Unsupported statement ---------------------------------------------------------
 
-    public R visitSyncStatement(SyncStmt statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    public R visitSetStatement(SetStmt statement, C context) {
+    public R visitUnsupportedStatement(UnsupportedStmt statement, C context) {
         return visitStatement(statement, context);
     }
 

@@ -29,7 +29,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.external.HiveMetaStoreTableUtils;
+import com.starrocks.external.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
@@ -258,7 +258,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         if (table.isLocalTable()) {
             return ((OlapTable) table).getRangePartitionMap();
         } else if (table.isHiveTable() || table.isHudiTable()) {
-            return HiveMetaStoreTableUtils.getPartitionRange((HiveMetaStoreTable) table, partitionColumn);
+            return PartitionUtil.getPartitionRange(table, partitionColumn);
         } else if (table.isIcebergTable()) {
             // todo(ywb) support partition mv for iceberg later
             return Maps.newHashMap();
@@ -509,10 +509,10 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         }
                     } else {
                         HiveMetaStoreTable currentHMSTable = (HiveMetaStoreTable) table;
-                        Map<String, Range<PartitionKey>> snapshotPartitionMap = HiveMetaStoreTableUtils.
-                                getPartitionRange(snapShotHMSTable, snapShotHMSTable.getPartitionColumns().get(0));
-                        Map<String, Range<PartitionKey>> currentPartitionMap = HiveMetaStoreTableUtils.
-                                getPartitionRange(currentHMSTable, currentHMSTable.getPartitionColumns().get(0));
+                        Map<String, Range<PartitionKey>> snapshotPartitionMap = PartitionUtil.
+                                getPartitionRange(snapshotTable, snapShotHMSTable.getPartitionColumns().get(0));
+                        Map<String, Range<PartitionKey>> currentPartitionMap = PartitionUtil.
+                                getPartitionRange(snapshotTable, currentHMSTable.getPartitionColumns().get(0));
                         boolean changed =
                                 SyncPartitionUtils.hasPartitionChange(snapshotPartitionMap, currentPartitionMap);
                         if (changed) {

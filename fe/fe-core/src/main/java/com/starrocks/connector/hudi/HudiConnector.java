@@ -7,32 +7,57 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.external.RemoteFileIO;
+import com.starrocks.external.hive.IHiveMetastore;
 
 import java.util.Map;
 
 public class HudiConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
     private final Map<String, String> properties;
-    private String resourceName;
-    private ConnectorMetadata metadata;
+    private final String catalogName;
+    private final HudiConnectorInternalMgr internalMgr;
+    private final HudiMetadataFactory metadataFactory;
 
     public HudiConnector(ConnectorContext context) {
         this.properties = context.getProperties();
+        this.catalogName = context.getCatalogName();
+        this.internalMgr = new HudiConnectorInternalMgr(catalogName, properties);
+        this.metadataFactory = createMetadataFactory();
         validate();
+        onCreate();
     }
 
     public void validate() {
-        this.resourceName = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
-                "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
-        Util.validateMetastoreUris(resourceName);
+        String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
+                "%s must be set in properties when creating hudi catalog", HIVE_METASTORE_URIS);
+        Util.validateMetastoreUris(hiveMetastoreUris);
     }
 
     @Override
     public ConnectorMetadata getMetadata() {
-        if (metadata == null) {
-            metadata = new HudiMetadata(resourceName);
-        }
-        return metadata;
+        return metadataFactory.create();
     }
 
+    private HudiMetadataFactory createMetadataFactory() {
+        IHiveMetastore metastore = internalMgr.createHiveMetastore();
+        RemoteFileIO remoteFileIO = internalMgr.createRemoteFileIO();
+        return new HudiMetadataFactory(
+                catalogName,
+                metastore,
+                remoteFileIO,
+                internalMgr.getHiveMetastoreConf(),
+                internalMgr.getRemoteFileConf(),
+                internalMgr.getPullRemoteFileExecutor(),
+                internalMgr.isSearchRecursive()
+        );
+    }
+
+    public void onCreate() {
+    }
+
+    @Override
+    public void shutdown() {
+        internalMgr.shutdown();
+    }
 }
