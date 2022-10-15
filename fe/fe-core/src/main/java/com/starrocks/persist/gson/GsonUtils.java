@@ -87,6 +87,10 @@ import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
+import com.starrocks.privilege.DbPEntryObject;
+import com.starrocks.privilege.PEntryObject;
+import com.starrocks.privilege.TablePEntryObject;
+import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.optimizer.dump.HiveTableDumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpDeserializer;
@@ -208,6 +212,12 @@ public class GsonUtils {
             = RuntimeTypeAdapterFactory.of(SnapshotInfo.class, "clazz")
             .registerSubtype(LakeTableSnapshotInfo.class, LakeTableSnapshotInfo.class.getSimpleName());
 
+    private static final RuntimeTypeAdapterFactory<PEntryObject> P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(PEntryObject.class, "clazz")
+                    .registerSubtype(DbPEntryObject.class, DbPEntryObject.class.getSimpleName())
+                    .registerSubtype(TablePEntryObject.class, TablePEntryObject.class.getSimpleName())
+                    .registerSubtype(UserPEntryObject.class, UserPEntryObject.class.getSimpleName());
+
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -251,6 +261,7 @@ public class GsonUtils {
             .registerTypeAdapterFactory(RECYCLE_PARTITION_INFO_V_2_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_SERIALIZER)
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)

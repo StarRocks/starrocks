@@ -8,7 +8,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -78,7 +77,7 @@ public class PostgresSchemaResolverTest {
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("postgres", "template1", "test");
             Assert.assertEquals(expectResult, result);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             Assert.fail();
         }
     }
@@ -100,7 +99,7 @@ public class PostgresSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
-        } catch (DdlException e) {
+        } catch (Exception e) {
             Assert.fail();
         }
     }
@@ -128,7 +127,7 @@ public class PostgresSchemaResolverTest {
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             Assert.fail();
         }
     }
@@ -154,7 +153,7 @@ public class PostgresSchemaResolverTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
         }

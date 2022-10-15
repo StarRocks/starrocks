@@ -13,10 +13,10 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.RemoteFileDesc;
 import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.Utils;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -33,6 +33,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.OptionalDouble;
 import java.util.TimeZone;
 import java.util.stream.Collectors;
@@ -64,7 +65,7 @@ public class HiveStatisticsProvider {
         Statistics.Builder builder = Statistics.builder();
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         if (hmsTbl.isUnPartitioned()) {
-            HivePartitionStatistics tableStats = hmsOps.getTableStatistics(hmsTbl.getDbName(), hmsTbl.getTableName());
+            HivePartitionStats tableStats = hmsOps.getTableStatistics(hmsTbl.getDbName(), hmsTbl.getTableName());
             return createUnpartitionedStats(tableStats, columns, builder, table);
         }
 
@@ -74,11 +75,11 @@ public class HiveStatisticsProvider {
                 .peek(partitionKey -> checkState(partitionKey.getKeys().size() == partitionColumnNames.size(),
                         "columns size is " + partitionColumnNames.size() +
                                 " but values size is " + partitionKey.getKeys().size()))
-                .map(partitionKey -> FileUtils.makePartName(partitionColumnNames, Utils.getPartitionValues(partitionKey)))
+                .map(partitionKey -> FileUtils.makePartName(partitionColumnNames, PartitionUtil.fromPartitionKey(partitionKey)))
                 .collect(Collectors.toList());
 
         List<String> sampledPartitionNames = getPartitionsSample(partitionNames, sampleSize);
-        Map<String, HivePartitionStatistics> partitionStatistics = hmsOps.getPartitionStatistics(table, sampledPartitionNames);
+        Map<String, HivePartitionStats> partitionStatistics = hmsOps.getPartitionStatistics(table, sampledPartitionNames);
 
         double avgRowNumPerPartition = -1;
         double totalRowNums = -1;
@@ -107,7 +108,7 @@ public class HiveStatisticsProvider {
     }
 
     public Statistics createUnpartitionedStats(
-            HivePartitionStatistics tableStats,
+            HivePartitionStats tableStats,
             List<ColumnRefOperator> columns,
             Statistics.Builder builder,
             Table table) {
@@ -130,11 +131,13 @@ public class HiveStatisticsProvider {
 
     public long getEstimatedRowCount(Table table, List<PartitionKey> partitionKeys) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
-        Collection<Partition> partitions = hmsTbl.isUnPartitioned() ?
-                Collections.singleton(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
-                hmsOps.getPartitionByNames(table, partitionKeys).values();
+        List<Partition> partitions = hmsTbl.isUnPartitioned() ?
+                Lists.newArrayList(hmsOps.getPartition(hmsTbl.getDbName(), hmsTbl.getTableName(), Lists.newArrayList())) :
+                Lists.newArrayList(hmsOps.getPartitionByNames(table, partitionKeys).values());
 
-        List<RemoteFileInfo> remoteFileInfos = fileOps.getPresentFilesInCache(partitions);
+        Optional<String> hudiBasePath = table.isHiveTable() ? Optional.empty() : Optional.of(hmsTbl.getTableLocation());
+        List<RemoteFileInfo> remoteFileInfos = fileOps.getRemoteFileInfoForStats(partitions, hudiBasePath);
+
         long totalBytes = 0;
         for (RemoteFileInfo remoteFileInfo : remoteFileInfos) {
             for (RemoteFileDesc fileDesc : remoteFileInfo.getFiles()) {
@@ -177,8 +180,8 @@ public class HiveStatisticsProvider {
         return builder.build();
     }
 
-    private OptionalDouble getPartitionRowCount(String partitionName, Map<String, HivePartitionStatistics> statistics) {
-        HivePartitionStatistics partitionStatistics = statistics.get(partitionName);
+    private OptionalDouble getPartitionRowCount(String partitionName, Map<String, HivePartitionStats> statistics) {
+        HivePartitionStats partitionStatistics = statistics.get(partitionName);
         if (partitionStatistics == null) {
             return OptionalDouble.empty();
         }
@@ -190,7 +193,7 @@ public class HiveStatisticsProvider {
     }
 
     private ColumnStatistic createPartitionColumnStatistics(Column column, List<PartitionKey> partitionKeys,
-                                                            Map<String, HivePartitionStatistics> statistics,
+                                                            Map<String, HivePartitionStats> statistics,
                                                             List<String> partitionColumnNames,
                                                             double avgNumPerPartition, double rowCount) {
         int index = partitionColumnNames.indexOf(column.getName());
@@ -219,14 +222,14 @@ public class HiveStatisticsProvider {
             double totalRowNums,
             double avgNumPerPartition,
             List<String> partitionColumnNames,
-            Map<String, HivePartitionStatistics> statistics) {
+            Map<String, HivePartitionStats> statistics) {
         if (totalRowNums == 0) {
             return 0;
         }
 
         double estimatedNullsCount = partitionKeys.stream()
                 .filter(partitionKey -> partitionKey.getKeys().get(index).isNullable())
-                .map(partitionKey -> FileUtils.makePartName(partitionColumnNames, Utils.getPartitionValues(partitionKey)))
+                .map(partitionKey -> FileUtils.makePartName(partitionColumnNames, PartitionUtil.fromPartitionKey(partitionKey)))
                 .mapToDouble(partitionName -> getPartitionRowCount(partitionName, statistics).orElse(avgNumPerPartition))
                 .sum();
 
@@ -281,9 +284,9 @@ public class HiveStatisticsProvider {
     }
 
     private ColumnStatistic createDataColumnStatistics(Column column, double rowNums,
-                                                       Collection<HivePartitionStatistics> partitionStatistics) {
-        List<HiveColumnStatistics> columnStatistics = partitionStatistics.stream()
-                .map(HivePartitionStatistics::getColumnStats)
+                                                       Collection<HivePartitionStats> partitionStatistics) {
+        List<HiveColumnStats> columnStatistics = partitionStatistics.stream()
+                .map(HivePartitionStats::getColumnStats)
                 .map(statistics -> statistics.get(column.getName()))
                 .filter(Objects::nonNull)
                 .collect(Collectors.toList());
@@ -301,9 +304,9 @@ public class HiveStatisticsProvider {
                 .build();
     }
 
-    private double ndv(List<HiveColumnStatistics> columnStatistics) {
+    private double ndv(List<HiveColumnStats> columnStatistics) {
         OptionalDouble ndv = columnStatistics.stream()
-                .map(HiveColumnStatistics::getNdv)
+                .map(HiveColumnStats::getNdv)
                 .filter(x -> x >= 0)
                 .mapToDouble(x -> x)
                 .max();
@@ -311,8 +314,8 @@ public class HiveStatisticsProvider {
         return  ndv.isPresent() ? ndv.getAsDouble() : 1;
     }
 
-    private double nullsFraction(Column column, Collection<HivePartitionStatistics> partitionStatistics) {
-        List<HivePartitionStatistics> filteredStatistics = partitionStatistics.stream()
+    private double nullsFraction(Column column, Collection<HivePartitionStats> partitionStatistics) {
+        List<HivePartitionStats> filteredStatistics = partitionStatistics.stream()
                 .filter(pStat -> pStat.getCommonStats().getRowNums() != -1)
                 .filter(pStat -> pStat.getColumnStats().get(column.getName()) != null)
                 .filter(pStat -> pStat.getColumnStats().get(column.getName()).getNumNulls() != -1)
@@ -324,9 +327,9 @@ public class HiveStatisticsProvider {
 
         long totalNullsNums = 0;
         long totalRowNums = 0;
-        for (HivePartitionStatistics statistics : filteredStatistics) {
+        for (HivePartitionStats statistics : filteredStatistics) {
             long rowNums = statistics.getCommonStats().getRowNums();
-            HiveColumnStatistics columnStatistics = statistics.getColumnStats().get(column.getName());
+            HiveColumnStats columnStatistics = statistics.getColumnStats().get(column.getName());
             long nullsNums = columnStatistics.getNumNulls();
             totalNullsNums += nullsNums;
             totalRowNums += rowNums;
@@ -340,12 +343,12 @@ public class HiveStatisticsProvider {
     }
 
 
-    private double averageRowSize(Column column, Collection<HivePartitionStatistics> partitionStatistics, double totalRowNums) {
+    private double averageRowSize(Column column, Collection<HivePartitionStats> partitionStatistics, double totalRowNums) {
         if (!column.getType().isStringType()) {
             return column.getType().getTypeSize();
         }
 
-        List<HivePartitionStatistics> filteredStatistics = partitionStatistics.stream()
+        List<HivePartitionStats> filteredStatistics = partitionStatistics.stream()
                 .filter(pStat -> pStat.getCommonStats().getRowNums() != -1)
                 .filter(pStat -> pStat.getColumnStats().get(column.getName()) != null)
                 .filter(pStat -> pStat.getColumnStats().get(column.getName()).getTotalSizeBytes() != -1)
@@ -365,31 +368,31 @@ public class HiveStatisticsProvider {
         return ((double) totalSizeWithoutNullRow) / totalRowNums;
     }
 
-    private double max(List<HiveColumnStatistics> columnStatistics) {
+    private double max(List<HiveColumnStats> columnStatistics) {
         OptionalDouble max =  columnStatistics.stream()
-                .map(HiveColumnStatistics::getMax)
+                .map(HiveColumnStats::getMax)
                 .filter(value -> value != POSITIVE_INFINITY)
                 .mapToDouble(x -> x)
                 .max();
         return max.isPresent() ? max.getAsDouble() : POSITIVE_INFINITY;
     }
 
-    private double min(List<HiveColumnStatistics> columnStatistics) {
+    private double min(List<HiveColumnStats> columnStatistics) {
         OptionalDouble min =  columnStatistics.stream()
-                .map(HiveColumnStatistics::getMin)
+                .map(HiveColumnStats::getMin)
                 .filter(value -> value != NEGATIVE_INFINITY)
                 .mapToDouble(x -> x)
                 .min();
         return min.isPresent() ? min.getAsDouble() : NEGATIVE_INFINITY;
     }
 
-    private double getPerPartitionRowAvgNums(Collection<HivePartitionStatistics> statistics) {
+    private double getPerPartitionRowAvgNums(Collection<HivePartitionStats> statistics) {
         if (statistics.isEmpty()) {
             return -1;
         }
 
         long[] rowNums = statistics.stream()
-                .map(HivePartitionStatistics::getCommonStats)
+                .map(HivePartitionStats::getCommonStats)
                 .map(HiveCommonStats::getRowNums)
                 .filter(num -> num != -1)
                 .mapToLong(num -> num)

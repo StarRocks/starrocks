@@ -44,6 +44,10 @@ public class ActionSet implements Cloneable {
         return new ActionSet(~bitSet & other.bitSet);
     }
 
+    public boolean contains(ActionSet other) {
+        return (~bitSet & other.bitSet) == 0;
+    }
+
     public boolean isEmpty() {
         return bitSet == 0;
     }

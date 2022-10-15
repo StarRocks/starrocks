@@ -982,6 +982,13 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testVarcharAsBitmapCast() throws Exception {
+        String sql = "select cast(t1a as BITMAP) from test_all_type;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(1: t1a AS BITMAP)");
+    }
+
+    @Test
     public void testReduceNumberCast() throws Exception {
         String sql;
         String plan;

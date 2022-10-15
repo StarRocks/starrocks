@@ -37,6 +37,16 @@ public class RemoteFileInfo {
         return fullPath;
     }
 
+    @Override
+    public String toString() {
+        final StringBuilder sb = new StringBuilder("RemoteFileInfo{");
+        sb.append("format=").append(format);
+        sb.append(", files=").append(files);
+        sb.append(", fullPath='").append(fullPath).append('\'');
+        sb.append('}');
+        return sb.toString();
+    }
+
     public static Builder builder() {
         return new Builder();
     }

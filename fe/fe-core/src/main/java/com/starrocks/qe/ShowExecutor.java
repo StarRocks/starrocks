@@ -83,6 +83,7 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.meta.BlackListSql;
 import com.starrocks.meta.SqlBlackList;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -520,9 +521,14 @@ public class ShowExecutor {
                 continue;
             }
 
-            if (!PrivilegeChecker.checkDbPriv(ConnectContext.get(), catalogName,
-                    dbName, PrivPredicate.SHOW)) {
-                continue;
+            if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+                if (CatalogMgr.isInternalCatalog(catalogName) && !PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                    continue;
+                }
+            } else {
+                if (!PrivilegeChecker.checkDbPriv(ctx, catalogName, dbName, PrivPredicate.SHOW)) {
+                    continue;
+                }
             }
             dbNameSet.add(dbName);
         }
@@ -558,9 +564,15 @@ public class ShowExecutor {
                             continue;
                         }
                         // check tbl privs
-                        if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
-                                db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
-                            continue;
+                        if (ctx.getGlobalStateMgr().isUsingNewPrivilege()) {
+                            if (!PrivilegeManager.checkAnyActionInTable(ctx, db.getFullName(), tbl.getName())) {
+                                continue;
+                            }
+                        } else {
+                            if (!PrivilegeChecker.checkTblPriv(ConnectContext.get(), catalog,
+                                    db.getFullName(), tbl.getName(), PrivPredicate.SHOW)) {
+                                continue;
+                            }
                         }
                         tableMap.put(tbl.getName(), tbl.getMysqlType());
                     }

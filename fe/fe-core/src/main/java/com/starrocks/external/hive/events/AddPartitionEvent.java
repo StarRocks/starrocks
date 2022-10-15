@@ -6,12 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
-import com.starrocks.catalog.Table;
-import com.starrocks.external.Utils;
-import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionKeysKey;
-import com.starrocks.external.hive.HivePartitionName;
-import com.starrocks.external.hive.HiveTableKey;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.messaging.AddPartitionMessage;
@@ -34,7 +29,7 @@ public class AddPartitionEvent extends MetastoreTableEvent {
      * Prevent instantiation from outside should use MetastoreEventFactory instead
      */
     private AddPartitionEvent(NotificationEvent event,
-                              HiveMetaCache metaCache,
+                              CacheUpdateProcessor metaCache,
                               Partition addedPartition,
                               List<Column> partCols) {
         super(event, metaCache);
@@ -51,15 +46,15 @@ public class AddPartitionEvent extends MetastoreTableEvent {
             this.partCols = partCols;
             hmsTbl = addPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(
-                    new HivePartitionName(dbName, tblName, Table.TableType.HIVE, addedPartition.getValues()));
+            // TODO(stephen): refactor this function
+            // hivePartitionKeys.add(new HivePartitionName(dbName, tblName, Table.TableType.HIVE, addedPartition.getValues()));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(ex);
         }
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                    HiveMetaCache metaCache,
+                                                    CacheUpdateProcessor metaCache,
                                                     List<Column> partCols) {
         List<MetastoreEvent> addPartitionEvents = Lists.newArrayList();
         try {
@@ -93,8 +88,10 @@ public class AddPartitionEvent extends MetastoreTableEvent {
      */
     @Override
     protected boolean existInCache() {
-        HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
-        return cache.tableExistInCache(tableKey);
+        // TODO(stephen): refactor this function
+        return false;
+        // HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
+        //return cache.tableExistInCache(tableKey);
     }
 
     @Override
@@ -105,15 +102,15 @@ public class AddPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
-            LOG.warn("Table [{}.{}.{}] doesn't exist in cache on event id: [{}]",
-                    cache.getResourceName(), getDbName(), getTblName(), getEventId());
+            // TODO(stephen): refactor this function
+            // LOG.warn("Table [{}.{}.{}] doesn't exist in cache on event id: [{}]", cache.getResourceName(), getDbName(), getTblName(), getEventId());
             return;
         }
         try {
-            HivePartitionKeysKey partitionKeysKey =
-                    new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
-            PartitionKey partitionKey = Utils.createPartitionKey(addedPartition.getValues(), partCols);
-            cache.addPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
+            // TODO(stephen): refactor this function
+            // HivePartitionKeysKey partitionKeysKey = new HivePartitionKeysKey(dbName, tblName, Table.TableType.HIVE, partCols);
+            // PartitionKey partitionKey = PartitionUtil.createPartitionKey(addedPartition.getValues(), partCols);
+            // cache.addPartitionKeyByEvent(partitionKeysKey, partitionKey, getHivePartitionKey());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);
