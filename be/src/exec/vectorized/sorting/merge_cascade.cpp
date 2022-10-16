@@ -131,7 +131,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             DCHECK_EQ(_left_run.num_rows() + right_1.num_rows(), perm.size());
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
             // TODO: avoid copy the whole chunk, but copy orderby columns only
-            append_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
+            materialize_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
 
             VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output left and right [{}, {})",
                                     _right_run.start_index(), right_cut);
@@ -150,7 +150,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             CursorAlgo::trim_permutation(left_1, _right_run, perm);
             DCHECK_EQ(_right_run.num_rows() + left_1.num_rows(), perm.size());
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
-            append_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
+            materialize_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
 
             VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output right and left [{}, {})",
                                     _left_run.start_index(), left_cut);

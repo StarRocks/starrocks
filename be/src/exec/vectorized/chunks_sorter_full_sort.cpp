@@ -56,7 +56,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
         RETURN_IF_ERROR(
                 sort_and_tie_columns(state->cancelled_ref(), segment.order_by_columns, _sort_desc, &_sort_permutation));
         ChunkPtr sorted_chunk = _unsorted_chunk->clone_empty_with_slot(_unsorted_chunk->num_rows());
-        append_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
+        materialize_by_permutation(sorted_chunk.get(), {_unsorted_chunk}, _sort_permutation);
         RETURN_IF_ERROR(sorted_chunk->upgrade_if_overflow());
 
         _sorted_chunks.push_back(sorted_chunk);
