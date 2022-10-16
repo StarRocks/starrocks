@@ -51,7 +51,7 @@ bool TieIterator::next() {
     return true;
 }
 
-// Append permutation to column, implements `append_by_permutation` function
+// Append permutation to column, implements `materialize_by_permutation` function
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
 public:
     explicit ColumnAppendPermutation(const Columns& columns, const Permutation& perm)

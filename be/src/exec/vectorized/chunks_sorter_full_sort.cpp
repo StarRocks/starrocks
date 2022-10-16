@@ -70,7 +70,7 @@ Status ChunksSorterFullSort::_partial_sort(RuntimeState* state, bool done) {
 Status ChunksSorterFullSort::_merge_sorted(RuntimeState* state) {
     SCOPED_TIMER(_merge_timer);
 
-    RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs, 0));
+    RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _sorted_chunks, &_merged_runs));
 
     return Status::OK();
 }
