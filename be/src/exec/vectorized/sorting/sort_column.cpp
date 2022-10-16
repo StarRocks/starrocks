@@ -511,25 +511,13 @@ void append_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, cons
         return;
     }
 
-    std::vector<const Chunk*> src;
-    src.reserve(chunks.size());
-    for (auto& chunk : chunks) {
-        src.push_back(chunk.get());
-    }
     DCHECK_LT(std::max_element(perm.begin(), perm.end(),
                                [](auto& lhs, auto& rhs) { return lhs.chunk_index < rhs.chunk_index; })
                       ->chunk_index,
               chunks.size());
-    append_by_permutation(dst, src, perm);
-}
-
-void append_by_permutation(Chunk* dst, const std::vector<const Chunk*>& chunks, const Permutation& perm) {
-    if (chunks.empty() || perm.empty()) {
-        return;
-    }
-
     DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
-    for (size_t col_index = 0; col_index < dst->columns().size(); col_index++) {
+
+    for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
         Columns tmp_columns;
         tmp_columns.reserve(chunks.size());
         for (auto chunk : chunks) {
