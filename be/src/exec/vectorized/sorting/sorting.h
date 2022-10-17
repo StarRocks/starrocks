@@ -54,7 +54,6 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_result, con
 // Tie(i) is set to 1 only if row(i-1) is equal to row(i), otherwise is set to 0.
 void build_tie_for_column(const ColumnPtr column, Tie* tie, const NullColumnPtr null_column = nullptr);
 
-
 struct SortDesc {
     int sort_order;
     int null_first;
