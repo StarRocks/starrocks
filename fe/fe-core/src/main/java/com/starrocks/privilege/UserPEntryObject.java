@@ -68,7 +68,7 @@ public class UserPEntryObject implements PEntryObject {
     }
 
     @Override
-    public Object clone() {
+    public PEntryObject clone() {
         return new UserPEntryObject(userIdentity);
     }
 }

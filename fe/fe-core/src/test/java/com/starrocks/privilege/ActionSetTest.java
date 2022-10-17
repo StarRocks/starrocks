@@ -86,9 +86,9 @@ public class ActionSetTest {
     }
 
     @Test
-    public void testClone() {
+    public void testCopyConstructor() {
         ActionSet set1 = new ActionSet(Arrays.asList(SELECT, INSERT));
-        ActionSet set2 = (ActionSet) set1.clone();
+        ActionSet set2 = new ActionSet(set1);
         set2.add(new ActionSet(Arrays.asList(DELETE)));
         Assert.assertEquals(6, set1.bitSet);
         Assert.assertEquals(14, set2.bitSet);

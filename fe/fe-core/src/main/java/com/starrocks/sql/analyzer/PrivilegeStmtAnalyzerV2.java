@@ -146,7 +146,6 @@ public class PrivilegeStmtAnalyzerV2 {
             }
 
             try {
-                PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
                 if (stmt.hasPrivilegeObject()) {
                     List<PEntryObject> objectList = new ArrayList<>();
                     if (stmt.getUserPrivilegeObjectList() != null) {

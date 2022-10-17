@@ -19,7 +19,7 @@ import com.starrocks.server.GlobalStateMgr;
  * (db1, ALL) matches (db1, tbl1)
  * (db1, tbl1) matches (db1, ALL)
  **/
-public interface PEntryObject extends Comparable<PEntryObject>, Cloneable {
+public interface PEntryObject extends Comparable<PEntryObject> {
 
     /**
      * if the specific object matches current object, including fuzzy matching.
@@ -53,5 +53,5 @@ public interface PEntryObject extends Comparable<PEntryObject>, Cloneable {
     /**
      * used to deep copy when merging Privilege collections
      **/
-    Object clone();
+    PEntryObject clone();
 }

@@ -240,7 +240,7 @@ public class PrivilegeCollectionTest {
     }
 
     @Test
-    public void testPEntryClone() throws Exception {
+    public void testPEntryCopyConstructor() throws Exception {
         Action select = new Action((short) 1, "SELECT");
         Action insert = new Action((short) 2, "INSERT");
         Action delete = new Action((short) 3, "DELETE");
@@ -249,7 +249,7 @@ public class PrivilegeCollectionTest {
                 new ActionSet(Arrays.asList(select, insert)),
                 table1,
                 false);
-        PrivilegeCollection.PrivilegeEntry clonedEntry = (PrivilegeCollection.PrivilegeEntry) entry.clone();
+        PrivilegeCollection.PrivilegeEntry clonedEntry = new PrivilegeCollection.PrivilegeEntry(entry);
 
         entry.actionSet.add(new ActionSet(Arrays.asList(delete)));
         Assert.assertFalse(clonedEntry.actionSet.contains(delete));

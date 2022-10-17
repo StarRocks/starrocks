@@ -130,7 +130,7 @@ public class TablePEntryObject implements PEntryObject {
     }
 
     @Override
-    public Object clone() {
+    public PEntryObject clone() {
         return new TablePEntryObject(databaseId, tableId);
     }
 }

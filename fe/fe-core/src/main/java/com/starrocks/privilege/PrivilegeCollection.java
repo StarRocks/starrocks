@@ -21,7 +21,7 @@ public class PrivilegeCollection {
     @SerializedName("m")
     protected Map<Short, List<PrivilegeEntry>> typeToPrivilegeEntryList = new HashMap<>();
 
-    static class PrivilegeEntry implements Comparable<PrivilegeEntry>, Cloneable {
+    static class PrivilegeEntry implements Comparable<PrivilegeEntry> {
         @SerializedName(value = "a")
         protected ActionSet actionSet;
         @SerializedName(value = "o")
@@ -35,13 +35,14 @@ public class PrivilegeCollection {
             this.isGrant = isGrant;
         }
 
-        @Override
-        public Object clone() {
-            if (object != null) {
-                return new PrivilegeEntry((ActionSet) actionSet.clone(), (PEntryObject) object.clone(), isGrant);
+        public PrivilegeEntry(PrivilegeEntry other) {
+            this.actionSet = new ActionSet(other.actionSet);
+            if (other.object == null) {
+                this.object = null;
             } else {
-                return new PrivilegeEntry((ActionSet) actionSet.clone(), null, isGrant);
+                this.object = other.object.clone();
             }
+            this.isGrant = other.isGrant;
         }
 
         @Override
@@ -260,9 +261,8 @@ public class PrivilegeCollection {
                 // deep copy here
                 List<PrivilegeEntry> clonedList = new ArrayList<>();
                 for (PrivilegeEntry entry : otherList) {
-                    clonedList.add((PrivilegeEntry) entry.clone());
+                    clonedList.add(new PrivilegeEntry(entry));
                 }
-                //typeToPrivilegeEntryList.put(typeId, (ArrayList<PrivilegeEntry>) otherList.clone());
                 typeToPrivilegeEntryList.put(typeId, clonedList);
             } else {
                 List<PrivilegeEntry> typeList = typeToPrivilegeEntryList.get(typeId);

@@ -500,7 +500,6 @@ public class PrivilegeManager {
             if (!userToPrivilegeCollection.containsKey(userIdentity)) {
                 throw new PrivilegeException("cannot find " + userIdentity.toString());
             }
-            // TODO lock..
             PrivilegeCollection collection = new PrivilegeCollection();
             UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
             collection.merge(userCollection);
