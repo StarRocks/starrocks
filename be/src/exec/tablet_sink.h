@@ -176,6 +176,7 @@ private:
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
 
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
+    std::vector<TTabletFailInfo> _tablet_fail_infos;
 
     AddBatchCounter _add_batch_counter;
     int64_t _serialize_batch_ns = 0;

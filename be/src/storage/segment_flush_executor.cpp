@@ -58,6 +58,9 @@ Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddS
         }
         if (!st.ok()) {
             writer->abort(true);
+            auto* tablet_info = response->add_failed_tablet_vec();
+            tablet_info->set_tablet_id(writer->tablet()->tablet_id());
+            tablet_info->set_node_id(writer->node_id());
         }
         st.to_protobuf(response->mutable_status());
         done->Run();
