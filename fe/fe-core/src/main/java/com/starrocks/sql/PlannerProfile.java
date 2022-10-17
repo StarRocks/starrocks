@@ -36,6 +36,7 @@ public class PlannerProfile {
         private volatile long currentThreadId = 0;
         private long totalTime = 0;
         private int totalCount = 0;
+        private int customCount = 0;
         // possible to record p99?
 
         public void start() {
@@ -58,6 +59,15 @@ public class PlannerProfile {
         public int getTotalCount() {
             return totalCount;
         }
+
+        public int getCustomCount() {
+            return customCount;
+        }
+
+        public ScopedTimer setCustomCount(int customCount) {
+            this.customCount = customCount;
+            return this;
+        }
     }
 
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
@@ -76,6 +86,10 @@ public class PlannerProfile {
     private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
 
     public static ScopedTimer getScopedTimer(String name) {
+        return getScopedTimer(name, 0);
+    }
+
+    public static ScopedTimer getScopedTimer(String name, int customCount) {
         // to avoid null.
         PlannerProfile p = DEFAULT_INSTANCE;
         ConnectContext ctx = ConnectContext.get();
@@ -84,6 +98,9 @@ public class PlannerProfile {
         }
         ScopedTimer t = p.getOrCreateScopedTimer(name);
         t.start();
+        if (customCount != 0) {
+            t.setCustomCount(customCount);
+        }
         return t;
     }
 
@@ -129,7 +146,8 @@ public class PlannerProfile {
             String name = key.substring(prefix.length());
             RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
             ScopedTimer t = timers.get(key);
-            p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), t.getTotalCount()));
+            int count = t.getCustomCount() == 0 ? t.getTotalCount() : t.getCustomCount();
+            p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), count));
         }
     }
 
