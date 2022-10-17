@@ -7,8 +7,10 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -122,6 +124,31 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public TaskRunStatus getStatus() {
+        if (status == null) {
+            return null;
+        }
+        switch (status.getState()) {
+            case RUNNING:
+                if (runCtx != null) {
+                    StmtExecutor executor = runCtx.getExecutor();
+                    if (executor != null && executor.getCoordinator() != null) {
+                        long jobId = executor.getCoordinator().getJobId();
+                        if (jobId != -1) {
+                            InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
+                                    .getLoadManager().getLoadJob(jobId);
+                            int progress = job.getProgress();
+                            if (progress == 100) {
+                                progress = 99;
+                            }
+                            status.setProgress(progress);
+                        }
+                    }
+                }
+                break;
+            case SUCCESS:
+                status.setProgress(100);
+                break;
+        }
         return status;
     }
 

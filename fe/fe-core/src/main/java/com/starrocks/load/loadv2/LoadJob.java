@@ -130,6 +130,10 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
     // 100: txn status is visible and load has been finished
     protected int progress;
 
+    public int getProgress() {
+        return this.progress;
+    }
+
     // non-persistence
     // This param is set true during txn is committing.
     // During committing, the load job could not be cancelled.
