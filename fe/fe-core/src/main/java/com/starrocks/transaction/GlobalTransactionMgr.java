@@ -740,4 +740,12 @@ public class GlobalTransactionMgr implements Writable {
         write(dos);
         return checksum;
     }
+
+    public String getTxnPublishTimeoutDebugInfo(long dbId, long txnId) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTransactionMgr == null) {
+            return "";
+        }
+        return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
+    }
 }
