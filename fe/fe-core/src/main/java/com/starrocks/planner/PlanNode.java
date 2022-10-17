@@ -643,10 +643,9 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
 
     protected String debugString() {
         // not using Objects.toStrHelper because
-        StringBuilder output = new StringBuilder();
-        output.append("preds=" + Expr.debugString(conjuncts));
-        output.append(" limit=" + limit);
-        return output.toString();
+        String output = "preds=" + Expr.debugString(conjuncts) +
+                " limit=" + limit;
+        return output;
     }
 
     private String getVerboseExplain(List<? extends Expr> exprs, TExplainLevel level) {
@@ -715,10 +714,7 @@ abstract public class PlanNode extends TreeNode<PlanNode> {
         // RuntimeFilter can only be pushed into multicast fragment iff.
         // this runtime filter is applied to all consumers. It's quite hard to do
         // thorough analysis, so we disable it for safety.
-        if (fragment_ instanceof MultiCastPlanFragment) {
-            return false;
-        }
-        return true;
+        return !(fragment_ instanceof MultiCastPlanFragment);
     }
 
     public void checkRuntimeFilterOnNullValue(RuntimeFilterDescription description, Expr probeExpr) {

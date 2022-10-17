@@ -1294,7 +1294,7 @@ public class PlanTestBase {
     }
 
     public void runFileUnitTest(String filename) {
-        runFileUnitTest(filename, true);
+        runFileUnitTest(filename, false);
     }
 
     public static String format(String result) {
@@ -1368,6 +1368,33 @@ public class PlanTestBase {
         for (String expected : explain) {
             Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
                     StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertVerbosePlanContains(String sql, String... explain) throws Exception {
+        String explainString = getVerboseExplain(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertVerbosePlanNotContains(String sql, String... explain) throws Exception {
+        String explainString = getVerboseExplain(sql);
+
+        for (String expected : explain) {
+            Assert.assertFalse("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
+    protected void assertExceptionMessage(String sql, String message) {
+        try {
+            getFragmentPlan(sql);
+            throw new Error();
+        } catch (Exception e) {
+            Assert.assertEquals(message, e.getMessage());
         }
     }
 
