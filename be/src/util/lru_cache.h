@@ -184,7 +184,7 @@ public:
 
     virtual uint64_t get_lookup_count() = 0;
     virtual uint64_t get_hit_count() = 0;
-    
+
     //  Decrease or increase cache capacity.
     virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
 
