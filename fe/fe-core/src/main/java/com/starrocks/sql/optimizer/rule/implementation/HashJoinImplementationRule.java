@@ -10,6 +10,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
@@ -34,7 +35,9 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
+        // Transform right semi/anti into left semi/anti
+        OptExpression commutedExpr = JoinCommutativityRule.commuteRightSemiAntiJoin(input);
+        LogicalJoinOperator joinOperator = (LogicalJoinOperator) commutedExpr.getOp();
 
         PhysicalHashJoinOperator physicalHashJoin = new PhysicalHashJoinOperator(
                 joinOperator.getJoinType(),
@@ -43,7 +46,7 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
                 joinOperator.getProjection());
-        OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
+        OptExpression result = OptExpression.create(physicalHashJoin, commutedExpr.getInputs());
         return Lists.newArrayList(result);
     }
 }
