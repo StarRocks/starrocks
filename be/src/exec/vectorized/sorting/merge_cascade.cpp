@@ -85,7 +85,7 @@ bool MergeTwoCursor::is_data_ready() {
 }
 
 bool MergeTwoCursor::is_eos() {
-    return _left_cursor->is_eos() && _right_cursor->is_eos();
+    return _left_run.empty() && _left_cursor->is_eos() && _right_run.empty() && _right_cursor->is_eos();
 }
 
 StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
@@ -96,6 +96,29 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
         return ChunkUniquePtr();
     }
     return merge_sorted_cursor_two_way();
+}
+
+bool MergeTwoCursor::move_cursor() {
+    DCHECK(is_data_ready());
+    DCHECK(!is_eos());
+
+    bool eos = _left_run.empty() && _right_run.empty();
+    if (_left_run.empty() && !_left_cursor->is_eos()) {
+        auto chunk = _left_cursor->try_get_next();
+        if (chunk.first) {
+            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
+        }
+    }
+    if (_right_run.empty() && !_right_cursor->is_eos()) {
+        auto chunk = _right_cursor->try_get_next();
+        if (chunk.first) {
+            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
+        }
+    }
+
+    return eos;
 }
 
 // 1. Find smaller tail
@@ -161,29 +184,6 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     }
 
     return result;
-}
-
-bool MergeTwoCursor::move_cursor() {
-    DCHECK(is_data_ready());
-    DCHECK(!is_eos());
-
-    bool eos = _left_run.empty() && _right_run.empty();
-    if (_left_run.empty() && !_left_cursor->is_eos()) {
-        auto chunk = _left_cursor->try_get_next();
-        if (chunk.first) {
-            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
-        }
-    }
-    if (_right_run.empty() && !_right_cursor->is_eos()) {
-        auto chunk = _right_cursor->try_get_next();
-        if (chunk.first) {
-            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
-        }
-    }
-
-    return eos;
 }
 
 // TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only
