@@ -306,6 +306,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     // Set up sink if required
     std::unique_ptr<DataSink> sink;
     if (fragment.__isset.output_sink) {
+        if (fragment.output_sink.type == TDataSinkType::RESULT_SINK) {
+            _query_ctx->set_result_sink(true);
+        }
         RowDescriptor row_desc;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, fragment.output_sink, fragment.output_exprs, params,
                                                    row_desc, &sink));

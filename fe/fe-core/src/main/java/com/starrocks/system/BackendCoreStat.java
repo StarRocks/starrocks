@@ -12,7 +12,8 @@ public class BackendCoreStat {
     private static AtomicInteger cachedAvgNumOfHardwareCores = new AtomicInteger(-1);
 
     public static void setNumOfHardwareCoresOfBe(long be, int numOfCores) {
-        if (numOfHardwareCoresPerBe.putIfAbsent(be, numOfCores) == null) {
+        Integer previous = numOfHardwareCoresPerBe.put(be, numOfCores);
+        if (previous == null || previous != numOfCores) {
             cachedAvgNumOfHardwareCores.set(-1);
         }
     }
