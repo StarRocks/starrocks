@@ -730,6 +730,8 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
             context.clear();
             context.merge(mergeContext);
+            optExpression.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                    context.stringColumnIdToDictColumnIds));
             return visitProjectionAfter(optExpression, context);
         }
 
