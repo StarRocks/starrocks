@@ -115,7 +115,7 @@ public class IcebergTableStatisticCalculator {
             statisticsBuilder.addColumnStatistic(columnList.get(0), columnStatistic);
         }
         statisticsBuilder.setOutputRowCount(recordCount);
-        LOG.debug("Finish make iceberg table statistics!");
+        LOG.debug("Finish to make iceberg table statistics!");
         return statisticsBuilder.build();
     }
 
