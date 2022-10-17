@@ -132,7 +132,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         LogicalProjectOperator project = (LogicalProjectOperator) optExpression.getOp();
 
-        if (project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
+        if (project.getColumnRefMap().entrySet().stream().allMatch(e -> e.getValue().equals(e.getKey()))) {
             return processChild(optExpression, context);
         }
 
@@ -140,6 +140,10 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(project.getColumnRefMap());
         context.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
         context.groupBys.replaceAll((k, v) -> rewriter.rewrite(v));
+
+        if (project.getColumnRefMap().values().stream().allMatch(ScalarOperator::isColumnRef)) {
+            return processChild(optExpression, context);
+        }
 
         // handle specials functions case-when/if
         // split to groupBys and mock new aggregations by values, don't need to save

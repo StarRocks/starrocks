@@ -663,7 +663,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double cboPruneShuffleColumnRate = 0.1;
 
     // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
-    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
+    @VarAttr(name = "cboPushDownAggregateMode_v1", alias = CBO_PUSH_DOWN_AGGREGATE_MODE,
+            show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
     private int cboPushDownAggregateMode = -1;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
@@ -1251,7 +1252,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
     }
-
 
     public int getParseTokensLimit() {
         return parseTokensLimit;
