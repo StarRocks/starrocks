@@ -101,6 +101,8 @@ public:
 
     uint64_t get_hit_count();
 
+    bool adjust_capacity(int64_t delta, size_t min_capacity = 0);
+
 private:
     static StoragePageCache* _s_instance;
 
