@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.hive.Partition;
+import com.starrocks.sql.PlannerProfile;
 
 import java.util.Collection;
 import java.util.List;
@@ -44,20 +45,30 @@ public class RemoteFileOperations {
             pathKeyToPartition.put(key, partition);
         }
 
-        List<RemoteFileInfo> resultRemoteFiles = Lists.newArrayList();
-        List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
-        for (Partition partition : partitions) {
-            RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
-            Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() -> remoteFileIO.getRemoteFiles(pathKey));
-            futures.add(future);
+        int cacheMissSize = partitions.size();
+        if (enableCatalogLevelCache) {
+            cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
+                    Lists.newArrayList(pathKeyToPartition.keySet())).size();
         }
 
+        List<RemoteFileInfo> resultRemoteFiles = Lists.newArrayList();
+        List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
         List<Map<RemotePathKey, List<RemoteFileDesc>>> result = Lists.newArrayList();
-        for (Future<Map<RemotePathKey, List<RemoteFileDesc>>> future : futures) {
-            try {
-                result.add(future.get());
-            } catch (InterruptedException | ExecutionException e) {
-                throw new StarRocksConnectorException("Failed to get remote files, msg: %s", e.getMessage());
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getRemoteFiles", cacheMissSize)) {
+            for (Partition partition : partitions) {
+                RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+                Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() ->
+                        remoteFileIO.getRemoteFiles(pathKey));
+                futures.add(future);
+            }
+
+            for (Future<Map<RemotePathKey, List<RemoteFileDesc>>> future : futures) {
+                try {
+                    result.add(future.get());
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new StarRocksConnectorException("Failed to get remote files, msg: %s", e.getMessage());
+                }
             }
         }
 

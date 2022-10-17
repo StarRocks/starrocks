@@ -5,6 +5,8 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +14,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.starrocks.external.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
 /**
  * To timing a function or a piece of code, you could
@@ -29,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 
 public class PlannerProfile {
+    private static final Logger LOG = LogManager.getLogger(PlannerProfile.class);
     private ConnectContext ctx;
 
     public static class ScopedTimer implements AutoCloseable {
@@ -50,6 +55,15 @@ public class PlannerProfile {
             currentThreadId = 0;
             totalTime += (System.currentTimeMillis() - startTime);
             totalCount += 1;
+            printBackgroundLog();
+        }
+
+        private void printBackgroundLog() {
+            String threadName = Thread.currentThread().getName();
+            if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
+                LOG.info("Get {} partitions or partition statistics on thread {} cost time: {}",
+                        customCount, threadName, totalTime);
+            }
         }
 
         public long getTotalTime() {
@@ -83,15 +97,13 @@ public class PlannerProfile {
         return timers.computeIfAbsent(name, (key) -> new ScopedTimer());
     }
 
-    private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
-
     public static ScopedTimer getScopedTimer(String name) {
         return getScopedTimer(name, 0);
     }
 
     public static ScopedTimer getScopedTimer(String name, int customCount) {
         // to avoid null.
-        PlannerProfile p = DEFAULT_INSTANCE;
+        PlannerProfile p = new PlannerProfile();
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             p = ctx.getPlannerProfile();

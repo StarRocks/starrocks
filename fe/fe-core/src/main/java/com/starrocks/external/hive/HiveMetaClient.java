@@ -210,18 +210,18 @@ public class HiveMetaClient {
 
     public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName,
                                                                           String tableName,
-                                                                          List<String> columns,
-                                                                          List<String> partitionNames) {
+                                                                          List<String> partitionNames,
+                                                                          List<String> columnNames) {
         int size = partitionNames.size();
         try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics", size);
                 AutoCloseClient client = getClient()) {
-            return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, columns, partitionNames);
+            return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, partitionNames, columnNames);
         } catch (Exception e) {
             LOG.error("Failed to get partitions column statistics on [{}.{}]. partition size: {}, columns size: {}",
-                    dbName, tableName, partitionNames.size(), columns.size(), e);
+                    dbName, tableName, partitionNames.size(), columnNames.size(), e);
             throw new StarRocksConnectorException("Failed to get partitions column statistics on [%s.%s]." +
                     " partition size: %d, columns size: %d. msg: %s", dbName, tableName, partitionNames.size(),
-                    columns.size(), e.getMessage());
+                    columnNames.size(), e.getMessage());
         }
     }
 
