@@ -185,6 +185,9 @@ public:
     virtual uint64_t get_lookup_count() = 0;
     virtual uint64_t get_hit_count() = 0;
 
+    //  Decrease or increase cache capacity.
+    virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
+
 private:
     Cache(const Cache&) = delete;
     const Cache& operator=(const Cache&) = delete;
@@ -326,10 +329,12 @@ public:
     size_t get_capacity() override;
     uint64_t get_lookup_count() override;
     uint64_t get_hit_count() override;
+    bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
 
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
+    void _set_capacity(size_t capacity);
 
     LRUCache _shards[kNumShards];
     std::mutex _mutex;
