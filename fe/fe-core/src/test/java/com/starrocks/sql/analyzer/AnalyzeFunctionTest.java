@@ -74,7 +74,7 @@ public class AnalyzeFunctionTest {
     }
 
     @Test
-    public void testDateFloor() {
+    public void testTimeSlice() {
         analyzeSuccess("select time_slice(th, interval 1 year) from tall");
         analyzeSuccess("select time_slice(th, interval 1 year, ceil) from tall");
         analyzeSuccess("select time_slice(th, interval 1 month) from tall");
