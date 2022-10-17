@@ -395,8 +395,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:OlapScanNode\n" +
-                "     TABLE: t0\n");
+                "  13:AGGREGATE (merge finalize)");
     }
 
     @Test

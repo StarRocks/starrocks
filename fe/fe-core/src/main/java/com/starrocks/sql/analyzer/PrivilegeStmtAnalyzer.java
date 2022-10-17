@@ -112,6 +112,9 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            if (stmt.isWithGrantOption()) {
+                throw new SemanticException("unsupported syntax: WITH GRANT OPTION");
+            }
             // validate user/role
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), session, true);
@@ -123,15 +126,24 @@ public class PrivilegeStmtAnalyzer {
             PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
             String privType = stmt.getPrivType();
             if (privType.equals("TABLE") || privType.equals("DATABASE")) {
-                analyseTablePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
+                if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one " + privType);
+                }
+                analyseTablePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokensList().get(0));
             } else if (privType.equals("RESOURCE")) {
-                analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
+                if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one " + privType);
+                }
+                analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokensList().get(0));
             } else if (privType.equals("USER")) {
                 if (stmt.getPrivList().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
                     throw new SemanticException("only IMPERSONATE can only be granted on user");
                 }
+                if (stmt.getUserPrivilegeObjectList().size() != 1) {
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one USER");
+                }
                 stmt.setPrivBitSet(privs);
-                analyseUser(stmt.getUserPrivilegeObject(), session, true);
+                analyseUser(stmt.getUserPrivilegeObjectList().get(0), session, true);
             } else {
                 throw new SemanticException("unsupported privilege type " + privType);
             }

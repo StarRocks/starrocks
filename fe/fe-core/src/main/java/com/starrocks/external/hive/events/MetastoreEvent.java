@@ -2,7 +2,7 @@
 
 package com.starrocks.external.hive.events;
 
-import com.starrocks.external.hive.HiveMetaCache;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -38,9 +38,9 @@ public abstract class MetastoreEvent {
     protected final NotificationEvent metastoreNotificationEvent;
 
     // The cached instance of this event that needs to be updated
-    protected final HiveMetaCache cache;
+    protected final CacheUpdateProcessor cache;
 
-    protected MetastoreEvent(NotificationEvent event, HiveMetaCache metaCache) {
+    protected MetastoreEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
         this.event = event;
         this.dbName = event.getDbName();
         this.tblName = event.getTableName();
@@ -93,7 +93,7 @@ public abstract class MetastoreEvent {
 
     /**
      * If the table key or partition key doesn't exist in the
-     * <code>{@link com.starrocks.external.hive.HiveMetaCache}</code> of fe. that is,
+     * <code>{@link com.starrocks.external.hive.CachingHiveMetastore}</code> of fe. that is,
      * the user has never queried the table/partition or refreshed the table/partition manually since the start of fe.
      * When processing incremental events, the event corresponding to the table/partition will not be processed.
      */

@@ -1269,7 +1269,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             GlobalStateMgr.getCurrentState().refreshExternalTable(new TableName(request.getCatalog_name(),
                     request.getDb_name(), request.getTable_name()), request.getPartitions());
             return new TRefreshTableResponse(new TStatus(TStatusCode.OK));
-        } catch (DdlException e) {
+        } catch (Exception e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
             status.setError_msgs(Lists.newArrayList(e.getMessage()));
             return new TRefreshTableResponse(status);

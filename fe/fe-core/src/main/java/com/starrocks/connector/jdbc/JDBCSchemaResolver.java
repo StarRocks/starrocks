@@ -9,6 +9,7 @@ import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -19,7 +20,7 @@ import java.util.Map;
 
 public abstract class JDBCSchemaResolver {
 
-    public Collection<String> listSchemas(Connection connection) throws DdlException {
+    public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getSchemas()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
@@ -31,7 +32,7 @@ public abstract class JDBCSchemaResolver {
             }
             return schemaNames.build();
         } catch (SQLException e) {
-            throw new DdlException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 

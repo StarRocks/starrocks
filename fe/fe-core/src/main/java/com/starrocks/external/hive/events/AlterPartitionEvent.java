@@ -4,9 +4,7 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
-import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionName;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.messaging.AlterPartitionMessage;
@@ -26,7 +24,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     // the Partition object after alter operation, as parsed from the NotificationEvent
     private final Partition partitionAfter;
 
-    private AlterPartitionEvent(NotificationEvent event, HiveMetaCache metaCache) {
+    private AlterPartitionEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
         super(event, metaCache);
         Preconditions.checkState(getEventType() == MetastoreEventType.ALTER_PARTITION);
         Preconditions.checkNotNull(event.getMessage());
@@ -39,15 +37,14 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             partitionAfter = Preconditions.checkNotNull(alterPartitionMessage.getPtnObjAfter());
             hmsTbl = alterPartitionMessage.getTableObj();
             hivePartitionKeys.clear();
-            hivePartitionKeys.add(
-                    new HivePartitionName(dbName, tblName, Table.TableType.HIVE, partitionAfter.getValues()));
+            // TODO(stephen): refactor this funcation
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter partition message"), e);
         }
     }
 
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, HiveMetaCache metaCache) {
+    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache) {
         return Lists.newArrayList(new AlterPartitionEvent(event, metaCache));
     }
 
@@ -66,7 +63,8 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.partitionExistInCache(getHivePartitionKey());
+        // TODO(stephen): refactor this funcation
+        return false;
     }
 
     @Override
@@ -81,9 +79,10 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected void process() throws MetastoreNotificationException {
+        // TODO(stephen): refactor this funcation
         if (!existInCache()) {
             LOG.warn("Partition [Resource: [{}], Table: [{}.{}]. Partition values: [{}] ] " +
-                            "doesn't exist in cache on event id [{}]", cache.getResourceName(),
+                            "doesn't exist in cache on event id [{}]", "cache.getResourceName()",
                     getDbName(), getTblName(), getHivePartitionKey().getPartitionValues(), getEventId());
             return;
         }
@@ -94,8 +93,10 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             return;
         }
 
+        // TODO(stephen): refactor this funcation
         try {
-            cache.alterPartitionByEvent(getHivePartitionKey(), partitionAfter.getSd(), partitionAfter.getParameters());
+            // TODO(stephen): refactor this funcation
+            // cache.alterPartitionByEvent(getHivePartitionKey(), partitionAfter.getSd(), partitionAfter.getParameters());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

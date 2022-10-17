@@ -4,10 +4,7 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.Table;
-import com.starrocks.external.hive.HiveMetaCache;
-import com.starrocks.external.hive.HivePartitionName;
-import com.starrocks.external.hive.HiveTableKey;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Partition;
 import org.apache.hadoop.hive.metastore.messaging.InsertMessage;
@@ -27,7 +24,7 @@ public class InsertEvent extends MetastoreTableEvent {
     // Represents the partition for this insert. Null if the table is unpartitioned.
     private final Partition insertPartition;
 
-    private InsertEvent(NotificationEvent event, HiveMetaCache metaCache) {
+    private InsertEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.INSERT.equals(getEventType()));
         InsertMessage insertMessage =
@@ -38,8 +35,8 @@ public class InsertEvent extends MetastoreTableEvent {
             insertPartition = insertMessage.getPtnObj();
             if (insertPartition != null) {
                 hivePartitionKeys.clear();
-                hivePartitionKeys.add(
-                        new HivePartitionName(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
+                // TODO(stephen): refactor this function
+                // hivePartitionKeys.add(new HivePartitionName(dbName, tblName, Table.TableType.HIVE, insertPartition.getValues()));
             }
         } catch (Exception e) {
             LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
@@ -50,7 +47,7 @@ public class InsertEvent extends MetastoreTableEvent {
         }
     }
 
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, HiveMetaCache metaCache) {
+    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache) {
         try {
             return Lists.newArrayList(new InsertEvent(event, metaCache));
         } catch (MetastoreNotificationException e) {
@@ -73,14 +70,8 @@ public class InsertEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        if (isPartitionTbl()) {
-            List<String> partVals = insertPartition.getValues();
-            HivePartitionName partitionKey = new HivePartitionName(dbName, tblName, Table.TableType.HIVE, partVals);
-            return cache.partitionExistInCache(partitionKey);
-        } else {
-            HiveTableKey tableKey = HiveTableKey.gen(dbName, tblName);
-            return cache.tableExistInCache(tableKey);
-        }
+        // TODO(stephen): refactor this function
+        return false;
     }
 
     @Override
@@ -99,14 +90,7 @@ public class InsertEvent extends MetastoreTableEvent {
         }
 
         try {
-            if (isPartitionTbl()) {
-                cache.alterPartitionByEvent(
-                        getHivePartitionKey(), insertPartition.getSd(), insertPartition.getParameters());
-            } else {
-                cache.alterTableByEvent(
-                        new HiveTableKey(dbName, tblName), getHivePartitionKey(), hmsTbl.getSd(),
-                        hmsTbl.getParameters());
-            }
+            // TODO(stephen): refactor this function
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

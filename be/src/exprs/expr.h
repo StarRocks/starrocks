@@ -263,7 +263,7 @@ protected:
 
     // analysis is done, types are fixed at this point
     TypeDescriptor _type;
-    std::vector<Expr*> _children;
+    std::vector<Expr*> _children = std::vector<Expr*>();
     int _output_scale;
 
     /// Function description.
@@ -274,7 +274,7 @@ protected:
     /// doesn't call RegisterFunctionContext().
     int _fn_context_index;
 
-    std::once_flag _constant_column_evaluate_once;
+    std::once_flag _constant_column_evaluate_once{};
     StatusOr<ColumnPtr> _constant_column = Status::OK();
 
     /// Simple debug string that provides no expr subclass-specific information

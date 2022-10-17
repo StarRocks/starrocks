@@ -6,7 +6,7 @@ import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
-import com.starrocks.common.DdlException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 
 import java.sql.Connection;
 import java.sql.ResultSet;
@@ -19,7 +19,7 @@ import static java.lang.Math.max;
 public class MysqlSchemaResolver extends JDBCSchemaResolver {
 
     @Override
-    public Collection<String> listSchemas(Connection connection) throws DdlException {
+    public Collection<String> listSchemas(Connection connection) {
         try (ResultSet resultSet = connection.getMetaData().getCatalogs()) {
             ImmutableSet.Builder<String> schemaNames = ImmutableSet.builder();
             while (resultSet.next()) {
@@ -34,7 +34,7 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             }
             return schemaNames.build();
         } catch (SQLException e) {
-            throw new DdlException(e.getMessage());
+            throw new StarRocksConnectorException(e.getMessage());
         }
     }
 

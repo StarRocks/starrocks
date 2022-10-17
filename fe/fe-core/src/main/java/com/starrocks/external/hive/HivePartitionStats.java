@@ -2,30 +2,39 @@
 
 package com.starrocks.external.hive;
 
-import com.google.gson.annotations.SerializedName;
+import com.google.common.collect.ImmutableMap;
+
+import java.util.Map;
 
 public class HivePartitionStats {
-    // -1: unknown
-    // from partition parameters
-    @SerializedName(value = "numRows")
-    private long numRows;
-    // the size (in bytes) of all the files inside this partition
-    @SerializedName(value = "totalFileBytes")
-    private long totalFileBytes;
+    private static final HivePartitionStats EMPTY = new HivePartitionStats(HiveCommonStats.empty(), ImmutableMap.of());
 
-    public HivePartitionStats(long numRows) {
-        this.numRows = numRows;
+    private final HiveCommonStats commonStats;
+    private final Map<String, HiveColumnStats> columnStats;
+
+    public static HivePartitionStats empty() {
+        return EMPTY;
     }
 
-    public void setTotalFileBytes(long totalFileBytes) {
-        this.totalFileBytes = totalFileBytes;
+    public HivePartitionStats(HiveCommonStats commonStats, Map<String, HiveColumnStats> columnStats) {
+        this.commonStats = commonStats;
+        this.columnStats = columnStats;
     }
 
-    public long getNumRows() {
-        return numRows;
+    public HiveCommonStats getCommonStats() {
+        return commonStats;
     }
 
-    public long getTotalFileBytes() {
-        return totalFileBytes;
+    public Map<String, HiveColumnStats> getColumnStats() {
+        return columnStats;
+    }
+
+    @Override
+    public String toString() {
+        final StringBuffer sb = new StringBuffer("HivePartitionStats{");
+        sb.append("commonStats=").append(commonStats);
+        sb.append(", columnStats=").append(columnStats);
+        sb.append('}');
+        return sb.toString();
     }
 }

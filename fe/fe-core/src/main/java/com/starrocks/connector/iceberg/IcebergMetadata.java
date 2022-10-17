@@ -56,7 +56,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listDbNames() throws DdlException {
+    public List<String> listDbNames() {
         return icebergCatalog.listAllDatabases();
     }
 
@@ -71,7 +71,7 @@ public class IcebergMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) throws DdlException {
+    public List<String> listTableNames(String dbName) {
         List<TableIdentifier> tableIdentifiers = icebergCatalog.listTables(Namespace.of(dbName));
         return tableIdentifiers.stream().map(TableIdentifier::name).collect(Collectors.toCollection(ArrayList::new));
     }

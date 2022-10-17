@@ -213,7 +213,7 @@ struct TBrokerScanRangeParams {
     13: optional bool non_blocking_read;
     // If use_broker is set, we will read hdfs thourgh broker
     // If use_broker is not set, we will read through libhdfs/S3 directly
-    14: optional bool use_broker = false
+    14: optional bool use_broker
     // hdfs_read_buffer_size_kb for reading through lib hdfs directly
     15: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties

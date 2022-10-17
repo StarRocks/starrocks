@@ -134,13 +134,15 @@ public class ResourceMgr implements Writable {
      * <p>2. Clear cache in memory </p>
      */
     public void replayCreateResource(Resource resource) throws DdlException {
-        if (resource instanceof HiveResource || resource instanceof HudiResource) {
-            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
-        }
-
-        if (resource.needMappingCatalog() && !nameToResource.containsKey(resource.getName())) {
+        if (resource.needMappingCatalog()) {
             String type = resource.getType().name().toLowerCase(Locale.ROOT);
             String catalogName = getResourceMappingCatalogName(resource.getName(), type);
+
+            if (nameToResource.containsKey(resource.name)) {
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+            }
+
             Map<String, String> properties = Maps.newHashMap(resource.getProperties());
             properties.put("type", type);
             properties.put(HIVE_METASTORE_URIS, resource.getHiveMetastoreURIs());
@@ -154,15 +156,10 @@ public class ResourceMgr implements Writable {
             this.writeUnLock();
         }
 
-        if (resource instanceof HiveResource || resource instanceof HudiResource) {
-            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
-        }
         LOG.info("replay create/alter resource log success. resource name: {}", resource.getName());
     }
 
     public void dropResource(DropResourceStmt stmt) throws DdlException {
-        Resource droppedResource;
-
         this.writeLock();
         try {
             String name = stmt.getResourceName();
@@ -170,8 +167,6 @@ public class ResourceMgr implements Writable {
             if (resource == null) {
                 throw new DdlException("Resource(" + name + ") does not exist");
             }
-
-            droppedResource = resource;
 
             if (resource.needMappingCatalog()) {
                 String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
@@ -184,10 +179,6 @@ public class ResourceMgr implements Writable {
         } finally {
             this.writeUnLock();
         }
-
-        // Do not invoke HiveRepository::clearCache inside `Resource.rwLock`. Otherwise, it might cause deadlock.
-        // Because HiveRepository::getClient will hold `Resource.rwLock` inside `HiveRepository::xxxLock`
-        onDropResource(droppedResource);
     }
 
     public void replayDropResource(DropResourceOperationLog operationLog) {
@@ -196,13 +187,6 @@ public class ResourceMgr implements Writable {
             String catalogName = getResourceMappingCatalogName(resource.name, resource.type.name().toLowerCase(Locale.ROOT));
             DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
             GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
-        }
-        onDropResource(resource);
-    }
-
-    private void onDropResource(Resource resource) {
-        if (resource instanceof HiveResource || resource instanceof HudiResource) {
-            GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(resource.getName());
         }
     }
 
@@ -256,15 +240,24 @@ public class ResourceMgr implements Writable {
                 throw new DdlException("Alter resource statement only support external hive/hudi/iceberg now");
             }
 
+            if (resource.needMappingCatalog()) {
+                String type = resource.getType().name().toLowerCase(Locale.ROOT);
+                String catalogName = getResourceMappingCatalogName(resource.getName(), type);
+                DropCatalogStmt dropCatalogStmt = new DropCatalogStmt(catalogName);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().dropCatalog(dropCatalogStmt);
+
+                Map<String, String> properties = Maps.newHashMap(stmt.getProperties());
+                properties.put("type", type);
+                String uriInProperties = stmt.getProperties().get(HIVE_METASTORE_URIS);
+                String uris = uriInProperties == null ? resource.getHiveMetastoreURIs() : uriInProperties;
+                properties.put(HIVE_METASTORE_URIS, uris);
+                GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog(type, catalogName, "mapping catalog", properties);
+            }
+
             GlobalStateMgr.getCurrentState().getEditLog().logCreateResource(resource);
         } finally {
             this.writeUnLock();
         }
-
-        // Do not invoke HiveRepository::clearCache inside `Resource.rwLock`. Otherwise, it might cause deadlock.
-        // Because HiveRepository::getClient will hold `Resource.rwLock` inside `HiveRepository::xxxLock`
-        GlobalStateMgr.getCurrentState().getHiveRepository().clearCache(stmt.getResourceName());
-        // TODO(stephen): recreate resource mapping catalog
     }
 
     public int getResourceNum() {

@@ -18,7 +18,7 @@ To enable FQDN access for a StarRocks cluster, make sure the following requireme
 
 To set up a new cluster with FQDN access, you should first install StarRocks version 2.4.0 or later. See [Deploy StarRocks](../quick_start/Deploy.md) for detailed instructions on how to install StarRocks.
 
-In StarRocks version 2.4 or later, FE nodes in a new cluster are started via FQDNs by default.
+FE nodes in a new cluster are started via IP addresses by default.
 
 Each BE node identifies itself with `BE Address` defined in the FE metadata. For example, if the `BE Address` defines a BE node with an FQDN, the BE node identifies itself with this FQDN.
 

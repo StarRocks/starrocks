@@ -2,6 +2,7 @@
 
 package com.starrocks.privilege;
 
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
 import java.util.HashMap;
@@ -13,11 +14,12 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     private static final short PLUGIN_VERSION = 1;
 
     private static final Map<String, List<String>> VALID_MAP = new HashMap<>();
+    public static final String UNEXPECTED_TYPE = "unexpected type ";
 
-    // support only all validate actions in table level for now
     static {
-        VALID_MAP.put(PrivilegeTypes.TABLE.toString(), PrivilegeTypes.TABLE.getValidActions());
-        VALID_MAP.put(PrivilegeTypes.DATABASE.toString(), PrivilegeTypes.DATABASE.getValidActions());
+        for (PrivilegeTypes types : PrivilegeTypes.values()) {
+            VALID_MAP.put(types.toString(), types.getValidActions());
+        }
     }
 
     @Override
@@ -46,13 +48,41 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
                 return DbPEntryObject.generate(mgr, objectTokens);
 
             default:
-                throw new PrivilegeException("unexpected type " + typeStr);
+                throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
     }
 
     @Override
-    public void validateGrant(short type, ActionSet wantSet, PEntryObject object) {
-        // ADMIN/GRANT is not allowed on system type. TBD
+    public PEntryObject generateUserObject(
+            String typeStr, UserIdentity user, GlobalStateMgr globalStateMgr) throws PrivilegeException {
+        if (typeStr.equals("USER")) {
+            return UserPEntryObject.generate(globalStateMgr, user);
+        }
+        throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
+    }
+
+    @Override
+    public PEntryObject generateObject(
+            String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
+            throws PrivilegeException {
+        PrivilegeTypes type = PrivilegeTypes.valueOf(typeStr);
+        switch (type) {
+            case TABLE:
+                return TablePEntryObject.generate(mgr, allTypes, restrictType, restrictName);
+
+            case DATABASE:
+                return DbPEntryObject.generate(allTypes, restrictType, restrictName);
+
+            default:
+                throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
+        }
+    }
+
+    @Override
+    public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
+        if (type.equals("SYSTEM")) {
+            throw new PrivilegeException("cannot grant/revoke system privilege: " + actions);
+        }
     }
 
     @Override
@@ -61,19 +91,14 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean checkAnyObject(short type, Action want, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.checkAnyObject(type, want);
+    public boolean checkAnyAction(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.checkAnyAction(type, object);
     }
 
     @Override
-    public boolean hasType(short type, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.hasType(type);
-    }
-
-    @Override
-    public boolean allowGrant(short type, Action want, PEntryObject object,
-                              PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.allowGrant(type, want, object);
+    public boolean allowGrant(
+            short type, ActionSet wants, List<PEntryObject> objects, PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.allowGrant(type, wants, objects);
     }
 
     @Override

@@ -8,7 +8,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.DdlException;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -23,6 +22,8 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.catalog.JDBCResource.DRIVER_CLASS;
 
 
 public class JDBCMetadataTest {
@@ -52,7 +53,7 @@ public class JDBCMetadataTest {
         columnResult.addColumn("COLUMN_NAME", Arrays.asList("a", "b", "c", "d"));
         columnResult.addColumn("IS_NULLABLE", Arrays.asList("YES", "NO", "NO", "NO"));
         properties = new HashMap<>();
-        properties.put(JDBCResource.DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
+        properties.put(DRIVER_CLASS, "com.mysql.cj.jdbc.Driver");
         properties.put(JDBCResource.URI, "jdbc:mysql://127.0.0.1:3306");
         properties.put(JDBCResource.USER, "root");
         properties.put(JDBCResource.PASSWORD, "123456");
@@ -89,7 +90,7 @@ public class JDBCMetadataTest {
             List<String> result = jdbcMetadata.listDbNames();
             List<String> expectResult = Lists.newArrayList("test");
             Assert.assertEquals(expectResult, result);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             Assert.fail();
         }
     }
@@ -100,7 +101,7 @@ public class JDBCMetadataTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
             Database db = jdbcMetadata.getDb("test");
             Assert.assertEquals("test", db.getOriginName());
-        } catch (DdlException e) {
+        } catch (Exception e) {
             Assert.fail();
         }
     }
@@ -112,7 +113,7 @@ public class JDBCMetadataTest {
             List<String> result = jdbcMetadata.listTableNames("test");
             List<String> expectResult = Lists.newArrayList("tbl1", "tbl2", "tbl3");
             Assert.assertEquals(expectResult, result);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             Assert.fail();
         }
     }
@@ -123,10 +124,9 @@ public class JDBCMetadataTest {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties);
             Table table = jdbcMetadata.getTable("test", "tbl1");
             Assert.assertTrue(table instanceof JDBCTable);
-        } catch (DdlException e) {
+        } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
         }
     }
-
 }

@@ -36,8 +36,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
-
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
@@ -299,6 +297,15 @@ public class IcebergTable extends Table {
             default:
                 return primitiveType == PrimitiveType.UNKNOWN_TYPE;
         }
+    }
+
+    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
+    // for table of external catalog. The table of external catalog will not create a real resource.
+    // We will reconstruct this part later. The concept of resource will not be used for external catalog
+
+    // Only iceberg catalog use this method at present. it will be removed after refactoring iceberg catalog.
+    public static boolean isInternalCatalog(String resourceName) {
+        return !resourceName.startsWith("thrift://");
     }
 
     @Override

@@ -233,8 +233,13 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     if (parent == nullptr) {
         DCHECK(root_expr != nullptr);
         DCHECK(ctx != nullptr);
-        *root_expr = expr;
-        *ctx = pool->add(new ExprContext(expr));
+        if (root_expr == nullptr || ctx == nullptr) {
+            return Status::InternalError(
+                    "Failed to reconstruct expression tree from thrift. Invalid input root_expr or ctx");
+        } else {
+            *root_expr = expr;
+            *ctx = pool->add(new ExprContext(expr));
+        }
     }
     return Status::OK();
 }
@@ -273,7 +278,18 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
             *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
-            break;
+            if (*expr == nullptr) {
+                PrimitiveType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
+                PrimitiveType from_type = thrift_to_type(texpr_node.child_type);
+                std::string err_msg = fmt::format(
+                        "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
+                        "function",
+                        type_to_string_v2(from_type), type_to_string_v2(to_type));
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            } else {
+                break;
+            }
         } else {
             // @TODO: will call FunctionExpr, implement later
             return Status::InternalError("Vectorized engine not support unknown child type cast");

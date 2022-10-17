@@ -4,7 +4,6 @@ package com.starrocks.common.proc;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.util.ProcResultUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
@@ -30,12 +29,9 @@ public class ExternalDbsProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
 
-        List<String> dbNames = null;
-        try {
-            dbNames = metadataMgr.listDbNames(catalogName);
-        } catch (DdlException e) {
-            throw new RuntimeException(e);
-        }
+        List<String> dbNames;
+        dbNames = metadataMgr.listDbNames(catalogName);
+
         if (dbNames == null || dbNames.isEmpty()) {
             // empty
             return result;

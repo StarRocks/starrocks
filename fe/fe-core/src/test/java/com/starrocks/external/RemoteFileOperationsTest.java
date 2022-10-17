@@ -34,7 +34,7 @@ public class RemoteFileOperationsTest {
         ExecutorService executorToLoad = Executors.newFixedThreadPool(5);
 
         CachingRemoteFileIO cachingFileIO = new CachingRemoteFileIO(hiveRemoteFileIO, executorToRefresh, 10, 10, 10);
-        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, false);
+        RemoteFileOperations ops = new RemoteFileOperations(cachingFileIO, executorToLoad, false, true);
 
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
         RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
@@ -46,9 +46,10 @@ public class RemoteFileOperationsTest {
 
         List<RemoteFileInfo> remoteFileInfos = ops.getRemoteFiles(Lists.newArrayList(partitions.values()));
         Assert.assertEquals(2, remoteFileInfos.size());
+        Assert.assertTrue(remoteFileInfos.get(0).toString().contains("emoteFileInfo{format=ORC, files=["));
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
-        Assert.assertEquals(RemoteFileInputFormat.PARQUET, fileInfo.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
 
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(0).getFiles();

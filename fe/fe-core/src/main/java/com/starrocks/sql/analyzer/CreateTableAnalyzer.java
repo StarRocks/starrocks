@@ -203,7 +203,10 @@ public class CreateTableAnalyzer {
                 if (engineName.equals("mysql") && columnDef.getType().isComplexType()) {
                     throw new SemanticException("%s external table don't support complex type", engineName);
                 }
-                columnDef.setIsKey(true);
+
+                if (!engineName.equals("hive")) {
+                    columnDef.setIsKey(true);
+                }
             }
         }
 

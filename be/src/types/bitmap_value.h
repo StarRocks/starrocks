@@ -37,6 +37,7 @@
 #include "common/logging.h"
 #include "util/coding.h"
 #include "util/phmap/phmap_fwd_decl.h"
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -113,6 +114,8 @@ public:
     // Deserialize a bitmap value from `src`.
     // Return false if `src` begins with unknown type code, true otherwise.
     bool deserialize(const char* src);
+    // Use max_bytes to read from src safely.
+    bool valid_and_deserialize(const char* src, size_t max_bytes);
 
     // TODO limit string size to avoid OOM
     std::string to_string() const;

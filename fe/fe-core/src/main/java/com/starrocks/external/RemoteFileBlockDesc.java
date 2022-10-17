@@ -2,15 +2,17 @@
 
 package com.starrocks.external;
 
+import com.starrocks.external.hive.HiveRemoteFileIO;
+
 public class RemoteFileBlockDesc {
     private long offset;
     private long length;
     private long[] replicaHostIds;
     private long[] diskIds;
-    private RemoteFileIO remoteFileIO;
+    private HiveRemoteFileIO remoteFileIO;
 
     public RemoteFileBlockDesc(long offset, long length, long[] replicaHostIds,
-                               long[] diskIds, RemoteFileIO remoteFileIO) {
+                               long[] diskIds, HiveRemoteFileIO remoteFileIO) {
         this.offset = offset;
         this.length = length;
         this.replicaHostIds = replicaHostIds;
@@ -30,12 +32,8 @@ public class RemoteFileBlockDesc {
         return replicaHostIds;
     }
 
-    public long[] getDiskIds() {
-        return diskIds;
-    }
-
-    public RemoteFileIO getRemoteFileIO() {
-        return remoteFileIO;
+    public String getDataNodeIp(long hostId) {
+        return remoteFileIO.getHdfsDataNodeIp(hostId);
     }
 
     @Override

@@ -108,7 +108,10 @@ public class Statistics {
         }
 
         public Builder setOutputRowCount(double outputRowCount) {
-            this.outputRowCount = outputRowCount;
+            // Due to the influence of the default filter coefficient,
+            // the number of calculated rows may be less than 1.
+            // The minimum value of rowCount is set to 1, and values less than 1 are meaningless.
+            this.outputRowCount = Math.max(1, outputRowCount);
             return this;
         }
 

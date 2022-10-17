@@ -5,8 +5,10 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.external.Utils;
+import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.external.PartitionUtil;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
@@ -46,7 +48,16 @@ public class HiveMetastore implements IHiveMetastore {
 
     public Table getTable(String dbName, String tableName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tableName);
-        return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+        StorageDescriptor sd = table.getSd();
+        if (sd == null) {
+            throw new StarRocksConnectorException("Table is missing storage descriptor");
+        }
+
+        if (!HudiTable.isHudiTable(table.getSd().getInputFormat())) {
+            return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
+        } else {
+            return HiveMetastoreApiConverter.toHudiTable(table, catalogName);
+        }
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
@@ -58,7 +69,7 @@ public class HiveMetastore implements IHiveMetastore {
         Map<String, String> params;
         if (partitionValues.size() > 0) {
             org.apache.hadoop.hive.metastore.api.Partition partition =
-                    client.getPartition(HiveTableName.of(dbName, tblName), partitionValues);
+                    client.getPartition(dbName, tblName, partitionValues);
             sd = partition.getSd();
             params = partition.getParameters();
         } else {
@@ -75,7 +86,7 @@ public class HiveMetastore implements IHiveMetastore {
                 client.getPartitionsByNames(dbName, tblName, partitionNames);
 
         Map<String, List<String>> partitionNameToPartitionValues = partitionNames.stream()
-                .collect(Collectors.toMap(Function.identity(), Utils::toPartitionValues));
+                .collect(Collectors.toMap(Function.identity(), PartitionUtil::toPartitionValues));
 
         Map<List<String>, Partition> partitionValuesToPartition = partitions.stream()
                 .collect(Collectors.toMap(
@@ -90,24 +101,24 @@ public class HiveMetastore implements IHiveMetastore {
         return resultBuilder.build();
     }
 
-    public HivePartitionStatistics getTableStatistics(String dbName, String tblName) {
+    public HivePartitionStats getTableStatistics(String dbName, String tblName) {
         org.apache.hadoop.hive.metastore.api.Table table = client.getTable(dbName, tblName);
         HiveCommonStats commonStats = toHiveCommonStats(table.getParameters());
         long totalRowNums = commonStats.getRowNums();
         if (totalRowNums == -1) {
-            return HivePartitionStatistics.empty();
+            return HivePartitionStats.empty();
         }
 
         List<String> dataColumns = table.getSd().getCols().stream()
                 .map(FieldSchema::getName)
                 .collect(toImmutableList());
         List<ColumnStatisticsObj> statisticsObjs = client.getTableColumnStats(dbName, tblName, dataColumns);
-        Map<String, HiveColumnStatistics> columnStatistics =
+        Map<String, HiveColumnStats> columnStatistics =
                 HiveMetastoreApiConverter.toSinglePartitionColumnStats(statisticsObjs, totalRowNums);
-        return new HivePartitionStatistics(commonStats, columnStatistics);
+        return new HivePartitionStats(commonStats, columnStatistics);
     }
 
-    public Map<String, HivePartitionStatistics> getPartitionStatistics(Table table, List<String> partitionNames) {
+    public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         String dbName = hmsTbl.getDbName();
         String tblName = hmsTbl.getTableName();
@@ -121,18 +132,18 @@ public class HiveMetastore implements IHiveMetastore {
         Map<String, Long> partitionRowNums = partitionCommonStats.entrySet().stream()
                 .collect(toImmutableMap(Map.Entry::getKey, entry -> entry.getValue().getRowNums()));
 
-        ImmutableMap.Builder<String, HivePartitionStatistics> resultBuilder = ImmutableMap.builder();
+        ImmutableMap.Builder<String, HivePartitionStats> resultBuilder = ImmutableMap.builder();
         Map<String, List<ColumnStatisticsObj>> partitionNameToColumnStatsObj =
                 client.getPartitionColumnStats(dbName, tblName, partitionColumnNames, dataColumns);
 
-        Map<String, Map<String, HiveColumnStatistics>> partitionColumnStats = HiveMetastoreApiConverter
+        Map<String, Map<String, HiveColumnStats>> partitionColumnStats = HiveMetastoreApiConverter
                 .toPartitionColumnStatistics(partitionNameToColumnStatsObj, partitionRowNums);
 
         for (String partitionName : partitionCommonStats.keySet()) {
             HiveCommonStats commonStats = partitionCommonStats.get(partitionName);
-            Map<String, HiveColumnStatistics> columnStatistics = partitionColumnStats
+            Map<String, HiveColumnStats> columnStatistics = partitionColumnStats
                     .getOrDefault(partitionName, ImmutableMap.of());
-            resultBuilder.put(partitionName, new HivePartitionStatistics(commonStats, columnStatistics));
+            resultBuilder.put(partitionName, new HivePartitionStats(commonStats, columnStatistics));
         }
 
         return resultBuilder.build();

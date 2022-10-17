@@ -217,7 +217,8 @@ public class RoutineLoadManager implements Writable {
                     RoutineLoadJob.JobState.RUNNING, RoutineLoadJob.JobState.PAUSED)).size() >
                     Config.max_routine_load_job_num) {
                 throw new DdlException("There are more than " + Config.max_routine_load_job_num
-                        + " routine load jobs are running. exceed limit.");
+                        + " routine load jobs are running. "
+                        + "Please modify FE config max_routine_load_job_num if you want more job");
             }
 
             unprotectedAddJob(routineLoadJob);

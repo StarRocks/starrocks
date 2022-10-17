@@ -23,6 +23,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "types/bitmap_value_detail.h"
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
@@ -346,6 +347,33 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
+
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_OBJECT> builder(viewer.size());
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto value = viewer.value(row);
+
+        BitmapValue bitmap;
+        if (bitmap.valid_and_deserialize(value.data, value.size)) {
+            builder.append(&bitmap);
+        } else {
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_OBJECT, value.to_string());
+            }
+            builder.append_null();
+        }
+    }
+
+    return builder.build(column->is_constant());
+}
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_OBJECT, cast_from_string_to_bitmap_fn);
 
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
@@ -1453,6 +1481,14 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
             return new CastStringToArray(node, cast_element_expr, cast_to);
         } else {
             return new CastJsonToArray(node, cast_element_expr, cast_to);
+        }
+    }
+
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
+        if (allow_throw_exception) {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, true>(node);
+        } else {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, false>(node);
         }
     }
 

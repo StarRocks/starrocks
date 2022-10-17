@@ -261,7 +261,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // In most cases, the partition statistics obtained from the hive metastore are empty.
     // Because we get partition statistics asynchronously for the first query of a table or partition,
     // if the gc of any service is caused, you can set the value to 100 for testing.
-    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "3000";
+    public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
@@ -664,7 +664,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
-    private int cboPushDownAggregateMode = 0;
+    private int cboPushDownAggregateMode = -1;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;

@@ -5,8 +5,7 @@ package com.starrocks.external.hive.events;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.starrocks.catalog.Table.TableType;
-import com.starrocks.external.hive.HiveMetaCache;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.external.hive.HivePartitionName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -27,12 +26,12 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     // HivePartitionKeys of each event to process. for unpartition table, the partition values are empty.
     protected List<HivePartitionName> hivePartitionKeys = Lists.newArrayList();
 
-    protected MetastoreTableEvent(NotificationEvent event, HiveMetaCache metaCache) {
+    protected MetastoreTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
         super(event, metaCache);
         Preconditions.checkNotNull(dbName, "Database name cannot be null");
         tblName = Preconditions.checkNotNull(event.getTableName());
 
-        HivePartitionName hivePartitionKey = new HivePartitionName(dbName, tblName, TableType.HIVE, Lists.newArrayList());
+        HivePartitionName hivePartitionKey = new HivePartitionName(dbName, tblName, Lists.newArrayList());
         hivePartitionKeys.add(hivePartitionKey);
     }
 

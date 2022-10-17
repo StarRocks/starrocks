@@ -71,7 +71,7 @@ SnapshotLoader::~SnapshotLoader() = default;
 
 Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                               std::map<int64_t, std::vector<std::string>>* tablet_files) {
-    if (upload.use_broker) {
+    if (!upload.__isset.use_broker || upload.use_broker) {
         LOG(INFO) << "begin to upload snapshot files. num: " << src_to_dest_path.size()
                   << ", broker addr: " << upload.broker_addr << ", job: " << _job_id << ", task" << _task_id;
     } else {
@@ -90,7 +90,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     // 2. get broker client
     std::unique_ptr<BrokerServiceConnection> client;
     std::unique_ptr<FileSystem> fs;
-    if (upload.use_broker) {
+    if (!upload.__isset.use_broker || upload.use_broker) {
         client = std::make_unique<BrokerServiceConnection>(client_cache(_env), upload.broker_addr, 10000, &status);
         if (!status.ok()) {
             std::stringstream ss;
@@ -124,7 +124,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
 
         // 2.1 get existing files from remote path
         std::map<std::string, FileStat> remote_files;
-        if (upload.use_broker) {
+        if (!upload.__isset.use_broker || upload.use_broker) {
             RETURN_IF_ERROR(_get_existing_files_from_remote(*client, dest_path, upload.broker_prop, &remote_files));
         } else {
             RETURN_IF_ERROR(_get_existing_files_from_remote_without_broker(fs, dest_path, &remote_files));
@@ -174,7 +174,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             auto local_file_path = src_path + "/" + local_file;
             std::unique_ptr<WritableFile> remote_writable_file;
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
-            if (upload.use_broker) {
+            if (!upload.__isset.use_broker || upload.use_broker) {
                 BrokerFileSystem fs_broker(upload.broker_addr, upload.broker_prop);
                 ASSIGN_OR_RETURN(remote_writable_file, fs_broker.new_writable_file(opts, tmp_broker_file_name));
             } else {
@@ -188,7 +188,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
             LOG(INFO) << "finished to write file via broker. file: " << local_file_path << ", length: " << *res;
             RETURN_IF_ERROR(remote_writable_file->close());
             // rename file to end with ".md5sum"
-            if (upload.use_broker) {
+            if (!upload.__isset.use_broker || upload.use_broker) {
                 RETURN_IF_ERROR(_rename_remote_file(*client, full_remote_file + ".part",
                                                     full_remote_file + "." + md5sum, upload.broker_prop));
             } else {
@@ -213,7 +213,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
  */
 Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to_dest_path,
                                 const TDownloadReq& download, std::vector<int64_t>* downloaded_tablet_ids) {
-    if (download.use_broker) {
+    if (!download.__isset.use_broker || download.use_broker) {
         LOG(INFO) << "begin to download snapshot files. num: " << src_to_dest_path.size()
                   << ", broker addr: " << download.broker_addr << ", job: " << _job_id << ", task id: " << _task_id;
     } else {
@@ -233,7 +233,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
     std::unique_ptr<BrokerServiceConnection> client;
     std::unique_ptr<FileSystem> fs;
     std::vector<TNetworkAddress> broker_addrs;
-    if (download.use_broker) {
+    if (!download.__isset.use_broker || download.use_broker) {
         client = std::make_unique<BrokerServiceConnection>(client_cache(_env), download.broker_addr, 10000, &status);
         if (!status.ok()) {
             std::stringstream ss;
@@ -276,7 +276,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
         // 2. get remote files
         std::map<std::string, FileStat> remote_files;
-        if (download.use_broker) {
+        if (!download.__isset.use_broker || download.use_broker) {
             RETURN_IF_ERROR(_get_existing_files_from_remote(*client, remote_path, download.broker_prop, &remote_files));
         } else {
             RETURN_IF_ERROR(_get_existing_files_from_remote_without_broker(fs, remote_path, &remote_files));
@@ -349,7 +349,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             }
 
             std::unique_ptr<SequentialFile> remote_sequential_file;
-            if (download.use_broker) {
+            if (!download.__isset.use_broker || download.use_broker) {
                 BrokerFileSystem fs_broker(download.broker_addr, download.broker_prop);
                 ASSIGN_OR_RETURN(remote_sequential_file, fs_broker.new_sequential_file(full_remote_file));
             } else {

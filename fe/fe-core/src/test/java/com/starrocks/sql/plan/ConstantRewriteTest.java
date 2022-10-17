@@ -172,7 +172,7 @@ public class ConstantRewriteTest extends PlanTestBase {
         sql = "select v4, v5 from (select v1, v2 from t0) a right anti join " +
                 "(select v4, v5 from t1 where v4 = 4) b on a.v1 = b.v4";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
+        assertContains(plan, "1:OlapScanNode\n" +
                 "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +

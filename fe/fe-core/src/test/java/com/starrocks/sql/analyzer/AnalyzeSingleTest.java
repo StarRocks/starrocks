@@ -511,4 +511,16 @@ public class AnalyzeSingleTest {
     public void testSync() {
         analyzeSuccess("sync");
     }
+
+    @Test
+    public void testUnsupportedStatement() {
+        analyzeSuccess("start transaction");
+        analyzeSuccess("start transaction with consistent snapshot");
+        analyzeSuccess("begin");
+        analyzeSuccess("begin work");
+        analyzeSuccess("commit");
+        analyzeSuccess("commit work");
+        analyzeSuccess("commit and no chain release");
+        analyzeSuccess("rollback");
+    }
 }

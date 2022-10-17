@@ -2,7 +2,6 @@
 
 package com.starrocks.connector.iceberg;
 
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -27,7 +26,7 @@ public class IcebergConnector implements Connector {
     }
 
     @Override
-    public ConnectorMetadata getMetadata() throws DdlException {
+    public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             if (null == properties.get(ICEBERG_CATALOG) || properties.get(ICEBERG_CATALOG).length() == 0) {
                 properties.put(ICEBERG_CATALOG, properties.get(ICEBERG_CATALOG_LEGACY));

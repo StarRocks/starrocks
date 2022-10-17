@@ -137,8 +137,8 @@ public class QueryDumpInfo implements DumpInfo {
     }
 
     public HiveMetaStoreTableDumpInfo getHMSTable(String resourceName, String dbName, String tableName) {
-        return hmsTableMap.getOrDefault(resourceName, new HashMap<>()).getOrDefault(dbName, new HashMap<>()).
-                getOrDefault(tableName, new HiveTableDumpInfo());
+        return hmsTableMap.getOrDefault(resourceName, new HashMap<>()).getOrDefault(dbName, new HashMap<>())
+                .getOrDefault(tableName, new HiveTableDumpInfo());
     }
 
     @Override

@@ -75,7 +75,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.sql.plan.ReplayHiveRepository;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
@@ -375,11 +374,6 @@ public class UtFrameUtils {
         // create resource
         for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
             starRocksAssert.withResource(createResourceStmt);
-        }
-        // mock replay external table info
-        if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
-            ReplayHiveRepository replayHiveRepository = new ReplayHiveRepository(replayDumpInfo.getHmsTableMap());
-            connectContext.getGlobalStateMgr().setHiveRepository(replayHiveRepository);
         }
 
         // create table

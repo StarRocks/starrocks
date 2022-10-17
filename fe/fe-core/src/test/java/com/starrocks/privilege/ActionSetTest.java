@@ -22,8 +22,11 @@ public class ActionSetTest {
         ActionSet s = new ActionSet(l);
         Assert.assertEquals(2, s.bitSet);
         Assert.assertTrue(s.contains(SELECT));
+        Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT))));
         Assert.assertFalse(s.contains(INSERT));
         Assert.assertFalse(s.contains(DELETE));
+        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(INSERT, DELETE))));
+        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE))));
         Assert.assertFalse(s.isEmpty());
 
         // add select + insert
@@ -34,7 +37,9 @@ public class ActionSetTest {
         Assert.assertEquals(2 + 4, s.bitSet);
         Assert.assertTrue(s.contains(SELECT));
         Assert.assertTrue(s.contains(INSERT));
+        Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
         Assert.assertFalse(s.contains(DELETE));
+        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(DELETE))));
         Assert.assertFalse(s.isEmpty());
 
         // remove delete
@@ -44,7 +49,9 @@ public class ActionSetTest {
         Assert.assertEquals(2 + 4, s.bitSet);
         Assert.assertTrue(s.contains(SELECT));
         Assert.assertTrue(s.contains(INSERT));
+        Assert.assertTrue(s.contains(new ActionSet(Arrays.asList(SELECT, INSERT))));
         Assert.assertFalse(s.contains(DELETE));
+        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE))));
         Assert.assertFalse(s.isEmpty());
 
         // remove select + insert
@@ -56,6 +63,7 @@ public class ActionSetTest {
         Assert.assertFalse(s.contains(SELECT));
         Assert.assertFalse(s.contains(INSERT));
         Assert.assertFalse(s.contains(DELETE));
+        Assert.assertFalse(s.contains(new ActionSet(Arrays.asList(SELECT, DELETE, INSERT))));
         Assert.assertTrue(s.isEmpty());
 
     }

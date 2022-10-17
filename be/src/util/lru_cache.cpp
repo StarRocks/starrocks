@@ -468,6 +468,22 @@ size_t ShardedLRUCache::get_memory_usage() {
     return total_usage;
 }
 
+uint64_t ShardedLRUCache::get_lookup_count() {
+    uint64_t total_count = 0;
+    for (auto& _shard : _shards) {
+        total_count += _shard.get_lookup_count();
+    }
+    return total_count;
+}
+
+uint64_t ShardedLRUCache::get_hit_count() {
+    uint64_t total_count = 0;
+    for (auto& _shard : _shards) {
+        total_count += _shard.get_hit_count();
+    }
+    return total_count;
+}
+
 void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {
     size_t shard_count = sizeof(_shards) / sizeof(LRUCache);
 

@@ -30,6 +30,9 @@ PipelineDriver::~PipelineDriver() noexcept {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
+    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    SCOPED_TIMER(prepare_timer);
+
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
@@ -429,16 +432,22 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 void PipelineDriver::_update_overhead_timer() {
     int64_t overhead_time = _active_timer->value();
     RuntimeProfile* profile = _runtime_profile.get();
-    std::vector<RuntimeProfile*> children;
-    profile->get_children(&children);
-    for (auto* child_profile : children) {
-        auto* total_timer = child_profile->get_counter("OperatorTotalTime");
-        if (total_timer != nullptr) {
-            overhead_time -= total_timer->value();
-        }
+    std::vector<RuntimeProfile*> operator_profiles;
+    profile->get_children(&operator_profiles);
+    for (auto* operator_profile : operator_profiles) {
+        auto* common_metrics = operator_profile->get_child("CommonMetrics");
+        DCHECK(common_metrics != nullptr);
+        auto* total_timer = common_metrics->get_counter("OperatorTotalTime");
+        DCHECK(total_timer != nullptr);
+        overhead_time -= total_timer->value();
     }
 
-    COUNTER_UPDATE(_overhead_timer, overhead_time);
+    if (overhead_time < 0) {
+        // All the time are recorded indenpendently, and there may be errors
+        COUNTER_UPDATE(_overhead_timer, 0);
+    } else {
+        COUNTER_UPDATE(_overhead_timer, overhead_time);
+    }
 }
 
 std::string PipelineDriver::to_readable_string() const {

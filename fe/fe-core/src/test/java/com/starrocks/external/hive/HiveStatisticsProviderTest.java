@@ -9,8 +9,8 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.external.CachingRemoteFileIO;
+import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.Utils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -21,6 +21,12 @@ import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.hive.metastore.api.ColumnStatisticsData;
+import org.apache.hadoop.hive.metastore.api.DateColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.DecimalColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.DoubleColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.LongColumnStatsData;
+import org.apache.hadoop.hive.metastore.api.StringColumnStatsData;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -60,14 +66,14 @@ public class HiveStatisticsProviderTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = new CachingHiveMetastore(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
-        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false);
+        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false, true);
         statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
 
         UtFrameUtils.createMinStarRocksCluster();
@@ -89,8 +95,10 @@ public class HiveStatisticsProviderTest {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
         ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
-        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
-        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         Statistics statistics = statisticsProvider.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
@@ -123,9 +131,9 @@ public class HiveStatisticsProviderTest {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
         cachingHiveMetastore.getPartitionStatistics(hiveTable, Lists.newArrayList("col1=1"));
-        Map<String, HivePartitionStatistics> statisticsMap = hmsOps.getPartitionStatistics(
+        Map<String, HivePartitionStats> statisticsMap = hmsOps.getPartitionStatistics(
                 hiveTable, Lists.newArrayList("col1=1"));
-        HivePartitionStatistics dataStats = statisticsMap.get("col1=1");
+        HivePartitionStats dataStats = statisticsMap.get("col1=1");
         Statistics.Builder builder = Statistics.builder();
         Statistics statistics = statisticsProvider.createUnpartitionedStats(
                 dataStats, Lists.newArrayList(dataColumnRefOperator), builder, hiveTable);
@@ -142,8 +150,10 @@ public class HiveStatisticsProviderTest {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
         ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
-        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
-        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         Statistics statistics = statisticsProvider.createUnknownStatistics(
                 hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
@@ -162,9 +172,9 @@ public class HiveStatisticsProviderTest {
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
         fileOps.getRemoteFiles(Lists.newArrayList(partitions.values()));
-        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("1"), hiveTable.getPartitionColumns());
-        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(
+        PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
                 Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         long res = statisticsProvider.getEstimatedRowCount(hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assert.assertEquals(10, res);
@@ -177,5 +187,44 @@ public class HiveStatisticsProviderTest {
         Assert.assertEquals(3, sampledPartitions.size());
         Assert.assertTrue(sampledPartitions.contains("k=1"));
         Assert.assertTrue(sampledPartitions.contains("k=5"));
+    }
+
+    @Test
+    public void testHiveColumnInit() {
+        HiveColumnStats stats = new HiveColumnStats();
+        ColumnStatisticsData columnStatisticsData = new ColumnStatisticsData();
+        LongColumnStatsData longColumnStatsData = new LongColumnStatsData();
+        longColumnStatsData.setNumNulls(1);
+        columnStatisticsData.setLongStats(longColumnStatsData);
+        stats.initialize(columnStatisticsData, 50);
+        Assert.assertEquals(1, stats.getNumNulls());
+
+        columnStatisticsData = new ColumnStatisticsData();
+        DoubleColumnStatsData doubleColumnStatsData = new DoubleColumnStatsData();
+        doubleColumnStatsData.setNumNulls(2);
+        columnStatisticsData.setDoubleStats(doubleColumnStatsData);
+        stats.initialize(columnStatisticsData, 60);
+        Assert.assertEquals(2, stats.getNumNulls());
+
+        columnStatisticsData = new ColumnStatisticsData();
+        DateColumnStatsData dateColumnStatsData = new DateColumnStatsData();
+        dateColumnStatsData.setNumNulls(3);
+        columnStatisticsData.setDateStats(dateColumnStatsData);
+        stats.initialize(columnStatisticsData, 70);
+        Assert.assertEquals(3, stats.getNumNulls());
+
+        columnStatisticsData = new ColumnStatisticsData();
+        DecimalColumnStatsData decimalColumnStatsData = new DecimalColumnStatsData();
+        decimalColumnStatsData.setNumNulls(4);
+        columnStatisticsData.setDecimalStats(decimalColumnStatsData);
+        stats.initialize(columnStatisticsData, 80);
+        Assert.assertEquals(4, stats.getNumNulls());
+
+        columnStatisticsData = new ColumnStatisticsData();
+        StringColumnStatsData stringColumnStatsData = new StringColumnStatsData();
+        stringColumnStatsData.setNumNulls(5);
+        columnStatisticsData.setStringStats(stringColumnStatsData);
+        stats.initialize(columnStatisticsData, 90);
+        Assert.assertEquals(5, stats.getNumNulls());
     }
 }

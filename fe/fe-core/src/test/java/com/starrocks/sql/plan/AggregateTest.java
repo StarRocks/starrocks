@@ -52,7 +52,7 @@ public class AggregateTest extends PlanTestBase {
                     "result: BOOLEAN; args nullable: true; result nullable: true]\n" +
                     "  |  group by: [1: t1a, VARCHAR, false]\n" +
                     "  |  having: [24: any_value, BOOLEAN, true]\n" +
-                    "  |  cardinality: 0\n" +
+                    "  |  cardinality: 1\n" +
                     "  |  \n" +
                     "  7:Project\n" +
                     "  |  output columns:\n" +
@@ -66,13 +66,13 @@ public class AggregateTest extends PlanTestBase {
                     "GROUP BY t1a\n" +
                     "HAVING ANY_VALUE(t1a <= '1');";
             String plan = getVerboseExplain(sql);
-            assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+            assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                     "  |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; " +
-                    "result nullable: false], any_value[([11: expr, BOOLEAN, false]); args: BOOLEAN; " +
-                    "result: BOOLEAN; args nullable: false; result nullable: true]\n" +
+                    "result nullable: false], any_value[([11: expr, BOOLEAN, false]); " +
+                    "args: BOOLEAN; result: BOOLEAN; args nullable: false; result nullable: true]\n" +
                     "  |  group by: [1: t1a, VARCHAR, false]\n" +
                     "  |  having: [13: any_value, BOOLEAN, true]\n" +
-                    "  |  cardinality: 0\n" +
+                    "  |  cardinality: 1\n" +
                     "  |  \n" +
                     "  1:Project\n" +
                     "  |  output columns:\n" +
@@ -189,14 +189,15 @@ public class AggregateTest extends PlanTestBase {
                 BackendCoreStat.setDefaultCoresOfBe(cpuCores);
                 Pair<String, ExecPlan> plan = UtFrameUtils.getPlanAndFragment(connectContext, queryStr);
                 String explainString = plan.second.getExplainString(TExplainLevel.NORMAL);
-                assertContains(explainString, "  2:Project\n"
-                        + "  |  <slot 4> : 4: avg\n"
-                        + "  |  \n"
-                        + "  1:AGGREGATE (update finalize)\n"
-                        + "  |  output: avg(2: v2)\n"
-                        + "  |  group by: 2: v2\n"
-                        + "  |  \n"
-                        + "  0:OlapScanNode");
+                assertContains(explainString, "2:Project\n" +
+                        "  |  <slot 4> : 4: avg\n" +
+                        "  |  \n" +
+                        "  1:AGGREGATE (update finalize)\n" +
+                        "  |  output: avg(2: v2)\n" +
+                        "  |  group by: 2: v2\n" +
+                        "  |  \n" +
+                        "  0:OlapScanNode\n" +
+                        "     TABLE: t0");
 
                 PlanFragment aggPlan = plan.second.getFragments().get(0);
                 String aggPlanStr = aggPlan.getExplainString(TExplainLevel.NORMAL);
@@ -510,26 +511,20 @@ public class AggregateTest extends PlanTestBase {
 
         sql = "select distinct x1 from (select distinct v1 as x1 from t0) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  RESULT SINK\n" +
-                "\n" +
-                "  1:AGGREGATE (update finalize)\n" +
-                "  |  group by: 1: v1\n");
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1");
 
         sql = "select sum(x1) from (select sum(v1) as x1 from t0) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  RESULT SINK\n" +
-                "\n" +
-                "  1:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
-                "  |  group by: \n");
+                "  |  group by:");
 
         sql = "select SUM(x1) from (select v2, sum(v1) as x1 from t0 group by v2) as q";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "  RESULT SINK\n" +
-                "\n" +
-                "  1:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(1: v1)\n" +
-                "  |  group by: \n");
+                "  |  group by:");
 
         sql = "select v2, SUM(x1) from (select v2, v3, sum(v1) as x1 from t0 group by v2, v3) as q group by v2";
         plan = getFragmentPlan(sql);
@@ -1351,24 +1346,24 @@ public class AggregateTest extends PlanTestBase {
                 "    EXCHANGE ID: 01\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 06\n" +
+                "    EXCHANGE ID: 09\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 14\n" +
+                "    EXCHANGE ID: 19\n" +
                 "    RANDOM");
-        assertContains(plan, "3:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "21:AGGREGATE (update serialize)\n" +
                 "  |  output: sum(18: t1c), max(17: t1b)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  2:Project\n" +
+                "  20:Project\n" +
                 "  |  <slot 17> : 2: t1b\n" +
                 "  |  <slot 18> : 3: t1c");
-        assertContains(plan, "  8:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  group by: 15: t1b\n" +
+        assertContains(plan, "6:AGGREGATE (update serialize)\n" +
+                "  |  output: count(15: t1b)\n" +
+                "  |  group by: \n" +
                 "  |  \n" +
-                "  7:Project\n" +
-                "  |  <slot 15> : 2: t1b");
+                "  5:AGGREGATE (merge serialize)\n" +
+                "  |  group by: 15: t1b");
     }
 
     @Test
@@ -1440,13 +1435,13 @@ public class AggregateTest extends PlanTestBase {
         sql = "select avg(distinct 1), count(distinct null), count(distinct 1), " +
                 "count(distinct (t1a + t1c)), sum(t1c) from test_all_type";
         plan = getFragmentPlan(sql);
-        assertContains(plan, " 4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_sum(1)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  3:Project\n" +
+                "  25:Project\n" +
                 "  |  <slot 21> : 3: t1c");
-        assertContains(plan, " 9:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
                 "  |  output: multi_distinct_count(NULL)");
 
         int prevAggStage = connectContext.getSessionVariable().getNewPlannerAggStage();
@@ -1487,10 +1482,10 @@ public class AggregateTest extends PlanTestBase {
         sql =
                 "select count(distinct t1b) as cn_t1b, count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a";
         plan = getFragmentPlan(sql);
-        assertContains(plan, " 13:HASH JOIN\n" +
+        assertContains(plan, "13:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BUCKET_SHUFFLE(S))\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 15: t1a <=> 13: t1a");
+                "  |  equal join conjunct: 13: t1a <=> 15: t1a");
 
         sql = "select count(distinct t1b) as cn_t1b, " +
                 "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1a,t1b,t1c";
@@ -1530,12 +1525,12 @@ public class AggregateTest extends PlanTestBase {
         sql = "select avg(distinct t1b) as cn_t1b, sum(t1b), " +
                 "count(distinct t1b, t1c) cn_t1b_t1c from test_all_type group by t1c, t1b+1";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "4:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "26:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  output: sum(26: t1b)\n" +
                 "  |  group by: 27: t1c, 28: expr\n" +
                 "  |  \n" +
-                "  3:Project\n" +
+                "  25:Project\n" +
                 "  |  <slot 26> : 2: t1b\n" +
                 "  |  <slot 27> : 3: t1c\n" +
                 "  |  <slot 28> : 11: expr");
@@ -1637,7 +1632,7 @@ public class AggregateTest extends PlanTestBase {
                 "sum(arrays_overlap(v3, [1])) as q1, " +
                 "sum(arrays_overlap(v3, [1])) as q2, " +
                 "sum(arrays_overlap(v3, [1])) as q3 FROM tarray;");
-        assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "2:AGGREGATE (update finalize)\n" +
                 "  |  output: sum(4: arrays_overlap)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +

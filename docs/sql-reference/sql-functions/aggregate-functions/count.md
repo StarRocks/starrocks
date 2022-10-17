@@ -13,11 +13,9 @@ This function has three variations:
 
 - `COUNT(DISTINCT expr)` counts the number of distinct non-NULL values in a column.
 
-This function can be used with WHERE and GROUP BY.
-
 `COUNT(DISTINCT expr)` is used for exact count distinct. If you require higher count distinct performance, see [Use bitmap for exact count discount](../../../using_starrocks/Using_bitmap.md).
 
-From StarRocks 2.4 onwards, you can specify multiple fields for DISTINCT.
+From StarRocks 2.4 onwards, you can use multiple COUNT(DISTINCT) in one statement.
 
 ## Syntax
 
@@ -108,6 +106,15 @@ select count(distinct category, supplier) from test;
 +------------------------------------+
 ~~~
 
-In the output, the combination with `id` 1004 duplicates with the combination with `id` 1002. They are counted only once.
+In the output, the combination with `id` 1004 duplicates with the combination with `id` 1002. They are counted only once. The combination with `id` 1007 has a NULL value and is not counted.
 
-The combination with `id` 1007 has a NULL value and is not counted.
+Example 6: Use multiple COUNT(DISTINCT) in one statement.
+
+~~~Plain
+select count(distinct country, category), count(distinct country,supplier) from test;
++-----------------------------------+-----------------------------------+
+| count(DISTINCT country, category) | count(DISTINCT country, supplier) |
++-----------------------------------+-----------------------------------+
+|                                 6 |                                 7 |
++-----------------------------------+-----------------------------------+
+~~~

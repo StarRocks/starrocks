@@ -114,14 +114,16 @@ struct AggHashSetOfOneNullableNumberKey {
     void build_set(size_t chunk_size, const Columns& key_columns, MemPool* pool) {
         if (key_columns[0]->only_null()) {
             has_null_key = true;
-        } else if (key_columns[0]->is_nullable()) {
+        } else {
+            DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
+            const auto& null_data = nullable_column->null_column_data();
 
             size_t row_num = nullable_column->size();
             if (nullable_column->has_null()) {
                 for (size_t i = 0; i < row_num; ++i) {
-                    if (nullable_column->is_null(i)) {
+                    if (null_data[i]) {
                         has_null_key = true;
                     } else {
                         hash_set.emplace(data_column->get_data()[i]);
@@ -146,11 +148,12 @@ struct AggHashSetOfOneNullableNumberKey {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0]);
             auto* data_column = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column());
+            const auto& null_data = nullable_column->null_column_data();
             auto& keys = data_column->get_data();
 
             if (nullable_column->has_null()) {
                 for (size_t i = 0; i < chunk_size; ++i) {
-                    if (nullable_column->is_null(i)) {
+                    if (null_data[i]) {
                         has_null_key = true;
                     } else {
                         (*not_founds)[i] = !hash_set.contains(keys[i]);
@@ -242,11 +245,12 @@ struct AggHashSetOfOneNullableStringKey {
         } else if (key_columns[0]->is_nullable()) {
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+            const auto& null_data = nullable_column->null_column_data();
 
             size_t row_num = nullable_column->size();
             if (nullable_column->has_null()) {
                 for (size_t i = 0; i < row_num; ++i) {
-                    if (nullable_column->is_null(i)) {
+                    if (null_data[i]) {
                         has_null_key = true;
                     } else {
                         _handle_data_key_column(data_column, i, pool);
@@ -271,10 +275,11 @@ struct AggHashSetOfOneNullableStringKey {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0]);
             auto* data_column = ColumnHelper::as_raw_column<BinaryColumn>(nullable_column->data_column());
+            const auto& null_data = nullable_column->null_column_data();
 
             if (nullable_column->has_null()) {
                 for (size_t i = 0; i < chunk_size; ++i) {
-                    if (nullable_column->is_null(i)) {
+                    if (null_data[i]) {
                         has_null_key = true;
                     } else {
                         _handle_data_key_column(data_column, i, not_founds);

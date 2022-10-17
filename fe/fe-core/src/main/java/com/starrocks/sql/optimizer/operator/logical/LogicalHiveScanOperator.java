@@ -19,6 +19,7 @@ import java.util.Set;
 public class LogicalHiveScanOperator extends LogicalScanOperator {
     private final Table.TableType tableType;
     private ScanOperatorPredicates predicates = new ScanOperatorPredicates();
+    private boolean hasUnknownColumn;
 
     public LogicalHiveScanOperator(Table table,
                                    Table.TableType tableType,
@@ -65,6 +66,14 @@ public class LogicalHiveScanOperator extends LogicalScanOperator {
     @Override
     public void setScanOperatorPredicates(ScanOperatorPredicates predicates) {
         this.predicates = predicates;
+    }
+
+    public boolean hasUnknownColumn() {
+        return hasUnknownColumn;
+    }
+
+    public void setHasUnknownColumn(boolean hasUnknownColumn) {
+        this.hasUnknownColumn = hasUnknownColumn;
     }
 
     @Override

@@ -53,6 +53,7 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
+// import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;

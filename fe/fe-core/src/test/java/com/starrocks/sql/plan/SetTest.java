@@ -476,16 +476,16 @@ public class SetTest extends PlanTestBase {
                 "      )\n" +
                 "  ) t;";
         String plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("8:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "8:AGGREGATE (update serialize)\n" +
                 "  |  STREAMING\n" +
                 "  |  group by: [9: day, TINYINT, true]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:UNION\n" +
                 "  |  child exprs:\n" +
                 "  |      [4, TINYINT, true]\n" +
                 "  |      [8, TINYINT, true]\n" +
-                "  |  pass-through-operands: all"));
+                "  |  pass-through-operands: all");
     }
 
     @Test

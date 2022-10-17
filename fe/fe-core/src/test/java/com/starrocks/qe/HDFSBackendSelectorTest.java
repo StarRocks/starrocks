@@ -87,7 +87,7 @@ public class HDFSBackendSelectorTest {
             {
                 hdfsScanNode.getId();
                 result = scanNodeId;
-                hiveTable.getHdfsPath();
+                hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
             }
         };
@@ -121,7 +121,7 @@ public class HDFSBackendSelectorTest {
             {
                 hdfsScanNode.getId();
                 result = scanNodeId;
-                hiveTable.getHdfsPath();
+                hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
             }
         };

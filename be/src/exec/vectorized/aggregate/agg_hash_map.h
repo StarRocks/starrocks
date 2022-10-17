@@ -11,6 +11,7 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "exec/vectorized/aggregate/agg_hash_set.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
@@ -210,6 +211,7 @@ struct AggHashMapWithOneNullableNumberKey {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<ColumnType*>(nullable_column->data_column().get());
+            const auto& null_data = nullable_column->null_column_data();
 
             if (!nullable_column->has_null()) {
                 if (hash_map.bucket_count() < prefetch_threhold) {
@@ -222,9 +224,9 @@ struct AggHashMapWithOneNullableNumberKey {
                 return;
             }
 
-            for (size_t i = 0; i < data_column->size(); i++) {
-                if (key_columns[0]->is_null(i)) {
-                    if (null_key_data == nullptr) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (UNLIKELY(null_key_data == nullptr)) {
                         null_key_data = allocate_func(nullptr);
                     }
                     (*agg_states)[i] = null_key_data;
@@ -257,17 +259,18 @@ struct AggHashMapWithOneNullableNumberKey {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0]);
             auto* data_column = ColumnHelper::as_raw_column<ColumnType>(nullable_column->data_column());
+            const auto& null_data = nullable_column->null_column_data();
 
             if (!nullable_column->has_null()) {
-                for (size_t i = 0; i < data_column->size(); i++) {
+                for (size_t i = 0; i < chunk_size; i++) {
                     _handle_data_key_column(data_column, i, agg_states, not_founds);
                 }
                 return;
             }
 
-            for (size_t i = 0; i < data_column->size(); i++) {
-                if (key_columns[0]->is_null(i)) {
-                    if (null_key_data == nullptr) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (UNLIKELY(null_key_data == nullptr)) {
                         null_key_data = allocate_func(nullptr);
                     }
                     (*agg_states)[i] = null_key_data;
@@ -421,9 +424,11 @@ struct AggHashMapWithOneNullableStringKey {
             for (size_t i = 0; i < chunk_size; i++) {
                 (*agg_states)[i] = null_key_data;
             }
-        } else if (key_columns[0]->is_nullable()) {
+        } else {
+            DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = down_cast<NullableColumn*>(key_columns[0].get());
             auto* data_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+            const auto& null_data = nullable_column->null_column_data();
             DCHECK(data_column->is_binary());
 
             if (!nullable_column->has_null()) {
@@ -437,9 +442,9 @@ struct AggHashMapWithOneNullableStringKey {
                 return;
             }
 
-            for (size_t i = 0; i < data_column->size(); i++) {
-                if (key_columns[0]->is_null(i)) {
-                    if (null_key_data == nullptr) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (UNLIKELY(null_key_data == nullptr)) {
                         null_key_data = allocate_func(nullptr);
                     }
                     (*agg_states)[i] = null_key_data;
@@ -468,6 +473,7 @@ struct AggHashMapWithOneNullableStringKey {
             DCHECK(key_columns[0]->is_nullable());
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(key_columns[0]);
             auto* data_column = ColumnHelper::as_raw_column<BinaryColumn>(nullable_column->data_column());
+            const auto& null_data = nullable_column->null_column_data();
             DCHECK(data_column->is_binary());
 
             if (!nullable_column->has_null()) {
@@ -477,9 +483,9 @@ struct AggHashMapWithOneNullableStringKey {
                 return;
             }
 
-            for (size_t i = 0; i < data_column->size(); i++) {
-                if (nullable_column->is_null(i)) {
-                    if (null_key_data == nullptr) {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (null_data[i]) {
+                    if (UNLIKELY(null_key_data == nullptr)) {
                         null_key_data = allocate_func(nullptr);
                     }
                     (*agg_states)[i] = null_key_data;

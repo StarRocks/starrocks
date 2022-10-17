@@ -128,6 +128,5 @@ public class Partition {
         public Partition build() {
             return new Partition(params, inputFormat, textFileFormatDesc, fullPath, isSplittable);
         }
-
     }
 }

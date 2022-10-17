@@ -461,7 +461,7 @@ public class Database extends MetaObject implements Writable {
                 throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
                         "The table [" + table.getName() +
                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                        " please use \"DROP table FORCE\".");
+                        " please use \"DROP TABLE <table> FORCE\".");
             }
             runnable = unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
