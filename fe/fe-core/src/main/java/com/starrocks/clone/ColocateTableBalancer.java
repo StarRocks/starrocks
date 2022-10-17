@@ -311,9 +311,9 @@ public class ColocateTableBalancer extends LeaderDaemon {
                             int idx = 0;
                             for (Long tabletId : index.getTabletIdsInOrder()) {
                                 LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
+                                Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
                                 // Tablet has already been scheduled, no need to schedule again
                                 if (!tabletScheduler.containsTablet(tablet.getId())) {
-                                    Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
                                     Preconditions.checkState(bucketsSeq.size() == replicationNum,
                                             bucketsSeq.size() + " vs. " + replicationNum);
                                     TabletStatus st = tablet.getColocateHealthStatus(visibleVersion,
@@ -341,6 +341,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                             tabletCtx.setOrigPriority(colocateUnhealthyPrio);
                                             tabletCtx.setTabletOrderIdx(idx);
                                             tabletCtx.setColocateGroupId(groupId);
+                                            tabletCtx.setTablet(tablet);
                                             ColocateRelocationInfo info = group2ColocateRelocationInfo.get(groupId);
                                             if (info != null && info.getRelocationForRepair() &&
                                                     st == TabletStatus.COLOCATE_MISMATCH) {
@@ -369,7 +370,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                         tablet.setLastStatusCheckTime(checkStartTime);
                                     }
                                 } else {
-                                    isGroupStable = false;
+                                    // tablet maybe added to scheduler because of balance between local disks,
+                                    // in this case we shouldn't mark the group unstable
+                                    if (tablet.getColocateHealthStatus(visibleVersion, replicationNum, bucketsSeq)
+                                            != TabletStatus.HEALTHY) {
+                                        isGroupStable = false;
+                                    }
                                 }
                                 idx++;
                             }

@@ -53,6 +53,8 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
@@ -765,6 +767,13 @@ public class ColocateTableBalancerTest {
         Database database = GlobalStateMgr.getCurrentState().getDb("db1");
         OlapTable table = (OlapTable) database.getTable("tbl");
         addTabletsToScheduler("db1", "tbl", false);
+
+        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        List<List<Long>> bl = Lists.newArrayList();
+        bl.add(new ArrayList<>(Arrays.asList(1L, 2L, 3L)));
+        bl.add(new ArrayList<>(Arrays.asList(1L, 2L, 3L)));
+        bl.add(new ArrayList<>(Arrays.asList(1L, 2L, 3L)));
+        colocateIndex.addBackendsPerBucketSeq(colocateIndex.getGroup(table.getId()), Lists.newArrayList(bl));
 
         // test if group is unstable when all its tablets are in TabletScheduler
         long tableId = table.getId();

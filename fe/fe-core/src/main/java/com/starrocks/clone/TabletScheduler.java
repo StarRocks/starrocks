@@ -661,7 +661,7 @@ public class TabletScheduler extends LeaderDaemon {
 
                 Set<Long> backendsSet = colocateTableIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
                 trySkipRelocateSchedAndResetBackendSeq(tabletCtx, partition.getVisibleVersion(),
-                        replicaNum, backendsSet);
+                        replicaNum, backendsSet, tablet);
                 TabletStatus st = tablet.getColocateHealthStatus(
                         partition.getVisibleVersion(),
                         replicaNum,
@@ -733,7 +733,7 @@ public class TabletScheduler extends LeaderDaemon {
      * which have finished scheduling to be scheduled again.
      */
     private void trySkipRelocateSchedAndResetBackendSeq(TabletSchedCtx ctx, long visibleVersion, short replicaNum,
-                                                        Set<Long> currentBackendsSet) {
+                                                        Set<Long> currentBackendsSet, LocalTablet tablet) {
         if (ctx.getRelocationForRepair()) {
             Set<Long> lastBackendsSet = ColocateTableBalancer.getInstance().getLastBackendSeqForBucket(ctx);
             // if we have already reset the backend set to last backend set, skip the reset action
@@ -752,7 +752,7 @@ public class TabletScheduler extends LeaderDaemon {
             int num = ColocateTableBalancer.getInstance().getScheduledTabletNumForBucket(ctx);
             int totalTabletsPerBucket = colocateTableIndex.getNumOfTabletsPerBucket(ctx.getColocateGroupId());
             if (num <= totalTabletsPerBucket * COLOCATE_BACKEND_RESET_RATIO) {
-                TabletStatus st = ctx.getTablet().getColocateHealthStatus(visibleVersion, replicaNum, lastBackendsSet);
+                TabletStatus st = tablet.getColocateHealthStatus(visibleVersion, replicaNum, lastBackendsSet);
                 if (st != TabletStatus.COLOCATE_MISMATCH) {
                     colocateTableIndex.setBackendsSetByIdxForGroup(ctx.getColocateGroupId(),
                             ctx.getTabletOrderIdx(), lastBackendsSet);
