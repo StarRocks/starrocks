@@ -31,6 +31,7 @@
 #include "exec/data_sink.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -211,6 +212,8 @@ private:
 
     // Specify the columns which need to send
     std::vector<int32_t> _output_columns;
+
+    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
 };
 
 } // namespace starrocks
