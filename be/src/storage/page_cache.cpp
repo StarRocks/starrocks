@@ -63,6 +63,18 @@ size_t StoragePageCache::get_capacity() {
     return _cache->get_capacity();
 }
 
+uint64_t StoragePageCache::get_lookup_count() {
+    return _cache->get_lookup_count();
+}
+
+uint64_t StoragePageCache::get_hit_count() {
+    return _cache->get_hit_count();
+}
+
+bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
+    return _cache->adjust_capacity(delta, min_capacity);
+}
+
 bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
     auto* lru_handle = _cache->lookup(key.encode());
     if (lru_handle == nullptr) {

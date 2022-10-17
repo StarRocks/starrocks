@@ -98,6 +98,32 @@ TEST_F(StoragePageCacheTest, normal) {
         size_t ori = cache.get_capacity();
         cache.set_capacity(ori / 2);
         ASSERT_EQ(ori / 2, cache.get_capacity());
+        cache.set_capacity(ori);
+    }
+
+    // adjust capacity
+    {
+        size_t ori = cache.get_capacity();
+        for (int i = 1; i <= 10; i++) {
+            cache.adjust_capacity(32);
+            ASSERT_EQ(cache.get_capacity(), ori + 32 * i);
+        }
+        cache.set_capacity(ori);
+        for (int i = 1; i <= 10; i++) {
+            cache.adjust_capacity(-32);
+            ASSERT_EQ(cache.get_capacity(), ori - 32 * i);
+        }
+        cache.set_capacity(ori);
+
+        int64_t delta = ori;
+        ASSERT_FALSE(cache.adjust_capacity(-delta / 2, ori));
+        ASSERT_EQ(cache.get_capacity(), ori);
+        ASSERT_TRUE(cache.adjust_capacity(-delta / 2, ori / 4));
+        cache.set_capacity(ori);
+
+        // overflow
+        cache.set_capacity(kNumShards);
+        ASSERT_FALSE(cache.adjust_capacity(-2 * kNumShards, 0));
     }
 }
 
