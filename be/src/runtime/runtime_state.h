@@ -306,6 +306,7 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
+    bool enable_query_statistic() const;
     std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
