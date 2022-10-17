@@ -24,7 +24,7 @@ public class DeltaLakeScanImplementationRule extends ImplementationRule {
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression result = null;
         LogicalDeltaLakeScanOperator scan = (LogicalDeltaLakeScanOperator) input.getOp();
-        if (scan.getTable().getType() == Table.TableType.DELTA_LAKE) {
+        if (scan.getTable().getType() == Table.TableType.DELTALAKE) {
             PhysicalDeltaLakeScanOperator physicalDeltaLakeScan = new PhysicalDeltaLakeScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
                     scan.getScanOperatorPredicates(),

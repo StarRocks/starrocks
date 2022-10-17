@@ -34,7 +34,7 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
     public static final PruneHDFSScanColumnRule ICEBERG_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final PruneHDFSScanColumnRule HUDI_SCAN = new PruneHDFSScanColumnRule(OperatorType.LOGICAL_HUDI_SCAN);
-    public static final PruneHDFSScanColumnRule DELTA_LAKE_SCAN =
+    public static final PruneHDFSScanColumnRule DELTALAKE_SCAN =
             new PruneHDFSScanColumnRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
 
     public PruneHDFSScanColumnRule(OperatorType logicalOperatorType) {

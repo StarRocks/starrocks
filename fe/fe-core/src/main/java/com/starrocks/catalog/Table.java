@@ -78,7 +78,7 @@ public class Table extends MetaObject implements Writable {
         JDBC,
         MATERIALIZED_VIEW,
         LAKE,
-        DELTA_LAKE
+        DELTALAKE
     }
 
     @SerializedName(value = "id")

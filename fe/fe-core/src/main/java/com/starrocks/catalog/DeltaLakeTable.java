@@ -31,7 +31,7 @@ public class DeltaLakeTable extends Table {
 
     public DeltaLakeTable(long id, String catalogName, String dbName, String tableName, List<Column> schema,
                           List<String> partitionNames, DeltaLog deltaLog) {
-        super(id, tableName, TableType.DELTA_LAKE, schema);
+        super(id, tableName, TableType.DELTALAKE, schema);
         this.catalogName = catalogName;
         this.dbName = dbName;
         this.tableName = tableName;
