@@ -161,47 +161,45 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|描述|
 |---|---|---|
-|log_roll_size_mb|1024|日志拆分的大小，每 1G 拆分一个日志，单位为 MB。|
-|sys_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|日志保留的目录。|
-|sys_log_level|INFO|日志级别，INFO < WARN < ERROR < FATAL。|
-|sys_log_verbose_modules|空字符串|日志打印的模块，写 org.apache.starrocks.catalog 就只打印 catalog 模块下的日志。|
-|sys_log_roll_interval|DAY|日志拆分的时间间隔。|
-|sys_log_delete_age|7d|日志删除的间隔。|
-|sys_log_roll_mode|SIZE-MB-1024|日志拆分的大小，每 1G 拆分一个日志。|
-|sys_log_roll_num|10|每个 sys_log_roll_interval 时间内，保留的日志文件数目。|
-|audit_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|审计日志保留的目录。|
+|log_roll_size_mb|1024|日志拆分的大小，每 1 GB 拆分为一个日志文件。单位：MB。|
+|sys_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|系统日志文件的保留目录。|
+|sys_log_level|INFO|系统日志的级别，从低到高依次为 `INFO`、`WARN`、`ERROR`、`FATAL`。|
+|sys_log_verbose_modules|空字符串|系统日志打印的模块，写 `org.apache.starrocks.catalog` 就只打印 Catalog 模块下的日志。|
+|sys_log_roll_interval|DAY|系统日志拆分的时间间隔。取值范围： `DAY` 和 `HOUR`。<ul><li>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。</li><li>取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。</li></ul>|
+|sys_log_delete_age|7d|系统日志删除的间隔。|
+|sys_log_roll_num|10|每个 `sys_log_roll_interval` 时间段内，保留的系统日志文件的数目。|
+|audit_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|审计日志文件的保留目录。|
 |audit_log_roll_num|90|审计日志保留的数目。|
-|audit_log_modules|"slow_query", "query"|审计日志打印的模块，默认保留 slow_query 和 query。|
-|audit_log_roll_interval|DAY|审计日志拆分的时间间隔, DAY 或者 HOUR。|
+|audit_log_modules|slow_query, query|审计日志打印的模块。默认打印 `slow_query` 和 `query` 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。|
+|audit_log_roll_interval|DAY|审计日志拆分的时间间隔。取值范围： `DAY` 和 `HOUR`。<ul><li>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。</li><li>取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。</li></ul>|
 |audit_log_delete_age|30d|审计日志删除的间隔。|
-|audit_log_roll_mode|TIME-DAY|审计日志拆分模式。|
-|dump_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|Dump 日志的目录。|
-|dump_log_modules|"query"|Dump 日志打印的模块，默认保留 query。|
-|dump_log_roll_interval|DAY|"Dump 日志拆分的时间间隔。日志文件的后缀为 yyyyMMdd（DAY）或 yyyyMMddHH（HOUR）"。|
-|dump_log_roll_num|10|每个 dump_log_roll_interval 时间内，保留的 Dump 日志文件数目。|
+|dump_log_dir|StarRocksFE.STARROCKS_HOME_DIR + "/log"|Dump 日志文件的保留目录。|
+|dump_log_modules|query|Dump 日志打印的模块。默认打印 query 模块的日志。可以指定多个模块，模块名称之间用英文逗号加一个空格分隔。|
+|dump_log_roll_interval|DAY|Dump 日志拆分的时间间隔。取值范围： `DAY` 和 `HOUR`。<ul><li>取值为 `DAY` 时，日志文件名的后缀为 `yyyyMMdd`。</li><li>取值为 `HOUR` 时，日志文件名的后缀为 `yyyyMMddHH`。</li></ul>|
+|dump_log_roll_num|10|每个 `dump_log_roll_interval` 时间内，保留的 Dump 日志文件的数目。|
 |dump_log_delete_age|7d|Dump 日志保留的时间长度。|
 
 #### Server 相关静态参数
 
 |配置项|默认值|描述|
 |---|---|---|
-|frontend_address|0.0.0.0|FE IP 地址。|
-|priority_networks|空字符串|以 CIDR 形式 10.10.10.0/24 指定 FE IP 地址，适用于机器有多个 IP，需要特殊指定的形式。|
+|frontend_address|0.0.0.0|FE 节点的 IP 地址。|
+|priority_networks|空字符串|以 CIDR 形式 `10.10.10.0/24` 指定 FE 节点的 IP 地址，适用于机器有多个 IP 地址，需要特殊指定的形式。|
 |http_port|8030|Http Server 的端口。|
-|http_backlog_num|1024|HTTP Server 的 backlog 队列长度。|
+|http_backlog_num|1024|HTTP Server 的 Backlog 队列长度。|
 |cluster_name|StarRocks Cluster|Web 页面中 Title 显示的集群名称。|
-|rpc_port|9020|FE 上的 thrift server 端口。|
-|thrift_backlog_num|1024|Thrift Server 的 backlog 队列长度。|
-|thrift_server_type|ThriftServer.THREAD_POOL|FE 的 Thrift 服务使用的服务模型，SIMPLE/THREADED/THREAD_POOL。|
-|thrift_server_max_worker_threads|4096|Thrift Server 最大工作线程数。|
-|thrift_client_timeout_ms|0|Client 超时时间，，单位为 ms。设置于 0 时永远不会超时。|
+|rpc_port|9020|FE 节点上的 Thrift Server 端口。|
+|thrift_backlog_num|1024|Thrift Server 的 Backlog 队列长度。|
+|thrift_server_type|THREAD_POOL|FE 节点上的 Thrift Server 使用的服务模型。取值范围：`SIMPLE`、`THREADED`、`THREAD_POOL`。|
+|thrift_server_max_worker_threads|4096|Thrift Server 的最大工作线程数。|
+|thrift_client_timeout_ms|0|Client 超时时间。单位：ms。设置为 `0` 时永远不会超时。|
 |brpc_number_of_concurrent_requests_processed|4096|并发处理 BRPC 请求数目。|
-|brpc_idle_wait_max_time|10000|BRPC 的空闲等待时间，单位为 ms。|
-|enable_brpc_share_channel|TRUE|在 BRPC Client 之间共享 channel。|
-|query_port|9030|FE 上的 mysql server 端口。|
-|mysql_service_nio_enabled|TRUE|FE 连接服务的 nio 是否开启。|
-|mysql_service_io_threads_num|4|FE 连接服务线程数。|
-|mysql_nio_backlog_num|1024|MySQL Server 的 backlog 队列长度。|
+|brpc_idle_wait_max_time|10000|BRPC 的空闲等待时间。单位：ms。|
+|enable_brpc_share_channel|TRUE|指定是否在 BRPC Client 之间共享 Channel。|
+|query_port|9030|FE 节点上的 Mysql Server 端口。|
+|mysql_service_nio_enabled|TRUE|指定 FE 连接服务的异步 I/O 是否开启。|
+|mysql_service_io_threads_num|4|FE 连接服务的最大线程数。|
+|mysql_nio_backlog_num|1024|MySQL Server 的 Backlog 队列长度。|
 |max_mysql_service_task_threads_num|4096|MySQL Server 处理任务的最大线程数。|
 |max_connection_scheduler_threads_num|4096|连接定时器的线程池的最大线程数。|
 |qe_max_connection|1024|FE 上最多接收的连接数，适用于所有用户。|
