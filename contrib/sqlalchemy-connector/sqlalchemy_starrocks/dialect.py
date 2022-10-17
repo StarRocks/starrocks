@@ -3,12 +3,12 @@
 from sqlalchemy.dialects.mysql import BIGINT
 from sqlalchemy.dialects.mysql.mysqldb import MySQLDialect_mysqldb
 
-class SRDialect(MySQLDialect_mysqldb):
+class StarRocksDialect(MySQLDialect_mysqldb):
 
-    name = 'sr'
+    name = 'starrocks'
 
     def __init__(self, *args, **kw):
-        super(SRDialect, self).__init__(*args, **kw)
+        super(StarRocksDialect, self).__init__(*args, **kw)
         self.ischema_names = self.ischema_names.copy()
         self.ischema_names['largeint']=BIGINT
 

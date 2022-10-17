@@ -43,8 +43,8 @@ setup(
     zip_safe=False,
     entry_points={
         'sqlalchemy.dialects': [
-            'starrocks = sqlalchemy_starrocks.dialect:SRDialect',
-            'sr = sqlalchemy_starrocks.dialect:SRDialect',
+            'starrocks = sqlalchemy_starrocks.dialect:StarRocksDialect',
+            'sr = sqlalchemy_starrocks.dialect:StarRocksDialect',
         ]
     },
 )
