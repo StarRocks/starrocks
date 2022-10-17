@@ -23,6 +23,7 @@
   + [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)
   + [使用 Apache Spark™ 批量导入](/loading/SparkLoad.md)
   + [使用 INSERT 语句导入](/loading/InsertInto.md)
+  + [使用 Stream Load 事务接口导入](/loading/stream_load_transaction_interface.md)
   + [从 MySQL 实时同步](/loading/Flink_cdc_load.md)
   + [从 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
   + [通过导入实现数据变更](/loading/PrimaryKeyLoad.md)
