@@ -880,6 +880,20 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select part_v2.p_partkey from lineitem join part_v2 on L_COMMENT = hex(P_NAME);";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+
+        // TopN with HashJoinNode
+        sql = "select * from supplier l join supplier_nullable r where l.S_SUPPKEY = r.S_SUPPKEY " +
+                "order by l.S_ADDRESS limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:TOP-N\n" +
+                "  |  order by: <slot 17> 17: S_ADDRESS ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: S_SUPPKEY = 9: S_SUPPKEY");
     }
 
     @Test
