@@ -17,7 +17,6 @@ import io.delta.standalone.types.DataType;
 import io.delta.standalone.types.StructField;
 import io.delta.standalone.types.StructType;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.List;
 
@@ -25,9 +24,7 @@ import static com.starrocks.external.hive.HiveMetastoreApiConverter.CONNECTOR_ID
 
 public class DeltaUtils {
     public static DeltaLakeTable convertDeltaToSRTable(String catalog, String dbName, String tblName, String path,
-                                                       String resourceName) {
-        Configuration configuration = new Configuration();
-        configuration.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), resourceName);
+                                                       Configuration configuration) {
         DeltaLog deltaLog = DeltaLog.forTable(configuration, path);
 
         if (!deltaLog.tableExists()) {
@@ -41,7 +38,7 @@ public class DeltaUtils {
 
         if (tableSchema == null) {
             throw new IllegalArgumentException(String.format("Unable to find Schema information in Delta log for " +
-                            "%s.%s.%s", catalog, dbName, tblName));
+                    "%s.%s.%s", catalog, dbName, tblName));
         }
 
         for (StructField field : metadata.getSchema().getFields()) {
