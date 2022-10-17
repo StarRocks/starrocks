@@ -148,6 +148,11 @@
       + [ALTER ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](./sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
       + [CANCEL LOAD](./sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md)
+<<<<<<< HEAD
+=======
+      + [CANCEL EXPORT](./sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md)
+      + [CANCEL REFRESH MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md)
+>>>>>>> bf06fb13e (add CANCEL EXPORT (#12175))
       + [DELETE](./sql-reference/sql-statements/data-manipulation/DELETE.md)
       + [EXPORT](./sql-reference/sql-statements/data-manipulation/EXPORT.md)
       + [GROUP BY](./sql-reference/sql-statements/data-manipulation/GROUP%20BY.md)
