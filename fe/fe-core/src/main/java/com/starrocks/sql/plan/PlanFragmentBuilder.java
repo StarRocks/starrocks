@@ -1210,6 +1210,11 @@ public class PlanFragmentBuilder {
                 if (!partitionExpressions.isEmpty()) {
                     inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
                 }
+
+                // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
+                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isGlobal()) {
                 if (node.hasSingleDistinct()) {
                     // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
@@ -1260,6 +1265,11 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 aggregationNode.setLimit(node.getLimit());
+
+                // Check colocate for one-phase local agg.
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                 AggregateInfo aggInfo = AggregateInfo.create(
@@ -1302,10 +1312,6 @@ public class PlanFragmentBuilder {
             // One phase aggregation prefer the inter-instance parallel to avoid local shuffle
             if (node.isOnePhaseAgg() && hasNoExchangeNodes(inputFragment.getPlanRoot())) {
                 estimateDopOfOnePhaseAgg(inputFragment);
-            }
-            // set aggregate node can use local aggregate
-            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                aggregationNode.setColocate(true);
             }
 
             inputFragment.setPlanRoot(aggregationNode);
