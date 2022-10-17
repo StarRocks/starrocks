@@ -169,6 +169,23 @@ struct TQueryOptions {
   59: optional bool enable_tablet_internal_parallel;
 
   60: optional i32 query_delivery_timeout;
+<<<<<<< HEAD
+=======
+  
+  61: optional bool enable_query_debug_trace;
+
+  62: optional Types.TCompressionType load_transmission_compression_type;
+
+  63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
+
+  64: optional TLoadJobType load_job_type
+
+  65: optional bool enable_replicated_storage;
+
+  66: optional bool use_scan_block_cache;
+
+  67: optional bool enable_pipeline_query_statistic = false;
+>>>>>>> 8cf7ff07d ([BugFix] fix version compatibility issue of pipeline query statistic (#12226))
 }
 
 
