@@ -85,15 +85,15 @@ public class PartitionPruneRule extends TransformationRule {
                 input.getInputs()));
     }
 
-    private void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> columnToPartitionValuesMap,
+    private void putValueMapItem(TreeMap<LiteralExpr, Set<Long>> partitionValueToIds,
                                  Long partitionId,
                                  LiteralExpr value) {
-        Set<Long> partitionIdSet = columnToPartitionValuesMap.get(value);
+        Set<Long> partitionIdSet = partitionValueToIds.get(value);
         if (partitionIdSet == null) {
             partitionIdSet = new HashSet<>();
         }
         partitionIdSet.add(partitionId);
-        columnToPartitionValuesMap.put(value, partitionIdSet);
+        partitionValueToIds.put(value, partitionIdSet);
     }
 
     private List<Long> listPartitionPrune(ListPartitionInfo listPartitionInfo,
@@ -105,14 +105,14 @@ public class PartitionPruneRule extends TransformationRule {
         // single item list partition has only one column mapper
         Map<Long, List<LiteralExpr>> literalExprValuesMap = listPartitionInfo.getLiteralExprValues();
         if (literalExprValuesMap != null && literalExprValuesMap.size() > 0) {
-            TreeMap<LiteralExpr, Set<Long>> columnToPartitionValuesItem = new TreeMap<>();
+            TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
             literalExprValuesMap.forEach((partitionId, values) ->
                     values.forEach(value ->
-                            putValueMapItem(columnToPartitionValuesItem, partitionId, value)));
+                            putValueMapItem(partitionValueToIds, partitionId, value)));
             // single item list partition has only one column
             Column column = listPartitionInfo.getPartitionColumns().get(0);
             ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
-            columnToPartitionValuesMap.put(columnRefOperator, columnToPartitionValuesItem);
+            columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
             columnToNullPartitions.put(columnRefOperator, new HashSet<>());
         }
 
@@ -121,18 +121,18 @@ public class PartitionPruneRule extends TransformationRule {
         if (multiLiteralExprValues != null && multiLiteralExprValues.size() > 0) {
             List<Column> columnList = listPartitionInfo.getPartitionColumns();
             for (int i = 0; i < columnList.size(); i++) {
-                TreeMap<LiteralExpr, Set<Long>> columnToPartitionValuesItem = new TreeMap<>();
+                TreeMap<LiteralExpr, Set<Long>> partitionValueToIds = new TreeMap<>();
                 for (Map.Entry<Long, List<List<LiteralExpr>>> entry : multiLiteralExprValues.entrySet()) {
                     Long partitionId = entry.getKey();
                     List<List<LiteralExpr>> multiValues = entry.getValue();
                     for (List<LiteralExpr> values : multiValues) {
                         LiteralExpr value = values.get(i);
-                        putValueMapItem(columnToPartitionValuesItem, partitionId, value);
+                        putValueMapItem(partitionValueToIds, partitionId, value);
                     }
                 }
                 Column column = columnList.get(i);
                 ColumnRefOperator columnRefOperator = olapScanOperator.getColumnReference(column);
-                columnToPartitionValuesMap.put(columnRefOperator, columnToPartitionValuesItem);
+                columnToPartitionValuesMap.put(columnRefOperator, partitionValueToIds);
                 columnToNullPartitions.put(columnRefOperator, new HashSet<>());
             }
         }
