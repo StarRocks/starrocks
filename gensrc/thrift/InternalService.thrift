@@ -180,6 +180,8 @@ struct TQueryOptions {
   62: optional Types.TCompressionType load_transmission_compression_type;
 
   63: optional TTabletInternalParallelMode tablet_internal_parallel_mode;
+
+  67: optional bool enable_pipeline_query_statistic;
 }
 
 
