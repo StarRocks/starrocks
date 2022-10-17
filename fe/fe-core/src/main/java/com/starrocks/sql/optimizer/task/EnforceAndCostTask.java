@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ChildOutputPropertyGuarantor;
@@ -357,12 +356,6 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         }
 
         PhysicalHashAggregateOperator aggregate = (PhysicalHashAggregateOperator) groupExpression.getOp();
-        // Must do one stage aggregate If there are exchange_bytes/_speed()
-        if (aggregate.getAggregations().values().stream().anyMatch(aggFunc ->
-                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
-                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED))) {
-            return true;
-        }
         List<CallOperator> distinctAggCallOperator = aggregate.getAggregations().values().stream()
                 .filter(CallOperator::isDistinct).collect(Collectors.toList());
         // 1. check the agg node is global aggregation without split and child expr is PhysicalDistributionOperator

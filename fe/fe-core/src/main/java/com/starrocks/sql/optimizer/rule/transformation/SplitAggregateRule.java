@@ -59,12 +59,6 @@ public class SplitAggregateRule extends TransformationRule {
 
     public boolean check(final OptExpression input, OptimizerContext context) {
         LogicalAggregationOperator agg = (LogicalAggregationOperator) input.getOp();
-        // must not apply this rule if there are exchange_bytes/_ratio()
-        if (agg.getAggregations().values().stream().anyMatch(aggFunc ->
-                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
-                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED))) {
-            return false;
-        }
         // Only apply this rule if the aggregate type is global and not split
         return agg.getType().isGlobal() && !agg.isSplit();
     }
@@ -122,12 +116,6 @@ public class SplitAggregateRule extends TransformationRule {
         }
         // 4. If scan tablet sum leas than 1, do one phase aggregate is enough
         if (aggStage == 0 && input.getLogicalProperty().isExecuteInOneTablet()) {
-            return false;
-        }
-        // 5。 must not apply this rule if there are exchange_bytes/_speed()
-        if (((LogicalAggregationOperator) input.getOp()).getAggregations().values().stream().anyMatch(aggFunc ->
-                aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
-                        aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED))) {
             return false;
         }
         // Default, we could generate two stage aggregate
