@@ -411,7 +411,7 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     int64_t prepare_time = 0;
     DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
         if (prepare_success) {
-            auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
+            auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.params.fragment_instance_id);
             auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
                     "FragmentInstancePrepareTime", TUnit::TIME_NS);
             COUNTER_SET(prepare_timer, prepare_time);
