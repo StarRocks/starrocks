@@ -41,5 +41,13 @@ size_t CacheManager::capacity() {
     return _cache.get_capacity();
 }
 
+size_t CacheManager::lookup_count() {
+    return _cache.get_lookup_count();
+}
+
+size_t CacheManager::hit_count() {
+    return _cache.get_hit_count();
+}
+
 } // namespace query_cache
 } // namespace starrocks

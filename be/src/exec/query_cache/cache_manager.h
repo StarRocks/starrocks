@@ -40,6 +40,8 @@ public:
     StatusOr<CacheValue> probe(const std::string& key);
     size_t memory_usage();
     size_t capacity();
+    size_t lookup_count();
+    size_t hit_count();
 
 private:
     ShardedLRUCache _cache;
