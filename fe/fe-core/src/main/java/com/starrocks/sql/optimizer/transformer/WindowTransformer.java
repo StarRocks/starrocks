@@ -117,7 +117,6 @@ public class WindowTransformer {
                     throw new SemanticException("Convert type error in offset fn(default value); old_type="
                             + callExpr.getChild(2).getType() + " new_type=" + callExpr.getChild(0).getType());
                 }
-
                 if (callExpr.getChild(2) instanceof CastExpr) {
                     throw new SemanticException(
                             "The third parameter of `" + callExpr.getFn().getFunctionName().getFunction() +
