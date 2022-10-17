@@ -17,7 +17,7 @@ namespace pipeline {
 class ExportSinkIOBuffer;
 class FragmentContext;
 
-class ExportSinkOperator : public Operator {
+class ExportSinkOperator final : public Operator {
 public:
     ExportSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        std::shared_ptr<ExportSinkIOBuffer> export_sink_buffer)
