@@ -616,7 +616,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
             res->Swap(dst);
         }
     }
-    if(_encode_context) {
+    if (_encode_context) {
         _encode_context->set_encode_levels_in_pb(dst);
     }
     DCHECK(dst->has_uncompressed_size());
