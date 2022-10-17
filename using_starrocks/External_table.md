@@ -898,23 +898,24 @@ PROPERTIES (
 
 创建外部表时，需根据 Iceberg 表的列类型指定 StarRocks 中外部表的列类型，具体映射关系如下：
 
-| **Iceberg**    | **StarRocks**            |
-| -------------- | ------------------------ |
-| BOOLEAN        | BOOLEAN                  |
-| INT            | TINYINT/SMALLINT/INT |
-| LONG           | BIGINT                   |
-| FLOAT          | FLOAT                    |
-| DOUBLE         | DOUBLE                   |
-| DECIMAL(P, S)  | DECIMAL                  |
-| DATE           | DATE/DATETIME          |
-| TIME           | BIGINT                   |
-| TIMESTAMP      | DATETIME                 |
-| STRING         | STRING/VARCHAR         |
-| UUID           | STRING/VARCHAR         |
-| FIXED(L)       | CHAR                     |
-| BINARY         | VARCHAR                  |
+| **Iceberg**   | **StarRocks**        |
+|---------------|----------------------|
+| BOOLEAN       | BOOLEAN              |
+| INT           | TINYINT/SMALLINT/INT |
+| LONG          | BIGINT               |
+| FLOAT         | FLOAT                |
+| DOUBLE        | DOUBLE               |
+| DECIMAL(P, S) | DECIMAL              |
+| DATE          | DATE/DATETIME        |
+| TIME          | BIGINT               |
+| TIMESTAMP     | DATETIME             |
+| STRING        | STRING/VARCHAR       |
+| UUID          | STRING/VARCHAR       |
+| FIXED(L)      | CHAR                 |
+| BINARY        | VARCHAR              |
+| LIST          | ARRAY                |
 
-StarRocks 不支持查询以下类型的数据： TIMESTAMPTZ、STRUCT、LIST 和 MAP。
+StarRocks 不支持查询以下类型的数据： TIMESTAMPTZ、STRUCT 和 MAP。
 
 #### 步骤四：查询 Iceberg 数据
 
