@@ -46,7 +46,3 @@ quota.low: Resource allocation at the low level
     ```SQL
     SET PROPERTY FOR 'jack' 'quota.normal' = '400';
     ```
-
-## keyword
-
-SET, PROPERTY

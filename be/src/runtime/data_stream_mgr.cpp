@@ -26,6 +26,7 @@
 
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/types.pb.h" // PUniqueId
+#include "runtime/current_thread.h"
 #include "runtime/data_stream_recvr.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -62,7 +63,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::create_recvr(
     DCHECK(pass_through_chunk_buffer != nullptr);
     std::shared_ptr<DataStreamRecvr> recvr(
             new DataStreamRecvr(this, state, row_desc, fragment_instance_id, dest_node_id, num_senders, is_merging,
-                                buffer_size, profile, std::move(sub_plan_query_statistics_recvr), is_pipeline,
+                                buffer_size, profile, sub_plan_query_statistics_recvr, is_pipeline,
                                 degree_of_parallelism, keep_order, pass_through_chunk_buffer));
     uint32_t hash_value = get_hash_value(fragment_instance_id, dest_node_id);
     std::lock_guard<std::mutex> l(_lock);
@@ -138,6 +139,7 @@ Status DataStreamMgr::transmit_chunk(const PTransmitChunkParams& request, ::goog
     TUniqueId t_finst_id;
     t_finst_id.hi = finst_id.hi();
     t_finst_id.lo = finst_id.lo();
+    SCOPED_SET_TRACE_INFO({}, {}, t_finst_id);
     std::shared_ptr<DataStreamRecvr> recvr = find_recvr(t_finst_id, request.node_id());
     if (recvr == nullptr) {
         // The receiver may remove itself from the receiver map via deregister_recvr()

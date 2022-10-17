@@ -354,7 +354,9 @@ PARTITION BY RANGE(`dt`) (
 
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
 
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+
+"enable_persistent_index" = "true");
 ```
 
 Example 2: Suppose that you need to analyze user behavior in real time. In this example, create a table named `users`, define `user_id` as the primary key, and define the other columns as metric columns.
@@ -390,7 +392,9 @@ create table users (
 
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
 
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+
+"enable_persistent_index" = "true");
 ```
 
 ### Usage notes
@@ -416,6 +420,15 @@ PROPERTIES("replication_num" = "3");
       (12 + 9) x 10,000,000 x 3 x 1.5 = 945 (MB)
 
       In the preceding formula, `9` is the immutable overhead per row, and `1.5` is the average extra overhead per hash table.
+
+- `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is true.
+
+  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+  > - The primary key must be a fixed-length data type (except for CHAR). Variable-length data types (such as VARCHAR) are not supported.
+  > - It is recommended to set this property to `TRUE` if the disk is SSD.
+  > - As of version 2.3.0, StarRocks supports to set this property.
+
+- Since version 2.3.0, the indicator column now supports BITMAP, HLL data types.
 
 - When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
 

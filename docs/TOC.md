@@ -108,6 +108,7 @@
       + [SHOW FULL COLUMNS](./sql-reference/sql-statements/Administration/SHOW%20FULL%20COLUMNS.md)
       + [SHOW INDEX](./sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
       + [SHOW PLUGINS](./sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md)
+      + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
       + [SHOW FILE](./sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
@@ -147,6 +148,11 @@
       + [ALTER ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/alter-routine-load.md)
       + [BROKER LOAD](./sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)
       + [CANCEL LOAD](./sql-reference/sql-statements/data-manipulation/CANCEL%20LOAD.md)
+<<<<<<< HEAD
+=======
+      + [CANCEL EXPORT](./sql-reference/sql-statements/data-manipulation/CANCEL%20EXPORT.md)
+      + [CANCEL REFRESH MATERIALIZED VIEW](./sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md)
+>>>>>>> bf06fb13e (add CANCEL EXPORT (#12175))
       + [DELETE](./sql-reference/sql-statements/data-manipulation/DELETE.md)
       + [EXPORT](./sql-reference/sql-statements/data-manipulation/EXPORT.md)
       + [GROUP BY](./sql-reference/sql-statements/data-manipulation/GROUP%20BY.md)
@@ -365,6 +371,10 @@
       + [RAND](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
+      + [current_version](./sql-reference/sql-functions/utility-functions/current_version.md)
+      + [version](./sql-reference/sql-functions/utility-functions/version.md)
+      + [last_query_id](./sql-reference/sql-functions/utility-functions/last_query_id.md)
+      + [sleep](./sql-reference/sql-functions/utility-functions/sleep.md)
       + [uuid](./sql-reference/sql-functions/utility-functions/uuid.md)
       + [uuid_numeric](./sql-reference/sql-functions/utility-functions/uuid_numeric.md)
   + [System variables](./reference/System_variable.md)

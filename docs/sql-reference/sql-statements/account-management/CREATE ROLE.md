@@ -19,7 +19,3 @@ It creates a role with no permission which could be added to the role though "GR
   ```sql
   CREATE ROLE role1;
   ```
-
-## keyword
-
-CREATE, ROLE
