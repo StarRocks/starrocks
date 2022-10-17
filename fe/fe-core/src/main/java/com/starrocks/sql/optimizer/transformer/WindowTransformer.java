@@ -118,7 +118,6 @@ public class WindowTransformer {
                             + callExpr.getChild(2).getType() + " new_type=" + callExpr.getChild(0).getType());
                 }
 
-                // Allow bitmap_empty/hll_empty as third paramter of LEAD/LAG.
                 if (callExpr.getChild(2) instanceof CastExpr) {
                     throw new SemanticException(
                             "The third parameter of `" + callExpr.getFn().getFunctionName().getFunction() +
