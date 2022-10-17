@@ -222,6 +222,8 @@ UDWF，即用户自定义窗口函数。跟普通聚合函数不同的是，窗�
 以下示例以 `MY_WINDOW_SUM_INT` 函数为例进行说明。与内置函数 `SUM`（返回类型为 BIGINT）区别在于，`MY_WINDOW_SUM_INT` 函数支持传入参数和返回参数的类型为 INT。
 
 ```Java
+package com.starrocks.udf.sample;
+
 public class WindowSumInt {    
     public static class State {
         int counter = 0;
@@ -310,6 +312,8 @@ UDTF，即用户自定义表值函数，读入一行数据，输出多个值可�
 以下示例以 `MY_UDF_SPLIT` 函数为例进行说明。`MY_UDF_SPLIT` 函数支持分隔符为空格，传入参数和返回参数的类型为 STRING。
 
 ```java
+package com.starrocks.udf.sample;
+
 public class UDFSplit{
     public String[] process(String in) {
         if (in == null) return null;
