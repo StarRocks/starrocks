@@ -264,6 +264,9 @@ public class RewriteUtils {
     }
 
     public static boolean isLogicalSPJG(OptExpression root) {
+        if (root == null) {
+            return false;
+        }
         Operator operator = root.getOp();
         if (!(operator instanceof LogicalOperator)) {
             return false;

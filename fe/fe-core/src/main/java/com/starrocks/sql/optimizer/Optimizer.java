@@ -354,7 +354,11 @@ public class Optimizer {
         } else {
             context.getRuleSet().addAutoJoinImplementationRule();
         }
-        context.getRuleSet().addMultiTableMvRewriteRule();
+
+        // TODO: should add session variable to control these rewrite rule
+        if (!context.getCandidateMvs().isEmpty()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
+        }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);

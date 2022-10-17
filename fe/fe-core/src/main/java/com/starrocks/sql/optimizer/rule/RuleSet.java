@@ -117,6 +117,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyJoinRule;
@@ -350,9 +351,13 @@ public class RuleSet {
     }
 
     public void addMultiTableMvRewriteRule() {
+        // for join rewrite
         transformRules.add(OnlyJoinRule.getInstance());
         transformRules.add(FilterJoinRule.getInstance());
         transformRules.add(ProjectionFilterJoinRule.getInstance());
+
+        // for aggregation rewrite
+        transformRules.add(AggregateJoinRule.getInstance());
     }
 
     public List<Rule> getTransformRules() {

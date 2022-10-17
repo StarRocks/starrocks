@@ -30,8 +30,16 @@ import java.util.List;
  *
  */
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
+    private boolean isAggregation;
+
     public BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
         super(type, pattern);
+        this.isAggregation = false;
+    }
+
+    public BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern, boolean isAggregation) {
+        super(type, pattern);
+        this.isAggregation = isAggregation;
     }
 
     @Override
@@ -45,6 +53,8 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
+
+        // TODO: should be removed to MaterializedViewRewriter
         // should get all predicates within and below this OptExpression
         List<ScalarOperator> queryConjuncts = RewriteUtils.getAllPredicates(queryExpression);
         ScalarOperator queryPredicate = Utils.compoundAnd(queryConjuncts);
@@ -68,8 +78,10 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
 
         List<OptExpression> results = Lists.newArrayList();
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
+
             List<Table> mvRefTables = RewriteUtils.getAllTables(mvContext.getMvExpression());
-            // if the ref table set between query and mv do not intersect, skip
+            // if the ref table set between query and mv do not intersect, skip.
+            // because there are nested mvs, so should add this logic to skip some conditions
             if (Collections.disjoint(queryRefTables, mvRefTables)) {
                 continue;
             }
@@ -78,16 +90,20 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             if (queryExpression.getOp() instanceof LogicalProjectOperator) {
                 queryProjector = (LogicalProjectOperator) queryExpression.getOp();
             }
-            MaterializedViewRewriter rewriter = new MaterializedViewRewriter(predicateTriple, queryEc,
-                    queryProjector, queryExpression, queryRefTables, mvRefTables, mvContext, context);
-            List<OptExpression> rewritten = rewriter.rewriteQuery();
+            MaterializedViewRewriter rewriter;
+            if (isAggregation) {
+                rewriter = new AggregatedMaterializedViewRewriter(predicateTriple, queryEc,
+                        queryProjector, queryExpression, queryRefTables, mvRefTables, mvContext, context);
+            } else {
+                rewriter = new MaterializedViewRewriter(predicateTriple, queryEc,
+                        queryProjector, queryExpression, queryRefTables, mvRefTables, mvContext, context);
+            }
+            List<OptExpression> rewritten = rewriter.rewrite();
             if (rewritten != null) {
-                // TODO(hkp): compare the cost and decide whether to use rewritten
                 results.addAll(rewritten);
             }
         }
 
-        // sort candidates and return lowest cost candidate
         return results;
     }
 

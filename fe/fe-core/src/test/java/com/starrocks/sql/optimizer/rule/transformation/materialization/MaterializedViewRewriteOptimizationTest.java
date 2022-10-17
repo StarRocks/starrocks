@@ -25,6 +25,7 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import mockit.Mock;
 import mockit.MockUp;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -70,14 +71,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
-                " from t0 join test_all_type" +
-                " on t0.v1 = test_all_type.t1d" +
-                " where t0.v1 = 1");
-
-        starRocksAssert.withNewMaterializedView("create materialized view join_mv_1" +
-                " distributed by hash(v1)" +
-                " as " +
-                " SELECT t0.v1 as v1, test_all_type.t1c" +
                 " from t0 join test_all_type" +
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 = 1");
@@ -266,6 +259,20 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
          */
 
+    }
+
+    @Test
+    public void test() throws Exception {
+        String query = "select t1a + 1, sum(t1g + 1) from test_all_type_not_null group by t1a + 1";
+        String plan = getFragmentPlan(query);
+        Assert.assertEquals("", plan);
+
+        /*
+        String query2 = "select t1a + 1, t1b, sum(t1g + 1) from test_all_type_not_null group by grouping sets((t1a), (t1a, t1b))";
+        String plan2 = getFragmentPlan(query2);
+        Assert.assertEquals("", plan2);
+
+         */
     }
 
     private void setPartitionVersion(Partition partition, long version) {

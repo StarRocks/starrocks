@@ -14,13 +14,15 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -45,56 +47,35 @@ import java.util.stream.Collectors;
  * SPJG materialized view rewriter, based on
  * 《Optimizing Queries Using Materialized Views: A Practical, Scalable Solution》
  *
- *  This rewriter is for single or multi table join query rewrite
+ *  This rewriter is for aggregated query rewrite
  */
-public class MaterializedViewRewriter {
-    protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
-    protected final Triple<ScalarOperator, ScalarOperator, ScalarOperator> queryPredicateTriple;
-    protected final EquivalenceClasses queryEc;
-    // top projection from query, null if not exist
-    protected final LogicalProjectOperator queryProjection;
-    // query expression below projection
-    protected final OptExpression query;
-    protected final MaterializationContext materializationContext;
-    protected final OptimizerContext optimizerContext;
-    protected final List<Table> queryTableSet;
-    protected final List<Table> mvTableSet;
+public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter {
+    private static final Logger LOG = LogManager.getLogger(AggregatedMaterializedViewRewriter.class);
 
-    protected enum MatchMode {
-        // all tables and join types match
-        COMPLETE,
-        // all tables match but join types do not
-        PARTIAL,
-        // all join types match but query has more tables
-        QUERY_DELTA,
-        // all join types match but view has more tables
-        VIEW_DELTA,
-        NOT_MATCH
+    public AggregatedMaterializedViewRewriter(Triple<ScalarOperator, ScalarOperator, ScalarOperator> queryPredicateTriple,
+                                              EquivalenceClasses queryEc, LogicalProjectOperator queryProjection,
+                                              OptExpression query, List<Table> queryTableSet, List<Table> mvTableSet,
+                                              MaterializationContext materializationContext,
+                                              OptimizerContext optimizerContext) {
+        super(queryPredicateTriple, queryEc, queryProjection, query,
+                queryTableSet, mvTableSet, materializationContext, optimizerContext);
     }
 
-    public MaterializedViewRewriter(Triple<ScalarOperator, ScalarOperator, ScalarOperator> queryPredicateTriple,
-                                    EquivalenceClasses queryEc, LogicalProjectOperator queryProjection,
-                                    OptExpression query, List<Table> queryTableSet, List<Table> mvTableSet,
-                                    MaterializationContext materializationContext,
-                                    OptimizerContext optimizerContext) {
-        this.queryPredicateTriple = queryPredicateTriple;
-        this.queryEc = queryEc;
-        this.queryProjection = queryProjection;
-        this.query = query;
-        this.queryTableSet = queryTableSet;
-        this.mvTableSet = mvTableSet;
-        this.materializationContext = materializationContext;
-        this.optimizerContext = optimizerContext;
-    }
-
+    @Override
     public boolean isValidPlan(OptExpression expression) {
+        if (expression == null) {
+            return false;
+        }
+        Operator op = expression.getOp();
+        if (!(op instanceof LogicalAggregationOperator)) {
+            return false;
+        }
+        // TODO: 是否支持grouping set/rollup/cube
         return RewriteUtils.isLogicalSPJG(expression);
     }
 
+    @Override
     public List<OptExpression> rewrite() {
-        if (!isValidPlan(materializationContext.getMvExpression())) {
-            return null;
-        }
         // the rewritten expression to replace query
         // TODO: generate scan mv operator by ColumnRefFactory of query
         OptExpression rewrittenExpression = OptExpression.create(materializationContext.getScanMvOperator());
@@ -108,6 +89,9 @@ public class MaterializedViewRewriter {
         } else {
             mvTopProjection = null;
             mvExpression = materializationContext.getMvExpression();
+        }
+        if (!isValidPlan(mvExpression)) {
+            return null;
         }
         List<ScalarOperator> mvConjuncts = RewriteUtils.getAllPredicates(mvExpression);
         ScalarOperator mvPredicate = Utils.compoundAnd(mvConjuncts);
@@ -225,6 +209,8 @@ public class MaterializedViewRewriter {
                     deriveLogicalProperty(rewrittenExpression);
                 }
 
+                // rewrite aggregation
+
                 // add projection operator
                 rewrittenExpression = rewriteProjection(queryProjection, query, mvTopProjection, mvExpression,
                         rewrittenExpression, relationIdMapping.inverse(), mvRelationIdToColumns,
@@ -240,16 +226,25 @@ public class MaterializedViewRewriter {
         return results;
     }
 
-    protected void deriveLogicalProperty(OptExpression root) {
-        for (OptExpression child : root.getInputs()) {
-            deriveLogicalProperty(child);
-        }
+    // get projection lineage of expression
+    // used to compute the equality of group key and aggregate
+    Map<ColumnRefOperator, ScalarOperator> getLineage(OptExpression expression, ColumnRefFactory refFactory) {
+        LineageFactory factory = new LineageFactory(expression, refFactory);
+        return factory.getLineage();
+    }
 
-        if (root.getLogicalProperty() == null) {
-            ExpressionContext context = new ExpressionContext(root);
-            context.deriveLogicalProperty();
-            root.setLogicalProperty(context.getRootProperty());
+    // consider rollup or not.
+    // should consider aggregate function
+    // 支持key进行表达式计算
+    private OptExpression rewriteAggregation(OptExpression rewrittenExpression, OptExpression query,
+                                             LogicalProjectOperator mvTopProjection, OptExpression mv, EquivalenceClasses ec) {
+        // should judge whether it is a rollup
+        LogicalAggregationOperator mvAgg = (LogicalAggregationOperator) mv.getOp();
+        Map<ColumnRefOperator, ScalarOperator> mvLineage = getLineage(mv, materializationContext.getMvColumnRefFactory());
+        for (ColumnRefOperator key : mvAgg.getGroupingKeys()) {
+
         }
+        return null;
     }
 
     // TODO: 考虑表达式改写是否需要copy一份表达式，不能够更改原来的节点，否则，会影响后续的改写
@@ -321,28 +316,6 @@ public class MaterializedViewRewriter {
         return projectionMap;
     }
 
-    /*
-    private ScalarOperator rewriteScalarOperator(ScalarOperator exprToRewrite,
-                                                   Map<ColumnRefOperator, ScalarOperator> viewExprMap,
-                                                   OptExpression targetExpr,
-                                                   Map<Integer, Integer> relationIdMap,
-                                                   Map<Integer, List<ColumnRefOperator>> srcRelationIdToColumns,
-                                                   ColumnRefFactory srcRefFactory,
-                                                   Map<Integer, List<ColumnRefOperator>> targetRelationIdToColumns,
-                                                   ColumnRefFactory targetRefFactory,
-                                                   EquivalenceClasses ec) {
-        List<ScalarOperator> scalarOperators = rewriteScalarOperators(ImmutableList.of(exprToRewrite), viewExprMap,
-                targetExpr, relationIdMap, srcRelationIdToColumns, srcRefFactory,
-                targetRelationIdToColumns, targetRefFactory, ec);
-        if (scalarOperators == null) {
-            return null;
-        }
-        Preconditions.checkState(scalarOperators.size() == 1);
-        return scalarOperators.get(0);
-    }
-
-     */
-
     // rewrite predicates by using target expression
     // temp:
     //     relationIdMap is view to query
@@ -386,6 +359,10 @@ public class MaterializedViewRewriter {
         Preconditions.checkState(mapping.size() == viewExprMap.size());
 
         // try to rewrite predicatesToRewrite by rewrittenExprMap
+
+        Set<ColumnRefOperator> originalColumnSet2 = srcRelationIdToColumns.values()
+                .stream().flatMap(List::stream).collect(Collectors.toSet());
+
 
         Set<ColumnRefOperator> originalColumnSet = targetRelationIdToColumns.values()
                 .stream().flatMap(List::stream).collect(Collectors.toSet());
@@ -525,7 +502,6 @@ public class MaterializedViewRewriter {
                 null, null, null, ec);
     }
 
-    // TODO: consider use Shuttle?
     private ScalarOperator rewriteColumnByRelationIdMapAndEc(ScalarOperator predicate, Map<Integer, Integer> relationIdMap,
                                                              Map<Integer, List<ColumnRefOperator>> srcRelationIdToColumns,
                                                              ColumnRefFactory srcRefFactory,
