@@ -17,8 +17,15 @@ namespace starrocks::serde {
 constexpr double EncodeRatioLimit = 0.95;
 constexpr uint32_t EncodeSamplingNum = 5;
 
+// EncodeContext adaptively adjusts encode_level according to the compression ratio. In detail,
+// for every _frequency chunks, if the compression ratio for the first EncodeSamplingNum chunks is less than
+// EncodeRatioLimit, then encode the rest chunks, otherwise not.
+
 class EncodeContext {
 public:
+    static std::shared_ptr<EncodeContext> get_encode_context_shared_ptr(const int col_num, const int encode_level) {
+        return encode_level == 0 ? nullptr : std::make_shared<EncodeContext>(col_num, encode_level);
+    }
     EncodeContext(const int col_num, const int encode_level);
     // update encode_level for each column
     void update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte);

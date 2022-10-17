@@ -166,8 +166,9 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     // serialized size. And for new version of BE, the "real" serialized size always matches, and we can save the cost
     // of calling `ProtobufChunkSerde::max_serialized_size()`.
     if (UNLIKELY(deserialized_size != chunk_pb.serialized_size())) {
-        size_t expected = ProtobufChunkSerde::max_serialized_size(*chunk); /// TODO
-        if (UNLIKELY(chunk_pb.data().size() != expected)) {
+        size_t expected = ProtobufChunkSerde::max_serialized_size(*chunk);
+        // if encode_level != 0, chunk_pb.data().size() is usually not equal to expected.
+        if (encode_level == 0 && UNLIKELY(chunk_pb.data().size() != expected)) {
             return Status::InternalError(strings::Substitute(
                     "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3",
                     chunk_pb.data().size(), expected, chunk_pb.serialized_size(), deserialized_size));
@@ -197,13 +198,13 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
 
-    if(_meta.encode_level.empty()) {
+    if (_meta.encode_level.empty()) {
         for (auto& column : columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
     } else {
         DCHECK(_meta.encode_level.size() == columns.size());
-        for(auto i =0; i< columns.size(); ++i) {
+        for (auto i = 0; i < columns.size(); ++i) {
             cur = ColumnArraySerde::deserialize(cur, columns[i].get(), _meta.encode_level[i]);
         }
     }

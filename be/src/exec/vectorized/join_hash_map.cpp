@@ -44,7 +44,7 @@ void SerializedJoinBuildFunc::construct_hash_table(RuntimeState* state, JoinHash
     // calc serialize size
     size_t serialize_size = 0;
     for (const auto& data_column : data_columns) {
-        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column, 0);
+        serialize_size += serde::ColumnArraySerde::max_serialized_size(*data_column);
     }
     uint8_t* ptr = table_items->build_pool->allocate(serialize_size);
 
