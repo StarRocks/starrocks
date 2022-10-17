@@ -52,7 +52,6 @@ import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.InfoSchemaDb;
 import com.starrocks.catalog.JDBCTable;
@@ -76,7 +75,6 @@ import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
-import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.cluster.Cluster;
@@ -100,6 +98,7 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageCacheInfo;
@@ -199,7 +198,6 @@ import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TTaskType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
-import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -207,7 +205,6 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
@@ -411,7 +408,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
                             "The database [" + dbName +
                             "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                            " please use \"DROP database FORCE\".");
+                            " please use \"DROP DATABASE <database> FORCE\".");
                 }
 
                 // save table names for recycling
@@ -1513,7 +1510,7 @@ public class LocalMetastore implements ConnectorMetadata {
                                 "There are still some transactions in the COMMITTED state waiting to be completed." +
                                         " The partition [" + partitionName +
                                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                                        " please use \"DROP partition FORCE\".");
+                                        " please use \"DROP PARTITION <partition> FORCE\".");
                     }
                 }
             }
@@ -2430,39 +2427,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void createHiveTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-        List<Column> columns = stmt.getColumns();
-        long tableId = getNextId();
-        HiveTable hiveTable = new HiveTable(tableId, tableName, columns, stmt.getProperties());
-        // partition key, commented for show partition key
-        String partitionCmt = "PARTITION BY (" + String.join(", ", hiveTable.getPartitionColumnNames()) + ")";
-        if (Strings.isNullOrEmpty(stmt.getComment())) {
-            hiveTable.setComment(partitionCmt);
-        } else {
-            hiveTable.setComment(stmt.getComment());
-        }
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getId()) == null) {
-                throw new DdlException("database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(hiveTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("successfully create table[{}-{}]", tableName, tableId);
+        Table hiveTable = TableFactory.createTable(stmt, Table.TableType.HIVE);
+        registerTable(db, hiveTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hiveTable.getId());
     }
 
     private void createIcebergTable(Database db, CreateTableStmt stmt) throws DdlException {
@@ -2498,51 +2465,9 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void createHudiTable(Database db, CreateTableStmt stmt) throws DdlException {
-        String tableName = stmt.getTableName();
-        List<Column> columns = stmt.getColumns();
-
-        Set<String> metaFields = new HashSet<>(Arrays.asList(
-                HoodieRecord.COMMIT_TIME_METADATA_FIELD,
-                HoodieRecord.COMMIT_SEQNO_METADATA_FIELD,
-                HoodieRecord.RECORD_KEY_METADATA_FIELD,
-                HoodieRecord.PARTITION_PATH_METADATA_FIELD,
-                HoodieRecord.FILENAME_METADATA_FIELD));
-        Set<String> includedMetaFields = columns.stream().map(Column::getName)
-                .filter(metaFields::contains).collect(Collectors.toSet());
-        metaFields.removeAll(includedMetaFields);
-        metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
-
-        long tableId = getNextId();
-        HudiTable hudiTable = new HudiTable(tableId, tableName, columns, stmt.getProperties());
-        // partition key, commented for show partition key
-        String partitionCmt = "PARTITION BY (" + String.join(", ", hudiTable.getPartitionColumnNames()) + ")";
-        if (Strings.isNullOrEmpty(stmt.getComment())) {
-            hudiTable.setComment(partitionCmt);
-        } else {
-            hudiTable.setComment(stmt.getComment());
-        }
-
-        // check database exists again, because database can be dropped when creating table
-        if (!tryLock(false)) {
-            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
-        }
-        try {
-            if (getDb(db.getFullName()) == null) {
-                throw new DdlException("Database has been dropped when creating table");
-            }
-            if (!db.createTableWithLock(hudiTable, false)) {
-                if (!stmt.isSetIfNotExists()) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, tableName, "table already exists");
-                } else {
-                    LOG.info("Create table[{}] which already exists", tableName);
-                    return;
-                }
-            }
-        } finally {
-            unlock();
-        }
-
-        LOG.info("Successfully create table[{}-{}]", tableName, tableId);
+        Table hudiTable = TableFactory.createTable(stmt, Table.TableType.HUDI);
+        registerTable(db, hudiTable, stmt);
+        LOG.info("successfully create table[{}-{}]", stmt.getTableName(), hudiTable.getId());
     }
 
     private void createJDBCTable(Database db, CreateTableStmt stmt) throws DdlException {
@@ -2573,6 +2498,27 @@ public class LocalMetastore implements ConnectorMetadata {
         }
 
         LOG.info("successfully create jdbc table[{}-{}]", tableName, tableId);
+    }
+
+    private void registerTable(Database db, Table table, CreateTableStmt stmt) throws DdlException {
+        // check database exists again, because database can be dropped when creating table
+        if (!tryLock(false)) {
+            throw new DdlException("Failed to acquire globalStateMgr lock. Try again");
+        }
+        try {
+            if (getDb(db.getFullName()) == null) {
+                throw new DdlException("Database has been dropped when creating table");
+            }
+            if (!db.createTableWithLock(table, false)) {
+                if (!stmt.isSetIfNotExists()) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_CANT_CREATE_TABLE, table.getName(), "table already exists");
+                } else {
+                    LOG.info("Create table[{}] which already exists", table.getName());
+                }
+            }
+        } finally {
+            unlock();
+        }
     }
 
     public void replayCreateTable(String dbName, Table table) {
@@ -3022,13 +2968,13 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     @Override
-    public List<String> listTableNames(String dbName) throws DdlException {
+    public List<String> listTableNames(String dbName) {
         Database database = getDb(dbName);
         if (database != null) {
             return database.getTables().stream()
                     .map(Table::getName).collect(Collectors.toList());
         } else {
-            throw new DdlException("Database " + dbName + " doesn't exist");
+            throw new StarRocksConnectorException("Database " + dbName + " doesn't exist");
         }
     }
 
