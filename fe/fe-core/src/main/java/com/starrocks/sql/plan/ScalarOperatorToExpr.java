@@ -494,7 +494,9 @@ public class ScalarOperatorToExpr {
             context.colRefToExpr.put(key, new PlaceHolderExpr(dictColumn.getId(), dictExpr.isNullable(), Type.VARCHAR));
             final Expr callExpr = buildExpr.build(call, context);
             // 3. recover the previous column
-            context.colRefToExpr.put(key, old);
+            if (old != null) {
+                context.colRefToExpr.put(key, old);
+            }
             Expr result = new DictMappingExpr(dictExpr, callExpr);
             result.setType(operator.getType());
             return result;
