@@ -516,6 +516,9 @@ void StorageEngine::stop() {
     if (_fd_cache_clean_thread.joinable()) {
         _fd_cache_clean_thread.join();
     }
+    if (_adjust_cache_thread.joinable()) {
+        _adjust_cache_thread.join();
+    }
     if (config::path_gc_check) {
         for (auto& thread : _path_scan_threads) {
             if (thread.joinable()) {

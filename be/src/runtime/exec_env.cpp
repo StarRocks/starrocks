@@ -389,7 +389,10 @@ int64_t ExecEnv::get_storage_page_cache_size() {
     if (_mem_tracker->has_limit()) {
         mem_limit = _mem_tracker->limit();
     }
-    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+}
+
+int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
@@ -406,6 +409,7 @@ int64_t ExecEnv::get_storage_page_cache_size() {
 
 Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
+    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 
     // TODO(zc): The current memory usage configuration is a bit confusing,

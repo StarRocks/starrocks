@@ -402,14 +402,28 @@ ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capac
     }
 }
 
-void ShardedLRUCache::set_capacity(size_t capacity) {
-    // Maybe multi client try to set capactity, we protect it using mutex.
-    std::lock_guard l(_mutex);
+void ShardedLRUCache::_set_capacity(size_t capacity) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
     }
     _capacity = capacity;
+}
+
+void ShardedLRUCache::set_capacity(size_t capacity) {
+    // Maybe multi client try to set capactity, we protect it using mutex.
+    std::lock_guard l(_mutex);
+    _set_capacity(capacity);
+}
+
+bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
+    std::lock_guard l(_mutex);
+    int64_t new_capacity = _capacity + delta;
+    if (new_capacity < static_cast<int64_t>(min_capacity)) {
+        return false;
+    }
+    _set_capacity(new_capacity);
+    return true;
 }
 
 Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t charge,
