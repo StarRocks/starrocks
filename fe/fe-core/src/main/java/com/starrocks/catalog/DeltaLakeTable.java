@@ -107,7 +107,7 @@ public class DeltaLakeTable extends Table {
             long partitionId = info.getId();
 
             THdfsPartition tPartition = new THdfsPartition();
-            tPartition.setFile_format(DeltaUtils.getHdfsFileFormat(metadata.getFormat().getProvider()).toThrift());
+            tPartition.setFile_format(DeltaUtils.getRemoteFileFormat(metadata.getFormat().getProvider()).toThrift());
 
             List<LiteralExpr> keys = key.getKeys();
             tPartition.setPartition_key_exprs(keys.stream().map(Expr::treeToThrift).collect(Collectors.toList()));

@@ -77,14 +77,14 @@ public class DeltaLakeScanNode extends ScanNode {
 
         // use current snapshot now
         Snapshot snapshot = deltaLog.snapshot();
-        List<String> partitionNames = snapshot.getMetadata().getPartitionColumns();
+        List<String> partitionColumnNames = snapshot.getMetadata().getPartitionColumns();
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
         for (CloseableIterator<AddFile> it = snapshot.scan().getFiles(); it.hasNext(); ) {
             AddFile file = it.next();
             Map<String, String> partitionValueMap = file.getPartitionValues();
-            List<String> partitionValues = partitionNames.stream().map(partitionValueMap::get).collect(
+            List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
                     Collectors.toList());
 
             Metadata metadata = snapshot.getMetadata();
@@ -124,7 +124,7 @@ public class DeltaLakeScanNode extends ScanNode {
         hdfsScanRange.setLength(file.getSize());
         hdfsScanRange.setPartition_id(partitionId);
         hdfsScanRange.setFile_length(file.getSize());
-        hdfsScanRange.setFile_format(DeltaUtils.getHdfsFileFormat(metadata.getFormat().getProvider()).toThrift());
+        hdfsScanRange.setFile_format(DeltaUtils.getRemoteFileFormat(metadata.getFormat().getProvider()).toThrift());
         TScanRange scanRange = new TScanRange();
         scanRange.setHdfs_scan_range(hdfsScanRange);
         scanRangeLocations.setScan_range(scanRange);
