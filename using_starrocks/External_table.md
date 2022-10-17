@@ -445,7 +445,7 @@ StarRocks 支持对目标表进行谓词下推，把过滤条件推给目标表�
 | DATE                | DATE      |
 | CHAR                | CHAR      |
 | VARCHAR             | VARCHAR   |
-| TEXT                | STRING    |
+| TEXT                | VARCHAR   |
 
 #### **目标数据库为 SQL Server**
 
