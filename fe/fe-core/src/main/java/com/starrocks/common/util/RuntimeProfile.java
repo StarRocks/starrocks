@@ -685,27 +685,10 @@ public class RuntimeProfile {
             }
             counter0.setValue(mergedValue);
 
-            boolean updateMinMax = false;
-            if (alreadyMerged) {
-                updateMinMax = true;
-            } else {
-                // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-                double diff = maxValue - minValue;
-                if (Counter.isAverageType(counter0.getType())) {
-                    if (diff > 5000000L && diff > mergedValue / 5.0) {
-                        updateMinMax = true;
-                    }
-                } else {
-                    // All sum type counters will have extra info (min value and max value)
-                    updateMinMax = true;
-                }
-            }
-            if (updateMinMax) {
-                Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, name);
-                Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, name);
-                minCounter.setValue(minValue);
-                maxCounter.setValue(maxValue);
-            }
+            Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, name);
+            Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, name);
+            minCounter.setValue(minValue);
+            maxCounter.setValue(maxValue);
         }
 
         // merge children
@@ -733,15 +716,27 @@ public class RuntimeProfile {
 
     public static void removeRedundantMinMaxMetrics(RuntimeProfile profile) {
         for (String name : profile.counterMap.keySet()) {
+            Counter counter = profile.getCounter(name);
             Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
             Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
-            if (minCounter == null || maxCounter == null) {
+            if (counter == null || minCounter == null || maxCounter == null) {
                 continue;
             }
-            // Remove MIN/MAX metrics if it's value is identical
-            if (Objects.equals(minCounter.getValue(), maxCounter.getValue())) {
-                profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+
+            if (Counter.isAverageType(minCounter.getType())) {
+                // For time metrics, remove MIN/MAX metrics if it's values are close
+                long diff = maxCounter.getValue() - minCounter.getValue();
+                long mergedValue = counter.getValue();
+                if (diff <= mergedValue / 5.0) {
+                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
+                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+                }
+            } else {
+                // For non-time metrics, remove MIN/MAX metrics if it's value is identical
+                if (Objects.equals(minCounter.getValue(), maxCounter.getValue())) {
+                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
+                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+                }
             }
         }
 
