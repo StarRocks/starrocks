@@ -38,12 +38,8 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
 
             if (doc.type() != simdjson::ondemand::json_type::object) {
                 auto err_msg = fmt::format("the value should be object type in json document stream, value: {}",
-                                           JsonFunctions::to_json_string(doc, MAX_RAW_JSON_LEN));
+                                           _doc_stream_itr.source());
                 return Status::DataQualityError(err_msg);
-            }
-	    if (doc.get_raw_json_string().error() != simdjson::SUCCESS) {
-                auto err_msg = strings::Substitute("Failed to iterate document stream as object.");
-		return Status::DataQualityError(err_msg);
             }
 
             _curr = doc.get_object();
