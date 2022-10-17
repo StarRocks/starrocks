@@ -1359,6 +1359,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 TTabletInternalParallelMode.valueOf(tabletInternalParallelMode.toUpperCase()));
 
         tResult.setEnable_query_debug_trace(enableQueryDebugTrace);
+        tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
 
         return tResult;
     }
