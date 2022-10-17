@@ -27,8 +27,13 @@
 #include "runtime/mem_tracker.h"
 #include "util/defer_op.h"
 #include "util/metrics.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
+
+METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
+METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
+METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 
 StoragePageCache* StoragePageCache::_s_instance = nullptr;
 
@@ -45,8 +50,27 @@ void StoragePageCache::release_global_cache() {
     }
 }
 
+static void init_metrics() {
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_lookup_count", []() {
+        page_cache_lookup_count.set_value(StoragePageCache::instance()->get_lookup_count());
+    });
+
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_hit_count", []() {
+        page_cache_hit_count.set_value(StoragePageCache::instance()->get_hit_count());
+    });
+
+    StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity", []() {
+        page_cache_capacity.set_value(StoragePageCache::instance()->get_capacity());
+    });
+}
+
 StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
-        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {}
+        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {
+    init_metrics();
+}
 
 StoragePageCache::~StoragePageCache() {}
 
@@ -61,6 +85,14 @@ void StoragePageCache::set_capacity(size_t capacity) {
 
 size_t StoragePageCache::get_capacity() {
     return _cache->get_capacity();
+}
+
+uint64_t StoragePageCache::get_lookup_count() {
+    return _cache->get_lookup_count();
+}
+
+uint64_t StoragePageCache::get_hit_count() {
+    return _cache->get_hit_count();
 }
 
 bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
