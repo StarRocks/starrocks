@@ -97,6 +97,10 @@ public:
 
     size_t get_capacity();
 
+    uint64_t get_lookup_count();
+
+    uint64_t get_hit_count();
+
 private:
     static StoragePageCache* _s_instance;
 
