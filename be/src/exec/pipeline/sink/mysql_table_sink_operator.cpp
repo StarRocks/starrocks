@@ -2,8 +2,8 @@
 
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 
-#include "exec/pipeline/sink/sink_io_buffer.h"
 #include "column/chunk.h"
+#include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr.h"
@@ -17,10 +17,12 @@ namespace starrocks::pipeline {
 
 class MysqlTableSinkIOBuffer final : public SinkIOBuffer {
 public:
-    MysqlTableSinkIOBuffer(const TMysqlTableSink& t_mysql_table_sink, std::vector<ExprContext*>& output_expr_ctxs, int32_t num_sinkers)
-        : SinkIOBuffer(num_sinkers),
-        _t_mysql_table_sink(t_mysql_table_sink),
-        _output_expr_ctxs(output_expr_ctxs) {}
+    MysqlTableSinkIOBuffer(const TMysqlTableSink& t_mysql_table_sink, std::vector<ExprContext*>& output_expr_ctxs,
+                           int32_t num_sinkers, FragmentContext* fragment_ctx)
+            : SinkIOBuffer(num_sinkers),
+              _t_mysql_table_sink(t_mysql_table_sink),
+              _output_expr_ctxs(output_expr_ctxs),
+              _fragment_ctx(fragment_ctx) {}
 
     ~MysqlTableSinkIOBuffer() override = default;
 
@@ -36,6 +38,7 @@ private:
     TMysqlTableSink _t_mysql_table_sink;
     const std::vector<ExprContext*> _output_expr_ctxs;
     std::unique_ptr<MysqlTableWriter> _writer;
+    FragmentContext* _fragment_ctx;
 };
 
 Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* parent_profile) {
@@ -48,8 +51,8 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
     bthread::ExecutionQueueOptions options;
     options.executor = SinkIOExecutor::instance();
     _exec_queue_id = std::make_unique<bthread::ExecutionQueueId<const vectorized::ChunkPtr>>();
-    int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(_exec_queue_id.get(), &options,
-        &MysqlTableSinkIOBuffer::execute_io_task, this);
+    int ret = bthread::execution_queue_start<const vectorized::ChunkPtr>(
+            _exec_queue_id.get(), &options, &MysqlTableSinkIOBuffer::execute_io_task, this);
     if (ret != 0) {
         _exec_queue_id.reset();
         return Status::InternalError("start execution queue error");
@@ -57,7 +60,6 @@ Status MysqlTableSinkIOBuffer::prepare(RuntimeState* state, RuntimeProfile* pare
 
     return Status::OK();
 }
-
 
 void MysqlTableSinkIOBuffer::close(RuntimeState* state) {
     _writer.reset();
@@ -76,9 +78,9 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectoriz
     }
 
     if (_writer == nullptr) {
-        if (Status status = _open_mysql_table_writer();!status.ok()) {
-            set_io_status(status);
+        if (Status status = _open_mysql_table_writer(); !status.ok()) {
             close(_state);
+            _fragment_ctx->cancel(status);
             return;
         }
     }
@@ -90,8 +92,8 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectoriz
         return;
     }
     if (Status status = _writer->append(chunk.get()); !status.ok()) {
-        set_io_status(status);
         close(_state);
+        _fragment_ctx->cancel(status);
         return;
     }
 }
@@ -147,11 +149,14 @@ Status MysqlTableSinkOperator::push_chunk(RuntimeState* state, const vectorized:
     return _mysql_table_sink_buffer->append_chunk(state, chunk);
 }
 
-MysqlTableSinkOperatorFactory::MysqlTableSinkOperatorFactory(int32_t id, const TMysqlTableSink& t_mysql_table_sink, std::vector<TExpr> t_output_expr, int32_t num_sinkers)
+MysqlTableSinkOperatorFactory::MysqlTableSinkOperatorFactory(int32_t id, const TMysqlTableSink& t_mysql_table_sink,
+                                                             std::vector<TExpr> t_output_expr, int32_t num_sinkers,
+                                                             FragmentContext* fragment_ctx)
         : OperatorFactory(id, "mysql_table_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
           _t_output_expr(std::move(t_output_expr)),
           _t_mysql_table_sink(t_mysql_table_sink),
-          _num_sinkers(num_sinkers) {}
+          _num_sinkers(num_sinkers),
+          _fragment_ctx(fragment_ctx) {}
 
 Status MysqlTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
@@ -159,7 +164,8 @@ Status MysqlTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_output_expr_ctxs, state));
     RETURN_IF_ERROR(Expr::open(_output_expr_ctxs, state));
 
-    _mysql_table_sink_buffer = std::make_shared<MysqlTableSinkIOBuffer>(_t_mysql_table_sink, _output_expr_ctxs, _num_sinkers);
+    _mysql_table_sink_buffer = std::make_shared<MysqlTableSinkIOBuffer>(_t_mysql_table_sink, _output_expr_ctxs,
+                                                                        _num_sinkers, _fragment_ctx);
 
     return Status::OK();
 }
@@ -169,4 +175,4 @@ void MysqlTableSinkOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 }
 
-}
+} // namespace starrocks::pipeline

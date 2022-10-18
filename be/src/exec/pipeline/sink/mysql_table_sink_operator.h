@@ -16,7 +16,7 @@ class MysqlTableSinkIOBuffer;
 class MysqlTableSinkOperator final : public Operator {
 public:
     MysqlTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                     std::shared_ptr<MysqlTableSinkIOBuffer> mysql_table_sink_buffer)
+                           std::shared_ptr<MysqlTableSinkIOBuffer> mysql_table_sink_buffer)
             : Operator(factory, id, "mysql_table_sink", plan_node_id, driver_sequence),
               _mysql_table_sink_buffer(mysql_table_sink_buffer) {}
 
@@ -47,12 +47,14 @@ private:
 
 class MysqlTableSinkOperatorFactory final : public OperatorFactory {
 public:
-    MysqlTableSinkOperatorFactory(int32_t id, const TMysqlTableSink& t_mysql_table_sink, std::vector<TExpr> t_output_expr, int32_t num_sinkers);
+    MysqlTableSinkOperatorFactory(int32_t id, const TMysqlTableSink& t_mysql_table_sink,
+                                  std::vector<TExpr> t_output_expr, int32_t num_sinkers, FragmentContext* fragment_ctx);
 
     ~MysqlTableSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<MysqlTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _mysql_table_sink_buffer);
+        return std::make_shared<MysqlTableSinkOperator>(this, _id, _plan_node_id, driver_sequence,
+                                                        _mysql_table_sink_buffer);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -67,6 +69,7 @@ private:
 
     std::shared_ptr<MysqlTableSinkIOBuffer> _mysql_table_sink_buffer;
     RuntimeProfile* _profile = nullptr;
+    FragmentContext* _fragment_ctx = nullptr;
 };
-}
-}
+} // namespace pipeline
+} // namespace starrocks

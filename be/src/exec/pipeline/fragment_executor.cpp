@@ -737,7 +737,9 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         MysqlTableSink* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto output_expr = mysql_table_sink->get_output_expr();
-        OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(context->next_operator_id(), request.output_sink().mysql_table_sink, mysql_table_sink->get_output_expr(), dop);
+        OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().mysql_table_sink,
+                mysql_table_sink->get_output_expr(), dop, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 
