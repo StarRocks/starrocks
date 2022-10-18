@@ -1191,7 +1191,7 @@ public class ReportHandler extends Daemon {
                         + olapTable.getSchemaHashByIndexId(indexId) + "]");
             }
 
-            // colocate table will delete Replica in meta when balance
+            // colocate table will delete Replica in meta when balancing,
             // but we need to rely on MetaNotFoundException to decide whether delete the tablet in backend.
             // delete tablet from backend if colocate tablet is healthy.
             ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentColocateIndex();
@@ -1275,7 +1275,7 @@ public class ReportHandler extends Daemon {
             try {
                 task = reportQueue.take();
                 synchronized (pendingTaskMap) {
-                    // using lastest task
+                    // using the lastest task
                     task = pendingTaskMap.get(task.type).get(task.beId);
                     if (task == null) {
                         throw new Exception("pendingTaskMap not exists " + task.beId);
