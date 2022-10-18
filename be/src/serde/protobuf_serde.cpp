@@ -53,7 +53,6 @@ void EncodeContext::_adjust(const int col_id) {
     }
     _encoded_bytes[col_id] = 0;
     _raw_bytes[col_id] = 0;
-    _frequency = _frequency > 1000000000 ? _frequency : _frequency * 2;
 }
 
 void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
@@ -67,6 +66,7 @@ void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
         for (auto col_id = 0; col_id < _column_encode_level.size(); ++col_id) {
             _adjust(col_id);
         }
+        _frequency = _frequency > 1000000000 ? _frequency : _frequency * 2;
     }
 }
 
