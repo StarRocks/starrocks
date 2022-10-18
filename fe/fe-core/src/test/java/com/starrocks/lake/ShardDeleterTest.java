@@ -180,7 +180,7 @@ public class ShardDeleterTest {
                 minTimes = 1;
                 result = CompletableFuture.completedFuture(response);
 
-                starOSAgent.deleteShards(shardIds);
+                starOSAgent.deleteShards((Set<Long>) any);
                 minTimes = 1;
                 result = null;
 

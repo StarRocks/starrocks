@@ -50,8 +50,6 @@ public class ShardDeleter extends LeaderDaemon {
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getTablesIncludeRecycleBin(db)) {
                     if (table.isLakeTable()) {
-                        // for debug
-                        LOG.info("table name is {}", table.getName());
                         OlapTable olapTbl = (OlapTable) table;
                         for (Partition partition : GlobalStateMgr.getCurrentState().getAllPartitionsIncludeRecycleBin(olapTbl)) {
                             Set<Long> shardId = new HashSet<>();
@@ -113,8 +111,6 @@ public class ShardDeleter extends LeaderDaemon {
                 LOG.warn("failed to delete shard from starMgr");
                 continue;
             }
-            // for debug
-            LOG.info("succ delete shards {}", shards);
 
             deletedShards.addAll(shards);
         }
