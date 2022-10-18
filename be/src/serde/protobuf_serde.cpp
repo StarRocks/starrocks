@@ -138,26 +138,22 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
             buff = ColumnArraySerde::serialize(*column, buff);
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
         }
-        LOG(WARNING) << "encode context is null";
     } else {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
             buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
-            if (context->get_session_encode_level() < -1) {
-                LOG(WARNING) << "Column " << i << " 's encode level = " << context->get_encode_level(i);
-            }
         }
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
     serialized_data->resize(chunk_pb.serialized_size());
     chunk_pb.set_uncompressed_size(serialized_data->size());
-    if (context && context->get_session_encode_level() < -1) {
-        LOG(WARNING) << "pb serialize data, memory bytes = " << chunk.bytes_usage()
-                     << " serialized size = " << chunk_pb.serialized_size()
-                     << " uncompressed size = " << chunk_pb.uncompressed_size()
-                     << " serialize ratio = " << chunk_pb.serialized_size() * 1.0 / chunk.bytes_usage();
+    if (context) {
+        VLOG_ROW << "pb serialize data, memory bytes = " << chunk.bytes_usage()
+                 << " serialized size = " << chunk_pb.serialized_size()
+                 << " uncompressed size = " << chunk_pb.uncompressed_size()
+                 << " serialize ratio = " << chunk_pb.serialized_size() * 1.0 / chunk.bytes_usage();
     }
     return std::move(chunk_pb);
 }
@@ -224,12 +220,10 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         for (auto& column : columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
-        LOG(WARNING) << "decode level is empty";
     } else {
         DCHECK(_encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
             cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]);
-            LOG(WARNING) << "Column " << i << " 's decode level = " << _encode_level[i];
         }
     }
 

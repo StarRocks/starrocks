@@ -73,10 +73,9 @@ uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encod
                                          buff + sizeof(uint64_t));
     }
     buff = write_little_endian_64(encode_size, buff);
-    if (encode_level < -1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size,
-                                    encode_size, encode_size * 1.0 / size);
-    }
+
+    VLOG_ROW << fmt::format("raw size = {}, encoded size = {}, integers compression ratio = {}\n", size, encode_size,
+                            encode_size * 1.0 / size);
     return buff + encode_size;
 }
 
@@ -109,10 +108,10 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
         throw std::runtime_error("lz4 compress error.");
     }
     buff = write_little_endian_64(encode_size, buff);
-    if (encode_level < -1) {
-        LOG(WARNING) << fmt::format("raw size = {}, encoded size = {}, lz4 compression ratio = {}\n", size, encode_size,
-                                    encode_size * 1.0 / size);
-    }
+
+    VLOG_ROW << fmt::format("raw size = {}, encoded size = {}, lz4 compression ratio = {}\n", size, encode_size,
+                            encode_size * 1.0 / size);
+
     return buff + encode_size;
 }
 
