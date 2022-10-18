@@ -151,7 +151,8 @@ public:
     }
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
+    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                           MemTracker* mem_tracker);
 
     void close(RuntimeState* state) override;
 

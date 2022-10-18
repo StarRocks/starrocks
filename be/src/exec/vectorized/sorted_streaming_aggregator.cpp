@@ -21,11 +21,12 @@ using NullMasks = vectorized::NullColumn::Container;
 
 // compare the value by column
 //
-// cmp_vector[0] = first_column.data[0].compare(data[0])
-// cmp_vector[i] = data[i - 1].compare(data[i])
-class ColumnWiseComparator : public ColumnVisitorAdapter<ColumnWiseComparator> {
+// cmp_vector[i] == 0 means data[i - 1] equels to data[i]
+// cmp_vector[0] = first_column.data[0].compare(data[0]) != 0
+// cmp_vector[i] = data[i - 1].compare(data[i]) != 0
+class ColumnSelfComparator : public ColumnVisitorAdapter<ColumnSelfComparator> {
 public:
-    ColumnWiseComparator(const ColumnPtr& first_column, std::vector<uint8_t>& cmp_vector, const NullMasks& null_masks)
+    ColumnSelfComparator(const ColumnPtr& first_column, std::vector<uint8_t>& cmp_vector, const NullMasks& null_masks)
             : ColumnVisitorAdapter(this),
               _first_column(first_column),
               _cmp_vector(cmp_vector),
@@ -33,15 +34,15 @@ public:
 
     Status do_visit(const vectorized::NullableColumn& column) {
         ColumnPtr ptr = down_cast<vectorized::NullableColumn*>(_first_column.get())->data_column();
-        ColumnWiseComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
+        ColumnSelfComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
         RETURN_IF_ERROR(column.data_column()->accept(&comparator));
 
         auto data_column = column.data_column();
         // NOTE
         if (!_first_column->empty()) {
-            _cmp_vector[0] = _first_column->compare_at(0, 0, *data_column, 1);
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, *data_column, 1) != 0;
         } else {
-            _cmp_vector[0] = 1;
+            _cmp_vector[0] |= 1;
         }
         return Status::OK();
     }
@@ -58,22 +59,22 @@ public:
     Status do_visit(const vectorized::BinaryColumn& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
-            _cmp_vector[0] = _first_column->compare_at(0, 0, column, 1);
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
         } else {
-            _cmp_vector[0] = 1;
+            _cmp_vector[0] |= 1;
         }
         if (!_null_masks.empty()) {
             DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
-                    _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
+                    _cmp_vector[i] |= column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
                 } else {
-                    _cmp_vector[i] = !(_null_masks[i - 1] == _null_masks[i]);
+                    _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
                 }
             }
         } else {
             for (size_t i = 1; i < num_rows; ++i) {
-                _cmp_vector[i] = column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
+                _cmp_vector[i] |= column.get_slice(i - 1).compare(column.get_slice(i)) != 0;
             }
         }
         return Status::OK();
@@ -83,23 +84,23 @@ public:
     Status do_visit(const vectorized::FixedLengthColumnBase<T>& column) {
         size_t num_rows = column.size();
         if (!_first_column->empty()) {
-            _cmp_vector[0] = _first_column->compare_at(0, 0, column, 1);
+            _cmp_vector[0] |= _first_column->compare_at(0, 0, column, 1) != 0;
         } else {
-            _cmp_vector[0] = 1;
+            _cmp_vector[0] |= 1;
         }
         const auto& data_container = column.get_data();
         if (!_null_masks.empty()) {
             DCHECK_EQ(_null_masks.size(), num_rows);
             for (size_t i = 1; i < num_rows; ++i) {
                 if (_null_masks[i - 1] == 0 && _null_masks[i] == 0) {
-                    _cmp_vector[i] = !(data_container[i - 1] == data_container[i]);
+                    _cmp_vector[i] |= data_container[i - 1] != data_container[i];
                 } else {
-                    _cmp_vector[i] = !(_null_masks[i - 1] == _null_masks[i]);
+                    _cmp_vector[i] |= _null_masks[i - 1] != _null_masks[i];
                 }
             }
         } else {
             for (size_t i = 1; i < num_rows; ++i) {
-                _cmp_vector[i] = !(data_container[i - 1] == data_container[i]);
+                _cmp_vector[i] |= data_container[i - 1] != data_container[i];
             }
         }
         return Status::OK();
@@ -238,6 +239,14 @@ SortedStreamingAggregator::~SortedStreamingAggregator() {
     }
 }
 
+Status SortedStreamingAggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                                          MemTracker* mem_tracker) {
+    RETURN_IF_ERROR(Aggregator::prepare(state, pool, runtime_profile, mem_tracker));
+    _streaming_state_allocator =
+            std::make_shared<StateAllocator>(_mem_pool.get(), _state->chunk_size(), _agg_states_total_size);
+    return Status::OK();
+}
+
 Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size) {
     if (chunk_size == 0) {
         return Status::OK();
@@ -253,30 +262,70 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
         }
     }
 
-    if (_streaming_state_allocator == nullptr) {
-        _streaming_state_allocator =
-                std::make_shared<StateAllocator>(_mem_pool.get(), _state->chunk_size(), _agg_states_total_size);
+    RETURN_IF_ERROR(_compure_group_by(chunk_size));
+
+    RETURN_IF_ERROR(_update_states(chunk_size));
+
+    // selector[i] == 0 means selected
+    std::vector<uint8_t> selector(chunk_size);
+    size_t selected_size = 0;
+    {
+        SCOPED_TIMER(_agg_compute_timer);
+        for (size_t i = 1; i < _cmp_vector.size(); ++i) {
+            selector[i - 1] = _cmp_vector[i] == 0;
+            selected_size += !selector[i - 1];
+        }
+        // we will never select the last rows
+        selector[chunk_size - 1] = 1;
     }
 
+    // finalize state
+    // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
+    // get result from aggregate values. such as count(*), sum(col)
+    auto agg_result_columns = _create_agg_result_columns();
+    _get_agg_result_columns(chunk_size, selector, agg_result_columns);
+
+    DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
+
+    _close_group_by(chunk_size, selector);
+
+    // combine group by keys
+    auto res_group_by_columns = _create_group_by_columns();
+    RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
+    auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns);
+
+    // TODO merge small chunk
+    this->offer_chunk_to_buffer(result_chunk);
+
+    // prepare for next
+    for (size_t i = 0; i < _last_columns.size(); ++i) {
+        // last column should never be the same column with new input column
+        DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
+        _last_columns[i]->reset_column();
+        _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
+    }
+    _last_state = _tmp_agg_states[chunk_size - 1];
+    DCHECK(!_group_by_columns[0]->empty());
+    DCHECK(!_last_columns[0]->empty());
+    return Status::OK();
+}
+
+Status SortedStreamingAggregator::_compure_group_by(size_t chunk_size) {
     // compare stage
     // _cmp_vector[i] = group[i - 1].equals(group[i])
     // _cmp_vector[i] == 0 means group[i - 1].equals(group[i])
     _cmp_vector.assign(chunk_size, 0);
-    {
-        const std::vector<uint8_t> dummy;
-        SCOPED_TIMER(_agg_compute_timer);
-        std::vector<uint8_t> cmp_vector(chunk_size);
-        for (size_t i = 0; i < _group_by_columns.size(); ++i) {
-            cmp_vector.assign(chunk_size, 0);
-            ColumnWiseComparator cmp(_last_columns[i], cmp_vector, dummy);
-            RETURN_IF_ERROR(_group_by_columns[i]->accept(&cmp));
-            for (size_t i = 0; i < chunk_size; ++i) {
-                _cmp_vector[i] |= cmp_vector[i];
-            }
-            // TODO short-circuit
-        }
+    const std::vector<uint8_t> dummy;
+    SCOPED_TIMER(_agg_compute_timer);
+    for (size_t i = 0; i < _group_by_columns.size(); ++i) {
+        ColumnSelfComparator cmp(_last_columns[i], _cmp_vector, dummy);
+        RETURN_IF_ERROR(_group_by_columns[i]->accept(&cmp));
+        // TODO short-circuit
     }
+    return Status::OK();
+}
 
+Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
     // TODO: split the states
     // allocate state stage
     {
@@ -324,80 +373,49 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
             }
         }
     }
+    return Status::OK();
+}
 
-    // selector[i] == 0 means selected
-    std::vector<uint8_t> selector(chunk_size);
-    size_t selected_size = 0;
-    {
-        SCOPED_TIMER(_agg_compute_timer);
-        for (size_t i = 1; i < _cmp_vector.size(); ++i) {
-            selector[i - 1] = !(_cmp_vector[i] != 0);
-            selected_size += !selector[i - 1];
-        }
-        // we will never select the last rows
-        selector[chunk_size - 1] = 1;
+void SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
+                                                        vectorized::Columns& agg_result_columns) {
+    SCOPED_TIMER(_get_results_timer);
+    if (_cmp_vector[0] != 0 && _last_state) {
+        _finalize_to_chunk(_last_state, agg_result_columns);
     }
 
-    // finalize state
-    // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
-    auto agg_result_columns = _create_agg_result_columns();
-    {
-        SCOPED_TIMER(_get_results_timer);
-        if (_cmp_vector[0] != 0 && _last_state) {
-            _finalize_to_chunk(_last_state, agg_result_columns);
-        }
-
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            _agg_functions[i]->batch_finalize_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
-                                                             _agg_states_offsets[i], agg_result_columns[i].get(),
-                                                             selector);
-        }
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        _agg_functions[i]->batch_finalize_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
+                                                         _agg_states_offsets[i], agg_result_columns[i].get(), selector);
     }
+}
 
-    DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
+void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector) {
     // close stage
-    {
-        SCOPED_TIMER(_state_destroy_timer);
-        if (_cmp_vector[0] != 0 && _last_state) {
-            _destroy_state(_last_state);
-        }
+    SCOPED_TIMER(_state_destroy_timer);
+    if (_cmp_vector[0] != 0 && _last_state) {
+        _destroy_state(_last_state);
+    }
 
-        for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
-            _agg_functions[i]->batch_destroy_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
-                                                            _agg_states_offsets[i], selector);
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        _agg_functions[i]->batch_destroy_with_selection(_agg_fn_ctxs[i], chunk_size, _tmp_agg_states,
+                                                        _agg_states_offsets[i], selector);
+    }
+}
+
+Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, size_t selected_size,
+                                                          const std::vector<uint8_t>& selector,
+                                                          vectorized::Columns& agg_group_by_columns) {
+    SCOPED_TIMER(_agg_append_timer);
+    if (_cmp_vector[0] != 0 && _last_state) {
+        for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
+            agg_group_by_columns[i]->append(*_last_columns[i], 0, 1);
         }
     }
 
-    // combine group by keys
-    auto res_group_by_columns = _create_group_by_columns();
-    {
-        SCOPED_TIMER(_agg_append_timer);
-        if (_cmp_vector[0] != 0 && _last_state) {
-            for (size_t i = 0; i < res_group_by_columns.size(); ++i) {
-                res_group_by_columns[i]->append(*_last_columns[i], 0, 1);
-            }
-        }
-
-        for (size_t i = 0; i < res_group_by_columns.size(); ++i) {
-            AppendWithMask appender(_group_by_columns[i].get(), selector, selected_size);
-            RETURN_IF_ERROR(res_group_by_columns[i]->accept_mutable(&appender));
-        }
+    for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
+        AppendWithMask appender(_group_by_columns[i].get(), selector, selected_size);
+        RETURN_IF_ERROR(agg_group_by_columns[i]->accept_mutable(&appender));
     }
-    auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns);
-
-    // TODO merge small chunk
-    this->offer_chunk_to_buffer(result_chunk);
-
-    // prepare for next
-    for (size_t i = 0; i < _last_columns.size(); ++i) {
-        // last column should never be the same column with new input column
-        DCHECK_NE(_last_columns[i].get(), _group_by_columns[i].get());
-        _last_columns[i]->reset_column();
-        _last_columns[i]->append(*_group_by_columns[i], chunk_size - 1, 1);
-    }
-    _last_state = _tmp_agg_states[chunk_size - 1];
-    DCHECK(!_group_by_columns[0]->empty());
-    DCHECK(!_last_columns[0]->empty());
     return Status::OK();
 }
 

@@ -8,6 +8,7 @@
 #include "exec/vectorized/aggregator.h"
 
 namespace starrocks::pipeline {
+// TODO: implements cache-relation method
 class SortedAggregateStreamingSinkOperator : public Operator {
 public:
     SortedAggregateStreamingSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,

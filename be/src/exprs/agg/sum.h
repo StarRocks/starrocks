@@ -141,13 +141,13 @@ public:
                                        const std::vector<uint8_t>& selection) const override {
         DCHECK(to->is_numeric());
         ResultType values[chunk_size];
-        size_t cnt = 0;
+        size_t selected_lengh = 0;
         for (size_t i = 0; i < chunk_size; i++) {
-            values[cnt] = this->data(agg_states[i] + state_offset).sum;
-            cnt += !selection[i];
+            values[selected_lengh] = this->data(agg_states[i] + state_offset).sum;
+            selected_lengh += !selection[i];
         }
-        if (cnt) {
-            CHECK(to->append_numbers(values, cnt * sizeof(ResultType)));
+        if (selected_lengh) {
+            CHECK(to->append_numbers(values, selected_lengh * sizeof(ResultType)));
         }
     }
 

@@ -48,6 +48,8 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
 
         PhysicalHashAggregateOperator agg = (PhysicalHashAggregateOperator) optExpression.getOp();
 
+        // Now we only support one-stage AGG
+        // TODO: support multi-stage AGG
         if (!agg.getType().isGlobal() || agg.getGroupBys().isEmpty()) {
             return null;
         }
@@ -67,17 +69,17 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
             }
         }
 
-        List<Column> groupBys = agg.getGroupBys().stream().map(s -> scan.getColRefToColumnMetaMap().get(s)).collect(
+        List<Column> nonKeyGroupBys = agg.getGroupBys().stream().map(s -> scan.getColRefToColumnMetaMap().get(s)).collect(
                 Collectors.toList());
 
         for (Column column : ((OlapTable) scan.getTable()).getSchemaByIndexId(scan.getSelectedIndexId())) {
-            if (!groupBys.contains(column)) {
+            if (!nonKeyGroupBys.contains(column)) {
                 break;
             }
-            groupBys.remove(column);
+            nonKeyGroupBys.remove(column);
         }
 
-        if (groupBys.isEmpty()) {
+        if (nonKeyGroupBys.isEmpty()) {
             agg.setUseSortAgg(true);
             scan.setSortedResult(true);
         }
