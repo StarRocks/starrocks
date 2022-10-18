@@ -9,7 +9,7 @@ StarRocks 的权限管理系统参照了 MySQL 的权限管理机制，支持表
 通过以下命令创建 StarRocks 用户。
 
 > 注意
-> 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户可以创建新用户。
+> 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户才可以创建新用户。
 
 ```sql
 CREATE USER user_identity [auth_option] [DEFAULT ROLE 'role_name'];
@@ -30,15 +30,15 @@ CREATE USER user_identity [auth_option] [DEFAULT ROLE 'role_name'];
 ```sql
 -- 创建一个无密码用户，且不指定 host。
 CREATE USER 'jack';
--- 使用明文密码创建用户，允许其从 '172.10.1.10' 登陆。
+-- 使用明文密码创建用户，允许其从 '172.10.1.10' 登录。
 CREATE USER jack@'172.10.1.10' IDENTIFIED WITH mysql_native_password BY '123456';
 -- 使用暗文密码创建用户。
 CREATE USER jack@'172.10.1.10' IDENTIFIED BY PASSWORD '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9';
 -- 创建一个 LDAP 认证的用户，并指定用户在 LDAP 中的 Distinguished Name (DN)。
 CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
--- 创建一个允许从 '192.168' 子网登陆的用户，同时指定其角色为 example_role。
+-- 创建一个允许从 '192.168' 子网登录的用户，同时指定其角色为 example_role。
 CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
--- 创建一个允许从域名 'example_domain' 登陆的用户。
+-- 创建一个允许从域名 'example_domain' 登录的用户。
 CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
 ```
 
@@ -47,7 +47,7 @@ CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
 
 ## 修改用户密码
 
-通过以下命令修改用户登陆密码。
+通过以下命令修改用户登录密码。
 
 > 注意
 >
@@ -108,10 +108,10 @@ GRANT privilege_list ON RESOURCE resource_name TO user_identity [ROLE role_name]
 
 * `privilege_list`：需要赋予的权限列表，以逗号分隔。
   * NODE_PRIV：节点变更权限。包括 FE、BE、BROKER 节点的添加、删除、下线等操作。目前该权限只能授予 Root 用户。
-  * GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色 等操作。
+  * GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色等操作。
   * SELECT_PRIV：对数据库、表的只读权限。
-  * LOAD_PRIV：对数据库、表的写权限。包括 Load、Insert、Delete 等。
-  * ALTER_PRIV：对数据库、表的更改权限。包括重命名 库/表、添加/删除/变更 列、添加/删除 分区等操作。
+  * LOAD_PRIV：对数据库、表的写权限。包括 LOAD、INSERT、DELETE 等。
+  * ALTER_PRIV：对数据库、表的更改权限。包括重命名库/表、添加/删除/变更 列、添加/删除分区等操作。
   * CREATE_PRIV：创建数据库、表、视图的权限。
   * DROP_PRIV：删除数据库、表、视图的权限。
   * USAGE_PRIV：资源的使用权限。
@@ -161,7 +161,7 @@ REVOKE privilege_list ON RESOURCE resource_name FROM user_identity [ROLE role_na
 通过以下命令创建指定角色。
 
 > 注意
-> 拥有 ADMIN 权限的用户可以创建角色。
+> 拥有 ADMIN 权限的用户才可以创建角色。
 
 ```sql
 CREATE ROLE role_name;
@@ -261,7 +261,7 @@ StarRocks 可以创建自定义命名的角色。角色可以被看做是一组�
 
 * 用户属性 User Property
 
-用户属性直接附属于某一用户，而非用户标识。即 `user1@'192.%'` 和 `user1@['domain']` 都拥有同一组用户属性，该属性属于用户 `user1`，而非 `user1@'192.%'` 或 `user1@['domain']`。用户属性包括但不限于： 用户最大连接数、导入集群配置等等。
+用户属性直接附属于某一用户，而非用户标识。即 `user1@'192.%'` 和 `user1@['domain']` 都拥有同一组用户属性，该属性属于用户 `user1`，而非 `user1@'192.%'` 或 `user1@['domain']`。用户属性包括但不限于：用户最大连接数、导入集群配置等等。
 
 ### 相关命令
 
@@ -281,10 +281,10 @@ StarRocks 可以创建自定义命名的角色。角色可以被看做是一组�
 StarRocks 目前支持以下几种权限：
 
 * NODE_PRIV：节点变更权限。包括 FE、BE、BROKER 节点的添加、删除、下线等操作。目前该权限只能授予 Root 用户。
-* GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色 等操作。
+* GRANT_PRIV：权限变更权限。允许执行包括授权、撤权、添加/删除/变更 用户/角色等操作。
 * SELECT_PRIV：对数据库、表的只读权限。
 * LOAD_PRIV：对数据库、表的写权限。包括 Load、Insert、Delete 等。
-* ALTER_PRIV：对数据库、表的更改权限。包括重命名 库/表、添加/删除/变更 列、添加/删除 分区等操作。
+* ALTER_PRIV：对数据库、表的更改权限。包括重命名库/表、添加/删除/变更列、添加/删除分区等操作。
 * CREATE_PRIV：创建数据库、表、视图的权限。
 * DROP_PRIV：删除数据库、表、视图的权限。
 * USAGE_PRIV：资源的使用权限。
@@ -338,8 +338,8 @@ StarRocks 初始化时，会自动创建如下角色和用户：
   * operator 角色：该角色的用户有且只有一个，拥有 NODE_PRIV 和 ADMIN_PRIV，即对 StarRocks 的所有权限。后续某个升级版本中，可能会将该角色的权限限制为 NODE_PRIV，即仅授予节点变更权限。以满足某些云上部署需求。
   * admin 角色：该角色拥有 ADMIN_PRIV，即除节点变更以外的所有权限。您可以创建多个 admin 角色。
 * **用户**
-  * root@'%'：root 用户，允许从任意节点登陆，角色为 operator。
-  * admin@'%'：admin 用户，允许从任意节点登陆，角色为 admin。
+  * root@'%'：root 用户，允许从任意节点登录，角色为 operator。
+  * admin@'%'：admin 用户，允许从任意节点登录，角色为 admin。
 
 > 说明
 > StarRocks 不支持删除或更改默认创建的角色或用户的权限。
@@ -356,17 +356,17 @@ StarRocks 初始化时，会自动创建如下角色和用户：
 
 假设创建了如下用户 `CREATE USER user1@'%' IDENTIFIED BY "12345";` 以及 `CREATE USER user1@'192.%' IDENTIFIED BY "abcde";`。
 
-在优先级上，`'192.%'` 优先于 `'%'`，因此，当用户 `user1` 从 `192.168.1.1` 这台机器尝试使用密码 `'12345'` 登陆 StarRocks 时会被拒绝。
+在优先级上，`'192.%'` 优先于 `'%'`，因此，当用户 `user1` 从 `192.168.1.1` 这台机器尝试使用密码 `'12345'` 登录 StarRocks 时会被拒绝。
 
 * **忘记密码**
 
-如果忘记密码无法登陆 StarRocks，您可以在 StarRocks FE 节点所在机器，使用如下命令无密码登陆 StarRocks：`mysql-client -h 127.0.0.1 -P query_port -uroot`。登陆后，您可以通过 `SET PASSWORD` 命令重置密码。
+如果忘记密码无法登录 StarRocks，您可以在 StarRocks FE 节点所在机器，使用如下命令无密码登录 StarRocks：`mysql-client -h 127.0.0.1 -P query_port -uroot`。登录后，您可以通过 `SET PASSWORD` 命令重置密码。
 
 关于 `current_user()` 和 `user()`：
 
 用户可以通过 `SELECT current_user();` 和 `SELECT user();` 分别查看 `current_user` 和 `user`。其中 `current_user` 表示当前用户是以哪种身份通过认证系统的，而 `user` 则是用户当前实际的用户标识。
 
-例如，假设创建了 `user1@'192.%'` 用户，然后来自 `192.168.10.1` 的用户 `user1` 登陆了系统，则此时的 `current_user` 为 `user1@'192.%'`，而 `user` 为 `user1@'192.168.10.1'`。
+例如，假设创建了 `user1@'192.%'` 用户，然后来自 `192.168.10.1` 的用户 `user1` 登录了系统，则此时的 `current_user` 为 `user1@'192.%'`，而 `user` 为 `user1@'192.168.10.1'`。
 
 所有权限都是赋予某个 `current_user` 的，真实用户拥有对应的 `current_user` 的所有权限。
 
