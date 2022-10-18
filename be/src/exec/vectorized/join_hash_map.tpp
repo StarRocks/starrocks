@@ -726,8 +726,10 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
             _probe_from_ht_for_left_semi_join_with_other_conjunct<first_probe>(state, build_data, data);
             break;
         case TJoinOp::LEFT_ANTI_JOIN:
-        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
             _probe_from_ht_for_left_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
+            break;
+        case TJoinOp::NULL_AWARE_LEFT_ANTI_JOIN:
+            _probe_from_ht_for_null_aware_anti_join_with_other_conjunct<first_probe>(state, build_data, data);
             break;
         case TJoinOp::RIGHT_OUTER_JOIN:
             _probe_from_ht_for_right_outer_join_with_other_conjunct<first_probe>(state, build_data, data);
@@ -792,6 +794,13 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_search_ht_impl(RuntimeState* state,
     _probe_state->cur_probe_index = 0; \
     _probe_state->count = match_count; \
     _probe_state->cur_row_match_count = 0;
+
+#define MATCH_RIGHT_TABLE_ROWS()                \
+    _probe_state->probe_index[match_count] = i; \
+    _probe_state->build_index[match_count] = j; \
+    _probe_state->probe_match_index[i]++;       \
+    match_count++;                              \
+    _probe_state->cur_row_match_count++;
 
 template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
 template <bool first_probe>
@@ -1326,6 +1335,100 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join_wi
         _probe_state->cur_row_match_count = 0;
     }
 
+    _probe_state->has_null_build_tuple = true;
+    PROBE_OVER()
+}
+
+template <PrimitiveType PT, class BuildFunc, class ProbeFunc>
+template <bool first_probe>
+void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_join_with_other_conjunct(
+        RuntimeState* state, const Buffer<CppType>& build_data, const Buffer<CppType>& probe_data) {
+    size_t match_count = 0;
+
+    size_t i = _probe_state->cur_probe_index;
+    if constexpr (!first_probe) {
+        _probe_state->probe_index[0] = _probe_state->probe_index[state->chunk_size()];
+        _probe_state->build_index[0] = _probe_state->build_index[state->chunk_size()];
+        match_count = 1;
+        if (_probe_state->next[i] == 0) {
+            i++;
+            _probe_state->cur_row_match_count = 0;
+        }
+    } else {
+        _probe_state->cur_row_match_count = 0;
+        for (size_t j = 0; j < state->chunk_size(); j++) {
+            _probe_state->probe_match_index[j] = 0;
+        }
+    }
+
+    size_t probe_row_count = _probe_state->probe_row_count;
+    for (; i < probe_row_count; i++) {
+        size_t build_index = _probe_state->next[i];
+        if (build_index == 0) {
+            bool change_flag = false;
+            if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
+                // when left table col value is null needs match all rows in right table
+                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    change_flag = true;
+                    MATCH_RIGHT_TABLE_ROWS()
+                    RETURN_IF_CHUNK_FULL()
+                }
+            } else if (_table_items->key_columns[0]->is_nullable()) {
+                // when left table col value not hits in hash table needs match all null value rows in right table
+                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
+                auto& null_array = nullable_column->null_column()->get_data();
+                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    if (null_array[j] == 1) {
+                        change_flag = true;
+                        MATCH_RIGHT_TABLE_ROWS()
+                        RETURN_IF_CHUNK_FULL()
+                    }
+                }
+            }
+
+            if (!change_flag) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = 0;
+                match_count++;
+                RETURN_IF_CHUNK_FULL()
+            }
+            continue;
+        } else {
+            // left table col value hits in hash table, we also need match null values firstly then match hit rows.
+            if (_table_items->key_columns[0]->is_nullable()) {
+                auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
+                auto& null_array = nullable_column->null_column()->get_data();
+                for (size_t j = 1; j < _table_items->row_count + 1; j++) {
+                    if (null_array[j] == 1) {
+                        MATCH_RIGHT_TABLE_ROWS()
+                        RETURN_IF_CHUNK_FULL()
+                    }
+                }
+            }
+        }
+
+        while (build_index != 0) {
+            if (ProbeFunc().equal(build_data[build_index], probe_data[i])) {
+                _probe_state->probe_index[match_count] = i;
+                _probe_state->build_index[match_count] = build_index;
+                _probe_state->probe_match_index[i]++;
+                match_count++;
+                _probe_state->cur_row_match_count++;
+
+                RETURN_IF_CHUNK_FULL()
+            }
+            build_index = _table_items->next[build_index];
+        }
+
+        if (_probe_state->cur_row_match_count <= 0) {
+            _probe_state->probe_index[match_count] = i;
+            _probe_state->build_index[match_count] = 0;
+            match_count++;
+
+            RETURN_IF_CHUNK_FULL()
+        }
+        _probe_state->cur_row_match_count = 0;
+    }
     _probe_state->has_null_build_tuple = true;
     PROBE_OVER()
 }
