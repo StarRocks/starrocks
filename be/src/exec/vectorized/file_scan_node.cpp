@@ -230,7 +230,7 @@ Status FileScanNode::_scanner_scan(const TBrokerScanRange& scan_range, const std
         size_t before_rows = temp_chunk->num_rows();
 
         const TQueryOptions& query_options = runtime_state()->query_options();
-        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
+        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::BROKER) {
             size_t before_size = temp_chunk->bytes_usage();
             runtime_state()->update_num_rows_load_from_source(before_rows);
             runtime_state()->update_num_bytes_load_from_source(before_size);
