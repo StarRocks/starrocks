@@ -1317,6 +1317,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean recover_with_empty_tablet = false;
 
+    /**
+     * Limit on the number of expr children of an expr tree.
+     */
+    @ConfField(mutable = true)
+    public static int expr_children_limit = 10000;
+
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
 
