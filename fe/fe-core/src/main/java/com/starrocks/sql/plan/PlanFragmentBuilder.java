@@ -1262,7 +1262,8 @@ public class PlanFragmentBuilder {
             // the group-by expressions just denote the hash distribution of an exchange operator.
             boolean forExchange = node.getAggregations().values().stream().anyMatch(aggFunc ->
                     aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
-                            aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED));
+                            aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED)) &&
+                    ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 1;
             if (!forExchange) {
                 for (ColumnRefOperator grouping : node.getGroupBys()) {
                     Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
