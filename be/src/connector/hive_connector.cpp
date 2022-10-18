@@ -53,7 +53,7 @@ Status HiveDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
-        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
+        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake table are supported");
     }
 
     _use_block_cache = config::block_cache_enable;

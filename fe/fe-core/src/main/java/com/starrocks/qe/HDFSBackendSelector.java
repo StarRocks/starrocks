@@ -16,6 +16,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.ConsistentHashRing;
 import com.starrocks.common.util.HashRing;
 import com.starrocks.common.util.RendezvousHashRing;
+import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.HudiScanNode;
 import com.starrocks.planner.IcebergScanNode;
@@ -82,6 +83,10 @@ public class HDFSBackendSelector implements BackendSelector {
                 HudiScanNode node = (HudiScanNode) scanNode;
                 predicates = node.getScanNodePredicates();
                 basePath = node.getHudiTable().getTableLocation();
+            } else if (scanNode instanceof DeltaLakeScanNode) {
+                DeltaLakeScanNode node = (DeltaLakeScanNode) scanNode;
+                predicates = node.getScanNodePredicates();
+                basePath = node.getDeltaLakeTable().getTableLocation();
             } else {
                 Preconditions.checkState(false);
             }

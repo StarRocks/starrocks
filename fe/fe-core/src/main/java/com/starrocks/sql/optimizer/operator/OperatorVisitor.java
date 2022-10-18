@@ -6,6 +6,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -34,6 +35,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalExceptOperator;
@@ -91,6 +93,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitLogicalIcebergScan(LogicalIcebergScanOperator node, C context) {
+        return visitLogicalTableScan(node, context);
+    }
+
+    public R visitLogicalDeltaLakeScan(LogicalDeltaLakeScanOperator node, C context) {
         return visitLogicalTableScan(node, context);
     }
 
@@ -230,6 +236,10 @@ public abstract class OperatorVisitor<R, C> {
     }
 
     public R visitPhysicalHudiScan(PhysicalHudiScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalDeltaLakeScan(PhysicalDeltaLakeScanOperator node, C context) {
         return visitOperator(node, context);
     }
 
