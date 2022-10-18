@@ -9,7 +9,6 @@
 #include "exec/workgroup/work_group_fwd.h"
 #include "storage/chunk_helper.h"
 
-
 namespace starrocks {
 
 class ScanNode;
