@@ -5,6 +5,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/scan/olap_schema_scan_context.h"
+#include "exec/pipeline/scan/olap_schema_scan_operator.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -14,11 +16,14 @@ namespace starrocks::vectorized {
 
 SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
+          _tnode(tnode),
           _is_init(false),
           _table_name(tnode.schema_scan_node.table_name),
           _tuple_id(tnode.schema_scan_node.tuple_id),
           _dest_tuple_desc(nullptr),
-          _schema_scanner(nullptr) {}
+          _schema_scanner(nullptr) {
+    _name = "schema_scan";
+}
 
 SchemaScanNode::~SchemaScanNode() {
     if (runtime_state() != nullptr) {
@@ -281,6 +286,21 @@ void SchemaScanNode::debug_string(int indentation_level, std::stringstream* out)
 
 Status SchemaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     return Status::OK();
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
+    size_t dop = morsel_queue_factory->size();
+
+    size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+            buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
+
+    auto scan_op = std::make_shared<pipeline::OlapSchemaScanOperatorFactory>(context->next_operator_id(), this, dop,
+                                                                             _tnode, std::move(buffer_limiter));
+    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
 } // namespace starrocks::vectorized
