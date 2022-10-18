@@ -108,7 +108,7 @@ Buffer<uint8_t> JoinHashMapTest::create_bools(uint32_t count, int32_t flag) {
     }
 
     if (flag == 1) {
-        // all 0
+        // all 1
         for (uint32_t i = 0; i < count; i++) {
             nulls[i] = 1;
         }
@@ -2171,5 +2171,4 @@ TEST_F(JoinHashMapTest, BuildTupleOutputForTupleExist3) {
     // check
     ASSERT_EQ(probe_chunk->num_columns(), 0);
 }
-
 } // namespace starrocks::vectorized
