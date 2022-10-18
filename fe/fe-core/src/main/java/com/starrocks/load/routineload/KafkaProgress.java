@@ -125,6 +125,14 @@ public class KafkaProgress extends RoutineLoadProgress {
 
     // modify the partition offset of this progress.
     // throw exception is the specified partition does not exist in progress.
+    //
+    // `kafkaPartitionOffsets`, the parameter of this function, CAN BE MODIFIED to fit the actual value so that when
+    // all operations end, it will represent the actual offset of this job and will be persisted to the journal.
+    // All follower will replay this journal and load the actual offset of this job as well.
+    // For example:
+    //   if current offset is {0:11, 1:22, 2:33, 3:55}, the parameter `kafkaPartitionOffsets` is {0: 22, 2:44}
+    //   in this function, current offset is modified as {0: 22, 1: 22, 2:44, 3:55}
+    //   so is the parameter `kafkaPartitionOffsets`.
     public void modifyOffset(List<Pair<Integer, Long>> kafkaPartitionOffsets) throws DdlException {
         for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
             if (!partitionIdToOffset.containsKey(pair.first)) {
