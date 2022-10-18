@@ -37,8 +37,8 @@ PROPERTIES
 
 * **host**：MySQL 的连接地址
 * **port**：MySQL 的连接端口号
-* **user**：MySQL 登陆的用户名
-* **password**：MySQL 登陆的密码
+* **user**：MySQL 登录的用户名
+* **password**：MySQL 登录的密码
 * **database**：MySQL 相关数据库名
 * **table**：MySQL 相关数据表名
 
@@ -585,7 +585,7 @@ select count(*) from profile_wos_p7;
 * be 配置文件路径为$BE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
 * be 所在的机器也需要配置 JAVA_HOME，一定要配置成 jdk 环境，不能配置成 jre 环境
 * kerberos 支持
-  1. 在所有的 fe/be 机器上用 `kinit -kt keytab_path principal` 登陆，该用户需要有访问 hive 和 hdfs 的权限。kinit 命令登陆是有实效性的，需要将其放入 crontab 中定期执行。
+  1. 在所有的 fe/be 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 hive 和 hdfs 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
   2. 把 hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到$FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到$BE_HOME/conf 下。
   3. 在$FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9 选项加上 -Djava.security.krb5.conf=/etc/krb5.conf，/etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
   4. 在$BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。

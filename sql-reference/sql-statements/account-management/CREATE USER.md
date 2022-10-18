@@ -49,7 +49,7 @@ auth_option: {
     CREATE USER 'jack';
     ```
 
-2. 创建一个有密码用户，允许从 '172.10.1.10' 登陆。
+2. 创建一个有密码用户，允许从 '172.10.1.10' 登录。
 
     ```sql
     CREATE USER jack@'172.10.1.10' IDENTIFIED BY '123456';
@@ -91,13 +91,13 @@ auth_option: {
     CREATE USER jack@'172.10.1.10' IDENTIFIED WITH authentication_ldap_simple AS 'uid=jack,ou=company,dc=example,dc=com';
     ```
 
-6. 创建一个允许从 '192.168' 子网登陆的用户，同时指定其角色为 example_role。
+6. 创建一个允许从 '192.168' 子网登录的用户，同时指定其角色为 example_role。
 
     ```sql
     CREATE USER 'jack'@'192.168.%' DEFAULT ROLE 'example_role';
     ```
 
-7. 创建一个允许从域名 'example_domain' 登陆的用户。
+7. 创建一个允许从域名 'example_domain' 登录的用户。
 
     ```sql
     CREATE USER 'jack'@['example_domain'] IDENTIFIED BY '12345';
