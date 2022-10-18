@@ -212,7 +212,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
     } else {
         DCHECK(_meta.encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
-            cur = ColumnArraySerde::deserialize(cur, columns[i].get(), _meta.encode_level[i]);
+            cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _meta.encode_level[i]);
         }
     }
 
