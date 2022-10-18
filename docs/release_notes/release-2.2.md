@@ -1,5 +1,23 @@
 # StarRocks version 2.2
 
+## 2.2.8
+
+Release date: October 17, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- BEs may crash if an expression encounters an error in the initial stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
+
+- BEs may crash if invalid JSON data is loaded. [#10804](https://github.com/StarRocks/starrocks/issues/10804)
+
+- Parallel writing encounters an error when the pipeline engine is enabled. [#11451](https://github.com/StarRocks/starrocks/issues/11451)
+
+- BEs crash when the ORDER BY NULL LIMIT clause is used. [#11648](https://github.com/StarRocks/starrocks/issues/11648)
+
+- BEs crash if the column type defined in the external table is different from the column type in the source Parquet file. [#11839](https://github.com/StarRocks/starrocks/issues/11839)
+
 ## 2.2.7
 
 Release date: September 23, 2022
