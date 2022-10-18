@@ -35,10 +35,17 @@ void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode
 
 // if encode ratio < EncodeRatioLimit, encode it, otherwise not.
 void EncodeContext::_adjust(const int col_id) {
+    auto old_level = _column_encode_level[col_id];
     if (_encoded_bytes[col_id] < _raw_bytes[col_id] * EncodeRatioLimit) {
         _column_encode_level[col_id] = _session_encode_level;
     } else {
         _column_encode_level[col_id] = 0;
+    }
+    if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
+        LOG(WARNING) << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
+                     << " because the first" << EncodeSamplingNum << " of " << _frequency
+                     << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
+                     << " higher than limit " << EncodeRatioLimit;
     }
     _encoded_bytes[col_id] = 0;
     _raw_bytes[col_id] = 0;
