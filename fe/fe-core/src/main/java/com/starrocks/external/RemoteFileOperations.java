@@ -55,7 +55,9 @@ public class RemoteFileOperations {
         List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
         List<Map<RemotePathKey, List<RemoteFileDesc>>> result = Lists.newArrayList();
 
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getRemoteFiles", cacheMissSize)) {
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getRemoteFiles", String.format("%s partitions", cacheMissSize));
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getRemoteFiles")) {
             for (Partition partition : partitions) {
                 RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
                 Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() ->

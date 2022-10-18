@@ -41,7 +41,6 @@ public class PlannerProfile {
         private volatile long currentThreadId = 0;
         private long totalTime = 0;
         private int totalCount = 0;
-        private int customCount = 0;
         // possible to record p99?
 
         public void start() {
@@ -61,8 +60,7 @@ public class PlannerProfile {
         private void printBackgroundLog() {
             String threadName = Thread.currentThread().getName();
             if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
-                LOG.info("Get {} partitions or partition statistics on thread {} cost time: {}",
-                        customCount, threadName, totalTime);
+                LOG.info("Get partitions or partition statistics cost time: {}", totalTime);
             }
         }
 
@@ -73,18 +71,10 @@ public class PlannerProfile {
         public int getTotalCount() {
             return totalCount;
         }
-
-        public int getCustomCount() {
-            return customCount;
-        }
-
-        public ScopedTimer setCustomCount(int customCount) {
-            this.customCount = customCount;
-            return this;
-        }
     }
 
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
+    private final Map<String, String> customProperties = new ConcurrentHashMap<>();
 
     public PlannerProfile() {
     }
@@ -98,10 +88,6 @@ public class PlannerProfile {
     }
 
     public static ScopedTimer getScopedTimer(String name) {
-        return getScopedTimer(name, 0);
-    }
-
-    public static ScopedTimer getScopedTimer(String name, int customCount) {
         // to avoid null.
         PlannerProfile p = new PlannerProfile();
         ConnectContext ctx = ConnectContext.get();
@@ -110,10 +96,21 @@ public class PlannerProfile {
         }
         ScopedTimer t = p.getOrCreateScopedTimer(name);
         t.start();
-        if (customCount != 0) {
-            t.setCustomCount(customCount);
-        }
         return t;
+    }
+
+    public static void addCustomProperties(String name, String value) {
+        PlannerProfile p = new PlannerProfile();
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            p = ctx.getPlannerProfile();
+        }
+        p.customProperties.put(name, value);
+
+        String threadName = Thread.currentThread().getName();
+        if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
+            LOG.info("Background collect hive column statistics profile: [{}:{}]", name, value);
+        }
     }
 
     private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
@@ -148,18 +145,27 @@ public class PlannerProfile {
     }
 
     public void buildTimers(RuntimeProfile parent) {
-        List<String> keys = new ArrayList<>(timers.keySet());
-        Collections.sort(keys);
-
         Map<String, RuntimeProfile> profilers = new HashMap<>();
         profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(timers.keySet());
+        Collections.sort(keys);
         for (String key : keys) {
             String prefix = getKeyPrefix(key);
             String name = key.substring(prefix.length());
             RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
             ScopedTimer t = timers.get(key);
-            int count = t.getCustomCount() == 0 ? t.getTotalCount() : t.getCustomCount();
-            p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), count));
+            p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), t.getTotalCount()));
+        }
+
+        keys = new ArrayList<>(customProperties.keySet());
+        Collections.sort(keys);
+        for (String key : keys) {
+            String prefix = getKeyPrefix(key);
+            String name = key.substring(prefix.length());
+            RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
+            String value = customProperties.get(key);
+            p.addInfoString(name, value);
         }
     }
 
@@ -169,5 +175,6 @@ public class PlannerProfile {
 
     public void reset() {
         timers.clear();
+        customProperties.clear();
     }
 }

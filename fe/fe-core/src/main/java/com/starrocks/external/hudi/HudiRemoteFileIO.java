@@ -21,6 +21,8 @@ import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.List;
@@ -30,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class HudiRemoteFileIO implements RemoteFileIO {
+    private static final Logger LOG = LogManager.getLogger(HudiRemoteFileIO.class);
     private final Configuration configuration;
 
     // table location -> HoodieTableMetaClient
@@ -73,6 +76,7 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                         ImmutableList.of(), ImmutableList.copyOf(logs)));
             }
         } catch (Exception e) {
+            LOG.error("get file failed", e);
             throw new StarRocksConnectorException("Failed to get hudi remote file's metadata on path: %s", pathKey);
         }
         return resultPartitions.put(pathKey, fileDescs).build();

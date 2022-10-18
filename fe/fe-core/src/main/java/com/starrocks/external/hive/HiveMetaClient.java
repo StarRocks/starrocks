@@ -180,7 +180,9 @@ public class HiveMetaClient {
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
         int size = partitionNames.size();
         List<Partition> partitions;
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames", size);
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames");
                 AutoCloseClient client = getClient()) {
             partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
             if (partitions.size() != partitionNames.size()) {
@@ -213,7 +215,9 @@ public class HiveMetaClient {
                                                                           List<String> partitionNames,
                                                                           List<String> columnNames) {
         int size = partitionNames.size();
-        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics", size);
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics");
                 AutoCloseClient client = getClient()) {
             return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, partitionNames, columnNames);
         } catch (Exception e) {
