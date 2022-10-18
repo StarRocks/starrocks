@@ -9,7 +9,7 @@ from setuptools import setup
 
 v = open(
     os.path.join(
-        os.path.dirname(os.path.realpath(sys.argv[0])), "sqlalchemy_starrocks", "__init__.py"
+        os.path.dirname(os.path.realpath(sys.argv[0])), "sqlalchemy-starrocks", "__init__.py"
     )
 )
 VERSION = re.compile(r".*__version__ = \"(.*?)\"", re.S).match(v.read()).group(1)
@@ -17,9 +17,9 @@ v.close()
 
 
 setup(
-    name="sqlalchemy_starrocks",
+    name="sqlalchemy-starrocks",
     version=VERSION,
-    description="StarRocks Dialect for SQLAlchemy and Apache Superset",
+    description="StarRocks Dialect for SQLAlchemy",
     long_description_content_type="text/markdown",
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -33,10 +33,10 @@ setup(
     ],
     install_requires=["sqlalchemy"],
     tests_require=[],
-    keywords="StarRocks Superset SQLAlchemy dialect",
+    keywords="db database analytics starrocks superset sqlalchemy dialect",
     author="fujianhj",
     author_email="fujianhj@gmail.com",
-    url="",
+    url="https://github.com/StarRocks/starrocks/contrib/sqlalchemy-connector",
     license="StarRocks",
     packages=find_packages(),
     include_package_data=True,
