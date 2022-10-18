@@ -28,14 +28,12 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.IsNullPredicate;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.catalog.AggregateType;
@@ -616,10 +614,5 @@ public class CreateMaterializedViewStmt extends DdlStmt {
                 mvColumnItem.setAggregationType(AggregateType.NONE, true);
             }
         }
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

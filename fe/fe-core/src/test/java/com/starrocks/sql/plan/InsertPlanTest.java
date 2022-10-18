@@ -1,12 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.plan;
 
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.thrift.TExplainLevel;
 import org.junit.Assert;
@@ -339,7 +339,7 @@ public class InsertPlanTest extends PlanTestBase {
         }
 
         sql = "insert into duplicate_table_with_default(K1,k2,k3) " +
-                        "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
+                "values('2020-06-25', '2020-06-25 00:16:23', 'beijing')";
         explainString = getInsertExecPlan(sql);
         Assert.assertTrue(explainString.contains("<slot 1> : 1: column_0"));
     }

@@ -26,8 +26,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.analysis.AlterLoadStmt;
-import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.AuthorizationInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -62,6 +60,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTask;
 import com.starrocks.task.PriorityLeaderTaskExecutor;
@@ -228,9 +228,9 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         loadStartTimestamp = System.currentTimeMillis();
     }
 
-    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId, 
-            long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
-        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows, 
+    public void updateProgess(Long beId, TUniqueId loadId, TUniqueId fragmentId,
+                              long sinkRows, long sinkBytes, long sourceRows, long sourceBytes, boolean isDone) {
+        loadingStatus.getLoadStatistic().updateLoadProgress(beId, loadId, fragmentId, sinkRows,
                 sinkBytes, sourceRows, sourceBytes, isDone);
     }
 

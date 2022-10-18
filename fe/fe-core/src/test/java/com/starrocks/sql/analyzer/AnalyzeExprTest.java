@@ -4,10 +4,10 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;

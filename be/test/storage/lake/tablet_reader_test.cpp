@@ -461,6 +461,7 @@ TEST_F(DuplicateTabletReaderWithDeleteTest, test_read_success) {
         rowset->set_data_size(0);
 
         auto* delete_predicate = rowset->mutable_delete_predicate();
+        delete_predicate->set_version(-1);
         // delete c0 (21, 22, 30)
         auto* binary_predicate = delete_predicate->add_binary_predicates();
         binary_predicate->set_column_name("c0");

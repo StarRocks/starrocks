@@ -4,7 +4,7 @@ package com.starrocks.external.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.external.hive.HiveMetaCache;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.CreateTableMessage;
 
@@ -16,11 +16,11 @@ import java.util.List;
 public class CreateTableEvent extends MetastoreTableEvent {
     public static final String CREATE_TABLE_EVENT_TYPE = "CREATE_TABLE";
 
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, HiveMetaCache metaCache) {
+    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache) {
         return Lists.newArrayList(new CreateTableEvent(event, metaCache));
     }
 
-    private CreateTableEvent(NotificationEvent event, HiveMetaCache metaCache)
+    private CreateTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache)
             throws MetastoreNotificationException {
         super(event, metaCache);
         Preconditions.checkArgument(MetastoreEventType.CREATE_TABLE.equals(getEventType()));

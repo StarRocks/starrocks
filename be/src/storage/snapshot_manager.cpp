@@ -211,7 +211,7 @@ Status SnapshotManager::convert_rowset_ids(const string& clone_dir, int64_t tabl
 Status SnapshotManager::_rename_rowset_id(const RowsetMetaPB& rs_meta_pb, const string& new_path,
                                           TabletSchema& tablet_schema, const RowsetId& rowset_id,
                                           RowsetMetaPB* new_rs_meta_pb) {
-    // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports beta rowset
+    // TODO use factory to obtain RowsetMeta when SnapshotManager::convert_rowset_ids supports rowset
     auto rowset_meta = std::make_shared<RowsetMeta>(rs_meta_pb);
     RowsetSharedPtr org_rowset;
     if (!RowsetFactory::create_rowset(&tablet_schema, new_path, rowset_meta, &org_rowset).ok()) {

@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.plan;
 
-import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.utframe.StarRocksAssert;
@@ -761,11 +760,11 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select * from supplier l join supplier r on " +
                 "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
         plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  1:OlapScanNode\n" +
+        assertContains(plan, "0:OlapScanNode\n" +
                 "     table: supplier, rollup: supplier\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
-                "     dict_col=S_COMMENT"));
+                "     dict_col=S_COMMENT");
 
         // Test Simple Filter
         sql = "select count(*) from supplier where S_ADDRESS = 'kks' group by S_ADDRESS ";
@@ -914,6 +913,20 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select part_v2.p_partkey from lineitem join part_v2 on L_COMMENT = hex(P_NAME);";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+
+        // TopN with HashJoinNode
+        sql = "select * from supplier l join supplier_nullable r where l.S_SUPPKEY = r.S_SUPPKEY " +
+                "order by l.S_ADDRESS limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:TOP-N\n" +
+                "  |  order by: <slot 17> 17: S_ADDRESS ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: S_SUPPKEY = 9: S_SUPPKEY");
     }
 
     @Test
@@ -1063,16 +1076,16 @@ public class LowCardinalityTest extends PlanTestBase {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         sql = "select upper(lower(S_ADDRESS)) from supplier group by lower(S_ADDRESS);";
         plan = getVerboseExplain(sql);
-        Assert.assertTrue(plan.contains("  6:Project\n" +
+        assertContains(plan, "6:Project\n" +
                 "  |  output columns:\n" +
                 "  |  10 <-> upper[([9, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true]\n" +
-                "  |  cardinality: 0\n" +
+                "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  5:Decode\n" +
                 "  |  <dict id 12> : <string id 9>\n" +
                 "  |  string functions:\n" +
-                "  |  <function id 12> : DictExpr(11: S_ADDRESS,[lower(<place-holder>)])"));
+                "  |  <function id 12> : DictExpr(11: S_ADDRESS,[lower(<place-holder>)])");
         Assert.assertTrue(plan.contains("  4:AGGREGATE (merge finalize)\n" +
                 "  |  group by: [12: lower, INT, true]"));
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
@@ -1157,14 +1170,12 @@ public class LowCardinalityTest extends PlanTestBase {
     public void testHavingAggFunctionOnConstant() throws Exception {
         String sql = "select S_ADDRESS from supplier GROUP BY S_ADDRESS HAVING (cast(count(null) as string)) IN (\"\")";
         String plan = getCostExplain(sql);
-        Assert.assertTrue(plan.contains("  1:AGGREGATE (update finalize)\n" +
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
                 "  |  aggregate: count[(NULL); args: BOOLEAN; result: BIGINT; args nullable: true; result nullable: false]\n" +
-                "  |  group by: [10: S_ADDRESS, INT, false]\n" +
-                "  |  having: cast([9: count, BIGINT, false] as VARCHAR(" + ScalarType.DEFAULT_STRING_LENGTH +
-                ")) = ''"));
-        Assert.assertTrue(plan.contains("  3:Decode\n" +
+                "  |  group by: [10: S_ADDRESS, INT, false]");
+        assertContains(plan, "  3:Decode\n" +
                 "  |  <dict id 10> : <string id 3>\n" +
-                "  |  cardinality: 1"));
+                "  |  cardinality: 1");
     }
 
     @Test

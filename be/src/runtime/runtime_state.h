@@ -58,6 +58,8 @@ class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
 class RuntimeFilterPort;
+class QueryStatistics;
+class QueryStatisticsRecvr;
 
 namespace pipeline {
 class QueryContext;
@@ -306,6 +308,9 @@ public:
 
     bool use_sorted_agg() const { return _use_sorted_agg; };
     void set_use_sorted_agg(bool use_sorted_agg) { _use_sorted_agg = use_sorted_agg; }
+    bool enable_query_statistic() const;
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+    std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
 private:
     Status create_error_log_file();

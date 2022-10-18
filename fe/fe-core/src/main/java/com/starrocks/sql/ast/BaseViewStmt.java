@@ -4,8 +4,6 @@ package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColWithComment;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 

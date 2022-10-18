@@ -2,7 +2,6 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColWithComment;
 import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.common.AnalysisException;
@@ -11,6 +10,7 @@ import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.BaseViewStmt;
+import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.QueryRelation;
 
 import java.util.List;

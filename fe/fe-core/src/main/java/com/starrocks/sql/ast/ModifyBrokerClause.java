@@ -74,11 +74,6 @@ public class ModifyBrokerClause extends AlterClause {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public Map<String, String> getProperties() {
         throw new NotImplementedException();
     }

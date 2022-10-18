@@ -643,17 +643,17 @@ public class TPCDSPlanTest extends TPCDSPlanTestBase {
     public void testQuery48LeftDeepJoinReorderAvoidInnerJoinOnSameTable() throws Exception {
         setTPCDSFactor(1);
         String plan = getFragmentPlan(Q48);
-        assertContains(plan, "  11:HASH JOIN\n" +
+        assertContains(plan, "7:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 6: ss_cdemo_sk = 53: cd_demo_sk\n" +
-                "  |  other predicates: ((((55: cd_marital_status = 'M') AND (56: cd_education_status = '4 yr Degree')) " +
-                "AND ((14: ss_sales_price >= 100.00) AND (14: ss_sales_price <= 150.00))) OR " +
-                "(((55: cd_marital_status = 'D') AND (56: cd_education_status = '2 yr Degree')) AND " +
-                "((14: ss_sales_price >= 50.00) AND (14: ss_sales_price <= 100.00)))) OR (((55: cd_marital_status = 'S') " +
-                "AND (56: cd_education_status = 'College')) AND ((14: ss_sales_price >= 150.00) " +
-                "AND (14: ss_sales_price <= 200.00)))\n" +
+                "  |  other join predicates: ((((55: cd_marital_status = 'M') AND (56: cd_education_status = '4 yr Degree')) " +
+                "AND ((14: ss_sales_price >= 100.00) AND (14: ss_sales_price <= 150.00))) OR (((55: cd_marital_status = 'D') " +
+                "AND (56: cd_education_status = '2 yr Degree')) AND ((14: ss_sales_price >= 50.00) " +
+                "AND (14: ss_sales_price <= 100.00)))) OR (((55: cd_marital_status = 'S') " +
+                "AND (56: cd_education_status = 'College')) " +
+                "AND ((14: ss_sales_price >= 150.00) AND (14: ss_sales_price <= 200.00)))\n" +
                 "  |  \n" +
-                "  |----10:EXCHANGE");
+                "  |----6:EXCHANGE");
     }
 }

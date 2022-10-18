@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -14,7 +13,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -24,7 +22,6 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 
 public class LocalMetaStoreTest {
@@ -57,12 +54,7 @@ public class LocalMetaStoreTest {
         Partition sourcePartition = olapTable.getPartition("t1");
         List<Long> sourcePartitionIds = Lists.newArrayList(sourcePartition.getId());
         List<Long> tmpPartitionIds = Lists.newArrayList(connectContext.getGlobalStateMgr().getNextId());
-        Optional<ConnectorMetadata> metadataOpt = connectContext.getGlobalStateMgr()
-                .getMetadataMgr().getOptionalMetadata(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
-        Assert.assertTrue(metadataOpt.isPresent());
-        ConnectorMetadata metadata = metadataOpt.get();
-        Assert.assertTrue(metadata instanceof LocalMetastore);
-        LocalMetastore localMetastore = (LocalMetastore) metadata;
+        LocalMetastore localMetastore = connectContext.getGlobalStateMgr().getLocalMetastore();
         Map<Long, String> origPartitions = Maps.newHashMap();
         OlapTable copiedTable = localMetastore.getCopiedTable(db, olapTable, sourcePartitionIds, origPartitions);
         Assert.assertEquals(olapTable.getName(), copiedTable.getName());

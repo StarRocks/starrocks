@@ -54,13 +54,11 @@ public class CatalogMgrTest {
         catalogMgr.replayCreateCatalog(catalog);
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
         Assert.assertTrue(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getMetadataMgr().connectorMetadataExists("catalog_1"));
 
         DropCatalogLog log = new DropCatalogLog("catalog_1");
         catalogMgr.replayDropCatalog(log);
         Assert.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
         Assert.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getMetadataMgr().connectorMetadataExists("catalog_1"));
 
         config.put("type", "hhhhhhive");
         config.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
@@ -69,7 +67,6 @@ public class CatalogMgrTest {
         catalogMgr.replayCreateCatalog(catalog);
         Assert.assertFalse(GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists("catalog_1"));
         Assert.assertFalse(GlobalStateMgr.getCurrentState().getConnectorMgr().connectorExists("catalog_1"));
-        Assert.assertFalse(GlobalStateMgr.getCurrentState().getMetadataMgr().connectorMetadataExists("catalog_1"));
     }
 
     @Test

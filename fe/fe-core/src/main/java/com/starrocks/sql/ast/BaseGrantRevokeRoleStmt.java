@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.UserIdentity;
 
 // GrantRoleStmt and RevokeRoleStmt share the same parameter and check logic with GrantRoleStmt

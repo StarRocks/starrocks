@@ -1132,12 +1132,12 @@ public class PlanFragmentBuilder {
 
         /**
          * Remove ExchangeNode between AggNode and ScanNode for the single backend.
-         *
+         * <p>
          * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
          * which contains two steps:
          * 1. Ignore the network cost for ExchangeNode when estimating cost model.
          * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
-         *
+         * <p>
          * Specifically, transfer
          * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
          * -      *inputFragment         sourceFragment
@@ -1147,7 +1147,7 @@ public class PlanFragmentBuilder {
          * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
          *
          * @param inputFragment The input fragment to match the above pattern.
-         * @param context The context of building fragment, which contains all the fragments.
+         * @param context       The context of building fragment, which contains all the fragments.
          * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
          */
         private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
@@ -1279,6 +1279,11 @@ public class PlanFragmentBuilder {
                 if (!partitionExpressions.isEmpty()) {
                     inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
                 }
+
+                // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
+                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isGlobal()) {
                 if (node.hasSingleDistinct()) {
                     // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
@@ -1329,6 +1334,11 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 aggregationNode.setLimit(node.getLimit());
+
+                // Check colocate for one-phase local agg.
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                 AggregateInfo aggInfo = AggregateInfo.create(
@@ -1374,10 +1384,6 @@ public class PlanFragmentBuilder {
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
-            }
-            // set aggregate node can use local aggregate
-            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                aggregationNode.setColocate(true);
             }
 
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
@@ -1661,6 +1667,17 @@ public class PlanFragmentBuilder {
 
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
             List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
@@ -1669,6 +1686,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.addConjuncts(conjuncts);
+            joinNode.setProbePartitionByExprs(probePartitionByExprs);
 
             // Connect parent and child fragment
             rightFragment.getPlanRoot().setFragment(leftFragment);

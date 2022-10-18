@@ -982,6 +982,24 @@ public class ExpressionTest extends PlanTestBase {
     }
 
     @Test
+    public void testVarcharAsBitmapCast() throws Exception {
+        String sql = "select cast(t1a as BITMAP) from test_all_type;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "CAST(1: t1a AS BITMAP)");
+    }
+
+    @Test
+    public void testTimeSlicePlan() throws Exception {
+        String sql = "select time_slice(th, interval 1 year) from tall;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "time_slice(8: th, 1, 'year', 'floor')");
+
+        sql = "select time_slice(th, interval 1 year, CEIL) from tall;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "time_slice(8: th, 1, 'year', 'ceil')");
+    }
+
+    @Test
     public void testReduceNumberCast() throws Exception {
         String sql;
         String plan;
