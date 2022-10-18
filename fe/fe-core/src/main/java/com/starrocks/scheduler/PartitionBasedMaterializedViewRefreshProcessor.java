@@ -290,7 +290,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                         granularity, partitionColumn.getPrimitiveType());
             }
         } catch (UserException e) {
-            LOG.warn("Materialized view compute partition difference with base table failed : {}", e);
+            LOG.warn("Materialized view compute partition difference with base table failed.", e);
             return;
         } finally {
             database.readUnlock();
@@ -631,9 +631,16 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                               DistributionDesc distributionDesc) {
         String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
         String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
+        boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
+        PartitionValue upperPartitionValue;
+        if (isMaxValue) {
+            upperPartitionValue = PartitionValue.MAX_VALUE;
+        } else {
+            upperPartitionValue = new PartitionValue(upperBound);
+        }
         PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
                 Collections.singletonList(new PartitionValue(lowerBound)),
-                Collections.singletonList(new PartitionValue(upperBound)));
+                Collections.singletonList(upperPartitionValue));
         SingleRangePartitionDesc singleRangePartitionDesc =
                 new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
         try {
