@@ -34,8 +34,6 @@ void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode
     if (_times % _frequency < EncodeSamplingNum) {
         _raw_bytes[col_id] += mem_bytes;
         _encoded_bytes[col_id] += encode_byte;
-    } else if (_times % _frequency == EncodeSamplingNum) {
-        _adjust(col_id);
     }
 }
 
@@ -49,7 +47,7 @@ void EncodeContext::_adjust(const int col_id) {
     }
     if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
         LOG(WARNING) << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
-                     << " because the first" << EncodeSamplingNum << " of " << _frequency
+                     << " because the first " << EncodeSamplingNum << " of " << _frequency
                      << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
                      << " higher than limit " << EncodeRatioLimit;
     }
@@ -62,6 +60,12 @@ void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
     res->mutable_encode_level()->Reserve(static_cast<int>(_column_encode_level.size()));
     for (const auto& level : _column_encode_level) {
         res->mutable_encode_level()->Add(level);
+    }
+    // must adjust after writing the current encode_level
+    if (_times % _frequency == EncodeSamplingNum) {
+        for (auto col_id = 0; col_id < _column_encode_level.size(); ++col_id) {
+            _adjust(col_id);
+        }
     }
 }
 
