@@ -1,5 +1,19 @@
 # StarRocks version 2.2
 
+## 2.2.8
+
+发布日期： 2022 年 10 月 17 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 表达式在初始阶段发生错误时可能导致 BE 停止服务。 ([#11395](https://github.com/StarRocks/starrocks/pull/11395))
+- 导入时无效的 JSON 可能会导致 BE 停止服务。（[#10804](https://github.com/StarRocks/starrocks/issues/10804)）
+- 开启 Pipeline 引擎会导致并行写入出错。（[#11451](https://github.com/StarRocks/starrocks/issues/11451)）
+- ORDER BY NULL LIMIT 会导致 BE 停止服务。（[#11648](https://github.com/StarRocks/starrocks/issues/11648)）
+- 外表的列类型和 Parquet 表中类型不一致时导致 BE 停止服务。（[#11839](https://github.com/StarRocks/starrocks/issues/11839))
+
 ## 2.2.7
 
 发布日期： 2022 年 9 月 23 日
