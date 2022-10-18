@@ -7,33 +7,32 @@ import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.OperatorType;
-import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.List;
 
-public class IcebergScanImplementationRule extends ImplementationRule {
-
-    public IcebergScanImplementationRule() {
-        super(RuleType.IMP_ICEBERG_LSCAN_TO_PSCAN,
-                Pattern.create(OperatorType.LOGICAL_ICEBERG_SCAN));
+public class DeltaLakeScanImplementationRule extends ImplementationRule {
+    public DeltaLakeScanImplementationRule() {
+        super(RuleType.IMP_DELTALAKE_LSCAN_TO_PSCAN,
+                Pattern.create(OperatorType.LOGICAL_DELTALAKE_SCAN));
     }
 
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         OptExpression result = null;
-        LogicalIcebergScanOperator scan = (LogicalIcebergScanOperator) input.getOp();
-        if (scan.getTable().getType() == Table.TableType.ICEBERG) {
-            PhysicalIcebergScanOperator physicalIcebergScan = new PhysicalIcebergScanOperator(scan.getTable(),
+        LogicalDeltaLakeScanOperator scan = (LogicalDeltaLakeScanOperator) input.getOp();
+        if (scan.getTable().getType() == Table.TableType.DELTALAKE) {
+            PhysicalDeltaLakeScanOperator physicalDeltaLakeScan = new PhysicalDeltaLakeScanOperator(scan.getTable(),
                     scan.getColRefToColumnMetaMap(),
                     scan.getScanOperatorPredicates(),
                     scan.getLimit(),
                     scan.getPredicate(),
                     scan.getProjection());
 
-            result = new OptExpression(physicalIcebergScan);
+            result = new OptExpression(physicalDeltaLakeScan);
         }
         return Lists.newArrayList(result);
     }
