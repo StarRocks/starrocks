@@ -93,7 +93,7 @@ public class OlapTable extends Table {
          * this state means table is under PENDING alter operation(SCHEMA_CHANGE or ROLLUP), and is not
          * stable. The tablet scheduler will continue fixing the tablets of this table. And the state will
          * change back to SCHEMA_CHANGE or ROLLUP after table is stable, and continue doing alter operation.
-         * This state is a in-memory state and no need to persist.
+         * This state is an in-memory state and no need to persist.
          */
         WAITING_STABLE
     }
@@ -782,6 +782,10 @@ public class OlapTable extends Table {
     // get all partitions except temp partitions
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
+    }
+
+    public int getNumberOfPartitions() {
+        return idToPartition.size();
     }
 
     // get only temp partitions

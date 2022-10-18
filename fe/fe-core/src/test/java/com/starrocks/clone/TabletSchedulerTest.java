@@ -2,15 +2,20 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.CatalogRecycleBin;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
+import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
+import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDisk;
@@ -30,6 +35,8 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TabletSchedulerTest {
     @Mocked
@@ -196,5 +203,43 @@ public class TabletSchedulerTest {
 
         freeSlotNTimes(2, bslots.get(1L), 11L);
         Assert.assertEquals(bslots.get(1L).peekSlot(11), bslots.get(1L).getSlotTotal(11));
+    }
+
+    @Test
+    public void testGetTabletsNumInScheduleForEachCG() {
+        TabletScheduler tabletScheduler =
+                new TabletScheduler(globalStateMgr, systemInfoService, tabletInvertedIndex, tabletSchedulerStat);
+        Map<Long, ColocateTableIndex.GroupId> tabletIdToCGIdForPending = Maps.newHashMap();
+        tabletIdToCGIdForPending.put(101L, new ColocateTableIndex.GroupId(200L, 300L));
+        tabletIdToCGIdForPending.put(102L, new ColocateTableIndex.GroupId(200L, 300L));
+        tabletIdToCGIdForPending.put(103L, new ColocateTableIndex.GroupId(200L, 301L));
+        tabletIdToCGIdForPending.forEach((k, v) -> {
+            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, 200L, 201L, 202L,
+                    203L, k, System.currentTimeMillis());
+            ctx.setColocateGroupId(v);
+            ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
+            Deencapsulation.invoke(tabletScheduler, "addToPendingTablets", ctx);
+        });
+
+        Map<Long, ColocateTableIndex.GroupId> tabletIdToCGIdForRunning = Maps.newHashMap();
+        tabletIdToCGIdForRunning.put(104L, new ColocateTableIndex.GroupId(200L, 300L));
+        tabletIdToCGIdForRunning.put(105L, new ColocateTableIndex.GroupId(200L, 300L));
+        tabletIdToCGIdForRunning.put(106L, new ColocateTableIndex.GroupId(200L, 301L));
+        tabletIdToCGIdForRunning.forEach((k, v) -> {
+            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, 200L, 201L, 202L,
+                    203L, k, System.currentTimeMillis());
+            ctx.setColocateGroupId(v);
+            ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
+            if (k == 104L) {
+                ctx.setTabletStatus(LocalTablet.TabletStatus.VERSION_INCOMPLETE);
+            }
+            Deencapsulation.invoke(tabletScheduler, "addToRunningTablets", ctx);
+        });
+
+        Map<ColocateTableIndex.GroupId, Long> result = tabletScheduler.getTabletsNumInScheduleForEachCG();
+        Assert.assertEquals(Optional.of(3L).get(),
+                result.get(new ColocateTableIndex.GroupId(200L, 300L)));
+        Assert.assertEquals(Optional.of(2L).get(),
+                result.get(new ColocateTableIndex.GroupId(200L, 301L)));
     }
 }
