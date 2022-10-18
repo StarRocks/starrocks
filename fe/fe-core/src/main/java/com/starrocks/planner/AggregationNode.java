@@ -37,6 +37,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -204,6 +205,7 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
+        msg.agg_node.setInterpolate_passthrough(useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
     }
 
     protected String getDisplayLabelDetail() {

@@ -255,7 +255,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     size_t degree_of_parallelism =
             down_cast<SourceOperatorFactory*>(operators_with_sink[0].get())->degree_of_parallelism();
 
-    if (config::interpolate_local_passthrough) {
+    if (_tnode.agg_node.__isset.interpolate_passthrough && _tnode.agg_node.interpolate_passthrough) {
         operators_with_sink = context->maybe_interpolate_local_passthrough_exchange(
                 runtime_state(), operators_with_sink, degree_of_parallelism, true);
     }
