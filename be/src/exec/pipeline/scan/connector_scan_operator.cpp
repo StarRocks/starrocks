@@ -167,6 +167,7 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
+    _ck_acc.set_desired_size(state->chunk_size());
     return Status::OK();
 }
 
@@ -191,15 +192,31 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         return Status::EndOfFile("limit reach");
     }
 
-    do {
-        RETURN_IF_ERROR(_data_source->get_next(state, chunk));
-    } while ((*chunk)->num_rows() == 0);
+    while (_status.ok()) {
+        vectorized::ChunkPtr tmp;
+        _status = _data_source->get_next(state, &tmp);
+        if (_status.ok()) {
+            _ck_acc.push(std::move(tmp));
+            if (!_ck_acc.empty()) {
+                break;
+            }
+        } else if (!_status.is_end_of_file()) {
+            return _status;
+        } else {
+            DCHECK(_status.is_end_of_file());
+            _ck_acc.finalize();
+        }
+    }
 
-    _rows_read += (*chunk)->num_rows();
+    DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
-
-    return Status::OK();
+    if (!_ck_acc.empty()) {
+        *chunk = _ck_acc.pull();
+        _rows_read += (*chunk)->num_rows();
+        return Status::OK();
+    }
+    return Status::EndOfFile("");
 }
 
 const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_entity(
