@@ -14,7 +14,7 @@ class RowDescriptor;
 }
 
 namespace starrocks::serde {
-constexpr double EncodeRatioLimit = 0.82;
+constexpr double EncodeRatioLimit = 0.9;
 constexpr uint32_t EncodeSamplingNum = 5;
 
 // EncodeContext adaptively adjusts encode_level according to the compression ratio. In detail,
