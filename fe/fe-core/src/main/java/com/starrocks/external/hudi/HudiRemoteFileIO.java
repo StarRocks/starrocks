@@ -76,7 +76,6 @@ public class HudiRemoteFileIO implements RemoteFileIO {
                         ImmutableList.of(), ImmutableList.copyOf(logs)));
             }
         } catch (Exception e) {
-            LOG.error("get file failed", e);
             throw new StarRocksConnectorException("Failed to get hudi remote file's metadata on path: %s", pathKey);
         }
         return resultPartitions.put(pathKey, fileDescs).build();
