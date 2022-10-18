@@ -167,7 +167,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
         return Status::InvalidArgument("not data in ChunkPB");
     }
     int64_t deserialized_size = 0;
-    ProtobufChunkDeserializer deserializer(*res, encode_level);
+    ProtobufChunkDeserializer deserializer(*res, &chunk_pb);
     StatusOr<vectorized::Chunk> chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size);
     if (!chunk.ok()) return chunk;
 
@@ -215,16 +215,16 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
 
-    if (_meta.encode_level.empty()) {
+    if (_encode_level.empty()) {
         for (auto& column : columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
         LOG(WARNING) << "decode level is empty";
     } else {
-        DCHECK(_meta.encode_level.size() == columns.size());
+        DCHECK(_encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
-            cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _meta.encode_level[i]);
-            LOG(WARNING) << "Column " << i << " 's decode level = " << _meta.encode_level[i];
+            cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]);
+            LOG(WARNING) << "Column " << i << " 's decode level = " << _encode_level[i];
         }
     }
 

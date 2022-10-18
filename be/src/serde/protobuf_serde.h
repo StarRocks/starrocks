@@ -87,19 +87,24 @@ struct ProtobufChunkMeta {
     std::vector<bool> is_consts;
     vectorized::Chunk::SlotHashMap slot_id_to_index;
     vectorized::Chunk::TupleHashMap tuple_id_to_index;
-    std::vector<int32_t> encode_level;
 };
 
 class ProtobufChunkDeserializer {
 public:
-    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, int encode_level = 0)
-            : _meta(meta), _encode_level(encode_level) {}
+    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, const ChunkPB* const pb = nullptr) : _meta(meta) {
+        _encode_level.clear();
+        if (pb != nullptr) {
+            for (auto i = 0; i < pb->encode_level_size(); ++i) {
+                _encode_level.emplace_back(pb->encode_level(i));
+            }
+        }
+    }
 
     StatusOr<vectorized::Chunk> deserialize(std::string_view buff, int64_t* deserialized_bytes = nullptr);
 
 private:
     const ProtobufChunkMeta& _meta;
-    int _encode_level;
+    std::vector<int> _encode_level;
 };
 
 StatusOr<ProtobufChunkMeta> build_protobuf_chunk_meta(const RowDescriptor& row_desc, const ChunkPB& chunk_pb);
