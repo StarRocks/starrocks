@@ -157,9 +157,15 @@ public class PlannerProfile {
             ScopedTimer t = timers.get(key);
             p.addInfoString(name, String.format("%dms / %d", t.getTotalTime(), t.getTotalCount()));
         }
+    }
 
-        keys = new ArrayList<>(customProperties.keySet());
+    public void buildCustomProperties(RuntimeProfile parent) {
+        Map<String, RuntimeProfile> profilers = new HashMap<>();
+        profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(customProperties.keySet());
         Collections.sort(keys);
+
         for (String key : keys) {
             String prefix = getKeyPrefix(key);
             String name = key.substring(prefix.length());
@@ -171,6 +177,7 @@ public class PlannerProfile {
 
     public void build(RuntimeProfile parent) {
         buildTimers(parent);
+        buildCustomProperties(parent);
     }
 
     public void reset() {
