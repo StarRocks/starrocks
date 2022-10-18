@@ -55,6 +55,7 @@ void UpdateConfigAction::handle(HttpRequest* req) {
         });
         _config_callback.emplace("storage_page_cache_limit", [&]() {
             int64_t cache_limit = _exec_env->get_storage_page_cache_size();
+            cache_limit = _exec_env->check_storage_page_cache_size(cache_limit);
             StoragePageCache::instance()->set_capacity(cache_limit);
         });
     });
