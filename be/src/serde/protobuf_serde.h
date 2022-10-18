@@ -91,9 +91,13 @@ struct ProtobufChunkMeta {
 
 class ProtobufChunkDeserializer {
 public:
-    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, const ChunkPB* const pb = nullptr) : _meta(meta) {
+    explicit ProtobufChunkDeserializer(const ProtobufChunkMeta& meta, const ChunkPB* const pb = nullptr,
+                                       const int encode_level = 0)
+            : _meta(meta) {
         _encode_level.clear();
-        if (pb != nullptr) {
+        // NOTE: to be compatible with older version, during upgrade or downgrade, encode_level should be 0,
+        // and older version sends chunks without encode_level fields.
+        if (pb != nullptr && encode_level) {
             for (auto i = 0; i < pb->encode_level_size(); ++i) {
                 _encode_level.emplace_back(pb->encode_level(i));
             }

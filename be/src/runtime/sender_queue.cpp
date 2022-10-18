@@ -69,13 +69,10 @@ Status DataStreamRecvr::SenderQueue::_build_chunk_meta(const ChunkPB& pb_chunk) 
 
 Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, vectorized::Chunk* chunk,
                                                         faststring* uncompressed_buffer) {
-    // NOTE: to be compatible with older version, during upgrade, encode_level should be 0,
-    // and older version sends chunks without encode_level fields.
-
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
-            serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk);
+            serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
             ASSIGN_OR_RETURN(*chunk, des.deserialize(pchunk.data()));
         });
     } else {
@@ -93,7 +90,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
-                serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk);
+                serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
                 ASSIGN_OR_RETURN(*chunk, des.deserialize(buff));
             });
         }

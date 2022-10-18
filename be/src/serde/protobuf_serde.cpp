@@ -167,7 +167,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
         return Status::InvalidArgument("not data in ChunkPB");
     }
     int64_t deserialized_size = 0;
-    ProtobufChunkDeserializer deserializer(*res, &chunk_pb);
+    ProtobufChunkDeserializer deserializer(*res, &chunk_pb, encode_level);
     StatusOr<vectorized::Chunk> chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size);
     if (!chunk.ok()) return chunk;
 
