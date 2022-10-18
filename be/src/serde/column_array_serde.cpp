@@ -138,7 +138,7 @@ class FixedLengthColumnSerde {
 public:
     static int64_t max_serialized_size(const vectorized::FixedLengthColumnBase<T>& column, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
-        if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
             return sizeof(uint64_t) +
                    std::max((int64_t)size, (int64_t)streamvbyte_max_compressedbytes((size + 3) / 4.0));
         } else {
@@ -150,7 +150,7 @@ public:
                               const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         buff = write_little_endian_32(size, buff);
-        if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
                 buff = encode_integers<true>(column.raw_data(), size, buff, encode_level);
             } else {
@@ -168,7 +168,7 @@ public:
         buff = read_little_endian_32(buff, &size);
         std::vector<T>& data = column->get_data();
         raw::make_room(&data, size / sizeof(T));
-        if ((encode_level & 1) && size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4 && sorted) { // only support sorted 32-bit integers
                 buff = decode_integers<true>(buff, data.data(), size);
             } else {
@@ -189,13 +189,13 @@ public:
         const auto& offsets = column.get_offset();
         int64_t res = sizeof(T) * 2;
         int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
-        if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) +
                    std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes((offsets_size + 3) / 4.0));
         } else {
             res += offsets_size;
         }
-        if ((encode_level & 2) && bytes.size() >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 4) && bytes.size() >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) + std::max((int64_t)bytes.size(), (int64_t)LZ4_compressBound(bytes.size()));
         } else {
             res += bytes.size();
@@ -214,7 +214,7 @@ public:
         } else {
             buff = write_little_endian_64(bytes_size, buff);
         }
-        if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = encode_string_lz4(bytes.data(), bytes_size, buff, encode_level);
         } else {
             buff = write_raw(bytes.data(), bytes_size, buff);
@@ -227,7 +227,7 @@ public:
         } else {
             buff = write_little_endian_64(offsets_size, buff);
         }
-        if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4) { // only support sorted 32-bit integers
                 buff = encode_integers<true>(offsets.data(), offsets_size, buff, encode_level);
             } else {
@@ -249,7 +249,7 @@ public:
             buff = read_little_endian_64(buff, &bytes_size);
         }
         column->get_bytes().resize(bytes_size);
-        if ((encode_level & 2) && bytes_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 4) && bytes_size >= ENCODE_SIZE_LIMIT) {
             buff = decode_string_lz4(buff, column->get_bytes().data(), bytes_size);
         } else {
             buff = read_raw(buff, column->get_bytes().data(), bytes_size);
@@ -262,7 +262,7 @@ public:
             buff = read_little_endian_64(buff, &offsets_size);
         }
         raw::make_room(&column->get_offset(), offsets_size / sizeof(typename vectorized::BinaryColumnBase<T>::Offset));
-        if ((encode_level & 1) && offsets_size >= ENCODE_SIZE_LIMIT) {
+        if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
             if (sizeof(T) == 4) { // only support sorted 32-bit integers
                 buff = decode_integers<true>(buff, column->get_offset().data(), offsets_size);
             } else {

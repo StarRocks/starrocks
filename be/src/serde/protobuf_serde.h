@@ -48,6 +48,7 @@ private:
     const int _session_encode_level;
     uint64_t _times = 0;
     uint64_t _frequency = 64;
+    bool _enable_adjust = false;
     std::vector<uint64_t> _raw_bytes, _encoded_bytes;
     std::vector<uint32_t> _column_encode_level;
 };

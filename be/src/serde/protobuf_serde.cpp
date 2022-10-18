@@ -19,12 +19,18 @@ EncodeContext::EncodeContext(const int col_num, const int encode_level)
         _encoded_bytes.emplace_back(0);
     }
     DCHECK(_session_encode_level != 0);
+    if (_session_encode_level & 1) {
+        _enable_adjust = true;
+    }
 }
 
 void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte) {
     DCHECK(_session_encode_level != 0);
+    if (!_enable_adjust) {
+        return;
+    }
     _times += col_id == 0;
-    // decide to encode or not by the encode ratio of the first EncodeSamplingNum of every _frequency chunks
+    // decide to encode or not by the encoding ratio of the first EncodeSamplingNum of every _frequency chunks
     if (_times % _frequency < EncodeSamplingNum) {
         _raw_bytes[col_id] += mem_bytes;
         _encoded_bytes[col_id] += encode_byte;
@@ -127,12 +133,16 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::C
             buff = ColumnArraySerde::serialize(*column, buff);
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
         }
+        LOG(WARNING) << "encode context is null";
     } else {
         for (auto i = 0; i < chunk.columns().size(); ++i) {
             auto buff_begin = buff;
             buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
             if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
             context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
+            if (context->get_session_encode_level() < -1) {
+                LOG(WARNING) << "Column " << i << " 's encode level = " << context->get_encode_level(i);
+            }
         }
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
@@ -209,10 +219,12 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         for (auto& column : columns) {
             cur = ColumnArraySerde::deserialize(cur, column.get());
         }
+        LOG(WARNING) << "decode level is empty";
     } else {
         DCHECK(_meta.encode_level.size() == columns.size());
         for (auto i = 0; i < columns.size(); ++i) {
             cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _meta.encode_level[i]);
+            LOG(WARNING) << "Column " << i << " 's decode level = " << _meta.encode_level[i];
         }
     }
 
