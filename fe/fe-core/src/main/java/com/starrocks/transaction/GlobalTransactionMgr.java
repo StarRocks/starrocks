@@ -380,7 +380,9 @@ public class GlobalTransactionMgr implements Writable {
             throw new UserException("publish timeout: " + timeoutMillis);
         }
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
-        dbTransactionMgr.waitTransactionVisible(db, transactionId, publishTimeoutMillis);
+        if (!dbTransactionMgr.waitTransactionVisible(db, transactionId, publishTimeoutMillis)) {
+            throw new UserException("publish timeout: " + timeoutMillis);
+        }
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
