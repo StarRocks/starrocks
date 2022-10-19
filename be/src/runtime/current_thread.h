@@ -267,17 +267,17 @@ private:
         TRY_CATCH_ALLOC_SCOPE_END()             \
     } while (0)
 
-#define TRY_CATCH_ALL(stmt)                                                            \
-    do {                                                                               \
-        try {                                                                          \
-            SCOPED_SET_CATCHED(true);                                                  \
-            { stmt; }                                                                  \
-        } catch (std::bad_alloc const& e) {                                            \
-            return Status::InternalError(fmt::format("Internal error: {}", e.what())); \
-        } catch (std::runtime_error const& e) {                                        \
-            return Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \
-        } catch (const std::exception& e) {                                            \
-            return Status::Unknown(fmt::format("Unknown error: {}", e.what()));        \
-        }                                                                              \
+#define TRY_CATCH_ALL(result, stmt)                                                      \
+    do {                                                                                 \
+        try {                                                                            \
+            SCOPED_SET_CATCHED(true);                                                    \
+            { result = stmt; }                                                           \
+        } catch (std::bad_alloc const& e) {                                              \
+            result = Status::InternalError(fmt::format("Internal error: {}", e.what())); \
+        } catch (std::runtime_error const& e) {                                          \
+            result = Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \
+        } catch (std::exception const& e) {                                              \
+            result = Status::Unknown(fmt::format("Unknown error: {}", e.what()));        \
+        }                                                                                \
     } while (0)
 } // namespace starrocks

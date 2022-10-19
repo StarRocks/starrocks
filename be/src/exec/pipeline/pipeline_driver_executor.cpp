@@ -119,7 +119,8 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             }
-            auto maybe_state = TRY_CATCH_ALL(driver->process(runtime_state, worker_id));
+            StatusOr<DriverState> maybe_state;
+            TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 
