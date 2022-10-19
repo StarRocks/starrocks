@@ -67,7 +67,7 @@ public class PartitionPruneRule extends TransformationRule {
         if (partitionInfo.getType() == PartitionType.RANGE) {
             selectedPartitionIds =
                     rangePartitionPrune(table, (RangePartitionInfo) partitionInfo, olapScanOperator);
-        }else if (partitionInfo.getType() == PartitionType.LIST) {
+        } else if (partitionInfo.getType() == PartitionType.LIST) {
             selectedPartitionIds =
                     listPartitionPrune((ListPartitionInfo) partitionInfo, olapScanOperator);
         }
