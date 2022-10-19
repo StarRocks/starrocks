@@ -38,7 +38,6 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
-        <starrocks.thridparty>/home/disk1/sr-deps/thirdparty-hook-tcmalloc</starrocks.thridparty>
         <iceberg.version>0.12.1</iceberg.version>
         <python>python</python>
     </properties>
