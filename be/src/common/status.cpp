@@ -22,8 +22,8 @@ inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) 
     msg.size = std::min<size_t>(msg.size, std::numeric_limits<uint16_t>::max());
     ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max());
 
-    const uint16_t len1 = msg.size;
-    const uint16_t len2 = ctx.size;
+    const uint16_t len1 = static_cast<uint16_t>(msg.size);
+    const uint16_t len2 = static_cast<uint16_t>(ctx.size);
     const uint32_t size = static_cast<uint32_t>(len1) + len2;
     auto result = new char[size + 5];
     memcpy(result, &len1, sizeof(len1));
@@ -52,11 +52,11 @@ const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) cons
     strings::memcpy_inlined(&len2, state + sizeof(len1), sizeof(len2));
     uint32_t old_length = static_cast<uint32_t>(len1) + len2 + 5;
     ctx.size = std::min<size_t>(ctx.size, std::numeric_limits<uint16_t>::max() - len2);
-    uint32_t new_length = old_length + ctx.size;
+    uint32_t new_length = static_cast<uint32_t>(old_length + ctx.size);
     auto result = new char[new_length];
     strings::memcpy_inlined(result, state, old_length);
     strings::memcpy_inlined(result + old_length, ctx.data, ctx.size);
-    uint16_t new_len2 = len2 + ctx.size;
+    uint16_t new_len2 = static_cast<uint16_t>(len2 + ctx.size);
     memcpy(result + 2, &new_len2, sizeof(new_len2));
     return result;
 }
