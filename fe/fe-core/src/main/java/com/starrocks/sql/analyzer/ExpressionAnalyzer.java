@@ -649,7 +649,7 @@ public class ExpressionAnalyzer {
             } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes,
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-                fn.setArgsType(argumentTypes);
+                fn.setArgsType(argumentTypes); // as accepting various types
                 fn.setIsNullable(false);
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
