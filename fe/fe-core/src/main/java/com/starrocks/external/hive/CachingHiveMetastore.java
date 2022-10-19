@@ -243,8 +243,12 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     public Map<String, HivePartitionStats> getPresentPartitionsStatistics(List<HivePartitionName> partitions) {
-        return partitionStatsCache.getAllPresent(partitions).entrySet().stream()
-                .collect(Collectors.toMap(entry -> entry.getKey().getPartitionNames().get(), Map.Entry::getValue));
+        if (metastore instanceof CachingHiveMetastore) {
+            return ((CachingHiveMetastore) metastore).getPresentPartitionsStatistics(partitions);
+        } else {
+            return partitionStatsCache.getAllPresent(partitions).entrySet().stream()
+                    .collect(Collectors.toMap(entry -> entry.getKey().getPartitionNames().get(), Map.Entry::getValue));
+        }
     }
 
     private HivePartitionStats loadPartitionStatistics(HivePartitionName hivePartitionName) {

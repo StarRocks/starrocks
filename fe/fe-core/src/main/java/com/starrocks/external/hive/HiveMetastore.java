@@ -123,7 +123,6 @@ public class HiveMetastore implements IHiveMetastore {
         String dbName = hmsTbl.getDbName();
         String tblName = hmsTbl.getTableName();
         List<String> dataColumns = hmsTbl.getDataColumnNames();
-        List<String> partitionColumnNames = hmsTbl.getPartitionColumnNames();
         Map<String, Partition> partitions = getPartitionsByNames(hmsTbl.getDbName(), hmsTbl.getTableName(), partitionNames);
 
         Map<String, HiveCommonStats> partitionCommonStats = partitions.entrySet().stream()
@@ -134,7 +133,7 @@ public class HiveMetastore implements IHiveMetastore {
 
         ImmutableMap.Builder<String, HivePartitionStats> resultBuilder = ImmutableMap.builder();
         Map<String, List<ColumnStatisticsObj>> partitionNameToColumnStatsObj =
-                client.getPartitionColumnStats(dbName, tblName, partitionColumnNames, dataColumns);
+                client.getPartitionColumnStats(dbName, tblName, partitionNames, dataColumns);
 
         Map<String, Map<String, HiveColumnStats>> partitionColumnStats = HiveMetastoreApiConverter
                 .toPartitionColumnStatistics(partitionNameToColumnStatsObj, partitionRowNums);
