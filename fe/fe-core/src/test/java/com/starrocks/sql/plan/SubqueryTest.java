@@ -527,4 +527,13 @@ public class SubqueryTest extends PlanTestBase {
                 "  |  <slot 4> : 4: v7\n" +
                 "  |  <slot 8> : 5: v8 + 1");
     }
+
+    @Test
+    public void testTransformNAAJ() throws Exception {
+        String sql = "select * from t0_not_null where v1 not in (select v2 from t0_not_null)";
+        String plan = getFragmentPlan(sql);
+        assertNotContains(plan, "NULL AWARE LEFT ANTI JOIN");
+        assertContains(plan, "LEFT ANTI JOIN");
+
+    }
 }
