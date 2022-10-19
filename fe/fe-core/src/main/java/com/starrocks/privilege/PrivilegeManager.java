@@ -497,11 +497,8 @@ public class PrivilegeManager {
         userReadLock();
         try {
             UserIdentity userIdentity = context.getCurrentUserIdentity();
-            if (!userToPrivilegeCollection.containsKey(userIdentity)) {
-                throw new PrivilegeException("cannot find " + userIdentity.toString());
-            }
+            UserPrivilegeCollection userCollection = getUserPrivilegeCollection(userIdentity);
             PrivilegeCollection collection = new PrivilegeCollection();
-            UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
             collection.merge(userCollection);
             Set<Long> roleIds = userCollection.getAllRoles();
             if (roleIds != null) {
@@ -516,17 +513,19 @@ public class PrivilegeManager {
     }
 
     private UserPrivilegeCollection getUserPrivilegeCollection(UserIdentity userIdentity) throws PrivilegeException {
-        if (!userToPrivilegeCollection.containsKey(userIdentity)) {
+        UserPrivilegeCollection userCollection = userToPrivilegeCollection.get(userIdentity);
+        if (userCollection == null) {
             throw new PrivilegeException("cannot find " + userIdentity.toString());
         }
-        return userToPrivilegeCollection.get(userIdentity);
+        return userCollection;
     }
 
     private RolePrivilegeCollection getRolePrivilegeCollection(long roleId) throws PrivilegeException {
-        if (!roleIdToPrivilegeCollection.containsKey(roleId)) {
+        RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
+        if (collection == null) {
             throw new PrivilegeException("cannot find role" + roleId);
         }
-        return roleIdToPrivilegeCollection.get(roleId);
+        return collection;
     }
 
     public ActionSet analyzeActionSet(String typeName, short typeId, List<String> actionNameList)
@@ -542,26 +541,29 @@ public class PrivilegeManager {
             if (actionName.endsWith("_PRIV")) {
                 actionName = actionName.substring(0, actionName.length() - 5);
             }
-            if (!actionMap.containsKey(actionName)) {
+            Action action = actionMap.get(actionName);
+            if (action == null) {
                 throw new PrivilegeException("invalid action " + actionName + " for " + typeName);
             }
-            actions.add(actionMap.get(actionName));
+            actions.add(action);
         }
         return new ActionSet(actions);
     }
 
     public String analyzeTypeInPlural(String plural) throws PrivilegeException {
-        if (! pluralToType.containsKey(plural)) {
+        String type = pluralToType.get(plural);
+        if (type == null) {
             throw new PrivilegeException("invalid plural privilege type " + plural);
         }
-        return pluralToType.get(plural);
+        return type;
     }
 
     public short analyzeType(String typeName) throws PrivilegeException {
-        if (!typeStringToId.containsKey(typeName)) {
+        Short typeId = typeStringToId.get(typeName);
+        if (typeId == null) {
             throw new PrivilegeException("cannot find type " + typeName + " in " + typeStringToId.keySet());
         }
-        return typeStringToId.get(typeName);
+        return typeId;
     }
 
     public void createRole(CreateRoleStmt stmt) throws DdlException {
@@ -605,15 +607,14 @@ public class PrivilegeManager {
         roleWriteLock();
         try {
             String roleName = stmt.getQualifiedRole();
-            if (!roleNameToId.containsKey(roleName)) {
-                throw new DdlException(String.format("Role %s doesn't exist!", roleName));
-            }
-            long roleId = roleNameToId.get(roleName);
+            long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
             roleIdToPrivilegeCollection.remove(roleId);
             roleNameToId.remove(roleName);
             globalStateMgr.getEditLog().logDropRole(roleId, collection, provider.getPluginId(), provider.getPluginVersion());
             LOG.info("dropped role {}[{}]", roleName, roleId);
+        } catch (PrivilegeException e) {
+            throw new DdlException(e.getMessage(), e);
         } finally {
             roleWriteUnlock();
         }
@@ -646,10 +647,11 @@ public class PrivilegeManager {
     }
 
     protected Long getRoleIdByNameNoLock(String name) throws PrivilegeException {
-        if (!roleNameToId.containsKey(name)) {
+        Long roleId = roleNameToId.get(name);
+        if (roleId == null) {
             throw new PrivilegeException(String.format("Role %s doesn't exist!", name));
         }
-        return roleNameToId.get(name);
+        return roleId;
     }
 
     public PEntryObject analyzeObject(String typeName, List<String> objectTokenList) throws PrivilegeException {

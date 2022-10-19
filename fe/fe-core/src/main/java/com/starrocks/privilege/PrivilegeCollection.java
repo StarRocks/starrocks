@@ -149,11 +149,11 @@ public class PrivilegeCollection {
     }
 
     public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             LOG.debug("revoke a non-existence type {}", type);
             return;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (objects == null) {
             // objects can be null, we should adjust it to a list of one null object
             objects = new ArrayList<>();
@@ -179,10 +179,10 @@ public class PrivilegeCollection {
     }
 
     public boolean check(short type, Action want, PEntryObject object) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             return false;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             if (objectMatch(privilegeEntry.object, object) && privilegeEntry.actionSet.contains(want)) {
                 return true;
@@ -193,10 +193,10 @@ public class PrivilegeCollection {
     }
 
     public boolean checkAnyAction(short type, PEntryObject object) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             return false;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             if (objectMatch(privilegeEntry.object, object)) {
                 return true;
@@ -206,10 +206,10 @@ public class PrivilegeCollection {
     }
 
     public boolean allowGrant(short type, ActionSet wantSet, List<PEntryObject> objects) {
-        if (!typeToPrivilegeEntryList.containsKey(type)) {
+        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
+        if (privilegeEntryList == null) {
             return false;
         }
-        List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         List<PEntryObject> unCheckedObjects = new ArrayList<>(objects);
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
             Iterator<PEntryObject> iterator = unCheckedObjects.iterator();
