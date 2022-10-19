@@ -214,10 +214,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    if constexpr (std::is_same_v<SourceFactory, AggregateBlockingSourceOperatorFactory>) {
-        source_operator->set_need_local_shuffle(
-                down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
-    }
+    source_operator->set_need_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
 
     ops_with_source.push_back(std::move(source_operator));
     if (should_cache) {
@@ -232,35 +230,44 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
-    bool streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
-    if (_tnode.agg_node.need_finalize) {
-        auto& agg_node = _tnode.agg_node;
+    auto& agg_node = _tnode.agg_node;
+    bool need_local_shuffle = context->need_local_shuffle(ops_with_sink) && agg_node.__isset.grouping_exprs &&
+                              !_tnode.agg_node.grouping_exprs.empty();
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        std::vector<ExprContext*> group_by_expr_ctxs;
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::prepare(group_by_expr_ctxs, runtime_state());
+        Expr::open(group_by_expr_ctxs, runtime_state());
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+    };
+
+    if (_tnode.agg_node.need_finalize && !sorted_streaming_aggregate) {
         // If finalize aggregate with group by clause, then it can be parallelized
-        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            if (context->need_local_shuffle(ops_with_sink)) {
-                std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                Expr::prepare(group_by_expr_ctxs, runtime_state());
-                Expr::open(group_by_expr_ctxs, runtime_state());
-                ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                                  group_by_expr_ctxs);
-            }
-        } else if (!streaming_aggregate) {
+        if (need_local_shuffle) {
+            ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+        } else {
             ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
         }
     }
 
     OpFactories ops_with_source;
 
-    if (streaming_aggregate) {
+    if (sorted_streaming_aggregate) {
         ops_with_source =
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
     } else {
         ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
                                                  AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+    }
+
+    // insert local shuffle after sorted streaming aggregate
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && need_local_shuffle) {
+        ops_with_source = try_interpolate_local_shuffle(ops_with_source);
     }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {

@@ -38,8 +38,12 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
+    bool need_local_shuffle() const override { return _need_local_shuffle; }
+    void set_need_local_shuffle(bool need_local_shuffle) override { _need_local_shuffle = need_local_shuffle; }
+
 private:
     StreamingAggregatorFactoryPtr _aggregator_factory = nullptr;
+    bool _need_local_shuffle = true;
 };
 
 } // namespace starrocks::pipeline
