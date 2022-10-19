@@ -1476,7 +1476,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
                     MATCH_RIGHT_TABLE_ROWS()
                     RETURN_IF_CHUNK_FULL()
                 }
-            } else if (_table_items->key_columns[0]->is_nullable()) {
+            } else if (_table_items->key_columns[0]->has_null()) {
                 // when left table col value not hits in hash table needs match all null value rows in right table
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
                 auto& null_array = nullable_column->null_column()->get_data();
@@ -1498,7 +1498,7 @@ void JoinHashMap<PT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
             continue;
         } else {
             // left table col value hits in hash table, we also need match null values firstly then match hit rows.
-            if (_table_items->key_columns[0]->is_nullable()) {
+            if (_table_items->key_columns[0]->has_null()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(_table_items->key_columns[0]);
                 auto& null_array = nullable_column->null_column()->get_data();
                 for (size_t j = 1; j < _table_items->row_count + 1; j++) {
