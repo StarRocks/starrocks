@@ -1744,7 +1744,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         List<List<Predicate>> predicatesList = new ArrayList<>();
         for (StarRocksParser.ClassifierContext classifierContext : context.classifier()) {
-            List<Predicate> p = visit(classifierContext.expression(), Predicate.class);
+            List<Predicate> p = visit(classifierContext.expressionList().expression(), Predicate.class);
             predicatesList.add(p);
         }
 
@@ -1774,7 +1774,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.ADD() != null) {
             List<List<Predicate>> predicatesList = new ArrayList<>();
             for (StarRocksParser.ClassifierContext classifierContext : context.classifier()) {
-                List<Predicate> p = visit(classifierContext.expression(), Predicate.class);
+                List<Predicate> p = visit(classifierContext.expressionList().expression(), Predicate.class);
                 predicatesList.add(p);
             }
 
@@ -1887,7 +1887,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         Expr whereExpr = (Expr) visitIfPresent(context.where);
         List<Expr> colMappingList = null;
         if (context.colMappingList != null) {
-            colMappingList = visit(context.colMappingList.expression(), Expr.class);
+            colMappingList = visit(context.colMappingList.expressionList().expression(), Expr.class);
         }
         if (context.srcTableName != null) {
             String srcTableName = ((Identifier) visit(context.srcTableName)).getValue();
@@ -3152,19 +3152,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitSingleGroupingSet(StarRocksParser.SingleGroupingSetContext context) {
-        return new GroupByClause(new ArrayList<>(visit(context.expression(), Expr.class)),
+        return new GroupByClause(new ArrayList<>(visit(context.expressionList().expression(), Expr.class)),
                 GroupByClause.GroupingType.GROUP_BY);
     }
 
     @Override
     public ParseNode visitRollup(StarRocksParser.RollupContext context) {
-        List<Expr> groupingExprs = visit(context.expression(), Expr.class);
+        List<Expr> groupingExprs = visit(context.expressionList().expression(), Expr.class);
         return new GroupByClause(new ArrayList<>(groupingExprs), GroupByClause.GroupingType.ROLLUP);
     }
 
     @Override
     public ParseNode visitCube(StarRocksParser.CubeContext context) {
-        List<Expr> groupingExprs = visit(context.expression(), Expr.class);
+        List<Expr> groupingExprs = visit(context.expressionList().expression(), Expr.class);
         return new GroupByClause(new ArrayList<>(groupingExprs), GroupByClause.GroupingType.CUBE);
     }
 
@@ -3438,7 +3438,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitTableFunction(StarRocksParser.TableFunctionContext context) {
         TableFunctionRelation tableFunctionRelation = new TableFunctionRelation(
                 getQualifiedName(context.qualifiedName()).toString(),
-                new FunctionParams(false, visit(context.expression(), Expr.class)));
+                new FunctionParams(false, visit(context.expressionList().expression(), Expr.class)));
 
         if (context.alias != null) {
             Identifier identifier = (Identifier) visit(context.alias);
@@ -3449,7 +3449,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitRowConstructor(StarRocksParser.RowConstructorContext context) {
-        ArrayList<Expr> row = new ArrayList<>(visit(context.expression(), Expr.class));
+        ArrayList<Expr> row = new ArrayList<>(visit(context.expressionList().expression(), Expr.class));
         return new ValueList(row);
     }
 
@@ -4043,7 +4043,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         boolean isNotIn = context.NOT() != null;
         return new InPredicate(
                 (Expr) visit(context.value),
-                visit(context.expression(), Expr.class), isNotIn);
+                visit(context.expressionList().expression(), Expr.class), isNotIn);
     }
 
     @Override
@@ -4219,7 +4219,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 IntervalLiteral intervalLiteral = (IntervalLiteral) e2;
 
-                ParseNode e3 = (ParseNode) visit(context.expression(2));
+                ParseNode e3 = visit(context.expression(2));
                 if (!(e3 instanceof UnitBoundary)) {
                     e3 = new UnitBoundary("floor");
                 }
@@ -4581,10 +4581,16 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.arrayType() != null) {
             return new ArrayExpr(
                     new ArrayType(getType(context.arrayType().type())),
-                    visit(context.expression(), Expr.class));
+                    visit(context.expressionList().expression(), Expr.class));
         }
 
-        return new ArrayExpr(null, visit(context.expression(), Expr.class));
+        List<Expr> exprs;
+        if (context.expressionList() != null) {
+            exprs = visit(context.expressionList().expression(), Expr.class);
+        } else {
+            exprs = Collections.emptyList();
+        }
+        return new ArrayExpr(null, exprs);
     }
 
     @Override

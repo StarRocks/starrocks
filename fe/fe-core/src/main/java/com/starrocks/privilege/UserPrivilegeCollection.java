@@ -2,6 +2,29 @@
 
 package com.starrocks.privilege;
 
+import com.google.gson.annotations.SerializedName;
+
+import java.util.HashSet;
+import java.util.Set;
+
 public class UserPrivilegeCollection extends PrivilegeCollection {
-    // todo: roles
+    @SerializedName(value = "r")
+    private Set<Long> roleIds;
+
+    public UserPrivilegeCollection() {
+        super();
+        roleIds = new HashSet<>();
+    }
+
+    public void grantRole(Long roleId) {
+        roleIds.add(roleId);
+    }
+
+    public void revokeRole(Long roleId) {
+        roleIds.remove(roleId);
+    }
+
+    public Set<Long> getAllRoles() {
+        return roleIds;
+    }
 }

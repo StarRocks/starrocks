@@ -741,6 +741,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             context.clear();
             context.merge(mergeContext);
+            optExpression.setLogicalProperty(rewriteLogicProperty(optExpression.getLogicalProperty(),
+                    context.stringColumnIdToDictColumnIds));
             return visitProjectionAfter(optExpression, context);
         }
 

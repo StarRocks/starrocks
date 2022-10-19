@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
@@ -45,6 +46,8 @@ public class OperatorBuilderFactory {
             return new LogicalIcebergScanOperator.Builder();
         } else if (operator instanceof LogicalHudiScanOperator) {
             return new LogicalHudiScanOperator.Builder();
+        } else if (operator instanceof LogicalDeltaLakeScanOperator) {
+            return new LogicalDeltaLakeScanOperator.Builder();
         } else if (operator instanceof LogicalEsScanOperator) {
             return new LogicalEsScanOperator.Builder();
         } else if (operator instanceof LogicalMysqlScanOperator) {

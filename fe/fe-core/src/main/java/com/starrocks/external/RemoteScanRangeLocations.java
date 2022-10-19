@@ -34,8 +34,7 @@ public class RemoteScanRangeLocations {
     private final List<TScanRangeLocations> result = new ArrayList<>();
 
     private void addScanRangeLocations(long partitionId, RemoteFileInfo partition, RemoteFileDesc fileDesc,
-                                       RemoteFileBlockDesc blockDesc
-    ) {
+                                       RemoteFileBlockDesc blockDesc) {
         // NOTE: Config.hive_max_split_size should be extracted to a local variable,
         // because it may be changed before calling 'splitScanRangeLocations'
         // and after needSplit has been calculated.

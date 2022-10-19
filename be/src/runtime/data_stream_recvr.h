@@ -101,7 +101,9 @@ public:
     const RowDescriptor& row_desc() const { return _row_desc; }
 
     void add_sub_plan_statistics(const PQueryStatistics& statistics, int sender_id) {
-        _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
+        if (_sub_plan_query_statistics_recvr) {
+            _sub_plan_query_statistics_recvr->insert(statistics, sender_id);
+        }
     }
 
     void short_circuit_for_pipeline(const int32_t driver_sequence);

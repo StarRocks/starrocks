@@ -51,8 +51,8 @@ enum TQueryType {
 }
 
 enum TLoadJobType {
-    Broker,
-    Spark,
+    BROKER,
+    SPARK,
     INSERT_QUERY,
     INSERT_VALUES
 }
@@ -193,6 +193,8 @@ struct TQueryOptions {
   65: optional bool enable_replicated_storage;
 
   66: optional bool use_scan_block_cache;
+
+  67: optional bool enable_pipeline_query_statistic = false;
 }
 
 

@@ -48,6 +48,8 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final RemoteScanPartitionPruneRule ICEBERG_SCAN =
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final RemoteScanPartitionPruneRule DELTALAKE_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
 
     public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
