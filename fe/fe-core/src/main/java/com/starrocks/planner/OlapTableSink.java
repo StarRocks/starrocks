@@ -79,7 +79,6 @@ import com.starrocks.transaction.TransactionState;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import scala.reflect.internal.Trees;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -311,8 +310,9 @@ public class OlapTableSink extends DataSink {
 
     private void setListPartitionValues(ListPartitionInfo listPartitionInfo, Partition partition,
                                         TOlapTablePartition tPartition){
-        List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
         List<List<TExprNode>> inKeysExprNodes = new ArrayList<>();
+
+        List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
         if(multiValues != null && multiValues.size() > 0){
             inKeysExprNodes = multiValues.stream()
                     .map(values -> this.LiteralExprsToTExprNodes(values))
@@ -330,7 +330,6 @@ public class OlapTableSink extends DataSink {
         if (inKeysExprNodes.size() > 0) {
             tPartition.setIn_keys(inKeysExprNodes);
         }
-
     }
 
     private void setRangeKeys(RangePartitionInfo rangePartitionInfo, Partition partition,
