@@ -29,7 +29,7 @@ StatusOr<CacheValue> CacheManager::probe(const std::string& key) {
         return CACHE_MISS;
     }
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    CacheValue cache_value = *reinterpret_cast<CacheValue*>(_cache.value(handle));
+    CacheValue cache_value(*reinterpret_cast<CacheValue*>(_cache.value(handle)));
     return cache_value;
 }
 

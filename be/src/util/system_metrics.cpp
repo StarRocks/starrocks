@@ -631,6 +631,9 @@ void SystemMetrics::_update_snmp_metrics() {
 
 void SystemMetrics::_update_query_cache_metrics() {
     auto* cache_mgr = ExecEnv::GetInstance()->cache_mgr();
+    if (UNLIKELY(cache_mgr == nullptr)) {
+        return;
+    }
     auto capacity = cache_mgr->capacity();
     auto usage = cache_mgr->memory_usage();
     auto lookup_count = cache_mgr->lookup_count();
