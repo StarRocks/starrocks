@@ -354,6 +354,23 @@ struct THudiTable {
     11: optional bool is_mor_table
 }
 
+struct TDeltaLakeTable {
+    // table location
+    1: optional string location
+
+    // Schema columns, except partition columns
+    2: optional list<TColumn> columns
+
+    // Partition columns
+    3: optional list<TColumn> partition_columns
+
+    // Map from partition id to partition metadata.
+    4: optional map<i64, THdfsPartition> partitions
+
+    // The prefixes of locations of partitions in this table
+    5: optional list<string> partition_prefixes
+}
+
 struct TJDBCTable {
     1: optional string jdbc_driver_name
     2: optional string jdbc_driver_url
@@ -392,6 +409,9 @@ struct TTableDescriptor {
 
   // Hudi Table schema
   32: optional THudiTable hudiTable
+
+  // Delta Lake schema
+  33: optional TDeltaLakeTable deltaLakeTable
 }
 
 struct TDescriptorTable {

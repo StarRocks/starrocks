@@ -1,11 +1,11 @@
 
  <p align="center">
- <a href="https://www.starrocks.com/en-US/index">
+ <a href="https://starrocks.io/index">
     <img  width="526" src="images/logo.png">
    </a>
 </p>
 <p align="center">
-  <a href="https://www.starrocks.com/en-US/download/community">Download</a> | <a href="https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro">Docs</a> | <a href="https://www.starrocks.com/en-us/blog/benchmark-test">Benchmarks</a> | <a href="https://github.com/StarRocks/demo">Demo</a>
+  <a href="https://starrocks.io/download/community">Download</a> | <a href="https://docs.starrocks.io/">Docs</a> | <a href="https://starrocks.io/blog/benchmark-test">Benchmarks</a> | <a href="https://github.com/StarRocks/demo">Demo</a>
 </p>
 <p align="center">
 
@@ -17,7 +17,7 @@
     <img src="https://img.shields.io/github/issues-raw/StarRocks/starrocks" alt="Open Issues">
   </a>
   </a>
-   <a href="https://www.starrocks.com/en-US/index">
+   <a href="https://starrocks.io/index">
     <img src="https://img.shields.io/badge/Visit%20StarRocks-Website-green" alt="Website">
   </a>
   </a>
@@ -75,9 +75,9 @@ StarRocks’s streamlined architecture is mainly composed of two modules：Front
 
 | Section | Description |
 |-|-|
-| [Deploy](https://docs.starrocks.com/en-us/main/quick_start/Deploy) | Learn how to run and configure StarRocks.|
-| [Docs](https://docs.starrocks.com/en-us/main/introduction/StarRocks_intro)| Full documentation. |
-| [Blogs](https://www.starrocks.com/en-US/blog) | StarRocks deep dive and user stories.  |
+| [Deploy](https://docs.starrocks.io/en-us/latest/quick_start/Deploy) | Learn how to run and configure StarRocks.|
+| [Docs](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro)| Full documentation. |
+| [Blogs](https://starrocks.io/blog) | StarRocks deep dive and user stories.  |
 
 ### ❓ Get support  
 [<img align="right" width="150" src="https://firstcontributions.github.io/assets/Readme/join-slack-team.png">](https://join.slack.com/t/starrocks/shared_invite/zt-z5zxqr0k-U5lrTVlgypRIV8RbnCIAzg)
@@ -99,7 +99,7 @@ We welcome all kinds of contributions from the community, individuals and partne
 3. Understand our [GitHub workflow](https://github.com/StarRocks/community/blob/main/Contributors/guide/workflow.md) for opening a pull request; use this [PR Template](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a pull request.
 4. Pick a [good first issue](https://github.com/StarRocks/starrocks/labels/good%20first%20issue) and start contributing. 
 
-**📝 License:** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://www.starrocks.com/en-US/product/license-FAQ) to learn more.  
+**📝 License:** Please note StaRocks is licensed under [Elastic License 2.0](https://github.com/StarRocks/starrocks/blob/main/LICENSE.txt), with small portions of code under [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See [FAQ](https://starrocks.io/product/license-FAQ) to learn more.  
 
 **👥 Community Membership:** Learn more about different [contributor roles](community/membership.md) in StarRocks community.
   
@@ -111,8 +111,8 @@ This project is used by the following companies. Learn more about their use case
 
 - [Airbnb](https://www.youtube.com/watch?v=AzDxEZuMBwM&ab_channel=StarRocks_labs)
 - [Trip.com](https://starrocks.medium.com/trip-com-starrocks-efficiently-supports-high-concurrent-queries-dramatically-reduces-labor-and-1e1921dd6bf8) 
-- [Zepp Health](https://www.starrocks.com/en-US/blog/zeppheath) 
-- [Lenovo](https://www.starrocks.com/en-us/blog/lenovo_en) 
+- [Zepp Health](https://starrocks.io/blog/zeppheath) 
+- [Lenovo](https://starrocks.io/blog/lenovo_en) 
 
 <br>
 

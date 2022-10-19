@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/beta_rowset_writer.cpp
+//   https://github.com/apache/incubator-doris/blob/master/be/src/olap/rowset/rowset_writer.cpp
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -19,7 +19,7 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#include "storage/rowset/beta_rowset_writer.h"
+#include "storage/rowset/rowset_writer.h"
 
 #include <butil/iobuf.h>
 #include <butil/reader_writer.h>
@@ -76,10 +76,10 @@ ssize_t SegmentFileWriter::WriteV(const iovec* iov, int iovcnt) {
     }
 }
 
-BetaRowsetWriter::BetaRowsetWriter(const RowsetWriterContext& context)
+RowsetWriter::RowsetWriter(const RowsetWriterContext& context)
         : _context(context), _num_rows_written(0), _total_row_size(0), _total_data_size(0), _total_index_size(0) {}
 
-Status BetaRowsetWriter::init() {
+Status RowsetWriter::init() {
     DCHECK(!(_context.tablet_schema->contains_format_v1_column() &&
              _context.tablet_schema->contains_format_v2_column()));
     // StarRocks has newly designed storage formats for DATA/DATETIME/DECIMAL for better performance.
@@ -122,7 +122,7 @@ Status BetaRowsetWriter::init() {
     return Status::OK();
 }
 
-StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
+StatusOr<RowsetSharedPtr> RowsetWriter::build() {
     if (_num_rows_written > 0) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
@@ -173,54 +173,89 @@ StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     return rowset;
 }
 
-Status BetaRowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
-    // 1. create segment file
-    if (data.size() != segment_pb.data_size()) {
-        return Status::InternalError(
-                fmt::format("segment size {} not equal attachment size {}", segment_pb.data_size(), data.size()));
+Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
+    if (data.size() != segment_pb.data_size() + segment_pb.delete_data_size()) {
+        return Status::InternalError(fmt::format("segment size {} + delete file size {} not equal attachment size {}",
+                                                 segment_pb.data_size(), segment_pb.delete_data_size(), data.size()));
     }
 
-    auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
-    // use MUST_CREATE make sure atomic
-    ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
+    if (segment_pb.has_path()) {
+        // 1. create segment file
+        auto path = Rowset::segment_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.segment_id());
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
 
-    // 2. flush segment file
-    auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+        // 2. flush segment file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
 
-    size_t remaining_bytes = segment_pb.data_size();
-    while (remaining_bytes > 0) {
-        auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
-        if (written_bytes < 0) {
-            return io::io_error(wfile->filename(), errno);
+        size_t remaining_bytes = segment_pb.data_size();
+        while (remaining_bytes > 0) {
+            auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
         }
-        remaining_bytes -= written_bytes;
-    }
-    if (remaining_bytes != 0) {
-        return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
-                                                 wfile->filename(), segment_pb.data_size() - remaining_bytes,
-                                                 segment_pb.data_size()));
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("segment {} write size {} not equal expected size {}",
+                                                     wfile->filename(), segment_pb.data_size() - remaining_bytes,
+                                                     segment_pb.data_size()));
+        }
+
+        RETURN_IF_ERROR(wfile->close());
+
+        // 3. update statistic
+        {
+            std::lock_guard<std::mutex> l(_lock);
+            _total_data_size += segment_pb.data_size();
+            _total_index_size += segment_pb.index_size();
+            _num_rows_written += segment_pb.num_rows();
+            _total_row_size += segment_pb.row_size();
+            _num_segment++;
+        }
+
+        VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
     }
 
-    RETURN_IF_ERROR(wfile->close());
+    if (segment_pb.has_delete_path()) {
+        // 1. create delete file
+        auto path =
+                Rowset::segment_del_file_path(_context.rowset_path_prefix, _context.rowset_id, segment_pb.delete_id());
+        // use MUST_CREATE make sure atomic
+        ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(path));
 
-    // 3. update statistic
-    {
-        std::lock_guard<std::mutex> l(_lock);
-        _total_data_size += segment_pb.data_size();
-        _total_index_size += segment_pb.index_size();
-        _num_rows_written += segment_pb.num_rows();
-        _total_row_size += segment_pb.row_size();
-        _num_segment++;
+        // 2. flush delete file
+        auto writer = std::make_unique<SegmentFileWriter>(wfile.get());
+
+        size_t remaining_bytes = segment_pb.delete_data_size();
+        while (remaining_bytes > 0) {
+            auto written_bytes = data.cut_into_writer(writer.get(), remaining_bytes);
+            if (written_bytes < 0) {
+                return io::io_error(wfile->filename(), errno);
+            }
+            remaining_bytes -= written_bytes;
+        }
+        if (remaining_bytes != 0) {
+            return Status::InternalError(fmt::format("segment delete file {} write size {} not equal expected size {}",
+                                                     wfile->filename(), segment_pb.delete_data_size() - remaining_bytes,
+                                                     segment_pb.delete_data_size()));
+        }
+
+        RETURN_IF_ERROR(wfile->close());
+
+        _num_delfile++;
+        _num_rows_del += segment_pb.delete_num_rows();
+
+        VLOG(2) << "Flush delete file to " << path << " size " << segment_pb.delete_data_size();
     }
 
-    VLOG(2) << "Flush segment to " << path << " size " << segment_pb.data_size();
     return Status::OK();
 }
 
-HorizontalBetaRowsetWriter::HorizontalBetaRowsetWriter(const RowsetWriterContext& context)
-        : BetaRowsetWriter(context), _segment_writer(nullptr) {}
+HorizontalRowsetWriter::HorizontalRowsetWriter(const RowsetWriterContext& context)
+        : RowsetWriter(context), _segment_writer(nullptr) {}
 
-HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
+HorizontalRowsetWriter::~HorizontalRowsetWriter() {
     // TODO(lingbin): Should wrapper exception logic, no need to know file ops directly.
     if (!_already_built) {       // abnormal exit, remove all files generated
         _segment_writer.reset(); // ensure all files are closed
@@ -280,7 +315,7 @@ HorizontalBetaRowsetWriter::~HorizontalBetaRowsetWriter() {
     }
 }
 
-StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_segment_writer() {
+StatusOr<std::unique_ptr<SegmentWriter>> HorizontalRowsetWriter::_create_segment_writer() {
     std::lock_guard<std::mutex> l(_lock);
     std::string path;
     if (_context.schema_change_sorting) {
@@ -300,7 +335,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> HorizontalBetaRowsetWriter::_create_seg
     return std::move(segment_writer);
 }
 
-Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
+Status HorizontalRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
     if (_segment_writer == nullptr) {
         ASSIGN_OR_RETURN(_segment_writer, _create_segment_writer());
     } else if (_segment_writer->estimate_segment_size() >= config::max_segment_file_size ||
@@ -315,7 +350,7 @@ Status HorizontalBetaRowsetWriter::add_chunk(const vectorized::Chunk& chunk) {
     return Status::OK();
 }
 
-std::string HorizontalBetaRowsetWriter::_dump_mixed_segment_delfile_not_supported() {
+std::string HorizontalRowsetWriter::_dump_mixed_segment_delfile_not_supported() {
     std::string msg = strings::Substitute(
             "multi-segment rowset do not support mixing upsert and delete tablet:$0 txn:$1 #seg:$2 #delfile:$3 "
             "#upsert:$4 #del:$5",
@@ -324,7 +359,7 @@ std::string HorizontalBetaRowsetWriter::_dump_mixed_segment_delfile_not_supporte
     return msg;
 }
 
-Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
+Status HorizontalRowsetWriter::flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
     // 1. pure upsert
     // once upsert, subsequent flush can only do upsert
     switch (_flush_chunk_state) {
@@ -339,7 +374,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk(const vectorized::Chunk& chunk, S
     return _flush_chunk(chunk, seg_info);
 }
 
-Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
+Status HorizontalRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info) {
     auto segment_writer = _create_segment_writer();
     if (!segment_writer.ok()) {
         return segment_writer.status();
@@ -357,9 +392,9 @@ Status HorizontalBetaRowsetWriter::_flush_chunk(const vectorized::Chunk& chunk, 
     return _flush_segment_writer(&segment_writer.value(), seg_info);
 }
 
-Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
-                                                            const vectorized::Column& deletes) {
-    auto flush_del_file = [&](const vectorized::Column& deletes) {
+Status HorizontalRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk& upserts,
+                                                        const vectorized::Column& deletes, SegmentPB* seg_info) {
+    auto flush_del_file = [&](const vectorized::Column& deletes, SegmentPB* seg_info) {
         ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_del_file_path(
                                              _context.rowset_path_prefix, _context.rowset_id, _num_delfile)));
         size_t sz = serde::ColumnArraySerde::max_serialized_size(deletes);
@@ -369,6 +404,12 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
         RETURN_IF_ERROR(wfile->close());
+        if (seg_info) {
+            seg_info->set_delete_num_rows(deletes.size());
+            seg_info->set_delete_id(_num_delfile);
+            seg_info->set_delete_data_size(content.size());
+            seg_info->set_delete_path(wfile->filename());
+        }
         _num_delfile++;
         _num_rows_del += deletes.size();
         return Status::OK();
@@ -378,7 +419,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
     // 2. pure delete, support multi-segment
     // 3. mixed upsert/delete, do not support multi-segment
     if (!upserts.is_empty() && deletes.empty()) {
-        return flush_chunk(upserts);
+        return flush_chunk(upserts, seg_info);
     } else if (upserts.is_empty() && !deletes.empty()) {
         // 2. pure delete
         // once delete, subsequent flush can only do delete
@@ -391,7 +432,7 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         default:
             return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
-        RETURN_IF_ERROR(flush_del_file(deletes));
+        RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
         return Status::OK();
     } else if (!upserts.is_empty() && !deletes.empty()) {
         // 3. mixed upsert/delete, do not support multi-segment, check will there be multi-segment in the following _final_merge
@@ -402,14 +443,14 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
         default:
             return Status::Cancelled(_dump_mixed_segment_delfile_not_supported());
         }
-        RETURN_IF_ERROR(flush_del_file(deletes));
-        return _flush_chunk(upserts);
+        RETURN_IF_ERROR(flush_del_file(deletes, seg_info));
+        return _flush_chunk(upserts, seg_info);
     } else {
         return Status::OK();
     }
 }
 
-Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
+Status HorizontalRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     RETURN_IF_ERROR(rowset->link_files_to(_context.rowset_path_prefix, _context.rowset_id));
     _num_rows_written += rowset->num_rows();
     _total_row_size += static_cast<int64_t>(rowset->total_row_size());
@@ -423,36 +464,36 @@ Status HorizontalBetaRowsetWriter::add_rowset(RowsetSharedPtr rowset) {
     return Status::OK();
 }
 
-Status HorizontalBetaRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
-                                                                       const SchemaMapping& schema_mapping) {
+Status HorizontalRowsetWriter::add_rowset_for_linked_schema_change(RowsetSharedPtr rowset,
+                                                                   const SchemaMapping& schema_mapping) {
     // TODO use schema_mapping to transfer zonemap
     return add_rowset(rowset);
 }
 
-Status HorizontalBetaRowsetWriter::flush() {
+Status HorizontalRowsetWriter::flush() {
     if (_segment_writer != nullptr) {
         return _flush_segment_writer(&_segment_writer);
     }
     return Status::OK();
 }
 
-StatusOr<RowsetSharedPtr> HorizontalBetaRowsetWriter::build() {
+StatusOr<RowsetSharedPtr> HorizontalRowsetWriter::build() {
     if (!_tmp_segment_files.empty()) {
         RETURN_IF_ERROR(_final_merge());
     }
-    if (_vertical_beta_rowset_writer) {
-        return _vertical_beta_rowset_writer->build();
+    if (_vertical_rowset_writer) {
+        return _vertical_rowset_writer->build();
     } else {
         // When building a rowset, we must ensure that the current _segment_writer has been
         // flushed, that is, the current _segment_writer is nullptr
         DCHECK(_segment_writer == nullptr) << "segment must be null when build rowset";
-        return BetaRowsetWriter::build();
+        return RowsetWriter::build();
     }
 }
 
 // final merge is still used for sorting schema change right now, so we keep the logic in RowsetWriter
 // we may move this logic to `schema change` in near future, we can remove the following logic at that time
-Status HorizontalBetaRowsetWriter::_final_merge() {
+Status HorizontalRowsetWriter::_final_merge() {
     DCHECK(_context.schema_change_sorting);
     auto span = Tracer::Instance().start_trace_txn_tablet("final_merge", _context.txn_id, _context.tablet_id);
     auto scoped = trace::Scope(span);
@@ -540,7 +581,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         _total_data_size = 0;
         _total_index_size = 0;
 
-        // If BetaRowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
+        // If RowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
         // but this array already have old entries, should clear those entries before write new segments for final merge.
         if (_rowset_txn_meta_pb) {
             _rowset_txn_meta_pb->clear_partial_rowset_footers();
@@ -550,8 +591,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         // method to create segment data files, rather than temporary segment files.
         _context.segments_overlap = NONOVERLAPPING;
 
-        _vertical_beta_rowset_writer = std::make_unique<VerticalBetaRowsetWriter>(_context);
-        if (auto st = _vertical_beta_rowset_writer->init(); !st.ok()) {
+        _vertical_rowset_writer = std::make_unique<VerticalRowsetWriter>(_context);
+        if (auto st = _vertical_rowset_writer->init(); !st.ok()) {
             std::stringstream ss;
             ss << "Fail to create rowset writer. tablet_id=" << _context.tablet_id << " err=" << st;
             LOG(WARNING) << ss.str();
@@ -571,7 +612,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
                 total_rows += chunk->num_rows();
                 total_chunk++;
-                if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
+                if (auto st = _vertical_rowset_writer->add_columns(*chunk, column_groups[0], true); !st.ok()) {
                     LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
                     return st;
                 }
@@ -584,7 +625,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
             }
         }
         itr->close();
-        if (auto st = _vertical_beta_rowset_writer->flush_columns(); !st.ok()) {
+        if (auto st = _vertical_rowset_writer->flush_columns(); !st.ok()) {
             LOG(WARNING) << "failed to flush_columns group, tablet=" << _context.tablet_id << ", err=" << st;
             return st;
         }
@@ -635,8 +676,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                     break;
                 } else if (st.ok()) {
                     ChunkHelper::padding_char_columns(char_field_indexes, schema, *_context.tablet_schema, chunk);
-                    if (auto st = _vertical_beta_rowset_writer->add_columns(*chunk, column_groups[i], false);
-                        !st.ok()) {
+                    if (auto st = _vertical_rowset_writer->add_columns(*chunk, column_groups[i], false); !st.ok()) {
                         LOG(WARNING) << "writer add_columns error. tablet=" << _context.tablet_id << ", err=" << st;
                         return st;
                     }
@@ -648,13 +688,13 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
                 }
             }
             itr->close();
-            if (auto st = _vertical_beta_rowset_writer->flush_columns(); !st.ok()) {
+            if (auto st = _vertical_rowset_writer->flush_columns(); !st.ok()) {
                 LOG(WARNING) << "failed to flush_columns group, tablet=" << _context.tablet_id << ", err=" << st;
                 return st;
             }
         }
 
-        if (auto st = _vertical_beta_rowset_writer->final_flush(); !st.ok()) {
+        if (auto st = _vertical_rowset_writer->final_flush(); !st.ok()) {
             LOG(WARNING) << "failed to final flush rowset when final merge " << _context.tablet_id << ", err=" << st;
             return st;
         }
@@ -706,7 +746,7 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
         _total_data_size = 0;
         _total_index_size = 0;
 
-        // If BetaRowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
+        // If RowsetWriter has final merge, it will produce new partial rowset footers and append them to partial_rowset_footers array,
         // but this array already have old entries, should clear those entries before write new segments for final merge.
         if (_rowset_txn_meta_pb) {
             _rowset_txn_meta_pb->clear_partial_rowset_footers();
@@ -764,8 +804,8 @@ Status HorizontalBetaRowsetWriter::_final_merge() {
     return Status::OK();
 }
 
-Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer,
-                                                         SegmentPB* seg_info) {
+Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWriter>* segment_writer,
+                                                     SegmentPB* seg_info) {
     uint64_t segment_size = 0;
     uint64_t index_size = 0;
     uint64_t footer_position = 0;
@@ -808,9 +848,9 @@ Status HorizontalBetaRowsetWriter::_flush_segment_writer(std::unique_ptr<Segment
     return Status::OK();
 }
 
-VerticalBetaRowsetWriter::VerticalBetaRowsetWriter(const RowsetWriterContext& context) : BetaRowsetWriter(context) {}
+VerticalRowsetWriter::VerticalRowsetWriter(const RowsetWriterContext& context) : RowsetWriter(context) {}
 
-VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
+VerticalRowsetWriter::~VerticalRowsetWriter() {
     if (!_already_built) {
         for (auto& segment_writer : _segment_writers) {
             segment_writer.reset();
@@ -827,8 +867,8 @@ VerticalBetaRowsetWriter::~VerticalBetaRowsetWriter() {
     }
 }
 
-Status VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
-                                             const std::vector<uint32_t>& column_indexes, bool is_key) {
+Status VerticalRowsetWriter::add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                                         bool is_key) {
     const size_t chunk_num_rows = chunk.num_rows();
     if (_segment_writers.empty()) {
         DCHECK(is_key);
@@ -897,7 +937,7 @@ Status VerticalBetaRowsetWriter::add_columns(const vectorized::Chunk& chunk,
     return Status::OK();
 }
 
-Status VerticalBetaRowsetWriter::flush_columns() {
+Status VerticalRowsetWriter::flush_columns() {
     if (_segment_writers.empty()) {
         return Status::OK();
     }
@@ -908,7 +948,7 @@ Status VerticalBetaRowsetWriter::flush_columns() {
     return Status::OK();
 }
 
-Status VerticalBetaRowsetWriter::final_flush() {
+Status VerticalRowsetWriter::final_flush() {
     for (auto& segment_writer : _segment_writers) {
         uint64_t segment_size = 0;
         uint64_t footer_position = 0;
@@ -944,7 +984,7 @@ Status VerticalBetaRowsetWriter::final_flush() {
     return Status::OK();
 }
 
-StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segment_writer(
+StatusOr<std::unique_ptr<SegmentWriter>> VerticalRowsetWriter::_create_segment_writer(
         const std::vector<uint32_t>& column_indexes, bool is_key) {
     std::lock_guard<std::mutex> l(_lock);
     ASSIGN_OR_RETURN(auto wfile, _fs->new_writable_file(Rowset::segment_file_path(_context.rowset_path_prefix,
@@ -956,7 +996,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> VerticalBetaRowsetWriter::_create_segme
     return std::move(segment_writer);
 }
 
-Status VerticalBetaRowsetWriter::_flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
+Status VerticalRowsetWriter::_flush_columns(std::unique_ptr<SegmentWriter>* segment_writer) {
     uint64_t index_size = 0;
     RETURN_IF_ERROR((*segment_writer)->finalize_columns(&index_size));
     {

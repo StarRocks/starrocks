@@ -16,6 +16,10 @@ public class ActionSet {
         }
     }
 
+    public ActionSet(ActionSet other) {
+        this.bitSet = other.bitSet;
+    }
+
     /**
      * private constructor: only construct by ActionSet itself
      */

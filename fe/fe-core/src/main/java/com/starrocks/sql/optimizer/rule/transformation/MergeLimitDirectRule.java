@@ -20,6 +20,7 @@ public class MergeLimitDirectRule extends TransformationRule {
     public static final MergeLimitDirectRule HIVE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HIVE_SCAN);
     public static final MergeLimitDirectRule ICEBERG_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final MergeLimitDirectRule HUDI_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final MergeLimitDirectRule DELTALAKE_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final MergeLimitDirectRule SCHEMA_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final MergeLimitDirectRule MYSQL_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_MYSQL_SCAN);
     public static final MergeLimitDirectRule ES_SCAN = new MergeLimitDirectRule(OperatorType.LOGICAL_ES_SCAN);
