@@ -38,7 +38,7 @@ under the License.
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.5</jacoco.version>
-        <iceberg.version>0.12.1</iceberg.version>
+        <iceberg.version>0.14.1</iceberg.version>
         <python>python</python>
     </properties>
 
@@ -236,9 +236,37 @@ under the License.
             <scope>test</scope>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-core -->
         <dependency>
             <groupId>org.apache.iceberg</groupId>
-            <artifactId>iceberg-mr</artifactId>
+            <artifactId>iceberg-core</artifactId>
+            <version>${iceberg.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>org.apache.avro</groupId>
+                    <artifactId>avro</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-hive-metastore -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-hive-metastore</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-bundled-guava -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-bundled-guava</artifactId>
+            <version>${iceberg.version}</version>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/org.apache.iceberg/iceberg-common -->
+        <dependency>
+            <groupId>org.apache.iceberg</groupId>
+            <artifactId>iceberg-common</artifactId>
             <version>${iceberg.version}</version>
         </dependency>
 

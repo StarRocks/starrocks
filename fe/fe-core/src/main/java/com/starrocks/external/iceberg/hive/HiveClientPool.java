@@ -26,7 +26,7 @@ public class HiveClientPool extends ClientPoolImpl<IMetaStoreClient, TException>
     private final HiveConf hiveConf;
 
     public HiveClientPool(int poolSize, Configuration conf) {
-        super(poolSize, TTransportException.class);
+        super(poolSize, TTransportException.class, true);
         this.hiveConf = new HiveConf(conf, HiveClientPool.class);
         this.hiveConf.addResource(conf);
     }
