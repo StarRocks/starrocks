@@ -379,8 +379,14 @@ public class GlobalTransactionMgr implements Writable {
             // so we just return false to indicate publish timeout
             throw new UserException("publish timeout: " + timeoutMillis);
         }
+<<<<<<< HEAD
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
         dbTransactionMgr.waitTransactionVisible(db, transactionId, publishTimeoutMillis);
+=======
+        if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
+            throw new UserException("publish timeout: " + timeoutMillis);
+        }
+>>>>>>> 9431bbca4 ([Bugfix] Publish timeout in commitPreparedTransaction should raise error (#12217))
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
