@@ -86,6 +86,13 @@ private:
 };
 
 template <typename SourceType, typename DestType>
+void convert_int_to_int(SourceType* __restrict__ src, DestType* __restrict__ dst, size_t size) {
+    for (size_t i = 0; i < size; i++) {
+        dst[i] = DestType(src[i]);
+    }
+}
+
+template <typename SourceType, typename DestType>
 class IntToIntConverter : public ColumnConverter {
 public:
     IntToIntConverter() = default;
@@ -110,11 +117,7 @@ public:
 
         size_t size = src_column->size();
         memcpy(dst_null_data.data(), src_null_data.data(), size);
-
-        for (size_t i = 0; i < size; i++) {
-            dst_data[i] = DestType(src_data[i]);
-        }
-
+        convert_int_to_int<SourceType, DestType>(src_data.data(), dst_data.data(), size);
         dst_nullable_column->set_has_null(src_nullable_column->has_null());
         return Status::OK();
     }
