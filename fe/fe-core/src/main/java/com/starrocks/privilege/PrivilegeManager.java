@@ -287,7 +287,7 @@ public class PrivilegeManager {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         try {
             // TODO support grant role to role
-            grantRoleToUser(stmt.getUserIdent(), stmt.getRole());
+            grantRoleToUser(stmt.getUserIdent(), stmt.getGranteeRole());
         } catch (PrivilegeException e) {
             throw new DdlException("failed to grant role: ", e);
         }
@@ -307,7 +307,7 @@ public class PrivilegeManager {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         try {
             // TODO support grant role to role
-            revokeRoleFromUser(stmt.getUserIdent(), stmt.getRole());
+            revokeRoleFromUser(stmt.getUserIdent(), stmt.getGranteeRole());
         } catch (PrivilegeException e) {
             throw new DdlException("failed to revoke role: ", e);
         }
