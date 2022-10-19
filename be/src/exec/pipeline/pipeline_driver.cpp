@@ -36,6 +36,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
+    _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
     _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
@@ -215,14 +216,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             // exceed the designated thresholds.
             if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_time_limit_counter, 1);
                 break;
             }
-
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
                 _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
                 break;
             }
         }
