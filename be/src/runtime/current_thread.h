@@ -272,12 +272,12 @@ private:
         try {                                                                            \
             SCOPED_SET_CATCHED(true);                                                    \
             { result = stmt; }                                                           \
-        } catch (std::bad_alloc const& e) {                                              \
-            result = Status::InternalError(fmt::format("Internal error: {}", e.what())); \
         } catch (std::runtime_error const& e) {                                          \
             result = Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \
         } catch (std::exception const& e) {                                              \
-            result = Status::Unknown(fmt::format("Unknown error: {}", e.what()));        \
+            result = Status::InternalError(fmt::format("Internal error: {}", e.what())); \
+        } catch (...) {                                                                  \
+            result = Status::Unknown("Unknown error");                                   \
         }                                                                                \
     } while (0)
 } // namespace starrocks
