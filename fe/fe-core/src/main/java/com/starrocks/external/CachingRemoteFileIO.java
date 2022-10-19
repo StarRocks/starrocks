@@ -64,7 +64,11 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getPresentRemoteFiles(List<RemotePathKey> paths) {
-        return cache.getAllPresent(paths);
+        if (fileIO instanceof CachingRemoteFileIO) {
+            return ((CachingRemoteFileIO) fileIO).getPresentRemoteFiles(paths);
+        } else {
+            return cache.getAllPresent(paths);
+        }
     }
 
     public List<RemotePathKey> getPresentPathKeyInCache(String basePath, boolean isRecursive) {

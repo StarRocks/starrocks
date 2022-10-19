@@ -30,6 +30,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -45,10 +46,13 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
+import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.HdfsScanNode;
@@ -75,6 +79,7 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -224,6 +229,7 @@ public class Coordinator {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
+    private EtlJobType etlJobType;
 
     private final boolean usePipeline;
 
@@ -282,7 +288,12 @@ public class Coordinator {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
-        this.connectContext = null;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setPipelineDop(0);
+        this.connectContext = connectContext;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
@@ -344,6 +355,63 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    public Coordinator(LoadPlanner loadPlanner) {
+        this.etlJobType = loadPlanner.getEtlJobType();
+        this.isBlockQuery = true;
+        this.jobId = loadPlanner.getLoadJobId();
+        ConnectContext context = loadPlanner.getContext(); 
+        this.queryId = loadPlanner.getLoadId();
+        this.connectContext = context;
+        this.descTable = loadPlanner.getDescTable().toThrift();
+        this.fragments = loadPlanner.getFragments();
+        this.scanNodes = loadPlanner.getScanNodes();
+
+        this.queryOptions = context.getSessionVariable().toThrift();
+        this.queryOptions.setQuery_type(TQueryType.LOAD);
+        this.queryOptions.setQuery_timeout((int) loadPlanner.getTimeout());
+        this.queryOptions.setMem_limit(loadPlanner.getExecMemLimit());
+        this.queryOptions.setLoad_mem_limit(loadPlanner.getLoadMemLimit());
+        Map<String, String> sessionVariables = loadPlanner.getSessionVariables();
+        if (sessionVariables != null) {
+            if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+                final TCompressionType loadCompressionType = CompressionUtils
+                        .findTCompressionByName(
+                                sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+                if (loadCompressionType != null) {
+                    this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+                }
+            }
+            if (sessionVariables.containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
+                this.queryOptions.setEnable_replicated_storage(
+                        Boolean.parseBoolean(sessionVariables.get(SessionVariable.ENABLE_REPLICATED_STORAGE)));
+            }
+        }
+
+        long startTime = loadPlanner.getStartTime();
+        String timezone = loadPlanner.getTimeZone();
+        if (timezone.equals("CST")) {
+            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+        } else {
+            this.queryGlobals.setTime_zone(timezone);
+        }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
+        if (context.getLastQueryId() != null) {
+            this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
+        }
+    
+        this.needReport = true;
+        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();;
+        this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
+        this.nextInstanceId = new TUniqueId();
+        nextInstanceId.setHi(queryId.hi);
+        nextInstanceId.setLo(queryId.lo + 1);
+
+        
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
@@ -2156,7 +2224,7 @@ public class Coordinator {
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
-                    scanNode instanceof HudiScanNode) {
+                    scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
                 }
