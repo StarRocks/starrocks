@@ -173,7 +173,7 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR> decoder(data_without_head);
     ASSERT_TRUE(decoder.init().ok());
     ASSERT_EQ(5, decoder.count());
-    for (int i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < 5; i++) {
         EXPECT_EQ(slices[i], decoder.string_at_index(i));
     }
 }
