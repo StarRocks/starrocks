@@ -10,7 +10,7 @@
 
 资源隔离功能支持计划
 
-|  | 内部表 | 外部表 | 大小查询隔离 | 实时资源组 | 导入资源隔离 | Schema Change 资源隔离 |
+|  | 内部表 | 外部表 | 大小查询隔离 | short_query 资源组 | 导入资源隔离 | Schema Change 资源隔离 |
 |---|---|---|---|---|---|---|
 | 2.2 | √ | × | × | × | × | × |
 | 2.3 | √ | √ | √ |√ | × | × |
@@ -40,12 +40,12 @@
 > 说明
 > 当资源组中运行的查询超过以上大查询限制时，查询将会终止，并返回错误。您也可以在 FE 节点 **fe.audit.log** 的 `ErrorCode` 列中查看错误信息。
 
-资源组的类型 `type` 支持实时资源组 `realtime` 与非实时资源组 `normal`。
+资源组的类型 `type` 支持 `short_query` 与 `normal`。
 
-- 当实时资源组 `rt_group` 有查询正在运行时，当前 BE 节点会为其预留 `rt_group.cpu_core_limit` 的 CPU 资源，所有非实时资源组的总 CPU 核数使用上限会被硬限制为 BE 节点核数 - `rt_group.cpu_core_limit`。
-- 当实时资源组 `rt_gruop` 没有查询正在运行时，其他非实时资源组的 CPU 核数没有硬限制。
+- 当 `short_query` 资源组有查询正在运行时，当前 BE 节点会为其预留 `short_query.cpu_core_limit` 的 CPU 资源，所有 `normal` 资源组的总 CPU 核数使用上限会被硬限制为 BE 节点核数 - `short_query.cpu_core_limit`。
+- 当 `short_query` 资源组没有查询正在运行时，所有 `normal` 资源组的 CPU 核数没有硬限制。
 
-> 注意：您最多只能创建一个实时资源组。
+> 注意：您最多只能创建一个 `short_query` 资源组。
 
 ### 分类器
 
@@ -123,7 +123,7 @@ WITH (
     "cpu_core_limit" = "INT",
     "mem_limit" = "m%",
     "concurrency_limit" = "INT",
-    "type" = "normal" -- 资源组的类型，取值为 normal 或 realtime。
+    "type" = "normal" -- 资源组的类型，取值为 normal 或 short_query。
 );
 ```
 
