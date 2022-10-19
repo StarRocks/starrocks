@@ -21,6 +21,8 @@ import org.apache.hudi.common.model.HoodieLogFile;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
 import org.apache.hudi.common.table.view.HoodieTableFileSystemView;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.List;
@@ -30,6 +32,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 public class HudiRemoteFileIO implements RemoteFileIO {
+    private static final Logger LOG = LogManager.getLogger(HudiRemoteFileIO.class);
     private final Configuration configuration;
 
     // table location -> HoodieTableMetaClient

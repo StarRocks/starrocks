@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
@@ -105,7 +106,8 @@ public class HiveMetaClient {
     }
 
     public List<String> getAllDatabaseNames() {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllDatabases");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.getAllDatabases();
         } catch (Exception e) {
             LOG.error("Failed to get all database names", e);
@@ -114,7 +116,8 @@ public class HiveMetaClient {
     }
 
     public List<String> getAllTableNames(String dbName) {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getAllTables");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.getAllTables(dbName);
         } catch (Exception e) {
             LOG.error("Failed to get all table names on database: " + dbName, e);
@@ -124,7 +127,8 @@ public class HiveMetaClient {
     }
 
     public List<String> getPartitionKeys(String dbName, String tableName) {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.listPartitionNames");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.listPartitionNames(dbName, tableName, (short) -1);
         } catch (Exception e) {
             LOG.error("Failed to get partitionKeys on {}.{}", dbName, tableName, e);
@@ -134,7 +138,8 @@ public class HiveMetaClient {
     }
 
     public Database getDb(String dbName) {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getDatabase");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.getDatabase(dbName);
         } catch (Exception e) {
             LOG.error("Failed to get database {}", dbName, e);
@@ -144,7 +149,8 @@ public class HiveMetaClient {
     }
 
     public Table getTable(String dbName, String tableName) {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTable");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.getTable(dbName, tableName);
         } catch (Exception e) {
             LOG.error("Failed to get table [{}.{}]", dbName, tableName, e);
@@ -154,7 +160,8 @@ public class HiveMetaClient {
     }
 
     public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartition");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.getPartition(dbName, tableName, partitionValues);
         } catch (Exception e) {
             LOG.error("Failed to get partition on {}.{}", dbName, tableName, e);
@@ -171,8 +178,12 @@ public class HiveMetaClient {
      * So we resend request "getPartitionByNames" when an exception occurs.
      */
     public List<Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames) {
+        int size = partitionNames.size();
         List<Partition> partitions;
-        try (AutoCloseClient client = getClient()) {
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionsByNames", String.format("%s partitions", size));
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionsByNames");
+                AutoCloseClient client = getClient()) {
             partitions = client.hiveClient.getPartitionsByNames(dbName, tblName, partitionNames);
             if (partitions.size() != partitionNames.size()) {
                 LOG.warn("Expect to fetch {} partition on [{}.{}], but actually fetched {} partition",
@@ -189,7 +200,8 @@ public class HiveMetaClient {
     }
 
     public List<ColumnStatisticsObj> getTableColumnStats(String dbName, String tableName, List<String> columns) {
-        try (AutoCloseClient client = getClient()) {
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getTableColumnStatistics");
+                AutoCloseClient client = getClient()) {
             return client.hiveClient.getTableColumnStatistics(dbName, tableName, columns);
         } catch (Exception e) {
             LOG.error("Failed to get table column statistics on [{}.{}]", dbName, tableName, e);
@@ -200,16 +212,20 @@ public class HiveMetaClient {
 
     public Map<String, List<ColumnStatisticsObj>> getPartitionColumnStats(String dbName,
                                                                           String tableName,
-                                                                          List<String> columns,
-                                                                          List<String> partitionNames) {
-        try (AutoCloseClient client = getClient()) {
-            return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, columns, partitionNames);
+                                                                          List<String> partitionNames,
+                                                                          List<String> columnNames) {
+        int size = partitionNames.size();
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getPartitionColumnStatistics", String.format("%s partitions", size));
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getPartitionColumnStatistics");
+                AutoCloseClient client = getClient()) {
+            return client.hiveClient.getPartitionColumnStatistics(dbName, tableName, partitionNames, columnNames);
         } catch (Exception e) {
             LOG.error("Failed to get partitions column statistics on [{}.{}]. partition size: {}, columns size: {}",
-                    dbName, tableName, partitionNames.size(), columns.size(), e);
+                    dbName, tableName, partitionNames.size(), columnNames.size(), e);
             throw new StarRocksConnectorException("Failed to get partitions column statistics on [%s.%s]." +
                     " partition size: %d, columns size: %d. msg: %s", dbName, tableName, partitionNames.size(),
-                    columns.size(), e.getMessage());
+                    columnNames.size(), e.getMessage());
         }
     }
 
