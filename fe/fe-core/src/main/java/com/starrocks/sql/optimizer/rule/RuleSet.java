@@ -177,6 +177,7 @@ public class RuleSet {
                 MergeLimitDirectRule.HIVE_SCAN,
                 MergeLimitDirectRule.ICEBERG_SCAN,
                 MergeLimitDirectRule.HUDI_SCAN,
+                MergeLimitDirectRule.DELTALAKE_SCAN,
                 MergeLimitDirectRule.SCHEMA_SCAN,
                 MergeLimitDirectRule.MYSQL_SCAN,
                 MergeLimitDirectRule.ES_SCAN,
@@ -195,9 +196,11 @@ public class RuleSet {
                 RemoteScanPartitionPruneRule.HIVE_SCAN,
                 RemoteScanPartitionPruneRule.HUDI_SCAN,
                 RemoteScanPartitionPruneRule.ICEBERG_SCAN,
+                RemoteScanPartitionPruneRule.DELTALAKE_SCAN,
                 PushDownMinMaxConjunctsRule.HIVE_SCAN,
                 PushDownMinMaxConjunctsRule.HUDI_SCAN,
                 PushDownMinMaxConjunctsRule.ICEBERG_SCAN,
+                PushDownMinMaxConjunctsRule.DELTALAKE_SCAN,
                 new EsScanPartitionPruneRule(),
                 new PartitionPredicatePrune()
         ));
@@ -234,6 +237,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.HIVE_SCAN,
                 PushDownPredicateScanRule.ICEBERG_SCAN,
                 PushDownPredicateScanRule.HUDI_SCAN,
+                PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.SCHEMA_SCAN,
                 PushDownPredicateScanRule.ES_SCAN,
                 PushDownPredicateScanRule.META_SCAN,
