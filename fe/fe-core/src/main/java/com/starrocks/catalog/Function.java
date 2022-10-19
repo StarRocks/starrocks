@@ -78,9 +78,6 @@ public class Function implements Writable {
         // If X is matchable with Y, this will only check X's element is identical with Y's.
         // e.g. fn is matchable with fn(int), fn(float) and fn(int) is only matchable with fn(int).
         IS_MATCHABLE,
-
-        // matching exactly one function by name, which accepts various arguments.
-        MATCH_NAME
     }
 
     // Function id, every function has a unique id. Now all built-in functions' id is 0

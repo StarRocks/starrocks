@@ -324,9 +324,6 @@ public class FunctionAnalyzer {
             if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
                 throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1.");
             }
-            if (!ConnectContext.get().getSessionVariable().isEnableExchangePerf()) {
-                throw new SemanticException(fnName.getFunction() + " should run in enable_exchange_perf = true.");
-            }
         }
     }
 }

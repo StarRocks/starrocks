@@ -594,16 +594,6 @@ public class FunctionSet {
         if (fns == null) {
             return null;
         }
-
-        // specially matching exactly one function by name
-        if (mode == Function.CompareMode.MATCH_NAME) {
-            if (fns.size() == 1) {
-                return fns.get(0);
-            } else {
-                return null;
-            }
-        }
-
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
@@ -712,11 +702,11 @@ public class FunctionSet {
 
         // EXCHANGE_BYTES/_SPEED with various arguments
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
-                Lists.newArrayList(), Type.BIGINT, Type.BIGINT, true,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.BIGINT, Type.BIGINT, true,
                 true, false, true));
 
         addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_SPEED,
-                Lists.newArrayList(), Type.VARCHAR, Type.BIGINT, true,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
                 true, false, true));
 
         for (Type t : Type.getSupportedTypes()) {
