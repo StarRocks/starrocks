@@ -402,8 +402,8 @@ cd -
 echo "Finished patching $JEMALLOC_SOURCE"
 
 # patch streamvbyte
-cd $TP_SOURCE_DIR/STREAMVBYTE_SOURCE
-if [ ! -f $PATCHED_MARK ] && [ STREAMVBYTE_SOURCE = "streamvbyte-0.5.1" ]; then
+cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $STREAMVBYTE_SOURCE = "streamvbyte-0.5.1" ]; then
     patch -p1 < $TP_PATCH_DIR/streamvbyte.patch
     touch $PATCHED_MARK
 fi

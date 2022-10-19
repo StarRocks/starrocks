@@ -956,7 +956,7 @@ build_cachelib() {
 build_streamvbyte() {
     check_if_source_exist $STREAMVBYTE_SOURCE
 
-    cd $TP_SOURCE_DIR/STREAMVBYTE_SOURCE/
+    cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE/
 
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR

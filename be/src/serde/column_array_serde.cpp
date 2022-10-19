@@ -58,14 +58,10 @@ const uint8_t* read_raw(const uint8_t* buff, void* target, size_t size) {
     return buff + size;
 }
 
-// only support sorted 32-bit integers
 template <bool sorted_32ints>
 uint8_t* encode_integers(const void* data, size_t size, uint8_t* buff, int encode_level) {
-    if (encode_level == 0) {
-        throw std::runtime_error("integer encode level does not work.");
-    }
     uint64_t encode_size = 0;
-    if (sorted_32ints) {
+    if (sorted_32ints) { // only support sorted 32-bit integers
         encode_size = streamvbyte_delta_encode(reinterpret_cast<const uint32_t*>(data), (3 + size) * 1.0 / 4.0,
                                                buff + sizeof(uint64_t), 0);
     } else {
@@ -83,24 +79,21 @@ template <bool sorted_32ints>
 const uint8_t* decode_integers(const uint8_t* buff, void* target, size_t size) {
     uint64_t encode_size = 0;
     buff = read_little_endian_64(buff, &encode_size);
-    uint64_t encode_size1 = 0;
+    uint64_t decode_size = 0;
     if (sorted_32ints) {
-        encode_size1 = streamvbyte_delta_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0, 0);
+        decode_size = streamvbyte_delta_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0, 0);
     } else {
-        encode_size1 = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
+        decode_size = streamvbyte_decode(buff, (uint32_t*)target, (3 + size) * 1.0 / 4.0);
     }
-    if (encode_size != encode_size1) {
+    if (encode_size != decode_size) {
         throw std::runtime_error(fmt::format(
                 "encode size does not equal when decoding, encode size = {}, but decode get size = {}, raw size = {}.",
-                encode_size, encode_size1, size));
+                encode_size, decode_size, size));
     }
-    return buff + encode_size1;
+    return buff + decode_size;
 }
 
 uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int encode_level) {
-    if (encode_level == 0) {
-        throw std::runtime_error("lz4 encode level does not work.");
-    }
     uint64_t encode_size =
             LZ4_compress_fast(reinterpret_cast<const char*>(data), reinterpret_cast<char*>(buff + sizeof(uint64_t)),
                               size, LZ4_compressBound(size), std::max(1, std::abs(encode_level / 10000) % 100));
@@ -118,16 +111,16 @@ uint8_t* encode_string_lz4(const void* data, size_t size, uint8_t* buff, int enc
 const uint8_t* decode_string_lz4(const uint8_t* buff, void* target, size_t size) {
     uint64_t encode_size = 0;
     buff = read_little_endian_64(buff, &encode_size);
-    uint64_t encode_size1 = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
-                                                encode_size, size);
-    if (encode_size1 <= 0) {
+    uint64_t decode_size = LZ4_decompress_safe(reinterpret_cast<const char*>(buff), reinterpret_cast<char*>(target),
+                                               encode_size, size);
+    if (decode_size <= 0) {
         throw std::runtime_error("lz4 decompress error.");
     }
-    if (size != encode_size1) {
+    if (size != decode_size) {
         throw std::runtime_error(
                 fmt::format("lz4 encode size does not equal when decoding, encode size = {}, but decode get size = "
                             "{}, raw size = {}.",
-                            encode_size, encode_size1, size));
+                            encode_size, decode_size, size));
     }
     return buff + encode_size;
 }
