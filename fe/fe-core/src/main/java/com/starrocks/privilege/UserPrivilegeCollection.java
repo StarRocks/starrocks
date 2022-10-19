@@ -9,12 +9,14 @@ import java.util.Set;
 
 public class UserPrivilegeCollection extends PrivilegeCollection {
     @SerializedName(value = "r")
-    private Set<Long> roleIds = null;
+    private Set<Long> roleIds;
+
+    public UserPrivilegeCollection() {
+        super();
+        roleIds = new HashSet<>();
+    }
 
     public void grantRole(Long roleId) {
-        if (roleIds == null) {
-            roleIds = new HashSet<>();
-        }
         roleIds.add(roleId);
     }
 
