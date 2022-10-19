@@ -386,7 +386,7 @@ public class OlapTableSinkTest {
             result = listPartitionInfo;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
@@ -421,7 +421,7 @@ public class OlapTableSinkTest {
             result = listPartitionInfo;
         }};
 
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L));
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(1L), TWriteQuorumType.MAJORITY);
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
