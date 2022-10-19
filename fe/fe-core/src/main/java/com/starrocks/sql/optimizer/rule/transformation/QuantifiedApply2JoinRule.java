@@ -49,8 +49,10 @@ public class QuantifiedApply2JoinRule extends TransformationRule {
         // NOT IN to ANTI-JOIN or NULL_AWARE_LEFT_ANTI_JOIN
         OptExpression joinExpression;
         if (ipo.isNotIn()) {
-            //@TODO: if will can filter null, use left-anti-join
-            joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN,
+            boolean operandsNullable = bpo.getChildren().stream().anyMatch(ScalarOperator::isNullable);
+            JoinOperator joinType = operandsNullable ?
+                    JoinOperator.NULL_AWARE_LEFT_ANTI_JOIN : JoinOperator.LEFT_ANTI_JOIN;
+            joinExpression = new OptExpression(new LogicalJoinOperator(joinType,
                     Utils.compoundAnd(bpo, Utils.compoundAnd(apply.getCorrelationConjuncts(), apply.getPredicate()))));
         } else {
             joinExpression = new OptExpression(new LogicalJoinOperator(JoinOperator.LEFT_SEMI_JOIN,
