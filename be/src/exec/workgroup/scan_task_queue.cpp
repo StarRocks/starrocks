@@ -12,9 +12,20 @@ StatusOr<ScanTask> FifoScanTaskQueue::take(int worker_id) {
     return task;
 }
 
+<<<<<<< HEAD
 bool FifoScanTaskQueue::try_offer(ScanTask task) {
     _queue.emplace(std::move(task));
     return true;
+=======
+bool PriorityScanTaskQueue::try_offer(ScanTask task) {
+    return _queue.try_put(std::move(task));
+}
+
+/// WorkGroupScanTaskQueue.
+bool WorkGroupScanTaskQueue::WorkGroupScanSchedEntityComparator::operator()(
+        const WorkGroupScanSchedEntityPtr& lhs, const WorkGroupScanSchedEntityPtr& rhs) const {
+    return lhs->vruntime_ns() < rhs->vruntime_ns();
+>>>>>>> a923234a7 ([Enhancement] Use non-blocking put for PriorityScanTaskQueue::try_offer (#12261))
 }
 
 void ScanTaskQueueWithWorkGroup::close() {
