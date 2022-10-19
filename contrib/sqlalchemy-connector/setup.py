@@ -4,12 +4,11 @@ import os
 import re
 import sys
 
-from setuptools import find_packages
 from setuptools import setup
 
 v = open(
     os.path.join(
-        os.path.dirname(os.path.realpath(sys.argv[0])), "sqlalchemy-starrocks", "__init__.py"
+        os.path.dirname(os.path.realpath(sys.argv[0])), "sqlalchemy_starrocks", "__init__.py"
     )
 )
 VERSION = re.compile(r".*__version__ = \"(.*?)\"", re.S).match(v.read()).group(1)
@@ -38,7 +37,7 @@ setup(
     author_email="fujianhj@gmail.com",
     url="https://github.com/StarRocks/starrocks/contrib/sqlalchemy-connector",
     license="StarRocks",
-    packages=find_packages(),
+    packages=['sqlalchemy_starrocks'],
     include_package_data=True,
     zip_safe=False,
     entry_points={
