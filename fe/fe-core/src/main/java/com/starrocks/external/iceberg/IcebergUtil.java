@@ -180,11 +180,13 @@ public class IcebergUtil {
     }
 
     public static IcebergTable convertCustomCatalogToSRTable(org.apache.iceberg.Table icebergTable, String catalogImpl,
-             String dbName, String tblName, Map<String, String> customProperties) throws DdlException {
+                                                             String catalogName, String dbName, String tblName,
+                                                             Map<String, String> customProperties) throws DdlException {
         Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
-        properties.put(IcebergTable.ICEBERG_CATALOG, "CUSTOM_CATALOG");
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "CUSTOM_CATALOG");
         properties.put(IcebergTable.ICEBERG_IMPL, catalogImpl);
         properties.putAll(customProperties);
         return convertToSRTable(icebergTable, properties);
@@ -198,7 +200,8 @@ public class IcebergUtil {
             return partitionNames;
         }
 
-        if (icebergTable.spec().fields().stream().anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
+        if (icebergTable.spec().fields().stream()
+                .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
             return partitionNames;
         }
 
@@ -229,11 +232,13 @@ public class IcebergUtil {
     }
 
     public static IcebergTable convertHiveCatalogToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
-                                                           String dbName, String tblName) throws DdlException {
+                                                           String catalogName, String dbName,
+                                                           String tblName) throws DdlException {
         Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
-        properties.put(IcebergTable.ICEBERG_CATALOG, "HIVE_CATALOG");
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "HIVE_CATALOG");
         properties.put(IcebergTable.ICEBERG_METASTORE_URIS, metastoreURI);
         return convertToSRTable(icebergTable, properties);
     }
