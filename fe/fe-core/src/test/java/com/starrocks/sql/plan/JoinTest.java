@@ -2070,7 +2070,7 @@ public class JoinTest extends PlanTestBase {
         assertContains(plan, "|  equal join conjunct: 1: v1 = 4: v4");
         assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: CAST(1: v1 AS VARCHAR(65533)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
+                "     PREDICATES: CAST(1: v1 AS VARCHAR(1048576)) = CAST(1: v1 AS VARCHAR(1048576))\n" +
                 "     partitions=0/1\n");
     }
 
