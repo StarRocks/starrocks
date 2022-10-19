@@ -8,8 +8,7 @@ Routine Load 支持消费 Kafka 中 CSV 或 JSON 格式数据。Routine Load 支
 
 本文介绍 CREATE ROUTINE LOAD 的语法、参数说明和示例。
 
-> Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入
-](/loading/RoutineLoad.md)。
+> Routine Load 的应用场景、基本原理和基本操作，请参见 [从 Apache Kafka® 持续导入](/loading/RoutineLoad.md)。
 
 ## 语法
 
