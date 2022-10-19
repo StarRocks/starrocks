@@ -496,11 +496,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties.put(property.getKey(), property.getValue());
             }
         }
-        if (context.orderByDesc() != null) {
-            if (context.keyDesc() == null || getKeysDesc(context.keyDesc()).getKeysType() != KeysType.PRIMARY_KEYS) {
-                throw new IllegalArgumentException("only primary key support sort key");
-            }
-        }
         return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
