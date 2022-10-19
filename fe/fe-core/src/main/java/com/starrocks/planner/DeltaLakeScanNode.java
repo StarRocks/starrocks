@@ -12,6 +12,7 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.delta.DeltaUtils;
+import com.starrocks.external.delta.ExpressionConverter;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -23,25 +24,34 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import io.delta.standalone.DeltaLog;
+import io.delta.standalone.DeltaScan;
 import io.delta.standalone.Snapshot;
 import io.delta.standalone.actions.AddFile;
 import io.delta.standalone.actions.Metadata;
 import io.delta.standalone.data.CloseableIterator;
+import io.delta.standalone.expressions.And;
+import io.delta.standalone.expressions.Expression;
+import io.delta.standalone.types.StructType;
 import org.apache.hadoop.fs.Path;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import static com.starrocks.thrift.TExplainLevel.VERBOSE;
 
 public class DeltaLakeScanNode extends ScanNode {
+    private static final Logger LOG = LogManager.getLogger(DeltaLakeScanNode.class);
     private final AtomicLong partitionIdGen = new AtomicLong(0L);
     private DeltaLakeTable deltaLakeTable;
     private HDFSScanNodePredicates scanNodePredicates = new HDFSScanNodePredicates();
     private List<TScanRangeLocations> scanRangeLocationsList = new ArrayList<>();
+    private Optional<Expression> deltaLakePredicates = Optional.empty();
 
     public DeltaLakeScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc, planNodeName);
@@ -64,6 +74,25 @@ public class DeltaLakeScanNode extends ScanNode {
         return helper.toString();
     }
 
+    private void preProcessConjuncts(StructType tableSchema) {
+        List<Expression> expressions = new ArrayList<>(conjuncts.size());
+        ExpressionConverter convertor = new ExpressionConverter(tableSchema);
+        for (Expr expr : conjuncts) {
+            Expression filterExpr = convertor.convert(expr);
+            if (filterExpr != null) {
+                try {
+                    expressions.add(filterExpr);
+                } catch (Exception e) {
+                    LOG.debug("binding to the table schema failed, cannot be pushed down expression: {}", expr.toSql());
+                }
+            }
+        }
+
+        LOG.debug("Number of predicates pushed down / Total number of predicates: {}/{}",
+                expressions.size(), conjuncts.size());
+        deltaLakePredicates = expressions.stream().reduce(And::new);
+    }
+
     @Override
     public List<TScanRangeLocations> getScanRangeLocations(long maxScanRangeLength) {
         return scanRangeLocationsList;
@@ -74,14 +103,16 @@ public class DeltaLakeScanNode extends ScanNode {
         if (!deltaLog.tableExists()) {
             return;
         }
-
         // use current snapshot now
         Snapshot snapshot = deltaLog.snapshot();
+        preProcessConjuncts(snapshot.getMetadata().getSchema());
         List<String> partitionColumnNames = snapshot.getMetadata().getPartitionColumns();
         // PartitionKey -> partition id
         Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
 
-        for (CloseableIterator<AddFile> it = snapshot.scan().getFiles(); it.hasNext(); ) {
+        DeltaScan scan = deltaLakePredicates.isPresent() ? snapshot.scan(deltaLakePredicates.get()) : snapshot.scan();
+
+        for (CloseableIterator<AddFile> it = scan.getFiles(); it.hasNext(); ) {
             AddFile file = it.next();
             Map<String, String> partitionValueMap = file.getPartitionValues();
             List<String> partitionValues = partitionColumnNames.stream().map(partitionValueMap::get).collect(
