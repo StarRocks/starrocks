@@ -2584,6 +2584,7 @@ void TabletUpdates::_remove_unused_rowsets() {
             skipped_rowsets.emplace_back(std::move(rowset));
             continue;
         }
+        StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
         rowset->close();
         rowset->set_need_delete_file();
         auto ost = rowset->remove();
