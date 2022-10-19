@@ -436,7 +436,7 @@ public class PartitionPruneRuleTest {
         List<Long> selectPartitionIds = ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedPartitionId();
         assertEquals(1, selectPartitionIds.size());
         long actual1 = selectPartitionIds.get(0);
-        assertEquals(10001L, actual1);
+        assertEquals(10002L, actual1);
     }
 
 
