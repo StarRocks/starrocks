@@ -131,10 +131,10 @@ public:
     static int64_t max_serialized_size(const vectorized::FixedLengthColumnBase<T>& column, const int encode_level) {
         uint32_t size = sizeof(T) * column.size();
         if ((encode_level & 2) && size >= ENCODE_SIZE_LIMIT) {
-            return sizeof(uint64_t) +
+            return sizeof(uint32_t) + sizeof(uint64_t) +
                    std::max((int64_t)size, (int64_t)streamvbyte_max_compressedbytes((size + 3) / 4.0));
         } else {
-            return sizeof(uint64_t) + size;
+            return sizeof(uint32_t) + size;
         }
     }
 
