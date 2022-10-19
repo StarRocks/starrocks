@@ -311,7 +311,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         std::string delta_file_paths;
         if (!scan_range.hudi_logs.empty()) {
             for (const std::string& log : scan_range.hudi_logs) {
-                delta_file_paths.append(partition_full_path.append("/").append(log));
+                delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
                 delta_file_paths.append(",");
             }
             delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
@@ -321,7 +321,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         if (scan_range.relative_path.empty()) {
             data_file_path = "";
         } else {
-            data_file_path = partition_full_path.append("/").append(scan_range.relative_path);
+            data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
         }
 
         std::map<std::string, std::string> jni_scanner_params;
