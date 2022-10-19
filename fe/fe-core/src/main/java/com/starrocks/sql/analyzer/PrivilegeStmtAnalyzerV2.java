@@ -18,6 +18,7 @@ import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
@@ -36,9 +37,11 @@ public class PrivilegeStmtAnalyzerV2 {
 
     static class PrivilegeStatementAnalyzerVisitor extends AstVisitor<Void, ConnectContext> {
         private AuthenticationManager authenticationManager = null;
+        private PrivilegeManager privilegeManager = null;
 
         public void analyze(StatementBase statement, ConnectContext session) {
             authenticationManager = session.getGlobalStateMgr().getAuthenticationManager();
+            privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
             visit(statement, session);
         }
 
@@ -58,23 +61,27 @@ public class PrivilegeStmtAnalyzerV2 {
 
             // check if user exists
             if (checkExist && !authenticationManager.doesUserExist(userIdent)) {
-                throw new SemanticException("user " + userIdent + " not exist!");
+                throw new SemanticException("cannot find user " + userIdent + "!");
             }
         }
 
         /**
          * check if role name valid and get full role name
          */
-        private String validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
+        private void validRoleName(String roleName, String errMsg, boolean checkExist) {
             try {
-                FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
+                // always set to true, we can validate if it's allowed to operation on admin later
+                FeNameFormat.checkRoleName(roleName, true, errMsg);
             } catch (AnalysisException e) {
                 // TODO AnalysisException used to raise in all old methods is captured and translated to SemanticException
                 // that is permitted to throw during analyzing phrase under the new framework for compatibility.
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            return roleName;
+            // check if role exists
+            if (checkExist && !privilegeManager.checkRoleExists(roleName)) {
+                throw new SemanticException(errMsg + ": cannot find role " + roleName + "!");
+            }
         }
 
         @Override
@@ -107,22 +114,16 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            String roleName = validRoleName(stmt.getQualifiedRole(), false, "Can not create role");
-            if (session.getGlobalStateMgr().getPrivilegeManager().checkRoleExists(roleName)) {
-                throw new SemanticException("Can not create role %s: already exists!", roleName);
+            validRoleName(stmt.getQualifiedRole(), "Can not create role", false);
+            if (session.getGlobalStateMgr().getPrivilegeManager().checkRoleExists(stmt.getQualifiedRole())) {
+                throw new SemanticException("Can not create role %s: already exists!", stmt.getQualifiedRole());
             }
-            stmt.setQualifiedRole(roleName);
             return null;
         }
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            String roleName = validRoleName(stmt.getQualifiedRole(), false, "Can not drop role");
-            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.checkRoleExists(roleName)) {
-                throw new SemanticException("Can not drop role %s: cannot find role!", roleName);
-            }
-            stmt.setQualifiedRole(roleName);
+            validRoleName(stmt.getQualifiedRole(), "Can not drop role", true);
             return null;
         }
 
@@ -141,12 +142,10 @@ public class PrivilegeStmtAnalyzerV2 {
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), true);
             } else {
-                // TODO
-                throw new SemanticException("not supported");
+                validRoleName(stmt.getRole(), "Can not grant/revoke to role", true);
             }
 
             try {
-                PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
                 if (stmt.hasPrivilegeObject()) {
                     List<PEntryObject> objectList = new ArrayList<>();
                     if (stmt.getUserPrivilegeObjectList() != null) {
@@ -186,5 +185,17 @@ public class PrivilegeStmtAnalyzerV2 {
             }
             return null;
         }
+
+        /**
+         * GRANT rolexx to userxx
+         * REVOKE rolexx from userxx
+         */
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            analyseUser(stmt.getUserIdent(), true);
+            validRoleName(stmt.getRole(), "Can not granted/revoke role to user", true);
+            return null;
+        }
+
     }
 }
