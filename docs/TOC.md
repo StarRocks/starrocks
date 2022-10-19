@@ -439,6 +439,9 @@
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
++ Developers
+  + Development Environment
+    + [IDEA](./developers/development-environment/IDEA.md)
 + Release Notes
   + [v2.4](./release_notes/release-2.4.md)
   + [v2.3](./release_notes/release-2.3.md)
