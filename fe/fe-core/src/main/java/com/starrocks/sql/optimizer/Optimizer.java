@@ -328,6 +328,7 @@ public class Optimizer {
                 childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         expression.setRequiredProperties(inputProperties);
+        expression.setOutputProperty(groupExpression.getOutputProperty(requiredProperty));
         expression.setStatistics(groupExpression.getGroup().hasConfidenceStatistic(requiredProperty) ?
                 groupExpression.getGroup().getConfidenceStatistic(requiredProperty) :
                 groupExpression.getGroup().getStatistics());
