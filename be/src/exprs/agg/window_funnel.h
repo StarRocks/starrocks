@@ -404,7 +404,8 @@ class WindowFunnelAggregateFunction final
     using TimestampType = typename WindowFunnelState<PT>::TimestampType;
 
 public:
-    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const {
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
         DCHECK(columns[2]->is_constant());
 
         this->data(state).window_size = down_cast<const Int64Column*>(columns[0])->get_data()[0];
