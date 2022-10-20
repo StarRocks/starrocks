@@ -400,7 +400,7 @@ public class TabletInvertedIndex {
         try {
             tabletMetaMap.putIfAbsent(tabletId, tabletMeta);
 
-            LOG.debug("add tablet: {}", tabletId);
+            LOG.info("add tablet: {}, meta: {}", tabletId, tabletMeta);
         } finally {
             writeUnlock();
         }
@@ -422,9 +422,9 @@ public class TabletInvertedIndex {
                     backingReplicaMetaTable.remove(backendId, tabletId);
                 }
             }
-            tabletMetaMap.remove(tabletId);
+            TabletMeta tabletMeta = tabletMetaMap.remove(tabletId);
 
-            LOG.debug("delete tablet: {}", tabletId);
+            LOG.info("delete tablet: {}, meta: {}", tabletId, tabletMeta);
         } finally {
             writeUnlock();
         }
@@ -440,7 +440,7 @@ public class TabletInvertedIndex {
             replicaMetaTable.put(tabletId, replica.getBackendId(), replica);
             replicaToTabletMap.put(replica.getId(), tabletId);
             backingReplicaMetaTable.put(replica.getBackendId(), tabletId, replica);
-            LOG.debug("add replica {} of tablet {} in backend {}",
+            LOG.info("add replica {} of tablet {} in backend {}",
                     replica.getId(), tabletId, replica.getBackendId());
         } finally {
             writeUnlock();
@@ -459,7 +459,7 @@ public class TabletInvertedIndex {
                 replicaToTabletMap.remove(replica.getId());
                 replicaMetaTable.remove(tabletId, backendId);
                 backingReplicaMetaTable.remove(backendId, tabletId);
-                LOG.debug("delete replica {} of tablet {} in backend {}",
+                LOG.info("delete replica {} of tablet {} in backend {}",
                         replica.getId(), tabletId, backendId);
             } else {
                 // this may happen when fe restart after tablet is empty(bug cause)
