@@ -925,14 +925,12 @@ public class EditLog {
                 }
                 case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(
-                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    globalStateMgr.getPrivilegeManager().replayUpdateRolePrivilegeCollection(info);
                     break;
                 }
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
-                    globalStateMgr.getPrivilegeManager().replayDropRole(
-                            info.getRoleId(), info.getPrivilegeCollection(), info.getPluginId(), info.getPluginVersion());
+                    globalStateMgr.getPrivilegeManager().replayDropRole(info);
                     break;
                 }
                 default: {
@@ -1610,6 +1608,10 @@ public class EditLog {
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                 roleId, privilegeCollection, pluginId, pluginVersion);
+        logUpdateRolePrivilege(info);
+    }
+
+    public void logUpdateRolePrivilege(RolePrivilegeCollectionInfo info) {
         logEdit(OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2, info);
     }
 

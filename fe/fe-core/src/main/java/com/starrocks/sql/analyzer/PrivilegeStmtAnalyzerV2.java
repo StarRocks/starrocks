@@ -199,8 +199,13 @@ public class PrivilegeStmtAnalyzerV2 {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), true);
-            validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to user", true);
+            if (stmt.getUserIdent() != null) {
+                analyseUser(stmt.getUserIdent(), true);
+                validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to user", true);
+            } else {
+                validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to role", true);
+                validRoleName(stmt.getRole(), "Can not granted/revoke role to role", true);
+            }
             return null;
         }
     }

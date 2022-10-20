@@ -1774,4 +1774,17 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int profile_info_reserved_num = 500;
+
+    /**
+     * Max number of roles that can be granted to user including all direct roles and all parent roles
+     * Used in new RBAC framework after 3.0 released
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_total_roles_per_user = 500;
+
+    /**
+     * Max role inheritance depth allowed. To avoid bad performance when merging privileges.
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_role_depth = 16;
 }

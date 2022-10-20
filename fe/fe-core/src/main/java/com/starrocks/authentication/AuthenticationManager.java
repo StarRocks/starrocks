@@ -171,6 +171,8 @@ public class AuthenticationManager {
         writeLock();
         try {
             dropUserNoLock(userIdentity);
+            // drop user privilege as well
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
             GlobalStateMgr.getCurrentState().getEditLog().logDropUser(userIdentity);
         } finally {
             writeUnlock();
@@ -181,6 +183,8 @@ public class AuthenticationManager {
         writeLock();
         try {
             dropUserNoLock(userIdentity);
+            // drop user privilege as well
+            GlobalStateMgr.getCurrentState().getPrivilegeManager().onDropUser(userIdentity);
         } finally {
             writeUnlock();
         }

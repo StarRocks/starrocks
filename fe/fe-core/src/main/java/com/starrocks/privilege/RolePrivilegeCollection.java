@@ -4,6 +4,9 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class RolePrivilegeCollection extends PrivilegeCollection {
     // the name of the role
     @SerializedName(value = "n")
@@ -11,6 +14,10 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     // see RoleFlags
     @SerializedName(value = "ma")
     private long mask;
+    @SerializedName(value = "p")
+    private Set<Long> parentRoleIds;
+    @SerializedName(value = "s")
+    private Set<Long> subRoleIds;
 
     enum RoleFlags {
         MUTABLE(1),
@@ -27,10 +34,15 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     protected RolePrivilegeCollection() {
         this.name = "";
         this.mask = 0;
+        this.parentRoleIds = new HashSet<>();
+        this.subRoleIds = new HashSet<>();
     }
 
     public RolePrivilegeCollection(String name) {
         this.name = name;
+        this.mask = 0;
+        this.parentRoleIds = new HashSet<>();
+        this.subRoleIds = new HashSet<>();
     }
 
     public RolePrivilegeCollection(String name, RoleFlags... flags) {
@@ -38,6 +50,8 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         for (RoleFlags flag : flags) {
             this.mask |= flag.mask;
         }
+        this.parentRoleIds = new HashSet<>();
+        this.subRoleIds = new HashSet<>();
     }
 
     public boolean isDefault() {
@@ -57,5 +71,33 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     }
     private boolean checkFlag(RoleFlags flag) {
         return (this.mask & flag.mask) != 0;
+    }
+
+    public void addParentRole(long parentRoleId) {
+        parentRoleIds.add(parentRoleId);
+    }
+
+    public void removeParentRole(long parentRoleId) {
+        parentRoleIds.remove(parentRoleId);
+    }
+
+    public Set<Long> getParentRoleIds() {
+        return parentRoleIds;
+    }
+
+    public boolean hasParentRole(long parentRoleId) {
+        return parentRoleIds.contains(parentRoleId);
+    }
+
+    public void addSubRole(long subRoleId) {
+        subRoleIds.add(subRoleId);
+    }
+
+    public void removeSubRole(long subRoleId) {
+        subRoleIds.remove(subRoleId);
+    }
+
+    public Set<Long> getSubRoleIds() {
+        return subRoleIds;
     }
 }
