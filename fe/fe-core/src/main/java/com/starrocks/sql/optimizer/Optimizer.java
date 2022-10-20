@@ -162,6 +162,7 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
 
+        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         // @todo: resolve recursive optimization question:
         //  MergeAgg -> PruneColumn -> PruneEmptyWindow -> MergeAgg/Project -> PruneColumn...
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
@@ -170,7 +171,6 @@ public class Optimizer {
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
-
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
@@ -223,6 +223,7 @@ public class Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());

@@ -61,7 +61,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneAggregateColumnsRule
 import com.starrocks.sql.optimizer.rule.transformation.PruneAssertOneRowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEConsumeColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneCTEProduceRule;
-import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneExceptEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneFilterColumnsRule;
@@ -228,8 +227,7 @@ public class RuleSet {
                 new PruneRepeatColumnsRule(),
                 new PruneValuesColumnsRule(),
                 new PruneTableFunctionColumnRule(),
-                new PruneCTEConsumeColumnsRule(),
-                new PruneEmptyWindowRule()
+                new PruneCTEConsumeColumnsRule()
         ));
 
         REWRITE_RULES.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
