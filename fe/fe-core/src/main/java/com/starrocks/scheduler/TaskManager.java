@@ -477,6 +477,7 @@ public class TaskManager {
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
             case FAILED:
+                status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
             case SUCCESS:
