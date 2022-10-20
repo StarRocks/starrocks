@@ -263,7 +263,7 @@ std::vector<size_t> ChunkHelper::get_char_field_indexes(const vectorized::Schema
 
 void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_indexes, const vectorized::Schema& schema,
                                        const starrocks::TabletSchema& tschema, vectorized::Chunk* chunk) {
-    uint32_t num_rows = static_cast<uint32_t>(chunk->num_rows());
+    size_t num_rows = chunk->num_rows();
     for (auto field_index : char_column_indexes) {
         vectorized::Column* column = chunk->get_column_by_index(field_index).get();
         vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
@@ -292,7 +292,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         }
 
         for (size_t j = 1; j <= num_rows; ++j) {
-            new_offset[j] = len * j;
+            new_offset[j] = static_cast<unsigned int>(len * j);
         }
 
         const auto& field = schema.field(field_index);

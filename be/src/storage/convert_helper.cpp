@@ -1078,12 +1078,12 @@ public:
                 dst_col->append_datum(dst_datum);
                 continue;
             }
-            float origin_value;
+            double origin_value;
             auto v = src_datum.get<CppType>();
             auto scale_factor = get_scale_factor<CppType>(src_type->scale());
-            DecimalV3Cast::to_float<CppType, float>(v, scale_factor, &origin_value);
+            DecimalV3Cast::to_float<CppType, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
-            percentile.add(origin_value);
+            percentile.add(static_cast<float>(origin_value));
             dst_datum.set_percentile(&percentile);
             dst_col->append_datum(dst_datum);
         }
@@ -1897,9 +1897,9 @@ Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
 }
 
 void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const {
-    int num_datums = static_cast<uint16_t>(src.size());
+    size_t num_datums = src.size();
     dst->resize(num_datums);
-    for (int i = 0; i < num_datums; ++i) {
+    for (size_t i = 0; i < num_datums; ++i) {
         _converters[i]->convert(&(*dst)[i], src[i]);
     }
 }
