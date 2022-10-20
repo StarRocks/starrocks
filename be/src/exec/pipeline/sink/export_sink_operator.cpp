@@ -121,6 +121,10 @@ Status ExportSinkIOBuffer::_open_file_writer(int timeout_ms) {
             ASSIGN_OR_RETURN(auto fs, FileSystem::CreateUniqueFromString(file_path, FSOptions(&_t_export_sink)));
             ASSIGN_OR_RETURN(output_file, fs->new_writable_file(options, file_path));
         } else {
+            if (_t_export_sink.broker_addresses.empty()) {
+                LOG(WARNING) << "ExportSink broker_addresses empty";
+                return Status::InternalError("ExportSink broker_addresses empty");
+            }
             const TNetworkAddress& broker_addr = _t_export_sink.broker_addresses[0];
             BrokerFileSystem fs_broker(broker_addr, _t_export_sink.properties, timeout_ms);
             ASSIGN_OR_RETURN(output_file, fs_broker.new_writable_file(options, file_path));
