@@ -40,7 +40,7 @@ public class RewriteUtils {
 
     public static ScalarOperator splitOr(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
-        List<ScalarOperator> targetItems = Utils.extractDisjunctive(src);
+        List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
         int srcLength = srcItems.size();
         int targetLength = targetItems.size();
         for (ScalarOperator item : srcItems) {

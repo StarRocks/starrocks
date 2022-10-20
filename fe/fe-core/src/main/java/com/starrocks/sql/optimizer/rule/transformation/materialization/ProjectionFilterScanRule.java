@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 /*
  *
  * Here is the rule for pattern Projection - Filter - Scan
- *
+ * TODO: this one can be removed because there is no Projection expr during rewrite
  */
 public class ProjectionFilterScanRule extends SingleTableRewriteRule {
     public ProjectionFilterScanRule() {

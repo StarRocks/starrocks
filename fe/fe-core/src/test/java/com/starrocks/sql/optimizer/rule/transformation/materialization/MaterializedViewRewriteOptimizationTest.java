@@ -38,6 +38,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
         PlanTestBase.beforeClass();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
 
+        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_1" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
@@ -74,6 +75,28 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " from t0 join test_all_type" +
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 = 1");
+
+
+         */
+        /*
+        starRocksAssert.withNewMaterializedView("create materialized view agg_mv_1" +
+                " distributed by hash(LO_ORDERKEY)" +
+                " as " +
+                " SELECT LO_ORDERKEY, LO_ORDERDATE, sum(LO_REVENUE) as total_revenue, count(LO_REVENUE) as total_num" +
+                " from lineorder_flat_for_mv" +
+                " group by LO_ORDERKEY, LO_ORDERDATE");
+
+         */
+
+        starRocksAssert.withNewMaterializedView("create materialized view agg_join_mv_1" +
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT t0.v1 as v1, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1d");
     }
 
     @Test
@@ -263,7 +286,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
     @Test
     public void test() throws Exception {
-        String query = "select t1a + 1, sum(t1g + 1) from test_all_type_not_null group by t1a + 1";
+        String query = "select t1a, sum(t1g) + 1 as v1, sum(t1g) + 1 as v2  from test_all_type_not_null group by t1a, t1b";
         String plan = getFragmentPlan(query);
         Assert.assertEquals("", plan);
 
@@ -285,5 +308,41 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+    }
+
+    @Test
+    public void testSingleTableAgg() throws Exception {
+        /*
+        String query1 = "SELECT LO_ORDERKEY, sum(LO_REVENUE), count(LO_REVENUE)" +
+                " from lineorder_flat_for_mv group by LO_ORDERKEY";
+        String plan1 = getFragmentPlan(query1);
+        Assert.assertEquals("", plan1);
+
+         */
+
+        String query2 = "SELECT LO_ORDERKEY, LO_ORDERDATE, sum(LO_REVENUE), count(LO_REVENUE)" +
+                " from lineorder_flat_for_mv group by LO_ORDERKEY, LO_ORDERDATE";
+        String plan2 = getFragmentPlan(query2);
+        Assert.assertEquals("", plan2);
+    }
+
+    @Test
+    public void testJoinAgg() throws Exception {
+        /*
+        String query1 = "SELECT LO_ORDERKEY, sum(LO_REVENUE), count(LO_REVENUE)" +
+                " from lineorder_flat_for_mv group by LO_ORDERKEY";
+        String plan1 = getFragmentPlan(query1);
+        Assert.assertEquals("", plan1);
+
+         */
+
+        String query2 = "SELECT t0.v1 as v1, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 = 1" +
+                " group by v1, test_all_type.t1d";
+        String plan2 = getFragmentPlan(query2);
+        Assert.assertEquals("", plan2);
     }
 }

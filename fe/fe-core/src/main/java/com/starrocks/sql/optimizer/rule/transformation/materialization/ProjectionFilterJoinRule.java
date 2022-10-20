@@ -9,7 +9,7 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 /*
  *
  * Here is the rule for pattern Projection - Filter - Join
- *
+ * TODO: this one can be removed because there is no Projection expr during rewrite
  */
 public class ProjectionFilterJoinRule extends BaseMaterializedViewRewriteRule {
     private static ProjectionFilterJoinRule INSTANCE = new ProjectionFilterJoinRule();

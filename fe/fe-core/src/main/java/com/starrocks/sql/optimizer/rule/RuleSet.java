@@ -117,7 +117,10 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFilterScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyJoinRule;
@@ -331,7 +334,9 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
                 new OnlyScanRule(),
                 new FilterScanRule(),
-                new ProjectionFilterScanRule()
+                new ProjectionFilterScanRule(),
+                AggregateScanRule.getInstance(),
+                AggregateFilterScanRule.getInstance()
         ));
     }
 
@@ -358,6 +363,7 @@ public class RuleSet {
 
         // for aggregation rewrite
         transformRules.add(AggregateJoinRule.getInstance());
+        transformRules.add(AggregateFilterJoinRule.getInstance());
     }
 
     public List<Rule> getTransformRules() {

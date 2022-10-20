@@ -691,8 +691,8 @@ public class MaterializedViewRewriter {
         } else if (srcPr != null && targetPr == null) {
             compensationPr = srcPr;
         } else {
-            ScalarOperator canonizedSrcPr = RewriteUtils.canonizeNode(srcPredicateTriple.getMiddle());
-            ScalarOperator canonizedTargetPr = RewriteUtils.canonizeNode(targetPredicateTriple.getMiddle());
+            ScalarOperator canonizedSrcPr = RewriteUtils.canonizeNode(srcPredicateTriple.getMiddle().clone());
+            ScalarOperator canonizedTargetPr = RewriteUtils.canonizeNode(targetPredicateTriple.getMiddle().clone());
 
             // swap column by source EC
             ScalarOperator rewrittenSrcPr = rewriteColumnByEc(canonizedSrcPr, sourceEc);
@@ -719,8 +719,8 @@ public class MaterializedViewRewriter {
         } else if (srcPu != null && targetPu == null) {
             compensationPu = srcPu;
         } else {
-            ScalarOperator canonizedSrcPu = RewriteUtils.canonizeNode(srcPredicateTriple.getRight());
-            ScalarOperator canonizedTargetPu = RewriteUtils.canonizeNode(targetPredicateTriple.getRight());
+            ScalarOperator canonizedSrcPu = RewriteUtils.canonizeNode(srcPredicateTriple.getRight().clone());
+            ScalarOperator canonizedTargetPu = RewriteUtils.canonizeNode(targetPredicateTriple.getRight().clone());
             ScalarOperator rewrittenSrcPu = rewriteColumnByEc(canonizedSrcPu, sourceEc);;
             ScalarOperator rewrittenTargetPu = rewriteColumnByRelationIdMapAndEc(canonizedTargetPu,
                     relationIdMap, srcRelationIdToColumns, srcColumnRefFactory,

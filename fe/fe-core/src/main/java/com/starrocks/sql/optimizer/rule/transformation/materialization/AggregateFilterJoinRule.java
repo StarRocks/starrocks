@@ -16,15 +16,16 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Here is the rule for pattern Aggregate-Join
  *
  */
-public class AggregateJoinRule extends BaseMaterializedViewRewriteRule {
-    private static AggregateJoinRule INSTANCE = new AggregateJoinRule();
+public class AggregateFilterJoinRule extends BaseMaterializedViewRewriteRule {
+    private static AggregateFilterJoinRule INSTANCE = new AggregateFilterJoinRule();
 
-    public AggregateJoinRule() {
-        super(RuleType.TF_MV_AGGREGATE_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
+    public AggregateFilterJoinRule() {
+        super(RuleType.TF_MV_AGGREGATE_FILTER_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
+                .addChildren(Pattern.create(OperatorType.LOGICAL_FILTER))
                 .addChildren(Pattern.create(OperatorType.PATTERN_MULTIJOIN)), true);
     }
 
-    public static AggregateJoinRule getInstance() {
+    public static AggregateFilterJoinRule getInstance() {
         return INSTANCE;
     }
 

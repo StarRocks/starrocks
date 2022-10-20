@@ -182,6 +182,11 @@ public class StatisticsCalculator extends OperatorVisitor<Void, ExpressionContex
             statisticsBuilder.setTableRowCountMayInaccurate(true);
         }
 
+        // add children statistic into statisticsBuilder
+        for (Statistics child : context.getChildrenStatistics()) {
+            statisticsBuilder.addColumnStatistics(child.getColumnStatistics());
+        }
+
         Projection projection = node.getProjection();
         if (projection != null) {
             Preconditions.checkState(projection.getCommonSubOperatorMap().isEmpty());

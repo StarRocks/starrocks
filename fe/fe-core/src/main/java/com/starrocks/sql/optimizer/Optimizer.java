@@ -8,8 +8,6 @@ import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -23,7 +21,11 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -489,8 +491,9 @@ public class Optimizer {
             if (!mv.isActive()) {
                 continue;
             }
-            // Set<String> partitionNamesToRefresh = Sets.newHashSet();
+            Set<String> partitionNamesToRefresh = Sets.newHashSet();
 
+            /*
             Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
@@ -502,6 +505,8 @@ public class Optimizer {
                 // then it can not be candidate
                 continue;
             }
+
+             */
 
             MaterializationContext materializationContext = mv.getMaterializationContext();
             if (materializationContext != null) {
@@ -532,7 +537,7 @@ public class Optimizer {
                     new ColumnRefSet(logicalPlan.getOutputColumn()),
                     columnRefFactory);
 
-            if (!RewriteUtils.isLogicalSPJG(optimizedPlan)) {
+            if (!isValidSPJGPlan(optimizedPlan)) {
                 continue;
             }
 
@@ -542,6 +547,26 @@ public class Optimizer {
             // TODO(hkp): it is not a good idea to set back to mv
             mv.setMaterializationContext(materializationContext);
             context.addCandidateMvs(materializationContext);
+        }
+    }
+
+    private boolean isValidSPJGPlan(OptExpression plan) {
+        Operator op = plan.getOp();
+        Preconditions.checkState(op instanceof LogicalOperator);
+        if (op instanceof LogicalAggregationOperator) {
+            // Aggregate - SPJ
+            return RewriteUtils.isLogicalSPJG(plan.inputAt(0));
+        } else if (op instanceof LogicalProjectOperator) {
+            if (plan.inputAt(0).getOp() instanceof LogicalAggregationOperator) {
+                // Project - Aggregate - SPJ
+                OptExpression aggExpr = plan.inputAt(0);
+                return RewriteUtils.isLogicalSPJG(aggExpr.inputAt(0));
+            } else {
+                // Projection - SPJ
+                return RewriteUtils.isLogicalSPJG(plan.inputAt(0));
+            }
+        } else {
+            return RewriteUtils.isLogicalSPJG(plan);
         }
     }
 }

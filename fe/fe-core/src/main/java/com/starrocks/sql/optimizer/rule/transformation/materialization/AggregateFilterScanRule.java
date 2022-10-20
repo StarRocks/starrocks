@@ -13,18 +13,19 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 
 /*
  *
- * Here is the rule for pattern Aggregate-Join
+ * Here is the rule for pattern Aggregate-Filter-Join
  *
  */
-public class AggregateJoinRule extends BaseMaterializedViewRewriteRule {
-    private static AggregateJoinRule INSTANCE = new AggregateJoinRule();
+public class AggregateFilterScanRule extends BaseMaterializedViewRewriteRule {
+    private static AggregateFilterScanRule INSTANCE = new AggregateFilterScanRule();
 
-    public AggregateJoinRule() {
-        super(RuleType.TF_MV_AGGREGATE_JOIN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
-                .addChildren(Pattern.create(OperatorType.PATTERN_MULTIJOIN)), true);
+    public AggregateFilterScanRule() {
+        super(RuleType.TF_MV_AGGREGATE_FILTER_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_AGGR)
+                .addChildren(Pattern.create(OperatorType.LOGICAL_FILTER))
+                .addChildren(Pattern.create(OperatorType.PATTERN_SCAN)), true);
     }
 
-    public static AggregateJoinRule getInstance() {
+    public static AggregateFilterScanRule getInstance() {
         return INSTANCE;
     }
 
