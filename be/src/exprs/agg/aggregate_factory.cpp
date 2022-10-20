@@ -516,8 +516,9 @@ public:
         //so here are the separate processing function percentile_approx
         if (name == "percentile_approx") {
             return AggregateFactory::MakePercentileApproxAggregateFunction();
+        } else if (name == "lead" || name == "lag") {
+            return AggregateFactory::MakeLeadLagWindowFunction<ArgPT>();
         }
-
         return nullptr;
     }
 
@@ -1120,7 +1121,11 @@ AggregateFuncResolver::AggregateFuncResolver() {
     ADD_ALL_TYPE("first_value", true);
     ADD_ALL_TYPE("last_value", true);
     ADD_ALL_TYPE("lead", true);
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lead");
+    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lead");
     ADD_ALL_TYPE("lag", true);
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lag");
+    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lag");
 
     add_object_mapping<TYPE_HLL, TYPE_HLL>("hll_union");
     add_object_mapping<TYPE_HLL, TYPE_HLL>("hll_raw_agg");
