@@ -1,22 +1,44 @@
-# Load data by using Stream Load transaction interface
+# Load data using Stream Load transaction interface
 
-StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) of transactions that are run to stream data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads. You can optionally run stream load jobs by using the Stream Load transaction interface.
+StarRocks provides a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®. The Stream Load transaction interface helps improve the performance of highly concurrent stream loads.
 
-## Capabilities
+This topic describes the Stream Load transaction interface and how to load data into StarRocks by using this interface.
+
+## Description
+
+The Stream Load transaction interface supports using an HTTP protocol-compatible tool or language to call API operations. This topic uses curl as an example to explain how to use this interface. This interface provides various features, such as transaction management, data write, transaction pre-commit, transaction deduplication, and transaction timeout management.
+
+### Transaction management
+
+The Stream Load transaction interface provides the following API operations, which are used to manage transactions:
+
+- `/api/transaction/begin`: starts a new transaction.
+
+- `/api/transaction/commit`: commits the current transaction to make data changes persistent.
+
+- `/api/transaction/rollback`: rolls back the current transaction to abort data changes.
+
+### Transaction pre-commit
+
+The Stream Load transaction interface provides the `/api/transaction/prepare` operation, which is used to pre-commit the current transaction and make data changes temporarily persistent. After you pre-commit a transaction, you can proceed to commit or roll back the transaction. If your StarRocks cluster breaks down after a transaction is pre-committed, you can still proceed to commit the transaction after your StarRocks cluster is restored to normal.
+
+> **NOTE**
+>
+> After the transaction is pre-committed, do not continue to write data using the transaction. If you continue to write data using the transaction, your write request returns errors.
+
+### Data write
+
+The Stream Load transaction interface provides the `/api/transaction/load` operation, which is used to write data. You can call this operation multiple times within one transaction.
 
 ### Transaction deduplication
 
 The Stream Load transaction interface carries over the labeling mechanism of StarRocks. You can bind a unique label to each transaction to achieve at-most-once guarantees for transactions.
 
-### Transaction rollback
-
-If data writes within a transaction fail, the transaction automatically rolls back. You can also call the `rollback` operation to roll back the transaction.
-
 ### Transaction timeout management
 
-You can use the `stream_load_default_timeout_second` parameter in the configuration file of each frontend (FE) to specify a default transaction timeout period for that FE.
+You can use the `stream_load_default_timeout_second` parameter in the configuration file of each FE to specify a default transaction timeout period for that FE.
 
-When you create a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period for the transaction.
+When you create a transaction, you can use the `timeout` field in the HTTP request header to specify a timeout period for the transaction. 
 
 When you create a transaction, you can also use the `idle_transaction_timeout` field in the HTTP request header to specify a timeout period within which the transaction can stay idle. If no data is written within the timeout period, the transaction automatically rolls back.
 
@@ -24,195 +46,317 @@ When you create a transaction, you can also use the `idle_transaction_timeout` f
 
 The Stream Load transaction interface brings the following benefits:
 
-- **Reduced memory usage**
-  You can use the Stream Load transaction interface to send data and commit transactions as separate operations. As such, you no longer need to cache a complete batch of data on your client before you commit your transaction. Instead, you can keep receiving upstream data while sending each group of received data separately, and then commit your transaction at a proper time to load all received data as a single batch. This way, memory usage on your client is reduced. Memory usage reduction is especially significant when you run a load job exactly once to load data from Apache Flink®.
+- **Exactly-once semantics**
+
+  A transaction is split into two phases, pre-commit and commit, which make it easy to load data across systems. For example, this interface can guarantee exactly-once semantics for data loads from Flink.
 
 - **Improved load performance**
-  When you invoke a program to run a stream load job, the Stream Load transaction interface allows you to send multiple small files at a time and then commit your transaction. This way, fewer data versions are generated, and load performance is improved.
+
+  If you run a load job by using a program, the Stream Load transaction interface allows you to merge multiple mini-batches of data on demand and then send them all at once within one transaction by calling the `/api/transaction/commit` operation. As such, fewer data versions need to be loaded, and load performance is improved.
 
 ## Limits
 
-The Stream Load transaction interface supports only single-table transactions. Multi-table transactions are under development.
+The Stream Load transaction interface has the following limits:
+
+- Only **single-database single-table** transactions are supported. Support for **multi-database multi-table** transactions is in development.
+
+- Only **concurrent data** **writes** **from one client** are supported. Support for **concurrent data writes from multiple clients** is in development.
+
+- The `/api/transaction/load` operation can be called multiple times within one transaction. In this case, the parameter settings specified for all of the `/api/transaction/load` operations that are called must be the same.
 
 ## Basic operations
 
-The Stream Load transaction interface supports only the HTTP protocol. You can use the transaction interface to perform the following operations:
-
 ### Start a transaction
 
+#### Syntax
+
 ```PowerShell
-# Start a transaction.
-curl -H "label:${label}"
-    -XPUT http://fe_host:http_port/api/{db}/transaction/begin
-# The transaction is successfully started.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Success",
-    "Message": "OK",
-    "BeginTxnTimeMs": 173
-}
-
-# The transaction is bound to duplicate labels.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Label Already Exist",
-    "Message": ""
-}
-
-# The transaction cannot be started due to other errors.
-{
-    "Status": "Fail",
-    "Message": ""
-}
+curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/begin
 ```
 
-### Send data
+#### Return result
+
+- If the transaction is successfully started, the following result is returned:
+
+  ```PowerShell
+  {
+      "Status": "OK",
+      "Message": "",
+      "Label": "xxx",
+      "TxnId": 9032,
+      "BeginTxnTimeMs": 0
+  }
+  ```
+
+- If the transaction is bound to a duplicate label, the following result is returned:
+
+  ```PowerShell
+  {
+      "Status": "LABEL_ALREADY_EXISTS",
+      "ExistingJobStatus": "RUNNING",
+      "Message": "Label [xxx] has already been used."
+  }
+  ```
+
+- If errors other than duplicate label occur, the following result is returned:
+
+  ```PowerShell
+  {
+      "Status": "FAIL",
+      "Message": ""
+  }
+  ```
+
+### Write data
+
+#### Syntax
 
 ```PowerShell
-# You can send data multiple times.
-# Send data.
-curl -H "label:${label}" 
+curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
     -T /path/to/data.csv
-    -XPUT http://fe_host:http_port/api/{db}/transaction/{table}/stream_load
- 
-# The data is successfully sent.   
-{
-    "TxnId": 1,
-    "Seq": 0,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Success",
-    "Message": "OK",
-    "NumberTotalRows": 5265644,
-    "NumberLoadedRows": 5265644,
-    "NumberFilteredRows": 0,
-    "NumberUnselectedRows": 0,
-    "LoadBytes": 10737418067,
-    "LoadTimeMs": 418778,
-    "StreamLoadPutTimeMs": 68,
-    "ReceivedDataTimeMs": 38964,
-}
-
-# The transaction is unknown.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Transcation Not Exist",
-    "Message": ""
-}
-
-# The transaction is in an invalid state.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Transcation State Invalid",
-    "Message": ""
-}
-
-# Data cannot be sent in the transaction due to other errors.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Fail",
-    "Message": ""
-}
+    -XPUT http://<fe_host>:<fe_http_port>/api/transaction/load
 ```
+
+#### Return result
+
+- If the data write is successful, the following result is returned:
+
+  ```PowerShell
+   {
+      "TxnId": 1,
+      "Seq": 0,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Success",
+      "Message": "OK",
+      "NumberTotalRows": 5265644,
+      "NumberLoadedRows": 5265644,
+      "NumberFilteredRows": 0,
+      "NumberUnselectedRows": 0,
+      "LoadBytes": 10737418067,
+      "LoadTimeMs": 418778,
+      "StreamLoadPutTimeMs": 68,
+      "ReceivedDataTimeMs": 38964,
+  }
+  ```
+
+- If the transaction is considered unknown, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "TXN_NOT_EXISTS",
+      "Message": ""
+  }
+  ```
+
+- If the transaction is considered in an invalid state, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Transcation State Invalid",
+      "Message": ""
+  }
+  ```
+
+- If errors other than unknown transaction and invalid status occur, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Fail",
+      "Message": ""
+  }
+  ```
+
+### Pre-commit a transaction
+
+#### Syntax
+
+```PowerShell
+ curl -H "label:<label_name>" -H "db:<database_name>"
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/prepare
+```
+
+#### Return result
+
+- If the pre-commit is successful, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Success",
+      "Message": "OK",
+      "NumberTotalRows": 5265644,
+      "NumberLoadedRows": 5265644,
+      "NumberFilteredRows": 0,
+      "NumberUnselectedRows": 0,
+      "LoadBytes": 10737418067,
+      "LoadTimeMs": 418778,
+      "StreamLoadPutTimeMs": 68,
+      "ReceivedDataTimeMs": 38964,
+      "WriteDataTimeMs": 417851
+      "CommitAndPublishTimeMs": 1393
+  }
+  ```
+
+- If the transaction is considered not existent, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Transcation Not Exist",
+      "Message": ""
+  }
+  ```
+
+- If the pre-commit times out, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Commit Timeout",
+      "Message": "",
+  }
+  ```
+
+- If errors other than non-existent transaction and pre-commit timeout occur, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Fail",
+      "Message": ""
+  }
+  ```
 
 ### Commit a transaction
 
+#### Syntax
+
 ```PowerShell
-# Commit a transaction.
-curl -H "label:${label}"
-    -XPUT http://fe_host:http_port/api/{db}/transaction/commit
-# The transaction is successfully committed.  
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Success",
-    "Message": "OK",
-    "NumberTotalRows": 5265644,
-    "NumberLoadedRows": 5265644,
-    "NumberFilteredRows": 0,
-    "NumberUnselectedRows": 0,
-    "LoadBytes": 10737418067,
-    "LoadTimeMs": 418778,
-    "StreamLoadPutTimeMs": 68,
-    "ReceivedDataTimeMs": 38964,
-    "WriteDataTimeMs": 417851
-    "CommitAndPublishTimeMs": 1393
-}
-
-# The transaction is successfully committed.   
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Success",
-    "Message": "Transaction already commited",
-}
-
-# The transaction cannot be found.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Transcation Not Exist",
-    "Message": ""
-}
-
-# The commit of the transaction times out.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Commit Timeout",
-    "Message": "",
-}
-
-# The publishing times out.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Publish Timeout",
-    "Message": "",
-    "CommitAndPublishTimeMs": 1393
-}
-
-# The transaction cannot be committed due to other errors.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Fail",
-    "Message": ""
-}
+curl -H "label:<label_name>" -H "db:<database_name>"
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/commit
 ```
+
+#### Return result
+
+- If the commit is successful, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Success",
+      "Message": "OK",
+      "NumberTotalRows": 5265644,
+      "NumberLoadedRows": 5265644,
+      "NumberFilteredRows": 0,
+      "NumberUnselectedRows": 0,
+      "LoadBytes": 10737418067,
+      "LoadTimeMs": 418778,
+      "StreamLoadPutTimeMs": 68,
+      "ReceivedDataTimeMs": 38964,
+      "WriteDataTimeMs": 417851
+      "CommitAndPublishTimeMs": 1393
+  }
+  ```
+
+- If the transaction has already been committed, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Success",
+      "Message": "Transaction already commited",
+  }
+  ```
+
+- If the transaction is considered not existent, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Transcation Not Exist",
+      "Message": ""
+  }
+  ```
+
+- If the commit times out, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Commit Timeout",
+      "Message": "",
+  }
+  ```
+
+- If the data publish times out, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Publish Timeout",
+      "Message": "",
+      "CommitAndPublishTimeMs": 1393
+  }
+  ```
+
+- If errors other than non-existent transaction and timeout occur, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Fail",
+      "Message": ""
+  }
+  ```
 
 ### Roll back a transaction
 
+#### Syntax
+
 ```PowerShell
-# Abort a transaction.
-curl -H "label:${label}"
-    -XPUT http://fe_host:http_port/api/{db}/transaction/rollback
-    
-# The transaction is successfully aborted.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Success",
-    "Message": "OK"
-}
-
-# The transaction cannot be found.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Transcation Not Exist",
-    "Message": ""
-}
-
-# The transaction cannot be aborted due to other errors.
-{
-    "TxnId": 1,
-    "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-    "Status": "Fail",
-    "Message": ""
-}
+curl -H "label:<label_name>" -H "db:<database_name>"
+    -XPOST http://<fe_host>:<fe_http_port>/api/transaction/rollback
 ```
+
+#### Return result
+
+- If the rollback is successful, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Success",
+      "Message": "OK"
+  }
+  ```
+
+- If the transaction is considered not existent, the following result is returned:
+
+  ```PowerShell
+  {
+      "TxnId": 1,
+      "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
+      "Status": "Transcation Not Exist",
+      "Message": ""
+  }
+  ```
+
+- If errors other than not existent transaction occur, the following result is returned:

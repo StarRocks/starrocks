@@ -28,10 +28,10 @@ public class HiveConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
     private final boolean enableMetastoreCache;
-    private CachingHiveMetastoreConf hmsConf;
+    private final CachingHiveMetastoreConf hmsConf;
 
     private final boolean enableRemoteFileCache;
-    private CachingRemoteFileConf remoteFileConf;
+    private final CachingRemoteFileConf remoteFileConf;
 
     private ExecutorService refreshHiveMetastoreExecutor;
     private ExecutorService refreshRemoteFileExecutor;
@@ -121,7 +121,7 @@ public class HiveConnectorInternalMgr {
     public ExecutorService getPullRemoteFileExecutor() {
         if (pullRemoteFileExecutor == null) {
             pullRemoteFileExecutor = Executors.newFixedThreadPool(loadRemoteFileMetadataThreadNum,
-                    new ThreadFactoryBuilder().setNameFormat("pull-remote-files-%d").build());
+                    new ThreadFactoryBuilder().setNameFormat("pull-hive-remote-files-%d").build());
         }
 
         return pullRemoteFileExecutor;

@@ -3,11 +3,11 @@
 package com.starrocks.external.hive;
 
 public class HiveCommonStats {
-    private static HiveCommonStats EMPTY = new HiveCommonStats(-1, -1);
+    private static final HiveCommonStats EMPTY = new HiveCommonStats(-1, -1);
 
     // Row num is first obtained from the table or partition's parameters.
     // If the num is null or -1, it will be estimated from total size of the partition or table's files.
-    private long rowNums;
+    private final long rowNums;
 
     private long totalFileBytes;
 

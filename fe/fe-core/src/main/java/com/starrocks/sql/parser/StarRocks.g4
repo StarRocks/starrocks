@@ -195,8 +195,6 @@ statement
     | cancelRestoreStatement
     | showRestoreStatement
     | showSnapshotStatement
-
-    //  Repository Satement
     | createRepositoryStatement
     | dropRepositoryStatement
 
@@ -223,6 +221,9 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+
+    //Unsupported Statement
+    | unsupportedStatement
     ;
 
 // ---------------------------------------- DataBase Statement ---------------------------------------------------------
@@ -912,7 +913,7 @@ showResourceStatement
     ;
 
 classifier
-    : '(' expression (',' expression)* ')'
+    : '(' expressionList ')'
     ;
 
 // ------------------------------------------- Function ----------------------------------------------------
@@ -1107,15 +1108,39 @@ helpStatement
 // ------------------------------------------- Privilege Statement -----------------------------------------------------
 
 
-privilegeObjectName
-    : identifierOrString
-    | tablePrivilegeObjectName
-    | user
+identifierOrStringList
+    : identifierOrString (',' identifierOrString)*
+    ;
+
+// [deprecated] grant select on *
+// [deprecated] grant select on *.*
+// grant select on db1.tbl1,db2.tbl2
+// grant select on db1,db2
+tableDbPrivilegeObjectNameList
+    : identifierOrStringOrStar                                  #deprecatedDbPrivilegeObject
+    | identifierOrStringOrStar '.' identifierOrStringOrStar     #deprecatedTablePrivilegeObject
+    | tablePrivilegeObjectNameList                              #tablePrivilegeObjectList
+    | identifierOrStringList                                    #defaultPrivilegeObjectList
+    ;
+
+userList
+    : user (',' user)*
+    ;
+
+tablePrivilegeObjectNameList
+    : tablePrivilegeObjectName (',' tablePrivilegeObjectName)*
     ;
 
 tablePrivilegeObjectName
-    : identifierOrStringOrStar
-    | identifierOrStringOrStar '.' identifierOrStringOrStar
+    : identifierOrString '.' identifierOrString
+    ;
+
+// the last one is deprecated
+privilegeObjectNameList
+    : tablePrivilegeObjectNameList
+    | identifierOrStringList
+    | userList
+    | ASTERISK_SYMBOL
     ;
 
 identifierOrStringOrStar
@@ -1134,6 +1159,7 @@ privilegeActionReserved
     | SELECT
     | INSERT
     | DELETE
+    | ALL
     ;
 
 privilegeActionList
@@ -1150,6 +1176,7 @@ privilegeTypeReserved
     | TABLE
     | DATABASE
     | CATALOG
+    | DATABASES
     ;
 
 privilegeType
@@ -1157,16 +1184,22 @@ privilegeType
     | identifier
     ;
 
+grantRevokeClause
+    : (user | ROLE identifierOrString ) (WITH GRANT OPTION)?
+    ;
+
 grantPrivilegeStatement
-    : GRANT IMPERSONATE ON user TO ( user | ROLE identifierOrString )                                       #grantImpersonateBrief
-    | GRANT privilegeActionList ON tablePrivilegeObjectName TO (user | ROLE identifierOrString)        #grantTablePrivBrief
-    | GRANT privilegeActionList ON privilegeType privilegeObjectName TO (user | ROLE identifierOrString)  #grantPrivWithType
+    : GRANT IMPERSONATE ON user TO grantRevokeClause                                               #grantImpersonateBrief
+    | GRANT privilegeActionList ON tableDbPrivilegeObjectNameList TO grantRevokeClause             #grantTablePrivBrief
+    | GRANT privilegeActionList ON privilegeType (privilegeObjectNameList)? TO grantRevokeClause   #grantPrivWithType
+    | GRANT privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? TO grantRevokeClause   #grantOnAll
     ;
 
 revokePrivilegeStatement
-    : REVOKE IMPERSONATE ON user FROM ( user | ROLE identifierOrString )                                  #revokeImpersonateBrief
-    | REVOKE privilegeActionList ON tablePrivilegeObjectName FROM (user | ROLE identifierOrString)   #revokeTablePrivBrief
-    | REVOKE privilegeActionList ON privilegeType privilegeObjectName FROM (user | ROLE identifierOrString) #revokePrivWithType
+    : REVOKE IMPERSONATE ON user FROM grantRevokeClause                                              #revokeImpersonateBrief
+    | REVOKE privilegeActionList ON tableDbPrivilegeObjectNameList FROM grantRevokeClause            #revokeTablePrivBrief
+    | REVOKE privilegeActionList ON privilegeType (privilegeObjectNameList)? FROM grantRevokeClause  #revokePrivWithType
+    | REVOKE privilegeActionList ON ALL privilegeType (IN ALL privilegeType)* (IN privilegeType identifierOrString)? FROM grantRevokeClause  #revokeOnAll
     ;
 
 grantRoleStatement
@@ -1372,6 +1405,13 @@ setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
     ;
 
+unsupportedStatement
+    : START TRANSACTION (WITH CONSISTENT SNAPSHOT)?
+    | BEGIN WORK?
+    | COMMIT WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    | ROLLBACK WORK? (AND NO? CHAIN)? (NO? RELEASE)?
+    ;
+
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
@@ -1402,7 +1442,7 @@ subquery
     ;
 
 rowConstructor
-     :'(' expression (',' expression)* ')'
+     :'(' expressionList ')'
      ;
 
 sortItem
@@ -1428,10 +1468,10 @@ fromClause
     ;
 
 groupingElement
-    : ROLLUP '(' (expression (',' expression)*)? ')'                                    #rollup
-    | CUBE '(' (expression (',' expression)*)? ')'                                      #cube
+    : ROLLUP '(' (expressionList)? ')'                                                  #rollup
+    | CUBE '(' (expressionList)? ')'                                                    #cube
     | GROUPING SETS '(' groupingSet (',' groupingSet)* ')'                              #multipleGroupingSets
-    | expression (',' expression)*                                                      #singleGroupingSet
+    | expressionList                                                                    #singleGroupingSet
     ;
 
 groupingSet
@@ -1468,7 +1508,7 @@ relationPrimary
     | '(' VALUES rowConstructor (',' rowConstructor)* ')'
         (AS? alias=identifier columnAliases?)?                                          #inlineTable
     | subquery (AS? alias=identifier columnAliases?)?                                   #subqueryWithAlias
-    | qualifiedName '(' expression (',' expression)* ')'
+    | qualifiedName '(' expressionList ')'
         (AS? alias=identifier columnAliases?)?                                          #tableFunction
     | '(' relations ')'                                                                 #parenthesizedRelation
     ;
@@ -1563,6 +1603,10 @@ expression
     | left=expression operator=(OR|LOGICAL_OR) right=expression                           #logicalBinary
     ;
 
+expressionList
+    : expression (',' expression)*
+    ;
+
 booleanExpression
     : predicate                                                                           #booleanExpressionDefault
     | booleanExpression IS NOT? NULL                                                      #isNull
@@ -1575,7 +1619,7 @@ predicate
     ;
 
 predicateOperations [ParserRuleContext value]
-    : NOT? IN '(' expression (',' expression)* ')'                                        #inList
+    : NOT? IN '(' expressionList ')'                                                      #inList
     | NOT? IN '(' queryRelation ')'                                                       #inSubquery
     | NOT? BETWEEN lower = valueExpression AND upper = predicate                          #between
     | NOT? (LIKE | RLIKE | REGEXP) pattern=valueExpression                                #like
@@ -1600,11 +1644,11 @@ valueExpression
 primaryExpression
     : userVariable                                                                        #userVariableExpression
     | systemVariable                                                                      #systemVariableExpression
-    | columnReference                                                                     #columnRef
     | functionCall                                                                        #functionCallExpression
     | '{' FN functionCall '}'                                                             #odbcFunctionCallExpression
     | primaryExpression COLLATE (identifier | string)                                     #collate
     | literalExpression                                                                   #literal
+    | columnReference                                                                     #columnRef
     | left = primaryExpression CONCAT right = primaryExpression                           #concat
     | operator = (MINUS_SYMBOL | PLUS_SYMBOL | BITNOT) primaryExpression                  #arithmeticUnary
     | operator = LOGICAL_NOT primaryExpression                                            #arithmeticUnary
@@ -1615,7 +1659,7 @@ primaryExpression
     | CONVERT '(' expression ',' type ')'                                                 #convert
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
-    | arrayType? '[' (expression (',' expression)*)? ']'                                  #arrayConstructor
+    | arrayType? '[' (expressionList)? ']'                                                #arrayConstructor
     | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
@@ -1986,7 +2030,7 @@ nonReserved
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOGICAL
     | MANUAL | MATERIALIZED | MAX | META | MIN | MINUTE | MODE | MODIFY | MONTH | MERGE
     | NAME | NAMES | NEGATIVE | NO | NODE | NULLS
-    | OBSERVER | OFFSET | ONLY | OPEN | OVERWRITE
+    | OBSERVER | OFFSET | ONLY | OPEN | OPTION | OVERWRITE
     | PARTITIONS | PASSWORD | PATH | PAUSE | PERCENTILE_UNION | PLUGIN | PLUGINS | PRECEDING | PROC | PROCESSLIST
     | PROPERTIES | PROPERTY
     | QUARTER | QUERY | QUOTA

@@ -17,7 +17,9 @@
 #include "exec/pipeline/scan/connector_scan_operator.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
+#include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/scan_node.h"
 #include "exec/tablet_sink.h"
 #include "exec/vectorized/cross_join_node.h"
@@ -30,7 +32,9 @@
 #include "runtime/data_stream_sender.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
+#include "runtime/export_sink.h"
 #include "runtime/multi_cast_data_stream_sink.h"
+#include "runtime/mysql_table_sink.h"
 #include "runtime/result_sink.h"
 #include "util/debug/query_trace.h"
 #include "util/pretty_printer.h"
@@ -431,6 +435,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
         const auto& tsink = request.output_sink();
+        if (tsink.type == TDataSinkType::RESULT_SINK) {
+            _query_ctx->set_result_sink(true);
+        }
         RowDescriptor row_desc;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, tsink, fragment.output_exprs, params,
                                                    request.sender_id(), row_desc, &datasink));
@@ -541,11 +548,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     UnifiedExecPlanFragmentParams request(common_request, unique_request);
 
     bool prepare_success = false;
-    DeferOp defer([this, &prepare_success]() {
-        if (!prepare_success) {
+    int64_t prepare_time = 0;
+    DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
+        if (prepare_success) {
+            auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.fragment_instance_id());
+            auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
+                    "FragmentInstancePrepareTime", TUnit::TIME_NS);
+            COUNTER_SET(prepare_timer, prepare_time);
+        } else {
             _fail_cleanup();
         }
     });
+    SCOPED_RAW_TIMER(&prepare_time);
     RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
     RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));
@@ -710,6 +724,22 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         runtime_state->set_num_per_fragment_instances(request.common().params.num_senders);
         OpFactoryPtr op =
                 std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), datasink, fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::ExportSink)) {
+        ExportSink* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto output_expr = export_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().export_sink, export_sink->get_output_expr(), dop,
+                fragment_ctx);
+        fragment_ctx->pipelines().back()->add_op_factory(op);
+    } else if (typeid(*datasink) == typeid(starrocks::MysqlTableSink)) {
+        MysqlTableSink* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
+        auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+        auto output_expr = mysql_table_sink->get_output_expr();
+        OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
+                context->next_operator_id(), request.output_sink().mysql_table_sink,
+                mysql_table_sink->get_output_expr(), dop, fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     }
 

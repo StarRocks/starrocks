@@ -6,11 +6,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.HiveTable;
-import com.starrocks.common.DdlException;
-import com.starrocks.external.HiveMetaStoreTableUtils;
-import com.starrocks.external.hive.HiveMetaCache;
+import com.starrocks.catalog.IcebergTable;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.external.hive.HivePartitionName;
-import com.starrocks.external.hive.HiveTableName;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
@@ -33,7 +31,7 @@ public class MetastoreEventFactory implements EventFactory {
      * It is convenient for creating batch tasks to parallel processing.
      */
     @Override
-    public List<MetastoreEvent> get(NotificationEvent event, HiveMetaCache metaCache, HiveTable table) {
+    public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor metaCache, HiveTable table) {
         Preconditions.checkNotNull(event.getEventType());
         MetastoreEventType metastoreEventType = MetastoreEventType.from(event.getEventType());
         switch (metastoreEventType) {
@@ -59,12 +57,10 @@ public class MetastoreEventFactory implements EventFactory {
 
     List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events, String resourceName) {
         List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
-        HiveMetaCache metaCache = null;
-        try {
-            metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
-        } catch (DdlException e) {
-            LOG.error("Filed to get meta cache on resource [{}]", resourceName, e);
-        }
+        CacheUpdateProcessor metaCache = null;
+        // TODO(stephen): refactor auto sync hive metatadata
+        // metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
+
         if (metaCache == null) {
             LOG.error("Meta cache is null on resource [{}]", resourceName);
             return metastoreEvents;
@@ -74,13 +70,13 @@ public class MetastoreEventFactory implements EventFactory {
         // Therefore, it's necessary to filter the events pulled this time from the hms instance,
         // and the events of the tables that don't register in the fe MetastoreEventsProcessor need to be filtered out.
         for (NotificationEvent event : events) {
-            HiveTable table;
-            if (HiveMetaStoreTableUtils.isInternalCatalog(resourceName)) {
+            HiveTable table = null;
+            if (IcebergTable.isInternalCatalog(resourceName)) {
                 table = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                         .getHiveTable(resourceName, event.getDbName(), event.getTableName());
             } else {
-                table = (HiveTable) metaCache.getTableFromCache(
-                        HiveTableName.of(event.getDbName(), event.getTableName()));
+                // TODO(stephen): refactor auto sync hive metatadata
+                // table = (HiveTable) metaCache.getTableFromCache(HiveTableName.of(event.getDbName(), event.getTableName()));
             }
 
             if (table == null) {

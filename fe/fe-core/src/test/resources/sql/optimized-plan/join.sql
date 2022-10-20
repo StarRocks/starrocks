@@ -209,18 +209,17 @@ select v1,v2,v3,v4 from t0 left outer join t1 on v1=v5 and 1>2
 [result]
 LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-    EXCHANGE BROADCAST
+    EXCHANGE SHUFFLE[5]
         VALUES
 [end]
 
 [sql]
 select v1,v2,v3 from t0 left semi join t1 on v1=v5 and 1>2
 [result]
-RIGHT SEMI JOIN (join-predicate [5: v5 = 1: v1] post-join-predicate [null])
-    EXCHANGE SHUFFLE[5]
+LEFT SEMI JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [null])
+    VALUES
+    EXCHANGE BROADCAST
         SCAN (columns[5: v5] predicate[5: v5 IS NOT NULL])
-    EXCHANGE SHUFFLE[1]
-        VALUES
 [end]
 
 [sql]
@@ -258,7 +257,7 @@ AGGREGATE ([GLOBAL] aggregate [{7: count=count(7: count)}] group by [[]] having 
         AGGREGATE ([LOCAL] aggregate [{7: count=count()}] group by [[]] having [null]
             LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
                 SCAN (columns[1: v1] predicate[null])
-                EXCHANGE BROADCAST
+                EXCHANGE SHUFFLE[4]
                     VALUES
 [end]
 [sql]

@@ -133,7 +133,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * Checks whether {@code this} {@link MaterializedIndex} is visible to a transaction.
      * <p>
      * If this {@link MaterializedIndex} is not visible to a transaction,
-     * {@link com.starrocks.transaction.PublishVersionDaemon} will not send {@link com.starrocks.lake.proto.PublishVersionRequest}
+     * {@link com.starrocks.transaction.PublishVersionDaemon} will not send {@link com.starrocks.proto.PublishVersionRequest}
      * to tablets of this index.
      * <p>
      * Only used for {@link com.starrocks.lake.LakeTable} now.

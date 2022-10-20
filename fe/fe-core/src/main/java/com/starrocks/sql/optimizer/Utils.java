@@ -5,7 +5,6 @@ package com.starrocks.sql.optimizer;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -15,7 +14,6 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.external.hive.HiveColumnStats;
 import com.starrocks.external.iceberg.cost.IcebergTableStatisticCalculator;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -46,7 +44,6 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -349,15 +346,10 @@ public class Utils {
                 return columnStatisticList.stream().anyMatch(ColumnStatistic::isUnknown);
             } else if (operator instanceof LogicalHiveScanOperator || operator instanceof LogicalHudiScanOperator) {
                 if (ConnectContext.get().getSessionVariable().enableHiveColumnStats()) {
-                    HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) scanOperator.getTable();
-                    try {
-                        Map<String, HiveColumnStats> hiveColumnStatisticMap =
-                                hiveMetaStoreTable.getTableLevelColumnStats(colNames);
-                        return hiveColumnStatisticMap.values().stream().anyMatch(HiveColumnStats::isUnknown);
-                    } catch (Exception e) {
-                        LOG.warn(scanOperator.getTable().getType() + " table {} get column failed. error : {}",
-                                scanOperator.getTable().getName(), e);
-                        return true;
+                    if (operator instanceof LogicalHiveScanOperator) {
+                        return ((LogicalHiveScanOperator) operator).hasUnknownColumn();
+                    } else {
+                        return ((LogicalHudiScanOperator) operator).hasUnknownColumn();
                     }
                 }
                 return true;

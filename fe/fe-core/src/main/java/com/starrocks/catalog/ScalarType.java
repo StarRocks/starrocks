@@ -50,9 +50,9 @@ public class ScalarType extends Type implements Cloneable {
     // precision that is supported by the smallest decimal type in the BE (4 bytes).
     public static final int DEFAULT_PRECISION = 9;
     public static final int DEFAULT_SCALE = 0; // SQL standard
-    // Longest supported VARCHAR and CHAR, chosen to match Hive.
-    public static final int DEFAULT_STRING_LENGTH = 65533;
     public static final int MAX_VARCHAR_LENGTH = 1048576;
+    // Longest supported VARCHAR and CHAR, chosen to match Hive.
+    public static final int DEFAULT_STRING_LENGTH = MAX_VARCHAR_LENGTH;
     public static final int MAX_CHAR_LENGTH = 255;
     // HLL DEFAULT LENGTH  2^14(registers) + 1(type)
     public static final int MAX_HLL_LENGTH = 16385;

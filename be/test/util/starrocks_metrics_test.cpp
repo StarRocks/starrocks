@@ -24,6 +24,8 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
+#include "runtime/mem_tracker.h"
+#include "storage/page_cache.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -32,6 +34,16 @@ class StarRocksMetricsTest : public testing::Test {
 public:
     StarRocksMetricsTest() {}
     virtual ~StarRocksMetricsTest() {}
+
+protected:
+    void SetUp() override {
+        auto _page_cache_mem_tracker = std::make_unique<MemTracker>();
+        static const int kNumShardBits = 5;
+        static const int kNumShards = 1 << kNumShardBits;
+        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), kNumShards * 100000);
+    }
+
+    void TearDown() override { StoragePageCache::release_global_cache(); }
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -239,6 +251,41 @@ TEST_F(StarRocksMetricsTest, Normal) {
         ASSERT_TRUE(metric != nullptr);
         ASSERT_STREQ("40", metric->to_string().c_str());
     }
+}
+
+TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
+    TestMetricsVisitor visitor;
+    auto instance = StarRocksMetrics::instance();
+    auto metrics = instance->metrics();
+    metrics->collect(&visitor);
+    LOG(INFO) << "\n" << visitor.to_string();
+    
+    auto lookup_metric = metrics->get_metric("page_cache_lookup_count");
+    ASSERT_TRUE(lookup_metric != nullptr);
+    auto hit_metric = metrics->get_metric("page_cache_hit_count");
+    ASSERT_TRUE(hit_metric != nullptr);
+    auto capacity_metric = metrics->get_metric("page_cache_capacity");
+    ASSERT_TRUE(capacity_metric != nullptr);
+    auto cache = StoragePageCache::instance();
+    {
+        StoragePageCache::CacheKey key("abc", 0);
+        char* buf = new char[1024];
+        PageCacheHandle handle;
+        Slice data(buf, 1024);
+        cache->insert(key, data, &handle, false);
+        auto found = cache->lookup(key, &handle);
+        ASSERT_TRUE(found);
+        for (int i = 0; i < 1024; i++) {
+            PageCacheHandle handle;
+            StoragePageCache::CacheKey key(std::to_string(i), 0);
+            cache->lookup(key, &handle);
+        }
+    }
+    config::enable_metric_calculator = false;
+    metrics->collect(&visitor);
+    ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
+    ASSERT_STREQ("1", hit_metric->to_string().c_str());
+    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());   
 }
 
 } // namespace starrocks

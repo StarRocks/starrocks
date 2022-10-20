@@ -60,6 +60,8 @@ public:
 
     RuntimeProfile* profile() override { return _profile; }
 
+    std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
+
 private:
     Status open_file_writer(int timeout_ms);
     Status gen_file_name(std::string* file_name);

@@ -414,7 +414,7 @@ The mapping between the target database and StarRocks varies based on the type o
 | DATE                | DATE      |
 | CHAR                | CHAR      |
 | VARCHAR             | VARCHAR   |
-| TEXT                | STRING    |
+| TEXT                | VARCHAR   |
 
 #### **SQL Server and StarRocks**
 

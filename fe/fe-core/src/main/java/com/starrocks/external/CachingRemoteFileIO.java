@@ -12,6 +12,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
+import java.util.stream.Collectors;
 
 import static com.google.common.base.Throwables.throwIfInstanceOf;
 import static com.google.common.cache.CacheLoader.asyncReloading;
@@ -58,12 +59,26 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         }
     }
 
-    private List<RemoteFileDesc> loadRemoteFiles(RemotePathKey pathKey) {
+    public List<RemoteFileDesc> loadRemoteFiles(RemotePathKey pathKey) {
         return fileIO.getRemoteFiles(pathKey).get(pathKey);
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getPresentRemoteFiles(List<RemotePathKey> paths) {
-        return cache.getAllPresent(paths);
+        if (fileIO instanceof CachingRemoteFileIO) {
+            return ((CachingRemoteFileIO) fileIO).getPresentRemoteFiles(paths);
+        } else {
+            return cache.getAllPresent(paths);
+        }
+    }
+
+    public List<RemotePathKey> getPresentPathKeyInCache(String basePath, boolean isRecursive) {
+        return cache.asMap().keySet().stream()
+                .filter(pathKey -> pathKey.approximateMatchPath(basePath, isRecursive))
+                .collect(Collectors.toList());
+    }
+
+    public void updateRemoteFiles(RemotePathKey pathKey) {
+        cache.put(pathKey, loadRemoteFiles(pathKey));
     }
 
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
@@ -78,5 +93,9 @@ public class CachingRemoteFileIO implements RemoteFileIO {
 
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
+    }
+
+    public void invalidateAll() {
+        cache.invalidateAll();
     }
 }

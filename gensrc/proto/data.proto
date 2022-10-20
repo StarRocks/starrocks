@@ -74,4 +74,9 @@ message SegmentPB {
     optional int64 num_rows = 5;
     optional int64 row_size = 6;
     optional string path = 7;
+
+    optional int64 delete_id = 8;
+    optional int64 delete_data_size = 9;
+    optional int64 delete_num_rows = 10;
+    optional string delete_path = 11;
 };
