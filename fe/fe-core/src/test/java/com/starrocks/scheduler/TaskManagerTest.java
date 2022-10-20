@@ -115,7 +115,9 @@ public class TaskManagerTest {
         int retryCount = 0;
         int maxRetry = 5;
         while (retryCount < maxRetry) {
-            state = taskRuns.get(0).getState();
+            if (taskRuns.size() > 0) {
+                state = taskRuns.get(0).getState();
+            }
             retryCount++;
             ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
             if (state == Constants.TaskRunState.FAILED || state == Constants.TaskRunState.SUCCESS) {
