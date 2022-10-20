@@ -17,7 +17,7 @@ v.close()
 
 setup(
     name="sqlalchemy-starrocks",
-    version=VERSION,
+    version = VERSION,
     description="StarRocks Dialect for SQLAlchemy",
     long_description_content_type="text/markdown",
     classifiers=[
