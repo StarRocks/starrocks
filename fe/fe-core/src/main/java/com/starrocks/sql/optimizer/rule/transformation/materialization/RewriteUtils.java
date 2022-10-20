@@ -9,7 +9,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
@@ -268,6 +270,38 @@ public class RewriteUtils {
             return false;
         }
         Operator operator = root.getOp();
+        if (!(operator instanceof LogicalAggregationOperator)) {
+            return false;
+        }
+        LogicalAggregationOperator agg = (LogicalAggregationOperator) operator;
+        if (agg.getType() != AggType.GLOBAL) {
+            return false;
+        }
+
+        OptExpression child = root.inputAt(0);
+        if (child == null) {
+            return false;
+        }
+        Operator childOp = child.getOp();
+        if (!(childOp instanceof LogicalScanOperator)
+                && !(childOp instanceof LogicalProjectOperator)
+                && !(childOp instanceof LogicalFilterOperator)
+                && !(childOp instanceof LogicalJoinOperator)) {
+            return false;
+        }
+        for (OptExpression input : root.getInputs()) {
+            if (!isLogicalSPJ(input)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isLogicalSPJ(OptExpression root) {
+        if (root == null) {
+            return false;
+        }
+        Operator operator = root.getOp();
         if (!(operator instanceof LogicalOperator)) {
             return false;
         }
@@ -278,7 +312,7 @@ public class RewriteUtils {
             return false;
         }
         for (OptExpression child : root.getInputs()) {
-            if (!isLogicalSPJG(child)) {
+            if (!isLogicalSPJ(child)) {
                 return false;
             }
         }

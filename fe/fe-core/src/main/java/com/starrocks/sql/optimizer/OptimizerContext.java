@@ -28,6 +28,7 @@ public class OptimizerContext {
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
+
     private Set<MaterializationContext> candidateMvs;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {

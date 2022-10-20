@@ -85,7 +85,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             return false;
         }
         // TODO: 是否支持grouping set/rollup/cube
-        return RewriteUtils.isLogicalSPJG(expression.inputAt(0));
+        return RewriteUtils.isLogicalSPJ(expression.inputAt(0));
     }
 
     @Override

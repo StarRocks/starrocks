@@ -39,7 +39,6 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializationContext;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
@@ -55,7 +54,6 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.isInternalCatalog;
@@ -338,14 +336,11 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     @SerializedName(value = "partitionRefTableExprs")
     private List<Expr> partitionRefTableExprs;
 
-    private AtomicReference<MaterializationContext> materializationContext;
-
     public MaterializedView() {
         super(TableType.MATERIALIZED_VIEW);
         this.tableProperty = null;
         this.state = OlapTableState.NORMAL;
         this.active = true;
-        this.materializationContext = new AtomicReference<>();
     }
 
     public MaterializedView(long id, long dbId, String mvName, List<Column> baseSchema, KeysType keysType,
@@ -356,7 +351,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.dbId = dbId;
         this.refreshScheme = refreshScheme;
         this.active = true;
-        this.materializationContext = new AtomicReference<>();
     }
 
     public long getDbId() {
@@ -640,17 +634,6 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         sb.append("\nAS ").append(define);
         sb.append(";");
         return sb.toString();
-    }
-
-    public void setMaterializationContext(MaterializationContext materializationContext) {
-        this.materializationContext.compareAndSet(null, materializationContext);
-    }
-
-    public MaterializationContext getMaterializationContext() {
-        if (materializationContext == null) {
-            return null;
-        }
-        return this.materializationContext.get();
     }
 
     public Set<String> getPartitionNamesToRefresh() {

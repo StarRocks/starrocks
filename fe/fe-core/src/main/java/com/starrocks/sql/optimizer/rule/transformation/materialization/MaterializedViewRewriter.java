@@ -88,7 +88,7 @@ public class MaterializedViewRewriter {
     }
 
     public boolean isValidPlan(OptExpression expression) {
-        return RewriteUtils.isLogicalSPJG(expression);
+        return RewriteUtils.isLogicalSPJ(expression);
     }
 
     public List<OptExpression> rewrite() {
