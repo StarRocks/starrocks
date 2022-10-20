@@ -66,8 +66,8 @@ public class PipelineParallelismTest extends PlanTestBase {
         ExecPlan plan = getExecPlan("select * from t0 [_META_]");
         PlanFragment fragment1 = plan.getFragments().get(1);
         assertContains(fragment1.getExplainString(TExplainLevel.NORMAL), "MetaScan");
-        Assert.assertEquals(parallelExecInstanceNum, fragment1.getParallelExecNum());
-        Assert.assertEquals(1, fragment1.getPipelineDop());
+        Assert.assertEquals(1, fragment1.getParallelExecNum());
+        Assert.assertEquals(numHardwareCores / 2, fragment1.getPipelineDop());
     }
 
     @Test
