@@ -90,7 +90,7 @@ private:
 
     // =========================
     RuntimeState* _runtime_state = nullptr;
-    ChunkAccumulator _ck_acc;
+    ChunkPipelineAccumulator _ck_acc;
     Status _status = Status::OK();
     bool _opened = false;
     bool _closed = false;

@@ -458,4 +458,26 @@ void ChunkAccumulator::finalize() {
     }
 }
 
+void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    DCHECK(_out_chunk == nullptr);
+    if (_in_chunk == nullptr) {
+        _in_chunk = chunk;
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+        _out_chunk = std::move(_in_chunk);
+        _in_chunk = chunk;
+    } else {
+        _in_chunk->append(*chunk);
+    }
+
+    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
+                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+        _out_chunk = std::move(_in_chunk);
+    }
+}
+
+void ChunkPipelineAccumulator::reset() {
+    _in_chunk.reset();
+    _out_chunk.reset();
+}
+
 } // namespace starrocks

@@ -167,7 +167,7 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
-    _ck_acc.set_desired_size(state->chunk_size());
+    _ck_acc.set_max_size(state->chunk_size());
     return Status::OK();
 }
 
@@ -197,25 +197,29 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         _status = _data_source->get_next(state, &tmp);
         if (_status.ok()) {
             _ck_acc.push(std::move(tmp));
-            if (!_ck_acc.empty()) {
+            if (_ck_acc.output_chunk() != nullptr) {
                 break;
             }
         } else if (!_status.is_end_of_file()) {
             return _status;
         } else {
             DCHECK(_status.is_end_of_file());
-            _ck_acc.finalize();
         }
     }
 
     DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
-    if (!_ck_acc.empty()) {
-        *chunk = _ck_acc.pull();
+    if (_ck_acc.output_chunk() != nullptr || _ck_acc.staging_chunk() != nullptr) {
+        if (_ck_acc.output_chunk() != nullptr) {
+            *chunk = std::move(_ck_acc.output_chunk());
+        } else {
+            *chunk = std::move(_ck_acc.staging_chunk());
+        }
         _rows_read += (*chunk)->num_rows();
         return Status::OK();
     }
+    _ck_acc.reset();    
     return Status::EndOfFile("");
 }
 
