@@ -13,6 +13,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.iceberg.BaseMetastoreCatalog;
+import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
 import org.apache.iceberg.ClientPool;
@@ -80,7 +81,8 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
                            Map<String, String> properties) throws StarRocksIcebergException {
         Preconditions.checkState(tableId != null);
         try {
-            return super.loadTable(tableId);
+            TableOperations ops = this.newTableOps(tableId);
+            return new BaseTable(ops, fullTableName(this.name(), tableId));
         } catch (Exception e) {
             throw new StarRocksIcebergException(String.format(
                     "Failed to load Iceberg table with id: %s", tableId), e);

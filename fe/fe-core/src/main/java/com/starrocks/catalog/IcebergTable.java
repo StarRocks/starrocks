@@ -57,10 +57,11 @@ public class IcebergTable extends Table {
 
     private org.apache.iceberg.Table icbTbl; // actual iceberg table
 
+    private boolean isCatalogTbl = false;
+
     private String db;
     private String table;
     private String resourceName;
-    private String tableLocation;
 
     private final List<String> columnNames = Lists.newArrayList();
 
@@ -68,6 +69,13 @@ public class IcebergTable extends Table {
 
     public IcebergTable() {
         super(TableType.ICEBERG);
+    }
+
+    public IcebergTable(long id, org.apache.iceberg.Table icbTbl, boolean isCatalogTbl, String name,
+                        List<Column> schema, Map<String, String> properties) throws DdlException {
+        this(id, name, schema, properties);
+        this.icbTbl = icbTbl;
+        this.isCatalogTbl = isCatalogTbl;
     }
 
     public IcebergTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
@@ -121,8 +129,8 @@ public class IcebergTable extends Table {
         return icebergProperties.get(ICEBERG_METASTORE_URIS);
     }
 
-    public void setTableLocation(String location) {
-        this.tableLocation = location;
+    public boolean isCatalogTbl() {
+        return isCatalogTbl;
     }
 
     public void refreshTable() {
@@ -132,13 +140,19 @@ public class IcebergTable extends Table {
     // icbTbl is used for caching
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {
-            if (this.icbTbl == null) {
-                IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(this);
-                this.icbTbl = catalog.loadTable(this);
+            if (isCatalogTbl) {
+                GlobalStateMgr.getCurrentState().getIcebergRepository().getTable(icbTbl).get();
+            } else {
+                if (this.icbTbl == null) {
+                    IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(this);
+                    this.icbTbl = catalog.loadTable(this);
+                }
             }
         } catch (StarRocksIcebergException e) {
             LOG.error("Load iceberg table failure!", e);
             throw e;
+        } catch (Exception e) {
+            LOG.error("Load iceberg table failure!", e);
         }
         return icbTbl;
     }
@@ -313,7 +327,6 @@ public class IcebergTable extends Table {
         Preconditions.checkNotNull(partitions);
 
         TIcebergTable tIcebergTable = new TIcebergTable();
-        tIcebergTable.setLocation(tableLocation);
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {

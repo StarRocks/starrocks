@@ -47,7 +47,6 @@ bool BinaryConverter::read_string(Column* column, Slice s, const Options& option
     }
 
     if (UNLIKELY((s.size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && s.size > max_size))) {
-        LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varchar length.";
         return false;
     }
     down_cast<BinaryColumn*>(column)->append(s);
@@ -92,7 +91,6 @@ bool BinaryConverter::read_quoted_string(Column* column, Slice s, const Options&
     size_t ext_size = new_size - old_size;
     if (UNLIKELY((ext_size > TypeDescriptor::MAX_VARCHAR_LENGTH) || (max_size > 0 && ext_size > max_size))) {
         bytes.resize(old_size);
-        LOG(WARNING) << "Column [" << column->get_name() << "]'s length exceed max varchar length.";
         return false;
     }
     offsets.push_back(bytes.size());
