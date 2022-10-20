@@ -15,7 +15,7 @@ namespace pipeline {
 class OlapMetaChunkSource final : public ChunkSource {
 public:
     OlapMetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                        vectorized::OlapMetaScanNode* scan_node, OlapMetaScanContextPtr scan_ctx);
+                        OlapMetaScanContextPtr scan_ctx);
 
     ~OlapMetaChunkSource() override;
 
@@ -28,7 +28,6 @@ private:
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
-    vectorized::OlapMetaScanNode* _scan_node;
     OlapMetaScanContextPtr _scan_ctx;
 
     std::shared_ptr<vectorized::OlapMetaScanner> _scanner;

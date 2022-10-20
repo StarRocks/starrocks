@@ -8,9 +8,8 @@
 namespace starrocks::pipeline {
 
 OlapMetaChunkSource::OlapMetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                         vectorized::OlapMetaScanNode* scan_node, OlapMetaScanContextPtr scan_ctx)
+                                         OlapMetaScanContextPtr scan_ctx)
         : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
-          _scan_node(scan_node),
           _scan_ctx(scan_ctx) {}
 
 OlapMetaChunkSource::~OlapMetaChunkSource() {}
@@ -19,6 +18,7 @@ Status OlapMetaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     // use tablet id in morsel to get olap meta scanner
     auto scan_morsel = dynamic_cast<ScanMorsel*>(_morsel.get());
+    DCHECK(scan_morsel != nullptr);
     auto scan_range = scan_morsel->get_olap_scan_range();
     _scanner = _scan_ctx->get_scanner(scan_range->tablet_id);
     RETURN_IF_ERROR(_scanner->open(state));

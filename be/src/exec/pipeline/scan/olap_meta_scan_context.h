@@ -11,7 +11,7 @@ namespace starrocks {
 namespace vectorized {
 class OlapMetaScanner;
 class OlapMetaScanNode;
-}
+} // namespace vectorized
 namespace pipeline {
 
 class OlapMetaScanContext;
@@ -38,7 +38,7 @@ public:
 
     void set_prepare_finished() { _is_prepare_finished = true; }
 
-    bool is_prepare_finished() { return _is_prepare_finished; }
+    bool is_prepare_finished() const { return _is_prepare_finished; }
 
 private:
     // tablet_id => olap_meta_scanner
