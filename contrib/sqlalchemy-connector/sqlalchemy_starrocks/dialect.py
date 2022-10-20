@@ -10,7 +10,7 @@ class StarRocksDialect(MySQLDialect_mysqldb):
     def __init__(self, *args, **kw):
         super(StarRocksDialect, self).__init__(*args, **kw)
         self.ischema_names = self.ischema_names.copy()
-        self.ischema_names['largeint']=DECIMAL
+        self.ischema_names['largeint'] = DECIMAL
 
     @classmethod
     def dbapi(cls):
