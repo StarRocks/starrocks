@@ -11,7 +11,7 @@ This statement is used to create materialized views.
 ## Syntax
 
 ```sql
-CREATE MATERIALIZED VIEW [materialized_view_name] as [query]
+CREATE MATERIALIZED VIEW materialized_view_name AS query;
 ```
 
 ## Parameters
