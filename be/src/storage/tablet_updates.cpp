@@ -2635,7 +2635,7 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     }
 }
 
-Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
+Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup) {
 #define CHECK_FAIL(status)                                                              \
     do {                                                                                \
         Status st = (status);                                                           \
@@ -2707,7 +2707,9 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         if (snapshot_meta.tablet_meta().schema_hash() != _tablet.schema_hash()) {
             return Status::InvalidArgument("mismatched schema hash");
         }
-        if (snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
+        // If it is the Restore process, we should skip the version check because using the older version data
+        // to overwrite the current data is permitted in Restore process.
+        if (!restore_from_backup && snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
             return Status::Cancelled("snapshot version too small");
         }
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
@@ -2745,7 +2747,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         std::unique_lock l3(_rowset_stats_lock);
 
         // Check version again after lock acquired.
-        if (snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
+        if (!restore_from_backup && snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
             return Status::Cancelled("snapshot version too small");
         }
 
