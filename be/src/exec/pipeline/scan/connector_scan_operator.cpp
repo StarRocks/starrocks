@@ -219,7 +219,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         _rows_read += (*chunk)->num_rows();
         return Status::OK();
     }
-    _ck_acc.reset();    
+    _ck_acc.reset();
     return Status::EndOfFile("");
 }
 
