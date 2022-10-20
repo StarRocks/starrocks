@@ -229,6 +229,7 @@ public class FunctionSet {
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
     public static final String HLL_RAW = "hll_raw";
+    public static final String HLL_EMPTY = "hll_empty";
     public static final String NDV = "ndv";
     public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
@@ -474,6 +475,8 @@ public class FunctionSet {
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
+                    .add(FunctionSet.BITMAP_EMPTY)
+                    .add(FunctionSet.HLL_EMPTY)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =
@@ -534,14 +537,13 @@ public class FunctionSet {
                 || functionName.equalsIgnoreCase(LAG)) {
             final ScalarType descArgType = (ScalarType) descArgTypes[0];
             final ScalarType candicateArgType = (ScalarType) candicateArgTypes[0];
-            // Bitmap, HLL, PERCENTILE type don't allow cast
-            if (descArgType.isOnlyMetricType()) {
-                return false;
-            }
             if (functionName.equalsIgnoreCase(LEAD) ||
                     functionName.equalsIgnoreCase(LAG)) {
                 // lead and lag function respect first arg type
                 return descArgType.isNull() || descArgType.matchesType(candicateArgType);
+            } else if (descArgType.isOnlyMetricType()) {
+                // Bitmap, HLL, PERCENTILE type don't allow cast
+                return false;
             } else {
                 // The implementations of hex for string and int are different.
                 return descArgType.isStringType() || !candicateArgType.isStringType();
