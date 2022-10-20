@@ -8,8 +8,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 
 import java.util.List;
 
-// TODO: now depends on equal
-// This will be extended to rollup(like date_trunc)
 public class AggregateChecker {
     private List<ScalarOperator> mvAggregates;
     private boolean distinct;
