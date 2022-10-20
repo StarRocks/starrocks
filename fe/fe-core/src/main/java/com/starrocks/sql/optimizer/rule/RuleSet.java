@@ -214,7 +214,8 @@ public class RuleSet {
                 new PruneRepeatColumnsRule(),
                 new PruneValuesColumnsRule(),
                 new PruneTableFunctionColumnRule(),
-                new PruneCTEConsumeColumnsRule()
+                new PruneCTEConsumeColumnsRule(),
+                new PruneWindowColumnsRule()
         ));
 
         rewriteRules.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
