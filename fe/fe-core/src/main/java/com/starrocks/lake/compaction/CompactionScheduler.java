@@ -102,6 +102,10 @@ public class CompactionScheduler extends Daemon {
         return finishedWaiting;
     }
 
+    private boolean isVerboseLogEnabled() {
+        return Config.lake_verbose_compaction_log || LOG.isDebugEnabled();
+    }
+
     private void schedule() {
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionContext>> iterator = runningCompactions.entrySet().iterator();
@@ -116,13 +120,18 @@ public class CompactionScheduler extends Daemon {
                 } catch (Exception e) {
                     iterator.remove();
                     compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_FAILURE);
-                    LOG.error("Fail to commit compaction transaction. partition={}, error={}", partition, e.getMessage());
+                    LOG.error("Fail to commit compaction. {} error={}", context.getDebugString(), e.getMessage());
                     continue;
                 }
             }
 
             if (context.transactionHasCommitted() && context.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
+                context.setCommitTs(System.currentTimeMillis());
                 iterator.remove();
+                if (isVerboseLogEnabled()) {
+                    LOG.info("Removed published compaction. {} cost={}ms running={}", context.getDebugString(),
+                            (context.getCommitTs() - context.getStartTs()), runningCompactions.size());
+                }
                 compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
             }
         }
@@ -139,12 +148,13 @@ public class CompactionScheduler extends Daemon {
         while (numRunningTasks < compactionLimit && index < partitions.size()) {
             PartitionIdentifier partition = partitions.get(index++);
             CompactionContext context = startCompaction(partition);
-            if (context != null) {
-                numRunningTasks += context.getNumCompactionTasks();
-                runningCompactions.put(partition, context);
-                if (LOG.isDebugEnabled()) {
-                    LOG.debug("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
-                }
+            if (context == null) {
+                continue;
+            }
+            numRunningTasks += context.getNumCompactionTasks();
+            runningCompactions.put(partition, context);
+            if (isVerboseLogEnabled()) {
+                LOG.info("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
             }
         }
     }
@@ -153,7 +163,7 @@ public class CompactionScheduler extends Daemon {
         if (Config.lake_compaction_max_tasks >= 0) {
             return Config.lake_compaction_max_tasks;
         }
-        return systemInfoService.getAliveBackendNumber() * 4;
+        return systemInfoService.getAliveBackendNumber() * 16;
     }
 
     private void cleanPartition() {
@@ -239,10 +249,8 @@ public class CompactionScheduler extends Daemon {
         CompactionContext context = new CompactionContext();
         context.setTxnId(txnId);
         context.setBeToTablets(beToTablets);
-
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Compacting partition {}.{}.{}", db.getFullName(), table.getName(), partition.getName());
-        }
+        context.setStartTs(System.currentTimeMillis());
+        context.setPartitionName(String.format("%s.%s.%s", db.getFullName(), table.getName(), partition.getName()));
 
         long nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS;
         try {
@@ -333,8 +341,8 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
-        if (LOG.isDebugEnabled()) {
-            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, context.getTxnId());
+        if (isVerboseLogEnabled()) {
+            LOG.info("Committing compaction transaction. partition={} txnId={}", partition, context.getTxnId());
         }
 
         VisibleStateWaiter waiter;
@@ -345,6 +353,27 @@ public class CompactionScheduler extends Daemon {
             db.writeUnlock();
         }
         context.setVisibleStateWaiter(waiter);
+        context.setCommitTs(System.currentTimeMillis());
+        if (isVerboseLogEnabled()) {
+            long numInputBytes = 0;
+            long numInputRows = 0;
+            long numOutputBytes = 0;
+            long numOutputRows = 0;
+            for (Future<CompactResponse> responseFuture : context.getResponseList()) {
+                CompactResponse response = responseFuture.get();
+                numInputBytes += response.numInputBytes;
+                numInputRows += response.numInputRows;
+                numOutputBytes += response.numOutputBytes;
+                numOutputRows += response.numOutputRows;
+            }
+            LOG.info("Committed compaction. {} inputBytes={} inputRows={} outputBytes={} outputRows={} time={}",
+                    context.getDebugString(),
+                    numInputBytes,
+                    numInputRows,
+                    numOutputBytes,
+                    numOutputRows,
+                    (context.getCommitTs() - context.getStartTs()));
+        }
     }
 
     private void abortTransactionIgnoreError(long dbId, long txnId, String reason) {
@@ -357,6 +386,9 @@ public class CompactionScheduler extends Daemon {
 
     private static class CompactionContext {
         private long txnId;
+        private long startTs;
+        private long commitTs;
+        private String partitionName;
         private Map<Long, List<Long>> beToTablets;
         private List<Future<CompactResponse>> responseList;
         private VisibleStateWaiter visibleStateWaiter;
@@ -407,6 +439,34 @@ public class CompactionScheduler extends Daemon {
 
         int getNumCompactionTasks() {
             return beToTablets.values().stream().mapToInt(List::size).sum();
+        }
+
+        void setStartTs(long startTs) {
+            this.startTs = startTs;
+        }
+
+        long getStartTs() {
+            return startTs;
+        }
+
+        void setCommitTs(long commitTs) {
+            this.commitTs = commitTs;
+        }
+
+        long getCommitTs() {
+            return commitTs;
+        }
+
+        void setPartitionName(String partitionName) {
+            this.partitionName = partitionName;
+        }
+
+        String getPartitionName() {
+            return partitionName;
+        }
+
+        String getDebugString() {
+            return String.format("TxnId=%d partition=%s", txnId, partitionName);
         }
     }
 }

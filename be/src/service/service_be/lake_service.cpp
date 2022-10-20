@@ -5,9 +5,11 @@
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
+#include <butil/time.h> // NOLINT
+#include <bvar/bvar.h>
 
 #include "agent/agent_server.h"
-#include "common/compiler_util.h"
+#include "common/config.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
 #include "gutil/macros.h"
@@ -19,7 +21,24 @@
 #include "util/threadpool.h"
 
 namespace starrocks {
+
+bvar::Adder<int> g_lake_running_compactions("lake_running_compactions");
+bvar::Adder<int> g_lake_pending_compactions("lake_pending_compactions");
+
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
+
+LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {
+#if defined(USE_STAROS) || defined(BE_UT)
+    auto st = ThreadPoolBuilder("lake_compact")
+                      .set_min_threads(0)
+                      .set_max_threads(config::compact_threads)
+                      .set_max_queue_size(config::compact_thread_pool_queue_size)
+                      .build(&(_compact_thread_pool));
+    CHECK(st.ok()) << st;
+#endif
+}
+
+LakeServiceImpl::~LakeServiceImpl() {}
 
 void LakeServiceImpl::publish_version(::google::protobuf::RpcController* controller,
                                       const ::starrocks::lake::PublishVersionRequest* request,
@@ -210,16 +229,18 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
         return;
     }
 
+    auto start_time = butil::gettimeofday_ms();
     auto thread_pool = _compact_thread_pool.get();
     auto latch = BThreadCountDownLatch(request->tablet_ids_size());
     bthread::Mutex response_mtx;
+    lake::CompactionTask::Stats gstats;
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
-            // TODO: compact tablets in parallel.
+            auto t1 = butil::gettimeofday_ms();
             auto res = _env->lake_tablet_manager()->compact(tablet_id, request->version(), request->txn_id());
             if (!res.ok()) {
-                LOG(WARNING) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
+                LOG(ERROR) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
                 latch.count_down();
@@ -227,27 +248,50 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
             }
 
             lake::CompactionTaskPtr task = std::move(res).value();
-            auto st = task->execute();
+            lake::CompactionTask::Stats stats;
+            auto st = task->execute(&stats);
+            auto t2 = butil::gettimeofday_ms();
             if (!st.ok()) {
-                LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << request->version()
-                             << " txn_id=" << request->txn_id() << ": " << st;
+                LOG(ERROR) << "Fail to compact tablet " << tablet_id << ". version=" << request->version()
+                           << " txn_id=" << request->txn_id() << " cost=" << (t2 - t1) << " : " << st;
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             } else {
-                LOG(INFO) << "Compacted tablet " << tablet_id << ". version=" << request->version()
-                          << " txn_id=" << request->txn_id();
+                gstats.merge(stats);
+                VLOG(3) << "Compacted tablet " << tablet_id << ". version=" << request->version()
+                        << " txn_id=" << request->txn_id() << " cost=" << (t2 - t1) << " stats=" << stats;
             }
             latch.count_down();
         };
-        auto st = thread_pool->submit_func(task);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to submit compact task: " << st;
+
+        auto task_wrapper = [&, f = std::move(task)]() {
+            g_lake_running_compactions << 1;
+            g_lake_pending_compactions << -1;
+
+            f();
+
+            g_lake_running_compactions << -1;
+        };
+
+        g_lake_pending_compactions << 1;
+        if (auto st = thread_pool->submit_func(std::move(task_wrapper)); !st.ok()) {
+            g_lake_pending_compactions << -1;
+            LOG(WARNING) << "Fail to submit compaction task. tablet_id=" << tablet_id << " txn_id=" << request->txn_id()
+                         << ": " << st;
             cntl->SetFailed(st.get_error_msg());
             latch.count_down();
         }
     }
 
     latch.wait();
+    auto end_time = butil::gettimeofday_ms();
+
+    std::lock_guard l(response_mtx);
+    response->set_execution_time(end_time - start_time);
+    response->set_num_input_bytes(gstats.input_bytes.load(std::memory_order_relaxed));
+    response->set_num_input_rows(gstats.input_rows.load(std::memory_order_relaxed));
+    response->set_num_output_bytes(gstats.output_bytes.load(std::memory_order_relaxed));
+    response->set_num_output_rows(gstats.output_rows.load(std::memory_order_relaxed));
 }
 
 void LakeServiceImpl::drop_table(::google::protobuf::RpcController* controller,
@@ -386,8 +430,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
             tablet_stat->set_data_size(data_size);
             latch.count_down();
         };
-        auto st = thread_pool->submit_func(task);
-        if (!st.ok()) {
+        if (auto st = thread_pool->submit_func(std::move(task)); !st.ok()) {
             LOG(WARNING) << "Fail to get tablet stats task: " << st;
             latch.count_down();
         }

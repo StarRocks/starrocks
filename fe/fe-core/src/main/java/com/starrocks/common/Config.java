@@ -1767,6 +1767,9 @@ public class Config extends ConfigBase {
     public static int lake_compaction_max_tasks = -1;
 
     @ConfField(mutable = true)
+    public static boolean lake_verbose_compaction_log = false;
+
+    @ConfField(mutable = true)
     public static boolean enable_new_publish_mechanism = false;
 
     /**

@@ -102,8 +102,8 @@ public class CompactionManager {
         if (statistics != null) {
             // FE's follower nodes may have a different timestamp with the leader node.
             statistics.setNextCompactionTime(System.currentTimeMillis() + delayMs);
-            if (LOG.isDebugEnabled()) {
-                LOG.debug("Enable partition to do compaction: {}", statistics);
+            if (Config.lake_verbose_compaction_log) {
+                LOG.info("Enable compaction after {}ms: {}", delayMs, statistics);
             }
         }
     }
