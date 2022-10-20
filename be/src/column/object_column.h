@@ -247,5 +247,9 @@ private:
     // Only for data loading
     mutable Buffer<Slice> _slices;
     mutable Buffer<uint8_t> _buffer;
+
+    // Just use to hide Clion error warning.
+    // https://stackoverflow.com/questions/18515183/c-overloaded-virtual-function-warning-by-clang
+    using Column::append;
 };
 } // namespace starrocks::vectorized

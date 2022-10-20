@@ -57,10 +57,13 @@ TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
     case TTypeNodeType::STRUCT:
         type = TYPE_STRUCT;
         ++(*idx);
+        DCHECK(node.__isset.selected_fields);
+        selected_fields = node.selected_fields;
         for (const auto& struct_field : node.struct_fields) {
             field_names.push_back(struct_field.name);
             children.push_back(TypeDescriptor(types, idx));
         }
+        DCHECK_EQ(selected_fields.size(), children.size());
         break;
     case TTypeNodeType::ARRAY:
         DCHECK(!node.__isset.scalar_type);
@@ -101,6 +104,8 @@ void TypeDescriptor::to_thrift(TTypeDesc* thrift_type) const {
             curr_node.struct_fields.emplace_back();
             curr_node.struct_fields.back().__set_name(field_name);
         }
+        curr_node.__set_selected_fields(selected_fields);
+        DCHECK_EQ(children.size(), selected_fields.size());
         for (const TypeDescriptor& child : children) {
             child.to_thrift(thrift_type);
         }
@@ -327,9 +332,15 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_ARRAY:
     case TYPE_MAP:
         return sizeof(void*); // sizeof(Collection*)
+    case TYPE_STRUCT: {
+        int struct_size = 0;
+        for (const TypeDescriptor& type_descriptor : children) {
+            struct_size += type_descriptor.get_slot_size();
+        }
+        return struct_size;
+    }
     case INVALID_TYPE:
     case TYPE_BINARY:
-    case TYPE_STRUCT:
     case TYPE_FUNCTION:
         DCHECK(false);
         break;

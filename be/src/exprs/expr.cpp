@@ -56,6 +56,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
+#include "exprs/vectorized/subfield_expr.h"
 
 #pragma clang diagnostic push
 #pragma ide diagnostic ignored "EndlessLoop"
@@ -345,6 +346,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::MAP_ELEMENT_EXPR:
         *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::SUBFIELD_EXPR:
+        *expr = pool->add(vectorized::SubfieldExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));

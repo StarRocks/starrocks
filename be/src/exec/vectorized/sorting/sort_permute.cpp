@@ -159,6 +159,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(StructColumn* dst) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
+    }
+
     template <typename T>
     Status do_visit(BinaryColumnBase<T>* dst) {
         using Container = typename BinaryColumnBase<T>::Container;
