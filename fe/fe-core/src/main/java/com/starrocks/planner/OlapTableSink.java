@@ -258,7 +258,7 @@ public class OlapTableSink extends DataSink {
                     setRangeKeys(rangePartitionInfo, partition, tPartition);
                     setIndexAndBucketNums(partition, tPartition);
                     partitionParam.addToPartitions(tPartition);
-                    setDistributedColumns(partitionParam, selectedDistInfo, partition,table);
+                    selectedDistInfo = getDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
                 if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
                     ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
@@ -279,7 +279,7 @@ public class OlapTableSink extends DataSink {
                     setListPartitionValues(listPartitionInfo, partition, tPartition);
                     setIndexAndBucketNums(partition, tPartition);
                     partitionParam.addToPartitions(tPartition);
-                    setDistributedColumns(partitionParam, selectedDistInfo, partition,table);
+                    selectedDistInfo = getDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
                 break;
             case UNPARTITIONED: {
@@ -370,19 +370,20 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private void setDistributedColumns(TOlapTablePartitionParam partitionParam,
+    private DistributionInfo getDistributedColumns(TOlapTablePartitionParam partitionParam,
                                        DistributionInfo selectedDistInfo,
                                        Partition partition,OlapTable table) throws UserException{
         DistributionInfo distInfo = partition.getDistributionInfo();
         if (selectedDistInfo == null) {
             partitionParam.setDistributed_columns(getDistColumns(distInfo, table));
-            selectedDistInfo = distInfo;
+            return distInfo;
         } else {
             if (selectedDistInfo.getType() != distInfo.getType()) {
                 throw new UserException("different distribute types in two different partitions, type1="
                         + selectedDistInfo.getType() + ", type2=" + distInfo.getType());
             }
         }
+        return selectedDistInfo;
     }
 
     private TOlapTableLocationParam createLocation(OlapTable table) throws UserException {
