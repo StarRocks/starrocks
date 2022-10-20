@@ -11,6 +11,7 @@ import com.starrocks.external.iceberg.IcebergCatalog;
 import com.starrocks.external.iceberg.IcebergCatalogType;
 import com.starrocks.external.iceberg.IcebergUtil;
 import com.starrocks.external.iceberg.StarRocksIcebergException;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.logging.log4j.LogManager;
@@ -81,6 +82,8 @@ public class IcebergMetadata implements ConnectorMetadata {
         try {
             org.apache.iceberg.Table icebergTable
                     = icebergCatalog.loadTable(IcebergUtil.getIcebergTableIdentifier(dbName, tblName));
+            // Submit a future task for refreshing
+            GlobalStateMgr.getCurrentState().getIcebergRepository().refreshTable(icebergTable);
             if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
                 return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, dbName, tblName, customProperties);
             }
