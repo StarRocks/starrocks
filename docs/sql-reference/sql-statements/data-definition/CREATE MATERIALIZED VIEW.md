@@ -1,22 +1,22 @@
 # CREATE MATERIALIZED VIEW
 
-## description
+## Description
 
 This statement is used to create materialized views.
 
-Note:
+> **NOTE**
+>
+> Asynchronous syntax. After the call is successful, it only indicates that the task to create the materialized view is successfully submitted. The user needs to check the progress of the materialized view by using SHOW ALTER TABLE ROLLUP statement. After the progress is FINISHED, you can use the DESC table_name ALL statement to check the schema of the materialized view.
 
-Asynchronous syntax. After the call is successful, it only indicates that the task to create the materialized view is successfully submitted. The user needs to check the progress of the materialized view by using ``` show alter table rollup ``` .
-After the progress is FINISHED, you can use the ``` desc [table_name] all ``` command to check the schema of the materialized view.
-
-Syntax:
+## Syntax
 
 ```sql
-CREATE MATERIALIZED VIEW [MV name] as [query]
-[PROPERTIES ("key" = "value")]
+CREATE MATERIALIZED VIEW [materialized_view_name] as [query]
 ```
 
-1. MV name
+## Parameters
+
+1. materialized_view_name
 
     Name of the materialized view. Required.
 
@@ -59,20 +59,6 @@ CREATE MATERIALIZED VIEW [MV name] as [query]
       If the number of sorts automatically supplemented is less than three, the first three are sorted.  
 
     + If the query contains a grouped column, the sort order must be the same as the grouped column.
-
-3. properties
-
-    Declare some configuration of materialized view. Optional.
-
-    ```sql
-    
-    PROPERTIES ("key" = "value", "key" = "value" ...)
-    ```
-
-    The following configurations can be declared here:
-
-    short_key: the number of columns.
-    timeout: timeout for materialized view construction.
 
 ## example
 
