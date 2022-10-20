@@ -162,12 +162,18 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         deriveLogicalProperty(tree);
 
+        // @todo: resolve recursive optimization question:
+        //  MergeAgg -> PruneColumn -> PruneEmptyWindow -> MergeAgg/Project -> PruneColumn...
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
+        rootTaskContext.setRequiredColumns(requiredColumns.clone());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
+
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
-        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
@@ -231,7 +237,7 @@ public class Optimizer {
         if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
             return tree;
         }
-        
+
         tree = new PushDownAggregateRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
 
