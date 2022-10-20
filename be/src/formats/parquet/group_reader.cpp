@@ -233,6 +233,12 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
         for (auto& child : field.children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
+    } else if (field.type.type == TYPE_MAP) {
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        DCHECK(field.children[0].type.type == TYPE_STRUCT);
+        for (auto& child : field.children[0].children) {
+            _collect_field_io_range(child, ranges, end_offset);
+        }
     } else {
         auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
         int64_t offset = 0;
