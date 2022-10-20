@@ -20,65 +20,9 @@
 
    > 注意：
    >
-<<<<<<< HEAD
-   > ``` bash
-   > $ ./bin/stop-cluster.sh
-   > $ ./bin/start-cluster.sh
-
-6. 下载并解压 [smt.tar.gz](https://www.starrocks.com/zh-CN/download/community)
-7. 解压并修改配置文件
-    * `Db` 需要修改成 MySQL 的连接信息。  
-    * `be_num` 需要配置成 StarRocks 集群的节点数（这个能帮助更合理的设置 bucket 数量）。  
-    * `[table-rule.1]` 是匹配规则，可以根据正则表达式匹配数据库和表名生成建表的 SQL，也可以配置多个规则。  
-    * `flink.starrocks.*` 是 StarRocks 的集群配置信息，参考 [Flink-connector-starrocks 配置](../loading/Flink-connector-starrocks.md)。
-  
-        ```bash
-        [db]
-        host = 192.168.1.1
-        port = 3306
-        user = root
-        password =  
-
-        [other]
-        # number of backends in StarRocks
-        be_num = 3
-        # `decimal_v3` is supported since StarRocks-1.18.1
-        use_decimal_v3 = false
-        # file to save the converted DDL SQL
-        output_dir = ./result
-        
-        [table-rule.1]
-        # pattern to match databases for setting properties
-        database = ^console_19321.*$
-        # pattern to match tables for setting properties
-        table = ^.*$
-
-        ############################################
-        ### flink sink configurations
-        ### DO NOT set `connector`, `table-name`, `database-name`, they are auto-generated
-        ############################################
-        flink.starrocks.jdbc-url=jdbc:mysql://192.168.1.1:9030
-        flink.starrocks.load-url= 192.168.1.1:8030
-        flink.starrocks.username=root
-        flink.starrocks.password=
-        flink.starrocks.sink.properties.column_separator=\x01
-        flink.starrocks.sink.properties.row_delimiter=\x02
-        flink.starrocks.sink.buffer-flush.interval-ms=15000
-        ```
-
-8. 执行 starrocks-migrate-tool，flink 和 starrocks 建表语句都生成在 result 目录下
-
-    ```bash
-    $./starrocks-migrate-tool
-    $ls result
-    flink-create.1.sql    smt.tar.gz              starrocks-create.all.sql
-    flink-create.all.sql  starrocks-create.1.sql
-    ```
-=======
    > 仅支持同步 DML，不支持同步 DDL。
 
 ## 业务场景
->>>>>>> 962a1cb (add synchronize mysql into sr (#2101))
 
 以商品累计销量实时榜单为例，存储在 MySQL 中的原始订单表，通过 Flink 处理计算出产品销量的实时排行，并实时同步至 StarRocks 的主键模型表中。最终用户可以通过可视化工具连接StarRocks查看到实时刷新的榜单。
 
@@ -257,14 +201,8 @@
 
     - `[table-rule]` ：库表匹配规则，以及对应的flink-connector-starrocks 配置。
 
-<<<<<<< HEAD
-  > Flink.starrocks.sink 的参数可以参考[上文](/#使用步骤)，比如可以给不同的规则配置不同的导入频率等参数。
-
-* 针对分库分表的大表可以单独配置一个规则，比如：有两个数据库 edu_db_1，edu_db_2，每个数据库下面分别有course_1，course_2 两张表，并且所有表的数据结构都是相同的，通过如下配置把他们导入StarRocks的一张表中进行分析。
-=======
         > - 如果需要为不同表匹配不同的 flink-connector-starrocks 配置，例如部分表更新频繁，需要提高导入速度，请参见[补充说明](./Flink_cdc_load.md#补充说明)。
         > - 如果需要将 MySQL 分库分表后的多张表导入至 StarRocks的一张表中，请参见[补充说明](./Flink_cdc_load.md#补充说明)。
->>>>>>> 962a1cb (add synchronize mysql into sr (#2101))
 
         - `database`、`table`：MySQL 中同步对象的库表名，支持正则表达式。
 
@@ -314,8 +252,6 @@
     "replication_num" = "3"
     );
     ```
-<<<<<<< HEAD
-=======
 
 ## 同步数据
 
@@ -563,4 +499,3 @@ flink.starrocks.sink.properties.strip_outer_array=true
 ## 常见问题
 
 请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_faq.md)。
->>>>>>> 962a1cb (add synchronize mysql into sr (#2101))
