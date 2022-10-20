@@ -16,11 +16,11 @@ v.close()
 
 
 setup(
-    name="sqlalchemy-starrocks",
+    name = "sqlalchemy-starrocks",
     version = VERSION,
-    description="StarRocks Dialect for SQLAlchemy",
-    long_description_content_type="text/markdown",
-    classifiers=[
+    description = "StarRocks Dialect for SQLAlchemy",
+    long_description_content_type = "text/markdown",
+    classifiers = [
         "Development Status :: 3 - Alpha",
         "Environment :: Console",
         "Intended Audience :: Developers",
@@ -30,17 +30,17 @@ setup(
         "Programming Language :: Python :: Implementation :: CPython",
         "Topic :: Database :: Front-Ends",
     ],
-    install_requires=["sqlalchemy"],
-    tests_require=[],
-    keywords="db database analytics starrocks superset sqlalchemy dialect",
-    author="fujianhj",
-    author_email="fujianhj@gmail.com",
-    url="https://github.com/StarRocks/starrocks/contrib/sqlalchemy-connector",
-    license="StarRocks",
-    packages=['sqlalchemy_starrocks'],
-    include_package_data=True,
-    zip_safe=False,
-    entry_points={
+    install_requires = ["sqlalchemy"],
+    tests_require = [],
+    keywords = "db database analytics starrocks superset sqlalchemy dialect",
+    author = "fujianhj",
+    author_email = "fujianhj@gmail.com",
+    url = "https://github.com/StarRocks/starrocks/contrib/sqlalchemy-connector",
+    license = "StarRocks",
+    packages = ['sqlalchemy_starrocks'],
+    include_package_data = True,
+    zip_safe = False,
+    entry_points = {
         'sqlalchemy.dialects': [
             'starrocks = sqlalchemy_starrocks.dialect:StarRocksDialect',
             'sr = sqlalchemy_starrocks.dialect:StarRocksDialect',
