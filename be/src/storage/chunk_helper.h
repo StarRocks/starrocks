@@ -96,11 +96,13 @@ public:
     ChunkPipelineAccumulator() = default;
     void set_max_size(size_t max_size) { _max_size = max_size; }
     void push(const vectorized::ChunkPtr& chunk);
-    vectorized::ChunkPtr& output_chunk() { return _out_chunk; }
-    vectorized::ChunkPtr& staging_chunk() { return _in_chunk; }
-    const vectorized::ChunkPtr& output_chunk() const { return _out_chunk; }
-    const vectorized::ChunkPtr& staging_chunk() const { return _in_chunk; }
+    vectorized::ChunkPtr& pull();
+    void finalize();
     void reset();
+
+    bool has_output() const;
+    bool need_input() const;
+    bool is_finished() const;
 
 private:
     static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75;          // 0.75 * chunk_size
@@ -108,6 +110,7 @@ private:
     vectorized::ChunkPtr _in_chunk = nullptr;
     vectorized::ChunkPtr _out_chunk = nullptr;
     size_t _max_size = 4096;
+    bool _finalized = false;
 };
 
 } // namespace starrocks

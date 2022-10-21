@@ -197,12 +197,11 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         _status = _data_source->get_next(state, &tmp);
         if (_status.ok()) {
             _ck_acc.push(std::move(tmp));
-            if (_ck_acc.output_chunk() != nullptr) {
-                break;
-            }
+            if (_ck_acc.has_output()) break;
         } else if (!_status.is_end_of_file()) {
             return _status;
         } else {
+            _ck_acc.finalize();
             DCHECK(_status.is_end_of_file());
         }
     }
@@ -210,12 +209,8 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
-    if (_ck_acc.output_chunk() != nullptr || _ck_acc.staging_chunk() != nullptr) {
-        if (_ck_acc.output_chunk() != nullptr) {
-            *chunk = std::move(_ck_acc.output_chunk());
-        } else {
-            *chunk = std::move(_ck_acc.staging_chunk());
-        }
+    if (_ck_acc.has_output()) {
+        *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();
         return Status::OK();
     }

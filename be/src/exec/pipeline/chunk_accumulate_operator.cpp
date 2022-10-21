@@ -14,22 +14,16 @@ Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const vectorized
 }
 
 StatusOr<vectorized::ChunkPtr> ChunkAccumulateOperator::pull_chunk(RuntimeState*) {
-    // If there isn't more input chunk and _out_chunk has been outputted, output _in_chunk this time.
-    if (_is_finished && _acc.output_chunk() == nullptr) {
-        return std::move(_acc.staging_chunk());
-    }
-
-    return std::move(_acc.output_chunk());
+    return std::move(_acc.pull());
 }
 
 Status ChunkAccumulateOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
-
+    _acc.finalize();
     return Status::OK();
 }
 
 Status ChunkAccumulateOperator::set_finished(RuntimeState*) {
-    _is_finished = true;
+    _acc.finalize();
     _acc.reset();
 
     return Status::OK();

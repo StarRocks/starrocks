@@ -480,4 +480,27 @@ void ChunkPipelineAccumulator::reset() {
     _out_chunk.reset();
 }
 
+void ChunkPipelineAccumulator::finalize() {
+    _finalized = true;
+}
+
+vectorized::ChunkPtr& ChunkPipelineAccumulator::pull() {
+    if (_finalized && _out_chunk == nullptr) {
+        return _in_chunk;
+    }
+    return _out_chunk;
+}
+
+bool ChunkPipelineAccumulator::has_output() const {
+    return _out_chunk != nullptr || (_finalized && _in_chunk != nullptr);
+}
+
+bool ChunkPipelineAccumulator::need_input() const {
+    return !_finalized && _out_chunk == nullptr;
+}
+
+bool ChunkPipelineAccumulator::is_finished() const {
+    return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
+}
+
 } // namespace starrocks

@@ -22,13 +22,9 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    bool has_output() const override {
-        return _acc.output_chunk() != nullptr || (_is_finished && _acc.staging_chunk() != nullptr);
-    }
-    bool need_input() const override { return !_is_finished && _acc.output_chunk() == nullptr; }
-    bool is_finished() const override {
-        return _is_finished && _acc.staging_chunk() == nullptr && _acc.output_chunk() == nullptr;
-    }
+    bool has_output() const override { return _acc.has_output(); }
+    bool need_input() const override { return _acc.need_input(); }
+    bool is_finished() const override { return _acc.is_finished(); }
 
     Status set_finishing(RuntimeState* state) override;
     Status set_finished(RuntimeState* state) override;
