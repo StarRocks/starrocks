@@ -2,6 +2,7 @@
 
 package com.starrocks.planner;
 
+import com.amazonaws.services.cloudfront.model.FieldLevelEncryption;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
@@ -41,8 +42,10 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class IcebergScanNode extends ScanNode {
@@ -56,6 +59,8 @@ public class IcebergScanNode extends ScanNode {
 
     // Exprs in icebergConjuncts converted to Iceberg Expression.
     private List<Expression> icebergPredicates = null;
+
+    private Set<String> equalityDeleteColumns = new HashSet<>();
 
     private final HashMultimap<String, Long> hostToBeId = HashMultimap.create();
     private long totalBytes = 0;
@@ -184,6 +189,12 @@ public class IcebergScanNode extends ScanNode {
                             source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES : TIcebergFileContent.POSITION_DELETES);
                     target.setLength(source.fileSizeInBytes());
 
+                    if (source.content() == FileContent.EQUALITY_DELETES) {
+                        source.equalityFieldIds().stream().forEach(fieldId -> {
+                            equalityDeleteColumns.add(srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
+                        });
+                    }
+
                     return target;
                 }).collect(Collectors.toList()));
                 TScanRange scanRange = new TScanRange();
@@ -201,6 +212,14 @@ public class IcebergScanNode extends ScanNode {
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
+    }
+
+    public Set<String> getEqualityDeleteColumns() {
+        return equalityDeleteColumns;
+    }
+
+    public TupleDescriptor getDesc() {
+        return this.desc;
     }
 
     @Override

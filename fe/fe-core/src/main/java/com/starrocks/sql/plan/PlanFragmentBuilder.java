@@ -14,6 +14,7 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.SortInfo;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.AggregateFunction;
@@ -76,6 +77,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.DecimalV3FunctionAnalyzer;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
+import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.AssertNumRowsElement;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.JoinHelper;
@@ -886,6 +888,36 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 icebergScanNode.getScanRangeLocations();
+                //set slot for equality delete file
+                Set<String> scanNodeColumns = node.getColRefToColumnMetaMap().values().stream()
+                        .map(column -> column.getName()).collect(Collectors.toSet());
+                Set<String> appendEqualityColumns = icebergScanNode.getEqualityDeleteColumns().stream()
+                        .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
+                for (String eqName : appendEqualityColumns) {
+                    for (Column column : referenceTable.getFullSchema()) {
+                        if (column.getName().equals(eqName)) {
+                            Field field;
+                            TableName tableName = icebergScanNode.getDesc().getRef().getName();
+                            if (referenceTable.getBaseSchema().contains(column)) {
+                                field = new Field(column.getName(), column.getType(), tableName,
+                                        new SlotRef(tableName, column.getName(), column.getName()), true);
+                            } else {
+                                field = new Field(column.getName(), column.getType(), tableName,
+                                        new SlotRef(tableName, column.getName(), column.getName()), false);
+                            }
+                            ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
+                                    field.getType(), column.isAllowNull());
+                            SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(
+                                    icebergScanNode.getDesc(), new SlotId(columnRef.getId()));
+                            slotDescriptor.setColumn(column);
+                            slotDescriptor.setIsNullable(column.isAllowNull());
+                            slotDescriptor.setIsMaterialized(true);
+                            context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
+                            break;
+                        }
+                    }
+                }
+
                 HDFSScanNodePredicates scanNodePredicates = icebergScanNode.getScanNodePredicates();
                 prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
             } catch (UserException e) {
