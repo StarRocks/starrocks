@@ -79,6 +79,10 @@ public class HiveMetastoreApiConverter {
                 .setFullSchema(toFullSchemasForHiveTable(table))
                 .setTableLocation(table.getSd().getLocation())
                 .setCreateTime(table.getCreateTime());
+
+        if (table.getParameters().get("spark.sql.sources.provider").equalsIgnoreCase("delta")) {
+            tableBuilder.setTableLocation(table.getSd().getSerdeInfo().getParameters().get("path"));
+        }
         return tableBuilder.build();
     }
 
