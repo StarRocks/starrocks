@@ -607,7 +607,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String transmissionCompressionType = "LZ4";
 
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
-    private int transmissionEncodeLevel = 0;
+    private int transmissionEncodeLevel = 7;
 
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
