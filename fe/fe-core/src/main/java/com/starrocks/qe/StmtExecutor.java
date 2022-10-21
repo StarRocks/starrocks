@@ -196,6 +196,10 @@ public class StmtExecutor {
         this.isProxy = false;
     }
 
+    public Coordinator getCoordinator() {
+        return this.coord;
+    }
+
     // At the end of query execution, we begin to add up profile
     public void initProfile(long beginTimeInNanoSecond) {
         profile = new RuntimeProfile("Query");

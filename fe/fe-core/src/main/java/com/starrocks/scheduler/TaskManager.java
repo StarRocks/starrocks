@@ -477,7 +477,10 @@ public class TaskManager {
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
             case FAILED:
+                taskRunManager.getTaskRunHistory().addHistory(status);
+                break;
             case SUCCESS:
+                status.setProgress(100);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
         }
@@ -546,6 +549,7 @@ public class TaskManager {
                     status.setErrorCode(statusChange.getErrorCode());
                 }
                 status.setState(toStatus);
+                status.setProgress(100);
                 status.setFinishTime(statusChange.getFinishTime());
                 taskRunManager.getTaskRunHistory().addHistory(status);
             }
