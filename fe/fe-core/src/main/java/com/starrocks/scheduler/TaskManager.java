@@ -478,7 +478,6 @@ public class TaskManager {
                 break;
             case FAILED:
                 LOG.warn("replay task failed" + status.getProgress());
-                status.setProgress(0);
                 taskRunManager.getTaskRunHistory().addHistory(status);
                 break;
             case SUCCESS:
