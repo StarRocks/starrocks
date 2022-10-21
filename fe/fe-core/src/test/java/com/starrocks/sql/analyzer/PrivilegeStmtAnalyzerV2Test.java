@@ -5,6 +5,7 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -251,6 +252,10 @@ public class PrivilegeStmtAnalyzerV2Test {
 
     @Test
     public void testSetRole() throws Exception {
+        for (int i = 1; i != 4; ++ i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role role" + i, ctx), ctx);
+        }
+
         String sql = "set role 'role1', 'role2'";
         SetRoleStmt setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals(2, setRoleStmt.getRoles().size());
@@ -275,18 +280,19 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
         Assert.assertTrue(setRoleStmt.isAll());
 
-        sql = "set role all except 'role1', 'role2', 'test_role'";
+        sql = "set role all except 'role1', 'role2', 'role3'";
         setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         Assert.assertEquals(3, setRoleStmt.getRoles().size());
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
         Assert.assertEquals("role2", setRoleStmt.getRoles().get(1));
-        Assert.assertEquals("test_role", setRoleStmt.getRoles().get(2));
+        Assert.assertEquals("role3", setRoleStmt.getRoles().get(2));
         Assert.assertTrue(setRoleStmt.isAll());
 
         // invalidate rolename
         try {
             UtFrameUtils.parseStmtWithNewParser("set role 'role1', 'bad_role'", ctx);
-        } catch (SemanticException e) {
+            Assert.fail();
+        } catch (AnalysisException e) {
             Assert.assertTrue(e.getMessage().contains("Cannot set role: cannot find role bad_role"));
         }
     }
@@ -374,7 +380,6 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser("grant impersonate on xxx to test_user", ctx);
             Assert.fail();
         } catch (Exception e) {
-            System.err.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("cannot find user 'xxx'@'%'"));
         }
     }

@@ -189,8 +189,10 @@ public class PrivilegeStmtAnalyzerV2 {
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
-            for (String roleName : stmt.getRoles()) {
-                validRoleName(roleName, "Cannot set role", true);
+            if (stmt.getRoles() != null) {
+                for (String roleName : stmt.getRoles()) {
+                    validRoleName(roleName, "Cannot set role", true);
+                }
             }
             return null;
         }

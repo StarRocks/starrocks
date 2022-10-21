@@ -92,8 +92,6 @@ public class PrivilegeManagerTest {
         String sql = "grant select on table db.tbl1 to test_user";
         GrantPrivilegeStmt grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.grant(grantStmt);
-        System.err.println(sql);
-        System.err.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection.get(testUser)));
 
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertTrue(PrivilegeManager.checkTableAction(
@@ -105,8 +103,6 @@ public class PrivilegeManagerTest {
         sql = "revoke select on db.tbl1 from test_user";
         RevokePrivilegeStmt revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         manager.revoke(revokeStmt);
-        System.err.println(sql);
-        System.err.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection.get(testUser)));
 
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertFalse(PrivilegeManager.checkTableAction(
@@ -258,7 +254,6 @@ public class PrivilegeManagerTest {
             DDLStmtExecutor.execute(stmt, ctx);
             Assert.fail();
         } catch (Exception e) {
-            System.err.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Role test_role doesn't exist!"));
         }
     }
@@ -875,7 +870,6 @@ public class PrivilegeManagerTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role4 to user_test_role_inheritance", ctx), ctx);
         } catch (DdlException e) {
-            System.err.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles >= 5"));
         }
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
@@ -1046,10 +1040,13 @@ public class PrivilegeManagerTest {
         assertTableSelectOnTest(user, false, true, true, false);
 
         // bad case: role not exists
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("create role bad_role", ctx), ctx);
+        SetRoleStmt stmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                "set role 'test_set_role_1', 'test_set_role_2', 'bad_role'", ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role bad_role", ctx), ctx);
         ctx.setCurrentUserIdentity(user);
         try {
-            SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
-                    "set role 'test_set_role_1', 'test_set_role_2', 'bad_role'", ctx), ctx);
+            SetRoleExecutor.execute(stmt, ctx);
             Assert.fail();
         } catch (UserException e) {
             Assert.assertTrue(e.getMessage().contains("Cannot find role bad_role"));
@@ -1059,7 +1056,6 @@ public class PrivilegeManagerTest {
                     "set role 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
             Assert.fail();
         } catch (UserException e) {
-            System.err.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
         }
 
@@ -1088,5 +1084,10 @@ public class PrivilegeManagerTest {
                 String.format("set role all except 'test_set_role_2'"), ctx)).execute();
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
         assertTableSelectOnTest(user, true, false, false, false);
+
+        // predecessors
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant test_set_role_3 to role test_set_role_0;", ctx), ctx);
+        assertTableSelectOnTest(user, true, false, false, true);
     }
 }

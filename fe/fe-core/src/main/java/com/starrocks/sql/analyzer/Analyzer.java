@@ -284,6 +284,7 @@ public class Analyzer {
 
         @Override
         public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
+            PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
 

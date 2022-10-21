@@ -630,11 +630,15 @@ public class PrivilegeManager {
             collection.merge(userCollection);
             roleReadLock();
             try {
+                // 1. get all parent roles by default, but can be specified with `SET ROLE` statement
                 Set<Long> roleIds = context.getCurrentRoleIds();
                 if (roleIds == null) {
-                    roleIds = getAllPredecessorsUnlocked(userCollection.getAllRoles());
+                    roleIds = userCollection.getAllRoles();
                 }
+                // 2. get all predecessors base on step 1
+                roleIds = getAllPredecessorsUnlocked(roleIds);
 
+                // 3. merge privilege collections of all predecessors
                 for (long roleId : roleIds) {
                     RolePrivilegeCollection rolePrivilegeCollection = getRolePrivilegeCollectionUnlocked(roleId, false);
                     if (rolePrivilegeCollection != null) {
@@ -797,18 +801,16 @@ public class PrivilegeManager {
     }
 
     // used in executing `set role` statement
-    // we should clone a new object and return
     public Set<Long> getRoleIdsByUser(UserIdentity user) throws PrivilegeException {
         userReadLock();
         try {
-            Set<Long> ret = new HashSet<>(getUserPrivilegeCollectionUnlocked(user).getAllRoles());
+            Set<Long> ret = new HashSet<>();
             roleReadLock();
             try {
-                Iterator<Long> iter = ret.iterator();
-                while (iter.hasNext()) {
+                for (long roleId : getUserPrivilegeCollectionUnlocked(user).getAllRoles()) {
                     // role may be removed
-                    if (getRolePrivilegeCollectionUnlocked(iter.next(), false) == null) {
-                        iter.remove();
+                    if (getRolePrivilegeCollectionUnlocked(roleId, false) != null) {
+                        ret.add(roleId);
                     }
                 }
                 return ret;
