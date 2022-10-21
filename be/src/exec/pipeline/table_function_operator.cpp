@@ -66,8 +66,17 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
         return_types.emplace_back(return_type.type);
     }
 
-    _table_function =
-            vectorized::get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
+    if (table_function_name == "unnest") {
+        std::vector<PrimitiveType> a;
+        a.emplace_back(arg_types[0]);
+        std::vector<PrimitiveType> r;
+        r.emplace_back(return_types[0]);
+
+        _table_function = vectorized::get_table_function(table_function_name, a, r, table_fn.binary_type);
+    } else {
+        _table_function =
+                vectorized::get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);
+    }
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }

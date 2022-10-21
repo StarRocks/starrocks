@@ -382,7 +382,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -762,15 +762,15 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
-                    
+
             // max_by        
             for (Type t1 : Type.getSupportedTypes()) {
                 if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
                     continue;
                 }
                 addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARCHAR, true, true, false));
-            }    
-            
+            }
+
             // NDV
             // ndv return string
             addBuiltin(AggregateFunction.createBuiltin(NDV,
@@ -1237,6 +1237,18 @@ public class FunctionSet {
             return newFn;
         }
         if (fn instanceof TableFunction) {
+            if (fn.functionName().equalsIgnoreCase("UNNEST")) {
+                List<Type> realTableFnRetTypes = new ArrayList<>();
+                for (Type paramType : paramTypes) {
+                    Type t = ((ArrayType) paramType).getItemType();
+                    realTableFnRetTypes.add(t);
+                }
+                return new TableFunction(fn.getFunctionName(),
+                        ((TableFunction) fn).getDefaultColumnNames(),
+                        Arrays.asList(paramTypes),
+                        realTableFnRetTypes);
+            }
+
             TableFunction tableFunction = (TableFunction) fn;
             List<Type> tableFnRetTypes = tableFunction.getTableFnReturnTypes();
             List<Type> realTableFnRetTypes = new ArrayList<>();

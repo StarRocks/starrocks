@@ -3426,6 +3426,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             Identifier identifier = (Identifier) visit(context.alias);
             tableFunctionRelation.setAlias(new TableName(null, identifier.getValue()));
         }
+
+        List<Identifier> columns = null;
+        if (context.columnAliases() != null) {
+            columns = visit(context.columnAliases().identifier(), Identifier.class);
+        }
+
+        List<String> columnNames = null;
+        if (columns != null) {
+            columnNames = columns.stream().map(Identifier::getValue).collect(toList());
+        }
+
+        tableFunctionRelation.setColumnNames(columnNames);
+
         return tableFunctionRelation;
     }
 

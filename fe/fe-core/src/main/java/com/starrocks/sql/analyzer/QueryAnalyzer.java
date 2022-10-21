@@ -53,7 +53,6 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
-// import com.starrocks.sql.optimizer.dump.HiveMetaStoreTableDumpInfo;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -670,11 +669,12 @@ public class QueryAnalyzer {
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-                Field field = new Field(tableFunction.getDefaultColumnNames().get(i),
-                        tableFunction.getTableFnReturnTypes().get(i), node.getResolveTableName(),
-                        new SlotRef(node.getResolveTableName(),
-                                node.getTableFunction().getDefaultColumnNames().get(i),
-                                node.getTableFunction().getDefaultColumnNames().get(i)));
+                String colName = node.getColumnNames().get(i);
+
+                Field field = new Field(colName,
+                        tableFunction.getTableFnReturnTypes().get(i),
+                        node.getResolveTableName(),
+                        new SlotRef(node.getResolveTableName(), colName, colName));
                 fields.add(field);
             }
 

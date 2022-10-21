@@ -40,7 +40,7 @@ public class TableFunction extends Function {
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        super(fnName, argTypes, Type.INVALID, false);
+        super(fnName, argTypes, Type.INVALID, true);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
 
