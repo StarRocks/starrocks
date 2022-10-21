@@ -258,7 +258,11 @@ void SystemMetrics::_update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #elif defined(USE_JEMALLOC)
-    size_t sz = sizeof(size_t);
+    // Update the statistics cached by mallctl.
+    uint64_t epoch = 1;
+    size_t sz = sizeof(epoch);
+    je_mallctl("epoch", &epoch, &sz, &epoch, sz);
+    sz = sizeof(size_t);
     if (je_mallctl("stats.allocated", &value, &sz, nullptr, 0) == 0) {
         _memory_metrics->jemalloc_allocated_bytes.set_value(value);
     }
