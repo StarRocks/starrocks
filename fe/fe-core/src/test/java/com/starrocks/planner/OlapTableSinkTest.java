@@ -48,6 +48,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TOlapTableLocationParam;
 import com.starrocks.thrift.TStorageMedium;
@@ -390,8 +391,7 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 
     @Test
@@ -425,7 +425,6 @@ public class OlapTableSinkTest {
         sink.init(new TUniqueId(1, 2), 3, 4, 1000);
         sink.complete();
 
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
+        Assert.assertTrue(sink.toThrift() instanceof TDataSink);
     }
 }
