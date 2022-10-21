@@ -206,22 +206,22 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|作用|
 |---|---|---|
-|meta_dir|StarRocksFe.STARROCKS_HOME_DIR/meta|元数据保留目录|
-|heartbeat_mgr_threads_num|8|HeartbeatMgr 中发送心跳任务的线程数|
-|heartbeat_mgr_blocking_queue_size|1024|HeartbeatMgr 中发送心跳任务的线程池的队列长度|
-|metadata_failure_recovery|FALSE|强制重置 FE 的元数据，慎用|
-|edit_log_port|9010|FE Group(Master, Follower, Observer)之间通信用的端口|
-|edit_log_type|BDB|Edit log 的类型，只能为 BDB|
-|bdbje_heartbeat_timeout_second|30|BDBJE 心跳超时的间隔|
-|bdbje_lock_timeout_second|1|BDBJE 锁超时的间隔|
-|max_bdbje_clock_delta_ms|5000|Master 与 Non-master 最大容忍的时钟偏移|
-|txn_rollback_limit|100|事务回滚的上限|
-|bdbje_replica_ack_timeout_second|10|BDBJE Master 等待足够多的 FOLLOWER ACK 的最长时间|
-|master_sync_policy|SYNC|Master 日志刷盘的方式，默认是 SYNC|
-|replica_sync_policy|SYNC|Follower 日志刷盘的方式，默认是 SYNC|
-|replica_ack_policy|SIMPLE_MAJORITY|日志被认为有效的形式，默认是多数派返回确认消息，就认为生效|
-|meta_delay_toleration_second|300|非 leader 节点容忍的最大元数据落后的时间|
-|cluster_id|-1|相同 cluster_id 的 FE/BE 节点属于同一个集群。等于-1 则在 leader FE 第一次启动时随机生成一个|
+|meta_dir|StarRocksFE.STARROCKS_HOME_DIR + "/meta"|元数据保留目录。|
+|heartbeat_mgr_threads_num|8|HeartbeatMgr 中发送心跳任务的线程数。|
+|heartbeat_mgr_blocking_queue_size|1024|HeartbeatMgr 中发送心跳任务的线程池的队列长度。|
+|metadata_failure_recovery|FALSE|强制重置 FE 的元数据，请谨慎使用该配置项。|
+|edit_log_port|9010|FE Group(Master, Follower, Observer)之间通信用的端口。|
+|edit_log_type|BDB|Edit log 的类型，只能为 BDB。|
+|bdbje_heartbeat_timeout_second|30|BDBJE 心跳超时的间隔，单位为秒。|
+|bdbje_lock_timeout_second|1|BDBJE 锁超时的间隔，单位为秒。|
+|max_bdbje_clock_delta_ms|5000|Master 与 Non-master 最大容忍的时钟偏移，单位为 ms。|
+|txn_rollback_limit|100|事务回滚的上限。|
+|bdbje_replica_ack_timeout_second|10|BDBJE Master 等待足够多的 FOLLOWER ACK 的最长时间，单位为秒。|
+|master_sync_policy|SYNC|Leader FE 上的日志刷盘方式。该参数仅在当前 FE 为 Leader 时有效。取值范围：<br/><ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li>`NO_SYNC`：事务提交时不同步写日志。</li><li>W`RITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。</li></ul>|
+|replica_sync_policy|SYNC|Follower FE 上的日志刷盘方式。该参数仅在当前 FE 为 Follower 时有效。取值范围：<br/><ul><li>`SYNC`：事务提交时同步写日志并刷盘。</li><li>`NO_SYNC`：事务提交时不同步写日志。</li><li>W`RITE_NO_SYNC`：事务提交时同步写日志，但是不刷盘。</li></ul>|
+|replica_ack_policy|SIMPLE_MAJORITY|日志被认为有效的形式，默认是多数 FE 返回确认消息，就认为生效。|
+|meta_delay_toleration_second|300|非 leader 节点容忍的最大元数据落后的时间，单位为秒。|
+|cluster_id|-1|相同 cluster_id 的 FE/BE 节点属于同一个集群。设置为于-1 则在 leader FE 第一次启动时随机生成一个。|
 
 * **Query Engine**
 
