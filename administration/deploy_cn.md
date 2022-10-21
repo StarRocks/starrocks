@@ -21,6 +21,7 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 ```
 
 > 注意
+>
 > 将以上文件名修改为下载的二进制安装包名。
 
 ## 配置 CN 节点
@@ -32,6 +33,7 @@ cd StarRocks-x.x.x/be
 ```
 
 > 注意
+>
 > 将以上路径名修改为解压后的路径名。
 修改 CN 节点配置文件 **conf/cn.conf**。因默认配置即可启动集群，以下示例并未修改 CN 节点配置。如需在生产环境中对集群进行详细优化配置，因为大部分参数均继承自BE，可以参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
 
@@ -44,6 +46,7 @@ mysql> ALTER SYSTEM ADD COMPUTE NODE "host:port";
 ```
 
 > 注意
+>
 > `host` 需要与 `priority_networks` 相匹配，`port` 需要与 **cn.conf** 文件中的设置的 `heartbeat_service_port` 相同，默认为 `9050`。
 如添加过程出现错误，需要通过以下命令将该 CN 节点从集群移除。
 

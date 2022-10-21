@@ -13,6 +13,7 @@ Colocate Join 功能是分布式系统实现 Join 数据分布的策略之一，
 在建表时，您需要在 PROPERTIES 中指定属性 `"colocate_with" = "group_name"` 以创建一个 Colocate Join 表，并且指定其归属于特定的 Colocation Group。
 
 > 注意
+>
 > StarRocks 仅支持对**同一 Database**中的表进行 Colocate Join 操作。
 
 示例：
@@ -111,6 +112,7 @@ mysql> SHOW PROC '/colocation_group/10005.10008';
 | BackendIds |分桶中数据分片所在的 BE 节点 ID 列表。|
 
 > 注意
+>
 > 以上命令需要 ADMIN 权限。暂不支持普通用户查看。
 
 ### 修改表 Group 属性
@@ -423,4 +425,5 @@ StarRocks 提供了多个与 Colocation Join 有关的 HTTP Restful API，用于
     其中 Body 是以嵌套数组表示的 Bucket Seq 以及每个分桶中分片所在 BE 的 ID。
 
     > 注意
+    >
     > 使用该命令，需要将 FE 的配置 `tablet_sched_disable_colocate_balance` 设为 `true`，即关闭系统自动 Colocation 副本修复和均衡。否则在修改数据分布设置后可能会被系统自动重置。

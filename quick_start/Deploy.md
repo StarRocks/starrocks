@@ -50,6 +50,7 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 ```
 
 > 注意
+>
 > 将以上文件名修改为下载的二进制安装包名。
 
 ### 配置 FE 节点
@@ -61,11 +62,13 @@ cd StarRocks-x.x.x/fe
 ```
 
 > 注意
+>
 > 将以上路径名修改为解压后的路径名。
 
 修改 FE 配置文件 **conf/fe.conf**。以下示例仅添加元数据目录和 Java 目录，以保证部署成功。如需在生产环境中对集群进行详细优化配置，参考 [FE 参数配置](../administration/Configuration.md#FE-配置项)。
 
 > 注意
+>
 > 当一台机器拥有多个 IP 地址时，需要在 FE 配置文件 **conf/fe.conf** 中设置 `priority_networks`，为该节点设定唯一 IP。
 
 添加元数据目录配置项。
@@ -200,6 +203,7 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 ```
 
 > 注意
+>
 > 将以上文件名修改为下载的二进制安装包名。
 
 ### 配置 BE 节点
@@ -211,6 +215,7 @@ cd StarRocks-x.x.x/be
 ```
 
 > 注意
+>
 > 将以上路径名修改为解压后的路径名。
 
 修改 BE 节点配置文件 **conf/be.conf**。因默认配置即可启动集群，以下示例并未修改 BE 节点配置。如需在生产环境中对集群进行详细优化配置，参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
@@ -224,6 +229,7 @@ mkdir -p storage
 ```
 
 > 注意
+>
 > 该路径需要与 **be.conf** 文件中配置路径保持一致。
 
 ### 添加 BE 节点
@@ -235,6 +241,7 @@ mysql> ALTER SYSTEM ADD BACKEND "host:port";
 ```
 
 > 注意
+>
 > `host` 需要与 `priority_networks` 相匹配，`port` 需要与 **be.conf** 文件中的设置的 `heartbeat_service_port` 相同，默认为 `9050`。
 
 如添加过程出现错误，需要通过以下命令将该 BE 节点从集群移除。
