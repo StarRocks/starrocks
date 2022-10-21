@@ -367,6 +367,7 @@ struct TTaskRunInfo {
     8: optional i64 expire_time
     9: optional i32 error_code
     10: optional string error_message
+    11: optional string progress
 }
 
 struct TGetTaskRunInfoResult {
