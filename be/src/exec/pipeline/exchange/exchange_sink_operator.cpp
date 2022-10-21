@@ -351,7 +351,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     _be_number = state->be_number();
-
+    if (state->query_options().__isset.transmission_encode_level) {
+        _encode_level = state->query_options().transmission_encode_level;
+    }
     // Set compression type according to query options
     if (state->query_options().__isset.transmission_compression_type) {
         _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
@@ -603,15 +605,19 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
+    }
+    if (_encode_context) {
+        _encode_context->set_encode_levels_in_pb(dst);
     }
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());

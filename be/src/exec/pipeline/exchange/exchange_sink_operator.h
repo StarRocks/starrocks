@@ -16,6 +16,7 @@
 #include "exec/pipeline/operator.h"
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -127,7 +128,7 @@ private:
     // Sender instance id, unique within a fragment.
     const int32_t _sender_id;
     const PlanNodeId _dest_node_id;
-
+    int32_t _encode_level = 0;
     // Will set in prepare
     int32_t _be_number = 0;
     phmap::flat_hash_map<int64_t, std::unique_ptr<Channel>> _instance_id2channel;
@@ -187,6 +188,8 @@ private:
     const std::vector<int32_t>& _output_columns;
 
     std::unique_ptr<Shuffler> _shuffler;
+
+    std::shared_ptr<serde::EncodeContext> _encode_context = nullptr;
 };
 
 class ExchangeSinkOperatorFactory final : public OperatorFactory {

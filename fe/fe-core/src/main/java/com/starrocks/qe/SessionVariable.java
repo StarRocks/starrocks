@@ -288,6 +288,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
+    public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -603,6 +605,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "LZ4";
+
+    @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
+    private int transmissionEncodeLevel = 0;
 
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
@@ -1337,6 +1342,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
         }
+
+        tResult.setTransmission_encode_level(transmissionEncodeLevel);
 
         TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
         if (loadCompressionType != null) {
