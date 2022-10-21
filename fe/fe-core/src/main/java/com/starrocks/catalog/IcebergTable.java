@@ -207,6 +207,7 @@ public class IcebergTable extends Table {
         IcebergResource icebergResource = (IcebergResource) resource;
         IcebergCatalogType type = icebergResource.getCatalogType();
         icebergProperties.put(ICEBERG_CATALOG, type.name());
+        icebergProperties.putAll(icebergResource.getProperties());
         LOG.info("Iceberg table type is " + type.name());
 
         String fileIOCacheMaxTotalBytes = copiedProps.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);

@@ -21,12 +21,15 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.IcebergResource;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
@@ -892,7 +895,10 @@ public class PlanFragmentBuilder {
             }
 
             icebergScanNode.setLimit(node.getLimit());
-
+            String resourceName = ((IcebergTable) referenceTable).getResourceName();
+            Resource resource = GlobalStateMgr.getCurrentState().getResourceMgr().getResource(resourceName);
+            IcebergResource icebergResource = (IcebergResource) resource;
+            icebergScanNode.setTHdfsProperties(icebergResource.getProperties());
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(icebergScanNode);
 

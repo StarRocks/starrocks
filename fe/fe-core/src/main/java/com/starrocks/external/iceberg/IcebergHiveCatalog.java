@@ -38,6 +38,7 @@ import static com.starrocks.external.iceberg.IcebergUtil.convertToSRDatabase;
 
 public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergCatalog {
     private static final Logger LOG = LogManager.getLogger(IcebergHiveCatalog.class);
+    public static final String FS_S3_CONF_PREFIX = "fs.s3a";
 
     private static final ConcurrentHashMap<String, IcebergHiveCatalog> METASTORE_URI_TO_CATALOG =
             new ConcurrentHashMap<>();
@@ -104,6 +105,14 @@ public class IcebergHiveCatalog extends BaseMetastoreCatalog implements IcebergC
         if (properties.containsKey(CatalogProperties.WAREHOUSE_LOCATION)) {
             this.conf.set(HiveConf.ConfVars.METASTOREWAREHOUSE.varname,
                     properties.get(CatalogProperties.WAREHOUSE_LOCATION));
+        }
+
+        // NOTE: remove core-site.xml, because the s3-auth of resource maybe difference
+        // if properties is null or no s3-auth info, new  Configuration will load default.
+        for (Map.Entry<String, String> entry : properties.entrySet()) {
+            if (entry.getKey().startsWith(FS_S3_CONF_PREFIX)) {
+                this.conf.set(entry.getKey(), entry.getValue());
+            }
         }
 
         String fileIOImpl = properties.get(CatalogProperties.FILE_IO_IMPL);
