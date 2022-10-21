@@ -196,8 +196,14 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         vectorized::ChunkPtr tmp;
         _status = _data_source->get_next(state, &tmp);
         if (_status.ok()) {
+            if (tmp->num_rows() == 0) continue;
             _ck_acc.push(std::move(tmp));
-            if (_ck_acc.has_output()) break;
+            if (config::connector_chunk_source_accumulate_enable) {
+                if (_ck_acc.has_output()) break;
+            } else {
+                _ck_acc.finalize();
+                break;
+            }
         } else if (!_status.is_end_of_file()) {
             return _status;
         } else {
