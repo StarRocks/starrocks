@@ -825,7 +825,16 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
+// the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
+// the minimum number of idle connections that connection pool tries to maintain.
+// if the idle connections dip below this value and the total connections in the pool are less than jdbc_connection_pool_size,
+// the connection pool will make a best effort to add additional connections quickly.
+CONF_Int16(jdbc_minimum_idle_connections, "1");
+// the maximum amount of time that a connection is allowed to sit idle in the pool.
+// this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
+// The minimum allowed value is 10000(10 seconds).
+CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
