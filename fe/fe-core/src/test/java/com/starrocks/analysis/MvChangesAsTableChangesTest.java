@@ -3,9 +3,14 @@ package com.starrocks.analysis;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.pseudocluster.PseudoCluster;
+import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskManagerTest;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import org.apache.hadoop.util.ThreadUtil;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -18,6 +23,8 @@ import java.util.List;
  * Test mv changes as base table changes
  */
 public class MvChangesAsTableChangesTest {
+
+    private static final Logger LOG = LogManager.getLogger(MvChangesAsTableChangesTest.class);
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -57,8 +64,18 @@ public class MvChangesAsTableChangesTest {
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         List<TaskRunStatus> taskRuns = taskManager.showTaskRunStatus(null);
 
+        int retryCount = 0;
+        int maxRetry = 5;
+        while (retryCount < maxRetry) {
+            retryCount++;
+            ThreadUtil.sleepAtLeastIgnoreInterrupts(2000L);
+            if (taskRuns.size() == 2) {
+                break;
+            }
+            LOG.info("testAsyncIfTableTruncate is waiting for TaskRunState retryCount:" + retryCount);
+        }
         // create mv add one + truncate table add one
-        Assert.assertEquals(2, taskRuns.size());
 
+        Assert.assertEquals(2, taskRuns.size());
     }
 }
