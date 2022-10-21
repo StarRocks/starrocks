@@ -258,7 +258,7 @@ public class OlapTableSink extends DataSink {
                     setRangeKeys(rangePartitionInfo, partition, tPartition);
                     setIndexAndBucketNums(partition, tPartition);
                     partitionParam.addToPartitions(tPartition);
-                    selectedDistInfo = getDistributedColumns(partitionParam, selectedDistInfo, partition, table);
+                    selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
                 if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
                     ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
@@ -279,7 +279,7 @@ public class OlapTableSink extends DataSink {
                     setListPartitionValues(listPartitionInfo, partition, tPartition);
                     setIndexAndBucketNums(partition, tPartition);
                     partitionParam.addToPartitions(tPartition);
-                    selectedDistInfo = getDistributedColumns(partitionParam, selectedDistInfo, partition, table);
+                    selectedDistInfo = setDistributedColumns(partitionParam, selectedDistInfo, partition, table);
                 }
                 break;
             case UNPARTITIONED: {
@@ -312,7 +312,7 @@ public class OlapTableSink extends DataSink {
         return partitionParam;
     }
 
-    private List<TExprNode> LiteralExprsToTExprNodes(List<LiteralExpr> values){
+    private List<TExprNode> literalExprsToTExprNodes(List<LiteralExpr> values){
         return values.stream()
                 .map(value -> value.treeToThrift().getNodes().get(0))
                 .collect(Collectors.toList());
@@ -323,17 +323,17 @@ public class OlapTableSink extends DataSink {
         List<List<TExprNode>> inKeysExprNodes = new ArrayList<>();
 
         List<List<LiteralExpr>> multiValues = listPartitionInfo.getMultiLiteralExprValues().get(partition.getId());
-        if(multiValues != null && multiValues.size() > 0){
+        if(multiValues != null && !multiValues.isEmpty()){
             inKeysExprNodes = multiValues.stream()
-                    .map(values -> this.LiteralExprsToTExprNodes(values))
+                    .map(this::literalExprsToTExprNodes)
                     .collect(Collectors.toList());
             tPartition.setIn_keys(inKeysExprNodes);
         }
 
         List<LiteralExpr> values = listPartitionInfo.getLiteralExprValues().get(partition.getId());
-        if (values != null && values.size() > 0){
+        if (values != null && !values.isEmpty()){
             inKeysExprNodes = values.stream()
-                    .map(value -> this.LiteralExprsToTExprNodes(Lists.newArrayList(value)))
+                    .map(value -> this.literalExprsToTExprNodes(Lists.newArrayList(value)))
                     .collect(Collectors.toList());
         }
 
@@ -370,7 +370,7 @@ public class OlapTableSink extends DataSink {
         }
     }
 
-    private DistributionInfo getDistributedColumns(TOlapTablePartitionParam partitionParam,
+    private DistributionInfo setDistributedColumns(TOlapTablePartitionParam partitionParam,
                                        DistributionInfo selectedDistInfo,
                                        Partition partition,OlapTable table) throws UserException{
         DistributionInfo distInfo = partition.getDistributionInfo();
