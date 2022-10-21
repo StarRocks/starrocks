@@ -88,7 +88,11 @@ public:
 
         for (uint i = 0; i < size; i++) {
             if (src[i] != values[i]) {
-                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
+                // Change the logging because g++-11 complains about ambiguous overload:
+                // In template: use of overloaded operator '<<' is ambiguous (with operand types 'std::basic_stringstream<char>' and 'const __int128')
+
+                // FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
+                FAIL() << "Fail at index " << i;
             }
         }
 
