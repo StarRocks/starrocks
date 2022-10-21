@@ -20,5 +20,6 @@ package com.starrocks.http.rest;
 // Status of RESTful action
 public enum ActionStatus {
     OK,
-    FAILED
+    FAILED,
+    LABEL_ALREADY_EXISTS
 }
