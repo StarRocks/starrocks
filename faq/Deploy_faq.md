@@ -73,6 +73,7 @@ wget https://bootstrap.pypa.io/ez_setup.py -O - | python
     curl -XPOST -u username:password http://ip:be_http_port/api/update_config?key=value
 
 > 注意
+>
 > 使用以上方式修改参数时，请确保当前用户拥有远程登录权限。
 
 以下示例创建了用户 test 并赋予其相应权限。

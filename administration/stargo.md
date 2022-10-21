@@ -146,6 +146,7 @@ mkdir -p StarRocks/be/storage
 ```
 
 > 注意
+>
 > 请确保以上创建的路径与配置文件中的 `meta_dir` 和 `storage_dir` 相同。
 
 ### 部署 StarRocks
@@ -533,6 +534,7 @@ mkdir -p StarRocks/be/storage
 ```
 
 > 注意
+>
 > 请确保以上创建的路径与配置文件中的 `meta_dir` 和 `storage_dir` 相同。
 
 ### 扩容 StarRocks 集群
