@@ -169,6 +169,9 @@ DataStreamRecvr::DataStreamRecvr(DataStreamMgr* stream_mgr, RuntimeState* runtim
     _buffer_unplug_counter = ADD_COUNTER(_profile, "BufferUnplugCount", TUnit::UNIT);
 
     _pass_through_context.init();
+    if (runtime_state->query_options().__isset.transmission_encode_level) {
+        _encode_level = runtime_state->query_options().transmission_encode_level;
+    }
 }
 
 Status DataStreamRecvr::get_next(vectorized::ChunkPtr* chunk, bool* eos) {
