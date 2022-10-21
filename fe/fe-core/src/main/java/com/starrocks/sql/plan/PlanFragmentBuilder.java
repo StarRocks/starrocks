@@ -1260,11 +1260,11 @@ public class PlanFragmentBuilder {
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
             // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
             // the group-by expressions just denote the hash distribution of an exchange operator.
-            boolean forExchange = node.getAggregations().values().stream().anyMatch(aggFunc ->
+            boolean forExchangePerf = node.getAggregations().values().stream().anyMatch(aggFunc ->
                     aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
                             aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED)) &&
                     ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 1;
-            if (!forExchange) {
+            if (!forExchangePerf) {
                 for (ColumnRefOperator grouping : node.getGroupBys()) {
                     Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
