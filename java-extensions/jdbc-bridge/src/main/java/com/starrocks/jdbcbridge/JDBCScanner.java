@@ -34,7 +34,23 @@ public class JDBCScanner {
         // one connection per query, so just set max pool size to 1
         config.setMaximumPoolSize(1);
 
+<<<<<<< HEAD
         dataSource = new HikariDataSource(config);
+=======
+        dataSource = DataSourceCache.getInstance().getSource(scanContext.getJdbcURL(), () -> {
+            HikariConfig config = new HikariConfig();
+            config.setDriverClassName(scanContext.getDriverClassName());
+            config.setJdbcUrl(scanContext.getJdbcURL());
+            config.setUsername(scanContext.getUser());
+            config.setPassword(scanContext.getPassword());
+            config.setMaximumPoolSize(scanContext.getConnectionPoolSize());
+            config.setMinimumIdle(scanContext.getMinimumIdleConnections());
+            config.setIdleTimeout(scanContext.getConnectionIdleTimeoutMs());
+            dataSource = new HikariDataSource(config);
+            return dataSource;
+        });
+
+>>>>>>> e09603014 ([Enhancement] reduce jdbc connections (#12295))
         connection = dataSource.getConnection();
         statement = connection.createStatement();
         statement.setFetchSize(scanContext.getStatementFetchSize());

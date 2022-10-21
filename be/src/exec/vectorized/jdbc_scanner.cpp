@@ -126,6 +126,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 
     jmethodID constructor = _jni_env->GetMethodID(
             scan_context_cls, "<init>",
+<<<<<<< HEAD
             "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;I)V");
     jstring driver_class_name = _jni_env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     jstring jdbc_url = _jni_env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -143,6 +144,39 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     _jni_env->DeleteLocalRef(passwd);
     _jni_env->DeleteLocalRef(sql);
     CHECK_JAVA_EXCEPTION("construct JDBCScanContext failed")
+=======
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIII)V");
+    jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
+    LOCAL_REF_GUARD_ENV(env, driver_class_name);
+    jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
+    LOCAL_REF_GUARD_ENV(env, jdbc_url);
+    jstring user = env->NewStringUTF(_scan_ctx.user.c_str());
+    LOCAL_REF_GUARD_ENV(env, user);
+    jstring passwd = env->NewStringUTF(_scan_ctx.passwd.c_str());
+    LOCAL_REF_GUARD_ENV(env, passwd);
+    jstring sql = env->NewStringUTF(_scan_ctx.sql.c_str());
+    LOCAL_REF_GUARD_ENV(env, sql);
+    int statement_fetch_size = state->chunk_size();
+    int connection_pool_size = config::jdbc_connection_pool_size;
+    if (UNLIKELY(connection_pool_size <= 0)) {
+        connection_pool_size = DEFAULT_JDBC_CONNECTION_POOL_SIZE;
+    }
+    int minimum_idle_connections = config::jdbc_minimum_idle_connections;
+    if (UNLIKELY(minimum_idle_connections < 0 || minimum_idle_connections > connection_pool_size)) {
+        minimum_idle_connections = connection_pool_size;
+    }
+    int idle_timeout_ms = config::jdbc_connection_idle_timeout_ms;
+    if (UNLIKELY(idle_timeout_ms < MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS)) {
+        idle_timeout_ms = MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS;
+    }
+
+    auto scan_ctx =
+            env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
+                           statement_fetch_size, connection_pool_size, minimum_idle_connections, idle_timeout_ms);
+    _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
+    LOCAL_REF_GUARD_ENV(env, scan_ctx);
+    CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
+>>>>>>> e09603014 ([Enhancement] reduce jdbc connections (#12295))
 
     return Status::OK();
 }

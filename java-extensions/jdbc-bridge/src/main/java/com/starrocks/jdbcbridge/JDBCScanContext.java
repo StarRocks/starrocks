@@ -10,16 +10,33 @@ public class JDBCScanContext {
     private String sql;
 
     private int statementFetchSize;
+<<<<<<< HEAD
 
     public JDBCScanContext() {}
     public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password,
                            String sql, int statementFetchSize) {
+=======
+    private int connectionPoolSize;
+    private int minimumIdleConnections;
+    private int connectionIdleTimeoutMs;
+
+    public JDBCScanContext() {}
+    public JDBCScanContext(String driverClassName, String jdbcURL, String user, String password,
+                           String sql, int statementFetchSize, int connectionPoolSize,
+                           int minimumIdleConnections, int connectionIdleTimeoutMs) {
+>>>>>>> e09603014 ([Enhancement] reduce jdbc connections (#12295))
         this.driverClassName = driverClassName;
         this.jdbcURL = jdbcURL;
         this.user = user;
         this.password = password;
         this.sql = sql;
         this.statementFetchSize = statementFetchSize;
+<<<<<<< HEAD
+=======
+        this.connectionPoolSize = connectionPoolSize;
+        this.minimumIdleConnections = minimumIdleConnections;
+        this.connectionIdleTimeoutMs = connectionIdleTimeoutMs;
+>>>>>>> e09603014 ([Enhancement] reduce jdbc connections (#12295))
     }
 
     public void setDriverClassName(String driverClassName) {
@@ -70,5 +87,13 @@ public class JDBCScanContext {
         return statementFetchSize;
     }
 
+
+    public int getMinimumIdleConnections() {
+        return minimumIdleConnections;
+    }
+
+    public int getConnectionIdleTimeoutMs() {
+        return connectionIdleTimeoutMs;
+    }
 
 }
