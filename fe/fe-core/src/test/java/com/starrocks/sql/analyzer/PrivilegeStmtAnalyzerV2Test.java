@@ -274,6 +274,21 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertEquals(1, setRoleStmt.getRoles().size());
         Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
         Assert.assertTrue(setRoleStmt.isAll());
+
+        sql = "set role all except 'role1', 'role2', 'test_role'";
+        setRoleStmt = (SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(3, setRoleStmt.getRoles().size());
+        Assert.assertEquals("role1", setRoleStmt.getRoles().get(0));
+        Assert.assertEquals("role2", setRoleStmt.getRoles().get(1));
+        Assert.assertEquals("test_role", setRoleStmt.getRoles().get(2));
+        Assert.assertTrue(setRoleStmt.isAll());
+
+        // invalidate rolename
+        try {
+            UtFrameUtils.parseStmtWithNewParser("set role 'role1', 'bad_role'", ctx);
+        } catch (SemanticException e) {
+            Assert.assertTrue(e.getMessage().contains("Cannot set role: cannot find role bad_role"));
+        }
     }
 
     @Test

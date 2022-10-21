@@ -1780,7 +1780,7 @@ public class Config extends ConfigBase {
      * Used in new RBAC framework after 3.0 released
      **/
     @ConfField(mutable = true)
-    public static int privilege_max_total_roles_per_user = 500;
+    public static int privilege_max_total_roles_per_user = 64;
 
     /**
      * Max role inheritance depth allowed. To avoid bad performance when merging privileges.

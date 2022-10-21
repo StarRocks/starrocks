@@ -1409,7 +1409,7 @@ setUserPropertyStatement
     ;
 
 roleList
-    : string (',' string)?
+    : string (',' string)*
     ;
 
 setRoleStatement

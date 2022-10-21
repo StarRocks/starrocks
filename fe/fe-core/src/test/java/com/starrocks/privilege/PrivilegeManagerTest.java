@@ -5,18 +5,22 @@ package com.starrocks.privilege;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.UserException;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.UserPrivilegeCollectionInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
+import com.starrocks.qe.SetRoleExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -857,7 +861,7 @@ public class PrivilegeManagerTest {
         oldValue = Config.privilege_max_total_roles_per_user;
         Config.privilege_max_total_roles_per_user = 5;
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_role_inheritance", "%");
-        UserPrivilegeCollection collection = manager.getUserPrivilegeCollection(user);
+        UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
@@ -910,7 +914,6 @@ public class PrivilegeManagerTest {
 
     private void assertTableSelectOnTest(UserIdentity userIdentity, boolean ... canSelectOnTbls) throws Exception {
         boolean[] args = canSelectOnTbls;
-        System.err.println("xx: " + GsonUtils.GSON.toJson(args));
         Assert.assertEquals(4, args.length);
         ctx.setCurrentUserIdentity(userIdentity);
         PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
@@ -943,7 +946,7 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("create user user_test_drop_role_inheritance"), ctx), ctx);
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_drop_role_inheritance", "%");
-        UserPrivilegeCollection collection = manager.getUserPrivilegeCollection(user);
+        UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
 
         // role0 -> role1[user] -> role2
         // role3[user]
@@ -999,5 +1002,91 @@ public class PrivilegeManagerTest {
 
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1])), manager.getAllPredecessorsUnlocked(collection));
         assertTableSelectOnTest(user, false, true, false, false);
+    }
+
+    @Test
+    public void testSetRole() throws Exception {
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        // create user
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                String.format("create user user_test_set_role"), ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_set_role", "%");
+        // create role0 ~ role3
+        // grant select on tblx to rolex
+        // grant role0, role1, role2 to user
+        long[] roleIds = new long[4];
+        for (int i = 0; i != 4; ++ i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    String.format("create role test_set_role_%d;", i), ctx), ctx);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "grant select on db.tbl" + i + " to role test_set_role_" + i, ctx), ctx);
+            if (i != 3) {
+                DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                        "grant test_set_role_" + i + " to user_test_set_role", ctx), ctx);
+            }
+            roleIds[i] = manager.getRoleIdByNameNoLock("test_set_role_" + i);
+        }
+
+        // default: user can select all tables
+        assertTableSelectOnTest(user, true, true, true, false);
+
+        // set one role
+        ctx.setCurrentUserIdentity(user);
+        Assert.assertNull(ctx.getCurrentRoleIds());
+        new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
+                String.format("set role 'test_set_role_0'"), ctx)).execute();
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
+        assertTableSelectOnTest(user, true, false, false, false);
+
+        // set on other 3 roles
+        ctx.setCurrentUserIdentity(user);
+        new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
+                String.format("set role 'test_set_role_1', 'test_set_role_2'"), ctx)).execute();
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])), ctx.getCurrentRoleIds());
+        assertTableSelectOnTest(user, false, true, true, false);
+
+        // bad case: role not exists
+        ctx.setCurrentUserIdentity(user);
+        try {
+            SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "set role 'test_set_role_1', 'test_set_role_2', 'bad_role'", ctx), ctx);
+            Assert.fail();
+        } catch (UserException e) {
+            Assert.assertTrue(e.getMessage().contains("Cannot find role bad_role"));
+        }
+        try {
+            SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "set role 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
+            Assert.fail();
+        } catch (UserException e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
+        }
+
+        try {
+            SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
+                    "set role all except 'test_set_role_1', 'test_set_role_3'", ctx), ctx);
+            Assert.fail();
+        } catch (UserException e) {
+            Assert.assertTrue(e.getMessage().contains("Role test_set_role_3 is not granted"));
+        }
+
+        // drop role1
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "drop role test_set_role_1;", ctx), ctx);
+        assertTableSelectOnTest(user, false, false, true, false);
+
+        ctx.setCurrentUserIdentity(user);
+        new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
+                String.format("set role all"), ctx)).execute();
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[2])), ctx.getCurrentRoleIds());
+        assertTableSelectOnTest(user, true, false, true, false);
+
+        ctx.setCurrentUserIdentity(user);
+        new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
+                String.format("set role all except 'test_set_role_2'"), ctx)).execute();
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0])), ctx.getCurrentRoleIds());
+        assertTableSelectOnTest(user, true, false, false, false);
     }
 }

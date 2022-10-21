@@ -85,10 +85,6 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         return parentRoleIds;
     }
 
-    public boolean hasParentRole(long parentRoleId) {
-        return parentRoleIds.contains(parentRoleId);
-    }
-
     public void addSubRole(long subRoleId) {
         subRoleIds.add(subRoleId);
     }

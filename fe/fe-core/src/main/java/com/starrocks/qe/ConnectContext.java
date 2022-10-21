@@ -113,7 +113,7 @@ public class ConnectContext {
     // In other word, currentUserIdentity is the entry that matched in StarRocks auth table.
     // This account determines user's access privileges.
     protected UserIdentity currentUserIdentity;
-    protected List<String> currentRoles;
+    protected Set<Long> currentRoleIds = null;
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -272,12 +272,12 @@ public class ConnectContext {
         this.currentUserIdentity = currentUserIdentity;
     }
 
-    public List<String> getCurrentRoles() {
-        return currentRoles;
+    public Set<Long> getCurrentRoleIds() {
+        return currentRoleIds;
     }
 
-    public void setCurrentRoles(List<String> roles) {
-        this.currentRoles = roles;
+    public void setCurrentRoleIds(Set<Long> roleIds) {
+        this.currentRoleIds = roleIds;
     }
 
     public void modifySessionVariable(SetVar setVar, boolean onlySetSessionVar) throws DdlException {

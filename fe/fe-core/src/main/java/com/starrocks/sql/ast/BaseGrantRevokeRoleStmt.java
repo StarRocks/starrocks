@@ -14,7 +14,7 @@ public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
     private String operationName;   // GRANT or REVOKE
     private String prepositionName; // TO or FROM
 
-    public BaseGrantRevokeRoleStmt(String granteeRole, UserIdentity userIdent, String operationName, String prepositionName) {
+    protected BaseGrantRevokeRoleStmt(String granteeRole, UserIdentity userIdent, String operationName, String prepositionName) {
         this.granteeRole = granteeRole;
         this.userIdent = userIdent;
         this.role = null;
@@ -22,7 +22,7 @@ public abstract class BaseGrantRevokeRoleStmt extends DdlStmt {
         this.prepositionName = prepositionName;
     }
 
-    public BaseGrantRevokeRoleStmt(String granteeRole, String role, String operationName, String prepositionName) {
+    protected BaseGrantRevokeRoleStmt(String granteeRole, String role, String operationName, String prepositionName) {
         this.granteeRole = granteeRole;
         this.userIdent = null;
         this.role = role;

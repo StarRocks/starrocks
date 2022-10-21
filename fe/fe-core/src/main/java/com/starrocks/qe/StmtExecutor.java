@@ -71,6 +71,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -490,7 +491,6 @@ public class StmtExecutor {
                 handleExecAsStmt();
             } else if (parsedStmt instanceof SetRoleStmt) {
                 handleSetRole();
-
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -912,9 +912,9 @@ public class StmtExecutor {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
-    private void handleSetRole() {
-        SetRoleStmt stmt = (SetRoleStmt) parsedStmt;
-        context.setCurrentRoles(stmt.getRoles());
+    private void handleSetRole() throws PrivilegeException, UserException {
+        SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
+
     }
 
     private void handleUnsupportedStmt() {

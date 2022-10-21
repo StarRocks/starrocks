@@ -44,7 +44,7 @@ public class UserPEntryObject implements PEntryObject {
      */
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getPrivilegeManager().getUserPrivilegeCollectionAllowNull(userIdentity) != null;
+        return globalStateMgr.getPrivilegeManager().getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
     }
 
     @Override
