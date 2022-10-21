@@ -337,7 +337,7 @@ public class OlapTableSink extends DataSink {
                     .collect(Collectors.toList());
         }
 
-        if (inKeysExprNodes.size() > 0) {
+        if (!inKeysExprNodes.isEmpty()) {
             tPartition.setIn_keys(inKeysExprNodes);
         }
     }
