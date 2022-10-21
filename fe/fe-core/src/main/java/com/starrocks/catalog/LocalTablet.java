@@ -143,11 +143,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return delete || !hasBackend;
     }
 
-    public void addReplica(Replica replica, boolean isRestore) {
+    public void addReplica(Replica replica, boolean updateInvertedIndex) {
         synchronized (replicas) {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
-                if (!isRestore) {
+                if (updateInvertedIndex) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
                 }
             }
@@ -155,7 +155,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public void addReplica(Replica replica) {
-        addReplica(replica, false);
+        addReplica(replica, true);
     }
 
     /**

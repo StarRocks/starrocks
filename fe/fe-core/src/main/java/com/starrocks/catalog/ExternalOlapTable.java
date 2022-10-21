@@ -483,7 +483,7 @@ public class ExternalOlapTable extends OlapTable {
                             replica.setLastFailedTime(replicaMeta.getLast_failed_time());
                             // forbidden repair for external table
                             replica.setNeedFurtherRepair(false);
-                            tablet.addReplica(replica, true);
+                            tablet.addReplica(replica, false);
                         }
                         TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
                                 tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),

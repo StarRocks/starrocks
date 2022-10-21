@@ -575,7 +575,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 long newReplicaId = globalStateMgr.getNextId();
                 Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                         version, schemaHash);
-                newTablet.addReplica(replica, true /* is restore */);
+                newTablet.addReplica(replica, false/* update inverted index*/);
             }
         }
         return Status.OK;

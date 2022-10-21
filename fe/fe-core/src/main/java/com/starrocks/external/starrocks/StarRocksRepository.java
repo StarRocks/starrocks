@@ -69,7 +69,7 @@ public class StarRocksRepository extends LeaderDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (GlobalStateMgr.getCurrentState().getRole() != FrontendNodeType.FOLLOWER) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
         for (ExternalOlapTable table : srTables.values()) {
