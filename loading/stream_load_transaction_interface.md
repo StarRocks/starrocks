@@ -86,7 +86,7 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
       "Label": "xxx",
       "TxnId": 9032,
       "BeginTxnTimeMs": 0
-    }
+  }
   ```
 
 - 如果事务的标签重复，则返回如下结果：
@@ -103,7 +103,7 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 
   ```PowerShell
   {
-      "Status": "FAIL",
+      "Status": "FAILED",
       "Message": ""
   }
   ```
@@ -123,12 +123,12 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
 - 如果数据写入成功，则返回如下结果：
 
   ```PowerShell
-   {
+  {
       "TxnId": 1,
       "Seq": 0,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Success",
-      "Message": "OK",
+      "Status": "OK",
+      "Message": "",
       "NumberTotalRows": 5265644,
       "NumberLoadedRows": 5265644,
       "NumberFilteredRows": 0,
@@ -146,8 +146,8 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "TXN_NOT_EXISTS",
-      "Message": ""
+      "Status": "FAILED",
+      "Message": "TXN_NOT_EXISTS"
   }
   ```
 
@@ -157,8 +157,8 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Transcation State Invalid",
-      "Message": ""
+      "Status": "FAILED",
+      "Message": "Transcation State Invalid"
   }
   ```
 
@@ -168,7 +168,7 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Fail",
+      "Status": "FAILED",
       "Message": ""
   }
   ```
@@ -190,8 +190,8 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Success",
-      "Message": "OK",
+      "Status": "OK",
+      "Message": "",
       "NumberTotalRows": 5265644,
       "NumberLoadedRows": 5265644,
       "NumberFilteredRows": 0,
@@ -211,8 +211,8 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Transcation Not Exist",
-      "Message": ""
+      "Status": "FAILED",
+      "Message": "Transcation Not Exist"
   }
   ```
 
@@ -222,8 +222,8 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Commit Timeout",
-      "Message": "",
+      "Status": "FAILED",
+      "Message": "commit timeout",
   }
   ```
 
@@ -233,8 +233,8 @@ curl -H "label:<label_name>" -H "db:<database_name>" -H "table:<table_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Fail",
-      "Message": ""
+      "Status": "FAILED",
+      "Message": "publish timeout"
   }
   ```
 
@@ -255,8 +255,8 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Success",
-      "Message": "OK",
+      "Status": "OK",
+      "Message": "",
       "NumberTotalRows": 5265644,
       "NumberLoadedRows": 5265644,
       "NumberFilteredRows": 0,
@@ -276,7 +276,7 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Success",
+      "Status": "OK",
       "Message": "Transaction already commited",
   }
   ```
@@ -287,8 +287,8 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Transcation Not Exist",
-      "Message": ""
+      "Status": "FAILED",
+      "Message": "Transcation Not Exist"
   }
   ```
 
@@ -298,8 +298,8 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Commit Timeout",
-      "Message": "",
+      "Status": "FAILED",
+      "Message": "commit timeout",
   }
   ```
 
@@ -309,8 +309,8 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Publish Timeout",
-      "Message": "",
+      "Status": "FAILED",
+      "Message": "publish timeout",
       "CommitAndPublishTimeMs": 1393
   }
   ```
@@ -321,7 +321,7 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Fail",
+      "Status": "FAILED",
       "Message": ""
   }
   ```
@@ -343,8 +343,8 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Success",
-      "Message": "OK"
+      "Status": "OK",
+      "Message": ""
   }
   ```
 
@@ -354,8 +354,8 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Transcation Not Exist",
-      "Message": ""
+      "Status": "FAILED",
+      "Message": "Transcation Not Exist"
   }
   ```
 
@@ -365,7 +365,7 @@ curl -H "label:<label_name>" -H "db:<database_name>"
   {
       "TxnId": 1,
       "Label": "a25eca8b-7b48-4c87-9ea7-0cbdd913e77d",
-      "Status": "Fail",
+      "Status": "FAILED",
       "Message": ""
   }
   ```
