@@ -278,6 +278,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+    public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
+
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
@@ -656,6 +658,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
+
+    @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean interpolatePassthrough = true;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -1255,6 +1260,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public String getloadTransmissionCompressionType() {
         return loadTransmissionCompressionType;
+    }
+
+    public boolean isInterpolatePassthrough() {
+        return interpolatePassthrough;
+    }
+
+    public void setInterpolatePassthrough(boolean value) {
+        this.interpolatePassthrough = value;
     }
 
     public int getParseTokensLimit() {
