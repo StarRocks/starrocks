@@ -24,6 +24,7 @@ ARRAY<type> NOT NULL
 数组元素支持以下数据类型：BOOLEAN、TINYINT、SMALLINT、INT、BIGINT、LARGEINT、FLOAT、DOUBLE、VARCHAR、CHAR、DATETIME、DATE。
 
 > 注意
+>
 > 数组类型有以下限制：
 >
 > * StarRocks 2.1 以前版本中，您只能在明细模型（Duplicate Key Table）中定义数组列。StarRocks 自 2.1 版本开始支持 Primary Key 和 Unique Key 中使用数组类型。

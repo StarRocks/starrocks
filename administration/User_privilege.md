@@ -9,6 +9,7 @@ StarRocks 的权限管理系统参照了 MySQL 的权限管理机制，支持表
 通过以下命令创建 StarRocks 用户。
 
 > 注意
+>
 > 拥有 ADMIN 权限，或任意层级的 GRANT 权限的用户才可以创建新用户。
 
 ```sql
@@ -79,6 +80,7 @@ SET PASSWORD FOR 'jack'@['domain'] = '*6BB4837EB74329105EE4568DDA7DC67ED2CA2AD9'
 通过以下命令删除 StarRocks 用户。
 
 > 注意
+>
 > 拥有 ADMIN 权限的用户可以删除用户。
 
 ```sql
@@ -161,6 +163,7 @@ REVOKE privilege_list ON RESOURCE resource_name FROM user_identity [ROLE role_na
 通过以下命令创建指定角色。
 
 > 注意
+>
 > 拥有 ADMIN 权限的用户才可以创建角色。
 
 ```sql
@@ -178,6 +181,7 @@ SHOW ROLES;
 ## 删除角色
 
 > 注意
+>
 > 拥有 GRANT_PRIV 或 ADMIN_PRIV 权限的用户可以删除角色。
 
 通过以下命令删除指定角色。

@@ -118,6 +118,7 @@ java -jar lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
 6. 将当前节点的 **fe.conf** 中 `metadata_failure_recovery=true` 注释掉。
 
     > 注意
+    >
     > 请不要重启该节点，以防止这个节点在加入集群的时候报错。
 
 7. DROP 当前 OBSERVER 节点以外的所有 FE 节点。

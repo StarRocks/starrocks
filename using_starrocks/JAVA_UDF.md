@@ -209,6 +209,7 @@ public class SumInt {
 | serializeLength()     | 中间结果序列化后的长度，单位为 Byte。 serializeLength 的数据类型固定为 INT。 例如，示例中 `State { int counter = 0; public int serializeLength() { return 4; }}` 包含对中间结果序列化后的说明，即，中间结果的数据类型为 INT，序列化长度为 4 Byte。您也可以按照业务需求进行调整，例如中间结果序列化后的数据类型 LONG，序列化长度为 8 Byte，则需要传入 `State { long counter = 0; public int serializeLength() { return 8; }}`。 |
 
 > 注意
+>
 > `java.nio.ByteBuffer` 序列化相关事项：
 >
 > - 不支持依赖 ByteBuffer 的 `remaining` 方法来反序列化 State。
