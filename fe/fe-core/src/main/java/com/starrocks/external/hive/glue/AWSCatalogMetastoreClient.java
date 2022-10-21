@@ -159,7 +159,7 @@ public class AWSCatalogMetastoreClient implements IMetaStoreClient {
 
     private Map<String, String> currentMetaVars;
 
-    public AWSCatalogMetastoreClient(HiveConf conf, HiveMetaHookLoader hook) throws MetaException {
+    public AWSCatalogMetastoreClient(HiveConf conf, HiveMetaHookLoader hook, Boolean allowEmbedded) throws MetaException {
         this.conf = conf;
         glueClient = new AWSGlueClientFactory(this.conf).newClient();
 
