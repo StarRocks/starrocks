@@ -60,6 +60,11 @@ public class TableFactory {
         Map<String, String> properties = stmt.getProperties();
         long tableId = gsm.getNextId();
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HIVE, HIVE);
+        if (table == null) {
+            throw new DdlException("Can not find hive table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HiveTable oHiveTable = (HiveTable) table;
 
         validateHiveColumnType(columns, oHiveTable);
