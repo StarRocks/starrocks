@@ -168,6 +168,7 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     _ck_acc.set_max_size(state->chunk_size());
+    _data_source->parse_runtime_filters(state);
     return Status::OK();
 }
 

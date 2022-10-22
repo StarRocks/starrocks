@@ -57,7 +57,7 @@ public:
         auto l = _children[0]->evaluate(context, ptr);
         auto r = _children[1]->evaluate(context, ptr);
         return VectorizedStrictBinaryFunction<OP>::template evaluate<Type, TYPE_BOOLEAN>(l, r);
-    }    
+    }
 };
 
 template <PrimitiveType Type, typename OP>

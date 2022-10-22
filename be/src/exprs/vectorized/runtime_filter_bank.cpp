@@ -614,4 +614,96 @@ void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_p
     }
 }
 
+// ========================================================
+template <PrimitiveType Type>
+class MinMaxPredicate : public Expr {
+public:
+    using CppType = RunTimeCppType<Type>;
+    MinMaxPredicate(SlotId slot_id, const CppType& min_value, const CppType& max_value)
+            : Expr(TypeDescriptor(Type), false), _slot_id(slot_id), _min_value(min_value), _max_value(max_value) {}
+    ~MinMaxPredicate() override = default;
+    Expr* clone(ObjectPool* pool) const override {
+        return pool->add(new MinMaxPredicate<Type>(_slot_id, _min_value, _max_value));
+    }
+
+    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
+        const vectorized::ColumnPtr lhs = ptr->get_column_by_slot_id(_slot_id);
+
+        ColumnViewer<Type> viewer(lhs);
+        size_t size = viewer.size();
+        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+
+        auto update_row = [&](int row) {
+            if (viewer.is_null(row)) {
+                builder.append_null();
+                return;
+            }
+
+            const auto& v = viewer.value(row);
+            builder.append((v >= _min_value && v <= _max_value) ? 1 : 0);
+        };
+
+        if (filter != nullptr) {
+            for (int row = 0; row < size; row++) {
+                if (filter[row]) {
+                    update_row(row);
+                }
+            }
+        } else {
+            for (int row = 0; row < size; row++) {
+                update_row(row);
+            }
+        }
+
+        auto result = builder.build(lhs->is_constant());
+        if (result->is_constant()) {
+            result->resize(lhs->size());
+        }
+        // VLOG_FILE << "lhs = " << lhs->debug_string() << ", res = " << result->debug_string();
+        return result;
+    }
+
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+        return evaluate_with_filter(context, ptr, nullptr);
+    }
+
+    int get_slot_ids(std::vector<SlotId>* slot_ids) const override {
+        slot_ids->emplace_back(_slot_id);
+        return 1;
+    }
+
+private:
+    SlotId _slot_id;
+    const CppType _min_value;
+    const CppType _max_value;
+};
+
+class MinMaxPredicateBuilder {
+public:
+    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
+            : _pool(pool), _slot_id(slot_id), _filter(filter) {}
+
+    template <PrimitiveType ptype>
+    Expr* operator()() {
+        auto* bloom_filter = (RuntimeBloomFilter<ptype>*)(_filter);
+        MinMaxPredicate<ptype>* p =
+                _pool->add(new MinMaxPredicate<ptype>(_slot_id, bloom_filter->min_value(), bloom_filter->max_value()));
+        return p;
+    }
+
+private:
+    ObjectPool* _pool;
+    SlotId _slot_id;
+    const JoinRuntimeFilter* _filter;
+};
+
+void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, PrimitiveType slot_type,
+                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+    *min_max_predicate = nullptr;
+    if (filter == nullptr || filter->has_null()) return;
+    if (slot_type == TYPE_CHAR || slot_type == TYPE_VARCHAR) return;
+    auto res = type_dispatch_filter(slot_type, (Expr*)nullptr, MinMaxPredicateBuilder(pool, slot_id, filter));
+    *min_max_predicate = res;
+}
+
 } // namespace starrocks::vectorized
