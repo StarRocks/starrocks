@@ -163,7 +163,7 @@ public:
     }
 
     template <bool use_array>
-    ColumnPtr eval_on_chunk_both_column_and_set_not_has_null(const ColumnPtr& lhs) {
+    ColumnPtr eval_on_chunk_both_column_and_set_not_has_null(const ColumnPtr& lhs, uint8_t* filter) {
         DCHECK(!_null_in_set);
         auto size = lhs->size();
 
@@ -177,8 +177,16 @@ public:
         uint8_t* data3 = result->get_data().data();
 
         if (!lhs->is_constant()) {
-            for (int row = 0; row < size; ++row) {
-                data3[row] = check_value_existence<use_array>(data[row]);
+            if (filter) {
+                for (int row = 0; row < size; ++row) {
+                    if (filter[row]) {
+                        data3[row] = check_value_existence<use_array>(data[row]);
+                    }
+                }
+            } else {
+                for (int row = 0; row < size; ++row) {
+                    data3[row] = check_value_existence<use_array>(data[row]);
+                }
             }
             if (_is_not_in) {
                 for (int i = 0; i < size; i++) {
@@ -204,30 +212,42 @@ public:
     // null_in_set: true means null is a value of _hash_set.
     // equal_null: true means that 'null' in column and 'null' in set is equal.
     template <bool null_in_set, bool equal_null, bool use_array>
-    ColumnPtr eval_on_chunk(const ColumnPtr& lhs) {
+    ColumnPtr eval_on_chunk(const ColumnPtr& lhs, uint8_t* filter) {
         ColumnViewer<Type> viewer(lhs);
         size_t size = viewer.size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
         uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
 
-        for (int row = 0; row < size; ++row) {
+        auto update_row = [&](int row) {
             if (viewer.is_null(row)) {
                 if constexpr (equal_null) {
                     builder.append(1);
                 } else {
                     builder.append_null();
                 }
-                continue;
+                return;
             }
             // find value
             if (check_value_existence<use_array>(viewer.value(row))) {
                 builder.append(1);
-                continue;
+                return;
             }
             if constexpr (!null_in_set || equal_null) {
                 builder.append(0);
             } else {
                 builder.append_null();
+            }
+        };
+
+        if (filter != nullptr) {
+            for (int row = 0; row < size; ++row) {
+                if (filter[row]) {
+                    update_row(row);
+                }
+            }
+        } else {
+            for (int row = 0; row < size; ++row) {
+                update_row(row);
             }
         }
 
@@ -244,7 +264,7 @@ public:
         return result;
     }
 
-    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) override {
+    ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
         ColumnPtr lhs = _children[0]->evaluate(context, ptr);
         if (!_eq_null && ColumnHelper::count_nulls(lhs) == lhs->size()) {
             return ColumnHelper::create_const_null_column(lhs->size());
@@ -254,30 +274,34 @@ public:
         if (_null_in_set) {
             if (_eq_null) {
                 if (!use_array) {
-                    return this->template eval_on_chunk<true, true, false>(lhs);
+                    return this->template eval_on_chunk<true, true, false>(lhs, filter);
                 } else {
-                    return this->template eval_on_chunk<true, true, true>(lhs);
+                    return this->template eval_on_chunk<true, true, true>(lhs, filter);
                 }
             } else {
                 if (!use_array) {
-                    return this->template eval_on_chunk<true, false, false>(lhs);
+                    return this->template eval_on_chunk<true, false, false>(lhs, filter);
                 } else {
-                    return this->template eval_on_chunk<true, false, true>(lhs);
+                    return this->template eval_on_chunk<true, false, true>(lhs, filter);
                 }
             }
         } else if (lhs->is_nullable()) {
             if (!use_array) {
-                return this->template eval_on_chunk<false, false, false>(lhs);
+                return this->template eval_on_chunk<false, false, false>(lhs, filter);
             } else {
-                return this->template eval_on_chunk<false, false, true>(lhs);
+                return this->template eval_on_chunk<false, false, true>(lhs, filter);
             }
         } else {
             if (!use_array) {
-                return eval_on_chunk_both_column_and_set_not_has_null<false>(lhs);
+                return eval_on_chunk_both_column_and_set_not_has_null<false>(lhs, filter);
             } else {
-                return eval_on_chunk_both_column_and_set_not_has_null<true>(lhs);
+                return eval_on_chunk_both_column_and_set_not_has_null<true>(lhs, filter);
             }
         }
+    }
+
+    ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr) {
+        return evaluate_with_filter(context, ptr, nullptr);
     }
 
     void insert(const ValueType* value) {

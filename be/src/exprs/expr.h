@@ -191,6 +191,7 @@ public:
     virtual StatusOr<ColumnPtr> evaluate_const(ExprContext* context);
 
     virtual ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* ptr);
+    virtual ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter);
 
     // get the first column ref in expr
     vectorized::ColumnRef* get_column_ref();
