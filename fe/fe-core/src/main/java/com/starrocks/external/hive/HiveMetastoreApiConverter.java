@@ -97,7 +97,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static HudiTable toHudiTable(Table table, String catalogName) {
-        String hudiBasePath = table.getSd().getLocation();
+        String hudiBasePath = ObjectStorageUtils.formatObjectStoragePath(table.getSd().getLocation());
         Configuration conf = new Configuration();
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
