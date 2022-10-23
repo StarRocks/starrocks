@@ -199,7 +199,7 @@ public class HiveMetastoreApiConverter {
                                                        Schema tableSchema) {
         Map<String, String> hudiProperties = Maps.newHashMap();
 
-        String hudiBasePath = metastoreTable.getSd().getLocation();
+        String hudiBasePath = ObjectStorageUtils.formatObjectStoragePath(metastoreTable.getSd().getLocation());
         if (!Strings.isNullOrEmpty(hudiBasePath)) {
             hudiProperties.put(HUDI_BASE_PATH, hudiBasePath);
         }
