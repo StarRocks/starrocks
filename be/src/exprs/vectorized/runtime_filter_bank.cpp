@@ -627,39 +627,44 @@ public:
     }
 
     ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
-        const vectorized::ColumnPtr lhs = ptr->get_column_by_slot_id(_slot_id);
+        const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
+        size_t size = col->size();
 
-        ColumnViewer<Type> viewer(lhs);
-        size_t size = viewer.size();
-        ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        std::shared_ptr<vectorized::BooleanColumn> result(new vectorized::BooleanColumn(size, 1));
+        uint8_t* res = result->get_data().data();
 
-        auto update_row = [&](int row) {
-            if (viewer.is_null(row)) {
-                builder.append_null();
-                return;
+        if (col->only_null()) {
+            return result;
+        }
+
+        if (col->is_constant()) {
+            CppType value = ColumnHelper::get_const_value<Type>(col);
+            if (!(value >= _min_value && value <= _max_value)) {
+                memset(res, 0x0, size);
             }
-
-            const auto& v = viewer.value(row);
-            builder.append((v >= _min_value && v <= _max_value) ? 1 : 0);
-        };
+            return result;
+        }
 
         if (filter != nullptr) {
-            for (int row = 0; row < size; row++) {
-                if (filter[row]) {
-                    update_row(row);
-                }
-            }
-        } else {
-            for (int row = 0; row < size; row++) {
-                update_row(row);
+            for (int i = 0; i < size; i++) {
+                res[i] = res[i] & filter[i];
             }
         }
 
-        auto result = builder.build(lhs->is_constant());
-        if (result->is_constant()) {
-            result->resize(lhs->size());
+        if (col->is_nullable()) {
+            auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
+            uint8_t* null_data = tmp->null_column_data().data();
+            CppType* data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
+            for (int i = 0; i < size; i++) {
+                res[i] = res[i] & (null_data[i] | (data[i] >= _min_value && data[i] <= _max_value));
+            }
+        } else {
+            CppType* data = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
+            for (int i = 0; i < size; i++) {
+                res[i] = res[i] & (data[i] >= _min_value && data[i] <= _max_value);
+            }
         }
-        // VLOG_FILE << "lhs = " << lhs->debug_string() << ", res = " << result->debug_string();
+
         return result;
     }
 
