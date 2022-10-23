@@ -569,6 +569,9 @@ public class DatabaseTransactionMgr {
             stateListeners.add(listener);
         }
 
+        // before state transform
+        TxnStateChangeCallback callback = transactionState.beforeStateTransform(TransactionStatus.PREPARED);
+        boolean txnOperated = false;
         txnSpan.setAttribute("tables", tableListString.toString());
 
         Span unprotectedCommitSpan = TraceManager.startSpan("unprotectedPreparedTransaction", txnSpan);
@@ -576,6 +579,7 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             unprotectedPrepareTransaction(transactionState, stateListeners);
+            txnOperated = true;
         } finally {
             writeUnlock();
             int numPartitions = 0;
@@ -584,6 +588,8 @@ public class DatabaseTransactionMgr {
             }
             txnSpan.setAttribute("num_partition", numPartitions);
             unprotectedCommitSpan.end();
+            // after state transform
+            transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
         }
 
         LOG.info("transaction:[{}] successfully prepare", transactionState);

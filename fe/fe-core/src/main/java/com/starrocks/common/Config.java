@@ -191,6 +191,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int label_clean_interval_second = 4 * 3600; // 4 hours
 
+
     /**
      * For Task framework do some background operation like cleanup Task/TaskRun.
      * It will run every *task_check_interval_second* to do background job.
@@ -688,6 +689,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_stream_load_timeout_second = 259200; // 3days
+
+    /**
+     * Max stream load load batch size
+     */
+    @ConfField(mutable = true) 
+    public static int max_stream_load_batch_size_mb = 100;
 
     /**
      * Default prepared transaction timeout

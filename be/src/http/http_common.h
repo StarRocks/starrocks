@@ -53,5 +53,6 @@ static const std::string HTTP_TRANSMISSION_COMPRESSION_TYPE = "transmission_comp
 static const std::string HTTP_LOAD_DOP = "load_dop";
 
 static const std::string HTTP_100_CONTINUE = "100-continue";
+static const std::string HTTP_CHANNEL_ID = "channel_id";
 
 } // namespace starrocks

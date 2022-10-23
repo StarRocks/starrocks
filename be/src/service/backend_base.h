@@ -104,6 +104,8 @@ public:
 
     void submit_routine_load_task(TStatus& t_status, const std::vector<TRoutineLoadTask>& tasks) override;
 
+    void finish_stream_load_channel(TStatus& t_status, const TStreamLoadChannel& stream_load_channel) override;
+
     // used for external service, open means start the scan procedure
     void open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) override;
 

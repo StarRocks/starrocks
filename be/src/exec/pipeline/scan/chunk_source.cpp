@@ -76,6 +76,10 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
                 if (_status.is_end_of_file()) {
                     chunk->owner_info().set_owner_id(tablet_id, true);
                     _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                } else if (_status.is_time_out()) {
+                    chunk->owner_info().set_owner_id(tablet_id, false);
+                    _chunk_buffer.put(_scan_operator_seq, std::move(chunk), std::move(_chunk_token));
+                    _status = Status::OK();
                 }
                 break;
             }

@@ -117,6 +117,7 @@ import com.starrocks.sql.ast.ShowRolesStmt;
 import com.starrocks.sql.ast.ShowRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowSmallFilesStmt;
 import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowStreamLoadStmt;
 import com.starrocks.sql.ast.ShowTableStatusStmt;
 import com.starrocks.sql.ast.ShowTabletStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
@@ -1198,6 +1199,15 @@ public class PrivilegeChecker {
 
         @Override
         public Void visitShowRoutineLoadStatement(ShowRoutineLoadStmt statement, ConnectContext session) {
+            String db = statement.getDbFullName();
+            if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowStreamLoadStatement(ShowStreamLoadStmt statement, ConnectContext session) {
             String db = statement.getDbFullName();
             if (!GlobalStateMgr.getCurrentState().getAuth().checkDbPriv(session, db, PrivPredicate.SHOW)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED, session.getQualifiedUser(), db);

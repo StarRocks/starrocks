@@ -58,6 +58,7 @@ import com.starrocks.load.MultiDeleteInfo;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.LoadJobFinalOperation;
 import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.UserPropertyInfo;
@@ -597,6 +598,11 @@ public class EditLog {
                 case OperationType.OP_REMOVE_ROUTINE_LOAD_JOB: {
                     RoutineLoadOperation operation = (RoutineLoadOperation) journal.getData();
                     globalStateMgr.getRoutineLoadManager().replayRemoveOldRoutineLoad(operation);
+                    break;
+                }
+                case OperationType.OP_CREATE_STREAM_LOAD_TASK: {
+                    StreamLoadTask streamLoadTask = (StreamLoadTask) journal.getData();
+                    globalStateMgr.getStreamLoadManager().replayCreateLoadTask(streamLoadTask);
                     break;
                 }
                 case OperationType.OP_CREATE_LOAD_JOB: {
@@ -1369,6 +1375,10 @@ public class EditLog {
 
     public void logRemoveRoutineLoadJob(RoutineLoadOperation operation) {
         logEdit(OperationType.OP_REMOVE_ROUTINE_LOAD_JOB, operation);
+    }
+
+    public void logCreateStreamLoadJob(StreamLoadTask streamLoadTask) {
+        logEdit(OperationType.OP_CREATE_STREAM_LOAD_TASK, streamLoadTask);
     }
 
     public void logCreateLoadJob(com.starrocks.load.loadv2.LoadJob loadJob) {

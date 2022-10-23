@@ -53,6 +53,7 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.RoutineLoadOperation;
@@ -68,7 +69,6 @@ import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.system.SystemInfoService;
-import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TExecPlanFragmentParams;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.AbstractTxnStateChangeCallback;
@@ -694,7 +694,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 throw new MetaNotFoundException("table " + this.tableId + " does not exist");
             }
             StreamLoadPlanner planner =
-                    new StreamLoadPlanner(db, (OlapTable) table, StreamLoadTask.fromRoutineLoadJob(this));
+                    new StreamLoadPlanner(db, (OlapTable) table, StreamLoadInfo.fromRoutineLoadJob(this));
             TExecPlanFragmentParams planParams = planner.plan(loadId);
             // add table indexes to transaction state
             TransactionState txnState =

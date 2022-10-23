@@ -145,6 +145,7 @@ import com.starrocks.load.loadv2.LoadTimeoutChecker;
 import com.starrocks.load.routineload.RoutineLoadManager;
 import com.starrocks.load.routineload.RoutineLoadScheduler;
 import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
+import com.starrocks.load.streamload.StreamLoadManager;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
@@ -302,6 +303,7 @@ public class GlobalStateMgr {
     private Load load;
     private LoadManager loadManager;
     private RoutineLoadManager routineLoadManager;
+    private StreamLoadManager streamLoadManager;
     private ExportMgr exportMgr;
     private Alter alter;
     private ConsistencyChecker consistencyChecker;
@@ -513,6 +515,7 @@ public class GlobalStateMgr {
     // if isCheckpointCatalog is true, it means that we should not collect thread pool metric
     private GlobalStateMgr(boolean isCheckpointCatalog) {
         this.load = new Load();
+        this.streamLoadManager = new StreamLoadManager();
         this.routineLoadManager = new RoutineLoadManager();
         this.exportMgr = new ExportMgr();
         this.alter = new Alter();
@@ -1263,6 +1266,8 @@ public class GlobalStateMgr {
             remoteChecksum = dis.readLong();
             checksum = loadCompactionManager(dis, checksum);
             remoteChecksum = dis.readLong();
+            checksum = loadStreamLoadManager(dis, checksum);
+            remoteChecksum = dis.readLong();
             loadRBACPrivilege(dis);
         } catch (EOFException exception) {
             LOG.warn("load image eof.", exception);
@@ -1449,6 +1454,12 @@ public class GlobalStateMgr {
         return checksum;
     }
 
+    public long loadStreamLoadManager(DataInputStream in, long checksum) throws IOException {
+        streamLoadManager = StreamLoadManager.loadStreamLoadManager(in);
+        checksum ^= streamLoadManager.getChecksum();
+        return checksum;
+    }
+
     // Only called by checkpoint thread
     public void saveImage() throws IOException {
         // Write image.ckpt
@@ -1514,6 +1525,8 @@ public class GlobalStateMgr {
             checksum = shardManager.saveShardManager(dos, checksum);
             dos.writeLong(checksum);
             checksum = compactionManager.saveCompactionManager(dos, checksum);
+            dos.writeLong(checksum);
+            checksum = streamLoadManager.saveStreamLoadManager(dos, checksum);
             dos.writeLong(checksum);
             saveRBACPrivilege(dos);
         }
@@ -1761,6 +1774,8 @@ public class GlobalStateMgr {
                     "should replay to %d but actual replayed journal id is %d",
                     toJournalId, replayedJournalId.get()));
         }
+
+        streamLoadManager.cancelUnDurableTaskAfterRestart();
 
         long replayInterval = System.currentTimeMillis() - replayStartTime;
         LOG.info("finish replay from {} to {} in {} msec", startJournalId, toJournalId, replayInterval);
@@ -2585,6 +2600,10 @@ public class GlobalStateMgr {
         return routineLoadManager;
     }
 
+    public StreamLoadManager getStreamLoadManager() {
+        return streamLoadManager;
+    }
+
     public RoutineLoadTaskScheduler getRoutineLoadTaskScheduler() {
         return routineLoadTaskScheduler;
     }
@@ -3376,6 +3395,11 @@ public class GlobalStateMgr {
             backupHandler.removeOldJobs();
         } catch (Throwable t) {
             LOG.warn("backup handler clean old jobs failed", t);
+        }
+        try {
+            streamLoadManager.cleanOldStreamLoadTasks();
+        } catch (Throwable t) {
+            LOG.warn("delete handler remove old delete info failed", t);
         }
     }
 

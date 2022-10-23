@@ -39,6 +39,7 @@
 #include "runtime/result_buffer_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/routine_load/routine_load_task_executor.h"
+#include "runtime/stream_load/transaction_mgr.h"
 #include "service_be/backend_service.h"
 #include "service_cn/compute_service.h"
 #include "storage/storage_engine.h"
@@ -119,6 +120,17 @@ void BackendServiceBase::submit_routine_load_task(TStatus& t_status, const std::
         }
     }
 
+    return Status::OK().to_thrift(&t_status);
+}
+
+void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TStreamLoadChannel& stream_load_channel) {
+    Status st = _exec_env->stream_context_mgr()->finish_body_sink(stream_load_channel.label,
+                                                                  stream_load_channel.channel_id);
+    if (!st.ok()) {
+        LOG(WARNING) << "failed to finish stream load channel. label: " << stream_load_channel.label
+                     << " channel id: " << stream_load_channel.channel_id;
+        return st.to_thrift(&t_status);
+    }
     return Status::OK().to_thrift(&t_status);
 }
 
