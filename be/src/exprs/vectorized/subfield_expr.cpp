@@ -18,7 +18,7 @@ public:
     ColumnPtr evaluate(ExprContext* context, vectorized::Chunk* chunk) override {
         DCHECK_EQ(1, _children.size());
 
-        ColumnPtr col = _children.at(0)->evaluate(context, chunk);;
+        ColumnPtr col = _children.at(0)->evaluate(context, chunk);
         Column* tmp_col = ColumnHelper::get_data_column(col.get());
         DCHECK(tmp_col->is_struct());
         StructColumn* struct_column = down_cast<StructColumn*>(tmp_col);

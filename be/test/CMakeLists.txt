@@ -110,6 +110,7 @@ set(EXEC_FILES
         ./exprs/vectorized/es_functions_test.cpp
         ./exprs/vectorized/utility_functions_test.cpp
         ./exprs/vectorized/runtime_filter_test.cpp
+        ./exprs/vectorized/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp

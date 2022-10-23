@@ -285,14 +285,14 @@ int StructColumn::compare_at(size_t left, size_t right, const Column& rhs, int n
 
 void StructColumn::fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
-    for(const ColumnPtr& column : _fields) {
+    for (const ColumnPtr& column : _fields) {
         column->fnv_hash(seed, from, to);
     }
 }
 
 void StructColumn::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
-    for(const ColumnPtr& column : _fields) {
+    for (const ColumnPtr& column : _fields) {
         column->crc32_hash(seed, from, to);
     }
 }
@@ -300,7 +300,7 @@ void StructColumn::crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const 
 int64_t StructColumn::xor_checksum(uint32_t from, uint32_t to) const {
     // TODO(SmithCruise) Not tested.
     int64_t xor_checksum = 0;
-    for(const ColumnPtr& column : _fields) {
+    for (const ColumnPtr& column : _fields) {
         column->xor_checksum(from, to);
     }
     return xor_checksum;

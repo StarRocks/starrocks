@@ -108,7 +108,7 @@ struct TScalarType {
 // Represents a field in a STRUCT type.
 // TODO: Model column stats for struct fields.
 struct TStructField {
-    1: required string name
+    1: optional string name
     2: optional string comment
 }
 

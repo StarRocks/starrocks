@@ -236,9 +236,19 @@ std::string TypeDescriptor::debug_string() const {
         ss << "STRUCT{";
         for (size_t i = 0; i < field_names.size(); i++) {
             ss << field_names[i] << " " << children[i].debug_string();
-            if (i + 1 < field_names.size()) ss << ", ";
+            if (i + 1 < field_names.size()) {
+                ss << ", ";
+            }
         }
         ss << "}";
+        ss << ", Selected fields: [";
+        for (size_t i = 0; i < selected_fields.size(); i++) {
+            ss << selected_fields[i];
+            if (i + 1 < selected_fields.size()) {
+                ss << ", ";
+            }
+        }
+        ss << "]";
         return ss.str();
     }
     default:
