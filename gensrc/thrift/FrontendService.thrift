@@ -45,6 +45,9 @@ struct TSetSessionParams {
 struct TAuthenticateParams {
     1: required string user
     2: required string passwd
+    3: required string host
+    4: required string db_name
+    5: required list<string> table_names;
 }
 
 struct TColumnDesc {

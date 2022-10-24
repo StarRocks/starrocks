@@ -90,24 +90,24 @@ public class PartitionKeyDesc implements ParseNode {
     public void analyze(int partColNum) throws AnalysisException {
         if (!isMax()) {
             if (upperValues.isEmpty() || upperValues.size() > partColNum) {
-                throw new AnalysisException("Partiton values number is more than partition column number: " + toSql());
+                throw new AnalysisException("Partition values number is more than partition column number: " + toSql());
             }
         }
 
-        // currently, we do not support MAXVALUE in partition range values. eg: ("100", "200", MAXVALUE);
+        // currently, we do not support MAXVALUE in multi partition range values. eg: ("100", "200", MAXVALUE);
         // maybe support later.
-        if (lowerValues != null) {
+        if (lowerValues != null && lowerValues.size() > 1) {
             for (PartitionValue lowerVal : lowerValues) {
                 if (lowerVal.isMax()) {
-                    throw new AnalysisException("Not support MAXVALUE in partition range values.");
+                    throw new AnalysisException("Not support MAXVALUE in multi partition range values.");
                 }
             }
         }
 
-        if (upperValues != null) {
+        if (upperValues != null && upperValues.size() > 1) {
             for (PartitionValue upperVal : upperValues) {
                 if (upperVal.isMax()) {
-                    throw new AnalysisException("Not support MAXVALUE in partition range values.");
+                    throw new AnalysisException("Not support MAXVALUE in multi partition range values.");
                 }
             }
         }
