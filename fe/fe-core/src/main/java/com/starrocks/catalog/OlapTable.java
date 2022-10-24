@@ -489,7 +489,7 @@ public class OlapTable extends Table {
                 for (int i = 0; i < tabletNum; i++) {
                     long newTabletId = catalog.getNextId();
                     Tablet newTablet = new Tablet(newTabletId);
-                    idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+                    idx.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                     // replicas
                     List<Long> beIds = Catalog.getCurrentSystemInfo()
@@ -505,7 +505,7 @@ public class OlapTable extends Table {
                         long newReplicaId = catalog.getNextId();
                         Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                                 partition.getVisibleVersion(), schemaHash);
-                        newTablet.addReplica(replica, true /* is restore */);
+                        newTablet.addReplica(replica, false/* update inverted index */);
                     }
                 }
             }
