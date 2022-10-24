@@ -61,7 +61,7 @@ mysql> ALTER SYSTEM DROP COMPUTE NODE "host:port";
 Run the following command to start the CN node.
 
 ```shell
-sh bin/start_cn.sh --daemon
+./bin/start_cn.sh --daemon
 ```
 
 ## Verify if CN node starts
