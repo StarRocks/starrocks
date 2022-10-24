@@ -252,6 +252,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
+    public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -642,6 +643,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
+    private boolean enableExchangePerf = false;
 
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
@@ -1178,6 +1182,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableExchangePassThrough() {
         return enableExchangePassThrough;
+    }
+
+    public boolean isEnableExchangePerf() {
+        return enableExchangePerf;
     }
 
     public boolean isAllowDefaultPartition() {

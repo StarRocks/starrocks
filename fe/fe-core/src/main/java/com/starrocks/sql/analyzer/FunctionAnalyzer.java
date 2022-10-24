@@ -14,6 +14,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
 
@@ -315,6 +316,13 @@ public class FunctionAnalyzer {
                     throw new SemanticException("percentile_approx requires the third parameter must be a constant : "
                             + functionCallExpr.toSql());
                 }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.EXCHANGE_BYTES) ||
+                fnName.getFunction().equals(FunctionSet.EXCHANGE_SPEED)) {
+            if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
+                throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1.");
             }
         }
     }
