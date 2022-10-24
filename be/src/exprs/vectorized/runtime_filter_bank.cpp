@@ -646,9 +646,7 @@ public:
         }
 
         if (filter != nullptr) {
-            for (int i = 0; i < size; i++) {
-                res[i] = res[i] & filter[i];
-            }
+            memcpy(res, filter, size);
         }
 
         if (col->is_nullable()) {
@@ -656,12 +654,12 @@ public:
             uint8_t* null_data = tmp->null_column_data().data();
             CppType* data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
             for (int i = 0; i < size; i++) {
-                res[i] = res[i] & (null_data[i] | (data[i] >= _min_value && data[i] <= _max_value));
+                res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
             }
         } else {
             CppType* data = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
             for (int i = 0; i < size; i++) {
-                res[i] = res[i] & (data[i] >= _min_value && data[i] <= _max_value);
+                res[i] = res[i] && (data[i] >= _min_value && data[i] <= _max_value);
             }
         }
 
