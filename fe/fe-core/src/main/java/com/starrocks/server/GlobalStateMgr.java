@@ -781,6 +781,11 @@ public class GlobalStateMgr {
         this.metadataMgr = metadataMgr;
     }
 
+    @VisibleForTesting
+    public void setStarOSAgent(StarOSAgent starOSAgent) {
+        this.starOSAgent = starOSAgent;
+    }
+
     public TaskManager getTaskManager() {
         return taskManager;
     }
