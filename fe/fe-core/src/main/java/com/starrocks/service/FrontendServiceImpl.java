@@ -509,6 +509,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
+            info.setProgress(status.getProgress() + "%");
             tasksResult.add(info);
         }
         return result;
@@ -965,11 +966,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TStatus status = new TStatus(TStatusCode.OK);
         result.setStatus(status);
         try {
-            if (!loadTxnCommitImpl(request)) {
-                // committed success but not visible
-                status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
-                status.addToError_msgs("Publish timeout. The data will be visible after a while");
-            }
+            loadTxnCommitImpl(request, status);
         } catch (UserException e) {
             LOG.warn("failed to commit txn_id: {}: {}", request.getTxnId(), e.getMessage());
             status.setStatus_code(TStatusCode.ANALYSIS_ERROR);
@@ -984,7 +981,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     // return true if commit success and publish success, return false if publish timeout
-    private boolean loadTxnCommitImpl(TLoadTxnCommitRequest request) throws UserException {
+    private void loadTxnCommitImpl(TLoadTxnCommitRequest request, TStatus status) throws UserException {
         String cluster = request.getCluster();
         if (Strings.isNullOrEmpty(cluster)) {
             cluster = SystemInfoService.DEFAULT_CLUSTER;
@@ -1015,17 +1012,26 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 timeoutMs, attachment);
         if (!ret) {
-            return ret;
+            // committed success but not visible
+            status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
+            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTxnPublishTimeoutDebugInfo(db.getId(), request.getTxnId());
+            LOG.warn("txn {} publish timeout {}", request.getTxnId(), timeoutInfo);
+            if (timeoutInfo.length() > 120) {
+                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            }
+            status.addToError_msgs("Publish timeout. The data will be visible after a while" + timeoutInfo);
+            return;
         }
         // if commit and publish is success, load can be regarded as success
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         if (null == attachment) {
-            return ret;
+            return;
         }
         // collect table-level metrics
         Table tbl = db.getTable(request.getTbl());
         if (null == tbl) {
-            return ret;
+            return;
         }
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         switch (request.txnCommitAttachment.getLoadType()) {
@@ -1053,7 +1059,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             default:
                 break;
         }
-        return ret;
     }
 
     @Override

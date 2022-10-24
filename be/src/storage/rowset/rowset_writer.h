@@ -109,7 +109,8 @@ public:
         return Status::NotSupported("RowsetWriter::flush_chunk");
     }
 
-    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) {
+    virtual Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+                                            SegmentPB* seg_info = nullptr) {
         return Status::NotSupported("RowsetWriter::flush_chunk_with_deletes");
     }
 
@@ -191,7 +192,8 @@ public:
     Status add_chunk(const vectorized::Chunk& chunk) override;
 
     Status flush_chunk(const vectorized::Chunk& chunk, SegmentPB* seg_info = nullptr) override;
-    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes) override;
+    Status flush_chunk_with_deletes(const vectorized::Chunk& upserts, const vectorized::Column& deletes,
+                                    SegmentPB* seg_info) override;
 
     // add rowset by create hard link
     Status add_rowset(RowsetSharedPtr rowset) override;

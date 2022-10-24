@@ -40,7 +40,12 @@ public class TableFunction extends Function {
 
     public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
                          List<Type> tableFnReturnTypes) {
-        super(fnName, argTypes, Type.INVALID, true);
+        this(fnName, defaultColumnNames, argTypes, tableFnReturnTypes, false);
+    }
+
+    public TableFunction(FunctionName fnName, List<String> defaultColumnNames, List<Type> argTypes,
+                         List<Type> tableFnReturnTypes, boolean varArgs) {
+        super(fnName, argTypes, Type.INVALID, varArgs);
         this.tableFnReturnTypes = tableFnReturnTypes;
         this.defaultColumnNames = defaultColumnNames;
 
@@ -49,8 +54,7 @@ public class TableFunction extends Function {
 
     public static void initBuiltins(FunctionSet functionSet) {
         TableFunction unnestFunction = new TableFunction(new FunctionName("unnest"), Lists.newArrayList("unnest"),
-                Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT));
-
+                Lists.newArrayList(Type.ANY_ARRAY), Lists.newArrayList(Type.ANY_ELEMENT), true);
         functionSet.addBuiltin(unnestFunction);
 
         TableFunction jsonEachFunction =

@@ -112,7 +112,7 @@ public class BoolLiteral extends LiteralExpr {
 
     @Override
     public String getStringValue() {
-        return value ? "TRUE" : "FALSE";
+        return value ? "1" : "0";
     }
 
     @Override

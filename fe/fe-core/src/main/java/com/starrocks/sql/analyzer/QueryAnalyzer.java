@@ -641,9 +641,9 @@ public class QueryAnalyzer {
                 analyzeExpression(args.get(i), analyzeState, scope);
                 argTypes[i] = args.get(i).getType();
 
-                AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "UNNEST");
-                AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "UNNEST");
-                AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "UNNEST");
+                AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
 
             Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
@@ -666,6 +666,25 @@ public class QueryAnalyzer {
             TableFunction tableFunction = (TableFunction) fn;
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
+
+            if (node.getColumnNames() == null) {
+                if (tableFunction.getFunctionName().getFunction().equalsIgnoreCase("unnest")) {
+                    // If the unnest variadic function does not explicitly specify column name,
+                    // all column names are `unnest`. This refers to the return column name of postgresql.
+                    List<String> columnNames = new ArrayList<>();
+                    for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+                        columnNames.add("unnest");
+                    }
+                    node.setColumnNames(columnNames);
+                } else {
+                    node.setColumnNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
+                }
+            } else {
+                if (node.getColumnNames().size() != tableFunction.getTableFnReturnTypes().size()) {
+                    throw new SemanticException("table %s has %s columns available but %s columns specified",
+                            node.getAlias().getTbl(), node.getColumnNames().size(), tableFunction.getTableFnReturnTypes().size());
+                }
+            }
 
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {

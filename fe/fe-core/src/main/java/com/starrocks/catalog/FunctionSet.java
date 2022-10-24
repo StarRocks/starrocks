@@ -229,6 +229,7 @@ public class FunctionSet {
     public static final String HLL_UNION = "hll_union";
     public static final String HLL_RAW_AGG = "hll_raw_agg";
     public static final String HLL_RAW = "hll_raw";
+    public static final String HLL_EMPTY = "hll_empty";
     public static final String NDV = "ndv";
     public static final String NDV_NO_FINALIZE = "ndv_no_finalize";
     public static final String MULTI_DISTINCT_COUNT = "multi_distinct_count";
@@ -262,7 +263,8 @@ public class FunctionSet {
     public static final String BITMAP_UNION_INT = "bitmap_union_int";
     public static final String INTERSECT_COUNT = "intersect_count";
     public static final String BITMAP_DICT = "bitmap_dict";
-
+    public static final String EXCHANGE_BYTES = "exchange_bytes";
+    public static final String EXCHANGE_SPEED = "exchange_speed";
     // Array functions:
     public static final String ARRAY_AGG = "array_agg";
     public static final String ARRAY_CONCAT = "array_concat";
@@ -382,7 +384,7 @@ public class FunctionSet {
 
     // JSON functions
     public static final Function JSON_QUERY_FUNC = new Function(
-            new FunctionName(JSON_QUERY), new Type[]{Type.JSON, Type.VARCHAR}, Type.JSON, false);
+            new FunctionName(JSON_QUERY), new Type[] {Type.JSON, Type.VARCHAR}, Type.JSON, false);
 
     private static final Logger LOGGER = LogManager.getLogger(FunctionSet.class);
 
@@ -474,6 +476,10 @@ public class FunctionSet {
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
+                    .add(FunctionSet.BITMAP_EMPTY)
+                    .add(FunctionSet.HLL_EMPTY)
+                    .add(FunctionSet.EXCHANGE_BYTES)
+                    .add(FunctionSet.EXCHANGE_SPEED)
                     .build();
 
     public static final Set<String> decimalRoundFunctions =
@@ -534,14 +540,13 @@ public class FunctionSet {
                 || functionName.equalsIgnoreCase(LAG)) {
             final ScalarType descArgType = (ScalarType) descArgTypes[0];
             final ScalarType candicateArgType = (ScalarType) candicateArgTypes[0];
-            // Bitmap, HLL, PERCENTILE type don't allow cast
-            if (descArgType.isOnlyMetricType()) {
-                return false;
-            }
             if (functionName.equalsIgnoreCase(LEAD) ||
                     functionName.equalsIgnoreCase(LAG)) {
                 // lead and lag function respect first arg type
                 return descArgType.isNull() || descArgType.matchesType(candicateArgType);
+            } else if (descArgType.isOnlyMetricType()) {
+                // Bitmap, HLL, PERCENTILE type don't allow cast
+                return false;
             } else {
                 // The implementations of hex for string and int are different.
                 return descArgType.isStringType() || !candicateArgType.isStringType();
@@ -589,7 +594,6 @@ public class FunctionSet {
         if (fns == null) {
             return null;
         }
-
         // First check for identical
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_IDENTICAL)) {
@@ -695,6 +699,15 @@ public class FunctionSet {
         // count(*)
         addBuiltin(AggregateFunction.createBuiltin(FunctionSet.COUNT,
                 new ArrayList<>(), Type.BIGINT, Type.BIGINT, false, true, true));
+
+        // EXCHANGE_BYTES/_SPEED with various arguments
+        addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_BYTES,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.BIGINT, Type.BIGINT, true,
+                true, false, true));
+
+        addBuiltin(AggregateFunction.createBuiltin(EXCHANGE_SPEED,
+                Lists.newArrayList(Type.ANY_ELEMENT), Type.VARCHAR, Type.BIGINT, true,
+                true, false, true));
 
         for (Type t : Type.getSupportedTypes()) {
             if (t.isFunctionType()) {
@@ -1237,16 +1250,20 @@ public class FunctionSet {
             return newFn;
         }
         if (fn instanceof TableFunction) {
+            // Because unnest is a variadic function, and the types of multiple parameters may be inconsistent,
+            // the current SR variadic function parsing can only support variadic parameters of the same type.
+            // The unnest is treated specially here, and the type of the child is directly used as the unnest function type.
             if (fn.functionName().equalsIgnoreCase("UNNEST")) {
                 List<Type> realTableFnRetTypes = new ArrayList<>();
                 for (Type paramType : paramTypes) {
+                    if (!paramType.isArrayType()) {
+                        return null;
+                    }
                     Type t = ((ArrayType) paramType).getItemType();
                     realTableFnRetTypes.add(t);
                 }
-                return new TableFunction(fn.getFunctionName(),
-                        ((TableFunction) fn).getDefaultColumnNames(),
-                        Arrays.asList(paramTypes),
-                        realTableFnRetTypes);
+                return new TableFunction(fn.getFunctionName(), ((TableFunction) fn).getDefaultColumnNames(),
+                        Arrays.asList(paramTypes), realTableFnRetTypes);
             }
 
             TableFunction tableFunction = (TableFunction) fn;

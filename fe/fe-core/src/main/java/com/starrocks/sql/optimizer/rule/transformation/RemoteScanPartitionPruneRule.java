@@ -8,7 +8,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -48,6 +47,8 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final RemoteScanPartitionPruneRule ICEBERG_SCAN =
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final RemoteScanPartitionPruneRule DELTALAKE_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
 
     public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
@@ -100,7 +101,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
                 long partitionId = 0;
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
-                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table instanceof HudiTable);
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
                     partitionKeys.put(partitionKey, partitionId++);
                 }
             } else {

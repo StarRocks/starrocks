@@ -479,7 +479,8 @@ void test_nullable_vector_const(DecimalTestCaseArray const& test_cases, int lhs_
         Columns columns = prepare_nullable_vector_const<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
                                                                           rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size, std::vector<bool>());
+                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                std::vector<bool>());
     }
 }
 template <PrimitiveType Type, typename Op, bool check_overflow>
@@ -501,7 +502,8 @@ void test_const_nullable_vector(DecimalTestCaseArray const& test_cases, int lhs_
         Columns columns = prepare_const_nullable_vector<LhsType, RhsType>(tc, lhs_precision, lhs_scale, rhs_precision,
                                                                           rhs_scale, front_fill_size, rear_fill_size);
         test_decimal_binary_functions_with_nullable_columns<LhsType, RhsType, ResultType, Op, check_overflow>(
-                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size, std::vector<bool>());
+                DecimalTestCaseArray{tc}, columns, result_precision, result_scale, front_fill_size,
+                std::vector<bool>());
     }
 }
 template <PrimitiveType Type, typename Op, bool check_overflow>
@@ -3008,7 +3010,7 @@ TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_32x32) {
     test_decimal_fast_mul_help<TYPE_DECIMAL32, TYPE_DECIMAL32, TYPE_DECIMAL128, MulOp32x32_128>(test_cases, 9, 2, 9, 2,
                                                                                                 38, 4);
     test_decimal_fast_mul_help<TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128, MulOp32x64_128>(test_cases, 9, 2, 9, 2,
-                                                                                               38, 4);
+                                                                                                38, 4);
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal_fast_mul_32x64) {

@@ -128,4 +128,9 @@ public class TablePEntryObject implements PEntryObject {
     public int hashCode() {
         return Objects.hash(databaseId, tableId);
     }
+
+    @Override
+    public PEntryObject clone() {
+        return new TablePEntryObject(databaseId, tableId);
+    }
 }

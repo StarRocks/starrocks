@@ -28,7 +28,9 @@ import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hudi.common.model.HoodieTableType;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
+import org.apache.hudi.common.table.timeline.HoodieInstant;
 import org.apache.hudi.common.table.timeline.HoodieTimeline;
+import org.apache.hudi.common.util.Option;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -245,8 +247,12 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         Configuration conf = new Configuration();
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(getTableLocation()).build();
-        HoodieTimeline timeline = metaClient.getActiveTimeline().filterCompletedAndCompactionInstants();
-        String queryInstant = timeline.lastInstant().get().getTimestamp();
+        HoodieTimeline timeline = metaClient.getCommitsAndCompactionTimeline().filterCompletedInstants();
+        Option<HoodieInstant> latestInstant = timeline.lastInstant();
+        String queryInstant = "";
+        if (latestInstant.isPresent()) {
+            queryInstant = latestInstant.get().getTimestamp();
+        }
         tHudiTable.setInstant_time(queryInstant);
         tHudiTable.setHive_column_names(hudiProperties.get(HUDI_TABLE_COLUMN_NAMES));
         tHudiTable.setHive_column_types(hudiProperties.get(HUDI_TABLE_COLUMN_TYPES));

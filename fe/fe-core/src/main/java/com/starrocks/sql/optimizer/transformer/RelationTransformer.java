@@ -436,7 +436,9 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
             scanOperator = new LogicalHiveScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.ICEBERG.equals(node.getTable().getType())) {
-            ((IcebergTable) node.getTable()).refreshTable();
+            if (!((IcebergTable) node.getTable()).isCatalogTbl()) {
+                ((IcebergTable) node.getTable()).refreshTable();
+            }
             scanOperator = new LogicalIcebergScanOperator(node.getTable(), colRefToColumnMetaMapBuilder.build(),
                     columnMetaToColRefMap, Operator.DEFAULT_LIMIT, null);
         } else if (Table.TableType.HUDI.equals(node.getTable().getType())) {

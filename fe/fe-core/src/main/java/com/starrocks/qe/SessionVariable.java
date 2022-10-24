@@ -252,6 +252,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
+    public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -278,6 +279,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+    public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
+
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
@@ -286,6 +289,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
+    public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -602,6 +607,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
     private String transmissionCompressionType = "LZ4";
 
+    @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
+    private int transmissionEncodeLevel = 0;
+
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
 
@@ -636,6 +644,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
+    private boolean enableExchangePerf = false;
+
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
 
@@ -657,6 +668,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
 
+    @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean interpolatePassthrough = true;
+
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
 
@@ -667,7 +681,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private double cboPruneShuffleColumnRate = 0.1;
 
     // 0: auto, 1: force push down, -1: don't push down, 2: push down medium, 3: push down high
-    @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
+    @VarAttr(name = "cboPushDownAggregateMode_v1", alias = CBO_PUSH_DOWN_AGGREGATE_MODE,
+            show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
     private int cboPushDownAggregateMode = -1;
 
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
@@ -1169,6 +1184,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableExchangePassThrough;
     }
 
+    public boolean isEnableExchangePerf() {
+        return enableExchangePerf;
+    }
+
     public boolean isAllowDefaultPartition() {
         return allowDefaultPartition;
     }
@@ -1256,6 +1275,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
+    public boolean isInterpolatePassthrough() {
+        return interpolatePassthrough;
+    }
+
+    public void setInterpolatePassthrough(boolean value) {
+        this.interpolatePassthrough = value;
+    }
 
     public int getParseTokensLimit() {
         return parseTokensLimit;
@@ -1324,6 +1350,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (compressionType != null) {
             tResult.setTransmission_compression_type(compressionType);
         }
+
+        tResult.setTransmission_encode_level(transmissionEncodeLevel);
 
         TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
         if (loadCompressionType != null) {

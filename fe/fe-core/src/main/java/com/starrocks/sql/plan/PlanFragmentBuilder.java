@@ -1258,18 +1258,25 @@ public class PlanFragmentBuilder {
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
+            // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
+            // the group-by expressions just denote the hash distribution of an exchange operator.
+            boolean forExchangePerf = node.getAggregations().values().stream().anyMatch(aggFunc ->
+                    aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                            aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED)) &&
+                    ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 1;
+            if (!forExchangePerf) {
+                for (ColumnRefOperator grouping : node.getGroupBys()) {
+                    Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
-            for (ColumnRefOperator grouping : node.getGroupBys()) {
-                Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                    groupingExpressions.add(groupingExpr);
 
-                groupingExpressions.add(groupingExpr);
-
-                SlotDescriptor slotDesc =
-                        context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
-                slotDesc.setType(groupingExpr.getType());
-                slotDesc.setIsNullable(groupingExpr.isNullable());
-                slotDesc.setIsMaterialized(true);
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
+                    slotDesc.setType(groupingExpr.getType());
+                    slotDesc.setIsNullable(groupingExpr.isNullable());
+                    slotDesc.setIsMaterialized(true);
+                }
             }
 
             ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();

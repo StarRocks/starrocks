@@ -367,6 +367,7 @@ struct TTaskRunInfo {
     8: optional i64 expire_time
     9: optional i32 error_code
     10: optional string error_message
+    11: optional string progress
 }
 
 struct TGetTaskRunInfoResult {
@@ -591,6 +592,7 @@ struct TStreamLoadPutRequest {
     27: optional bool partial_update
     28: optional string transmission_compression_type
     29: optional i32 load_dop
+    30: optional bool enable_replicated_storage
     // only valid when file type is CSV
     50: optional string rowDelimiter
 }

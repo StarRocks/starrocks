@@ -66,4 +66,9 @@ public class UserPEntryObject implements PEntryObject {
     public int hashCode() {
         return Objects.hash(super.hashCode(), userIdentity);
     }
+
+    @Override
+    public PEntryObject clone() {
+        return new UserPEntryObject(userIdentity);
+    }
 }
