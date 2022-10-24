@@ -262,7 +262,8 @@ public class CostModel {
                     "should be handled by nestloopjoin");
 
             return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                            + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                            + rightStatistics.getOutputSizeIncreaseRowWeight(context.getChildOutputColumns(1),
+                            ConnectContext.get().getSessionVariable().getCboJoinCostRowWeight()),
                     rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
         }
 

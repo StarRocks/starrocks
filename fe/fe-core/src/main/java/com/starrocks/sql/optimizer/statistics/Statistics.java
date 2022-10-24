@@ -31,6 +31,10 @@ public class Statistics {
     }
 
     public double getOutputSize(ColumnRefSet outputColumns) {
+        return getOutputSizeIncreaseRowWeight(outputColumns, 1.0d);
+    }
+
+    public double getOutputSizeIncreaseRowWeight(ColumnRefSet outputColumns, double weight) {
         double totalSize = 0;
         boolean nonEmpty = false;
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
@@ -42,7 +46,7 @@ public class Statistics {
         if (nonEmpty) {
             totalSize = Math.max(totalSize, 1.0);
         }
-        return totalSize * outputRowCount;
+        return Math.pow(totalSize, weight) * outputRowCount;
     }
 
     public double getComputeSize() {

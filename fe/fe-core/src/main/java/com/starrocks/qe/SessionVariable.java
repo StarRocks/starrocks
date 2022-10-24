@@ -232,6 +232,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_DEBUG_ALIVE_BACKEND_NUMBER = "cbo_debug_alive_backend_number";
     public static final String ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL =
             "enable_rewrite_groupingsets_to_union_all";
+    public static final String CBO_JOIN_COST_ROW_WEIGHT = "cbo_join_cost_row_weight";
 
     // --------  New planner session variables end --------
 
@@ -596,6 +597,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
+
+    @VariableMgr.VarAttr(name = CBO_JOIN_COST_ROW_WEIGHT)
+    private double cboJoinCostRowWeight = 1.25d;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
@@ -1170,6 +1174,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableRewriteGroupingSetsToUnionAll(boolean enableRewriteGroupingSetsToUnionAll) {
         this.enableRewriteGroupingSetsToUnionAll = enableRewriteGroupingSetsToUnionAll;
+    }
+
+    public double getCboJoinCostRowWeight() {
+        return cboJoinCostRowWeight;
+    }
+
+    public SessionVariable setCboJoinCostRowWeight(double cboJoinCostRowWeight) {
+        this.cboJoinCostRowWeight = cboJoinCostRowWeight;
+        return this;
     }
 
     public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
