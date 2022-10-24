@@ -561,6 +561,6 @@ public class DiskAndTabletLoadReBalancerTest {
         replica.setPathHash(pathHash);
         invertedIndex.addReplica(tabletId, replica);
         Tablet tablet1 = new Tablet(tabletId, Lists.newArrayList(replica));
-        materializedIndex.addTablet(tablet1, tabletMeta, false);
+        materializedIndex.addTablet(tablet1, tabletMeta, true);
     }
 }

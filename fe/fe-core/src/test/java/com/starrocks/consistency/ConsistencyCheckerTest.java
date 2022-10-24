@@ -39,7 +39,7 @@ public class ConsistencyCheckerTest {
 
         TabletMeta tabletMeta = new TabletMeta(dbId, tableId, partitionId, indexId, 1111, medium);
         Tablet tablet = new Tablet(tabletId, Lists.newArrayList(replica));
-        materializedIndex.addTablet(tablet, tabletMeta, true);
+        materializedIndex.addTablet(tablet, tabletMeta, false);
         PartitionInfo partitionInfo = new PartitionInfo();
         DataProperty dataProperty = new DataProperty(medium);
         partitionInfo.addPartition(partitionId, dataProperty, (short) 3, false);
