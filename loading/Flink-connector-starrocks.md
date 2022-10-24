@@ -136,7 +136,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
             "'sink.buffer-flush.interval-ms' = '5000'," +
             // 自 2.4 版本，支持更新主键模型中的部分列。您可以通过以下两个属性指定需要更新的列。
             // "'sink.properties.partial_update' = 'true'," +
-            // "'sink.properties.row_delimiter' = 'k1,k2,k3'," + 
+            // "'sink.properties.columns' = 'k1,k2,k3'," + 
             "'sink.properties.column_separator' = '\\x01'," +
             "'sink.properties.row_delimiter' = '\\x02'," +
             "'sink.properties.*' = 'xxx'" + // stream load properties like `'sink.properties.columns' = 'k1, v1'`
