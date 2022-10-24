@@ -73,6 +73,16 @@ namespace starrocks {
     case type:                    \
         return fun.template operator()<type>(args...);
 
+template <class Functor, class... Args>
+auto type_dispatch_numeric(PrimitiveType ptype, Functor fun, Args... args) {
+    switch (ptype) {
+        APPLY_FOR_ALL_NUMBER_TYPE(_TYPE_DISPATCH_CASE)
+    default:
+        CHECK(false) << "Unknown type: " << ptype;
+        __builtin_unreachable();
+    }
+}
+
 // type_dispatch_*:
 template <class Functor, class... Args>
 auto type_dispatch_basic(PrimitiveType ptype, Functor fun, Args... args) {

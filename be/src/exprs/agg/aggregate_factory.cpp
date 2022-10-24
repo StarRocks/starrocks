@@ -36,11 +36,35 @@
 #include "exprs/agg/window_funnel.h"
 #include "percentile_union.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "udf/java/java_function_fwd.h"
 
 namespace starrocks::vectorized {
 class AggregateFactory {
 public:
+    struct AvgFunctionBuilder {
+        template <PrimitiveType PT>
+        AggregateFunctionPtr operator()() {
+            return std::make_shared<AvgAggregateFunction<PT>>();
+        }
+    };
+    struct DecimalAvgFunctionBuilder {
+        template <PrimitiveType PT>
+        AggregateFunctionPtr operator()() {
+            return std::make_shared<DecimalAvgAggregateFunction<PT>>();
+        }
+    };
+    template <template <PrimitiveType PT, typename T = RunTimeCppType<PT>,
+                        PrimitiveType ImmediatePT = ImmediateAvgResultPT<PT>,
+                        typename ImmediateType = RunTimeCppType<ImmediatePT>>
+              class Fun>
+    struct RetTypeFunctionBuilder {
+        template <PrimitiveType PT>
+        AggregateFunctionPtr operator()() {
+            return std::make_shared<Fun<PT>>();
+        }
+    };
+
     // The function should be placed by alphabetical order
     template <PrimitiveType PT>
     static auto MakeAvgAggregateFunction();
@@ -415,6 +439,16 @@ public:
             return nullptr;
         }
         return pair->second.get();
+    }
+
+    void add_aggregate_mapping(const std::string& name, PrimitiveType arg, PrimitiveType ret, bool is_window,
+                               AggregateFunctionPtr fun) {
+        _infos_mapping.emplace(std::make_tuple(name, arg, ret, false, false), fun);
+        _infos_mapping.emplace(std::make_tuple(name, arg, ret, false, true), fun);
+        if (is_window) {
+            _infos_mapping.emplace(std::make_tuple(name, arg, ret, true, false), fun);
+            _infos_mapping.emplace(std::make_tuple(name, arg, ret, true, true), fun);
+        }
     }
 
     template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
@@ -875,6 +909,26 @@ private:
 
 AggregateFuncResolver::AggregateFuncResolver() {
     // The function should be placed by alphabetical order
+
+    std::vector<PrimitiveType> numeric_arg_types = {TYPE_BOOLEAN, TYPE_TINYINT,  TYPE_SMALLINT, TYPE_INT,
+                                                    TYPE_BIGINT,  TYPE_LARGEINT, TYPE_FLOAT,    TYPE_DOUBLE};
+
+    std::vector<PrimitiveType> decimal_arg_types = {TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128};
+    std::vector<PrimitiveType> temporal_types = {TYPE_DATETIME, TYPE_DATE};
+
+    for (auto arg : numeric_arg_types) {
+        add_aggregate_mapping(
+                "avg", arg, TYPE_DOUBLE, true,
+                type_dispatch_numeric(arg, AggregateFactory::RetTypeFunctionBuilder<AvgAggregateFunction>()));
+        add_aggregate_mapping(
+                "sum", arg, TYPE_DOUBLE, true,
+                type_dispatch_numeric(arg, AggregateFactory::RetTypeFunctionBuilder<SumAggregateFunction>()));
+    }
+    for (auto arg : decimal_arg_types) {
+        add_aggregate_mapping(
+                "avg", arg, TYPE_DECIMAL128, true,
+                type_dispatch_numeric(arg, AggregateFactory::RetTypeFunctionBuilder<AvgAggregateFunction>()));
+    }
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE, true>("avg");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_DOUBLE, true>("avg");
