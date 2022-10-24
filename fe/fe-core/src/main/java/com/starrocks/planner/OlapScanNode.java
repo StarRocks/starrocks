@@ -649,7 +649,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
-            msg.olap_scan_node.setUse_sorted_agg(useSortedResult);
+            msg.olap_scan_node.setSorted_by_keys_per_tablet(useSortedResult);
         }
     }
 
