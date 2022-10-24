@@ -23,7 +23,7 @@ const static std::string ACTION_STAT = "stat";
 const static std::string ACTION_INVALIDATE_ALL = "invalidate_all";
 
 void QueryCacheAction::handle(HttpRequest* req) {
-    LOG(INFO) << req->debug_string();
+    VLOG_ROW << req->debug_string();
     const auto& action = req->param(ACTION_KEY);
     if (req->method() == HttpMethod::GET) {
         if (action == ACTION_STAT) {
