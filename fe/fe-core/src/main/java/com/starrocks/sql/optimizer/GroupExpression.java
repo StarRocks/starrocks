@@ -8,7 +8,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
-import com.starrocks.sql.optimizer.base.OutputInputProperty;
+import com.starrocks.sql.optimizer.base.OutputPropertyGroup;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.rule.Rule;
@@ -43,10 +43,10 @@ public class GroupExpression {
     // required property by parent -> output property
     private final Map<PhysicalPropertySet, PhysicalPropertySet> outputPropertyMap;
 
-    // valid output/input properties, only used in enum plan
-    private final Set<OutputInputProperty> validOutputInputProperties;
-    // property -> plan count, only used in enum plan
-    private final Map<OutputInputProperty, Integer> propertiesPlanCountMap;
+    // valid output property groups, only used in enum plan
+    private final Set<OutputPropertyGroup> validOutputPropertyGroups;
+    // property group -> plan count, only used in enum plan
+    private final Map<OutputPropertyGroup, Integer> propertiesPlanCountMap;
 
     private boolean isUnused = false;
 
@@ -54,7 +54,7 @@ public class GroupExpression {
         this.op = op;
         this.inputs = inputs;
         this.lowestCostTable = Maps.newHashMap();
-        this.validOutputInputProperties = Sets.newLinkedHashSet();
+        this.validOutputPropertyGroups = Sets.newLinkedHashSet();
         this.propertiesPlanCountMap = Maps.newLinkedHashMap();
         this.outputPropertyMap = Maps.newHashMap();
     }
@@ -126,39 +126,41 @@ public class GroupExpression {
         this.outputPropertyMap.put(requiredPropertySet, outputPropertySet);
     }
 
-    public void addValidOutputInputProperties(PhysicalPropertySet outputProperty,
-                                              List<PhysicalPropertySet> inputProperties) {
-        validOutputInputProperties.add(OutputInputProperty.of(outputProperty, inputProperties));
+    public void addValidOutputPropertyGroup(PhysicalPropertySet outputProperty,
+                                            boolean isChildrenEnforced,
+                                            List<PhysicalPropertySet> childrenOutputProperties) {
+        validOutputPropertyGroups.add(
+                OutputPropertyGroup.of(outputProperty, isChildrenEnforced, childrenOutputProperties));
     }
 
-    public List<List<PhysicalPropertySet>> getRequiredInputProperties(PhysicalPropertySet requiredProperty) {
-        List<List<PhysicalPropertySet>> result = Lists.newArrayList();
-        for (OutputInputProperty outputInputProperty : validOutputInputProperties) {
-            if (outputInputProperty.getOutputProperty().equals(requiredProperty)) {
-                result.add(outputInputProperty.getInputProperties());
+    public List<OutputPropertyGroup> getChildrenOutputProperties(PhysicalPropertySet outputProperty) {
+        List<OutputPropertyGroup> outputPropertyGroups = Lists.newArrayList();
+        for (OutputPropertyGroup outputPropertyGroup : validOutputPropertyGroups) {
+            if (outputPropertyGroup.getOutputProperty().equals(outputProperty)) {
+                outputPropertyGroups.add(outputPropertyGroup);
             }
         }
-        return result;
+        return outputPropertyGroups;
     }
 
     public boolean hasValidSubPlan() {
-        return !validOutputInputProperties.isEmpty();
+        return !validOutputPropertyGroups.isEmpty();
     }
 
-    public void addPlanCountOfProperties(OutputInputProperty properties, int count) {
+    public void addPlanCountOfProperties(OutputPropertyGroup properties, int count) {
         propertiesPlanCountMap.put(properties, count);
     }
 
-    public Map<OutputInputProperty, Integer> getPropertiesPlanCountMap(
+    public Map<OutputPropertyGroup, Integer> getPropertiesPlanCountMap(
             PhysicalPropertySet requiredProperty) {
-        Map<OutputInputProperty, Integer> result = Maps.newLinkedHashMap();
+        Map<OutputPropertyGroup, Integer> result = Maps.newLinkedHashMap();
         propertiesPlanCountMap.entrySet().stream()
                 .filter(entry -> entry.getKey().getOutputProperty().equals(requiredProperty))
                 .forEach(entry -> result.put(entry.getKey(), entry.getValue()));
         return result;
     }
 
-    public int getRequiredPropertyPlanCount(PhysicalPropertySet requiredProperty) {
+    public int getOutputPropertyPlanCount(PhysicalPropertySet requiredProperty) {
         return propertiesPlanCountMap.entrySet().stream()
                 .filter(entry -> entry.getKey().getOutputProperty().equals(requiredProperty))
                 .mapToInt(Map.Entry::getValue).sum();
