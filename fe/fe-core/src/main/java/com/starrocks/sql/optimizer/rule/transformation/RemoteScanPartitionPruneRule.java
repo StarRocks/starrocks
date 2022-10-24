@@ -11,7 +11,7 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.DdlException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -35,6 +35,9 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
+import static com.starrocks.external.PartitionUtil.createPartitionKey;
+import static com.starrocks.external.PartitionUtil.toPartitionValues;
+
 public class RemoteScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);
 
@@ -44,6 +47,8 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_HUDI_SCAN);
     public static final RemoteScanPartitionPruneRule ICEBERG_SCAN =
             new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_ICEBERG_SCAN);
+    public static final RemoteScanPartitionPruneRule DELTALAKE_SCAN =
+            new RemoteScanPartitionPruneRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
 
     public RemoteScanPartitionPruneRule(OperatorType logicalOperatorType) {
         super(RuleType.TF_PARTITION_PRUNE, Pattern.create(logicalOperatorType));
@@ -60,7 +65,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         Map<ColumnRefOperator, Set<Long>> columnToNullPartitions = Maps.newHashMap();
 
         try {
-            initPartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions, context);
+            initPartitionInfo(operator, context, columnToPartitionValuesMap, columnToNullPartitions);
             classifyConjuncts(operator, columnToPartitionValuesMap);
             computePartitionInfo(operator, columnToPartitionValuesMap, columnToNullPartitions);
         } catch (Exception e) {
@@ -70,15 +75,14 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
         return Collections.emptyList();
     }
 
-    private void initPartitionInfo(LogicalScanOperator operator,
+    private void initPartitionInfo(LogicalScanOperator operator, OptimizerContext context,
                                    Map<ColumnRefOperator, TreeMap<LiteralExpr, Set<Long>>> columnToPartitionValuesMap,
-                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions,
-                                   OptimizerContext context)
-            throws DdlException, AnalysisException {
+                                   Map<ColumnRefOperator, Set<Long>> columnToNullPartitions)
+            throws AnalysisException {
         Table table = operator.getTable();
         if (table instanceof HiveMetaStoreTable) {
-            HiveMetaStoreTable hiveMetaStoreTable = (HiveMetaStoreTable) table;
-            List<Column> partitionColumns = hiveMetaStoreTable.getPartitionColumns();
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
+            List<Column> partitionColumns = hmsTable.getPartitionColumns();
             List<ColumnRefOperator> partitionColumnRefOperators = new ArrayList<>();
             for (Column column : partitionColumns) {
                 ColumnRefOperator partitionColumnRefOperator = operator.getColumnReference(column);
@@ -86,15 +90,24 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
                 columnToNullPartitions.put(partitionColumnRefOperator, Sets.newHashSet());
                 partitionColumnRefOperators.add(partitionColumnRefOperator);
             }
-            
-            // no partition column table:
-            // 1. partitionColumns is empty
-            // 2. partitionKeys size = 1
-            // 3. key.getKeys() is empty
-            Map<PartitionKey, Long> partitionKeys = hiveMetaStoreTable.getPartitionKeys();
-            // record partition keys for query dump
-            context.getDumpInfo().getHMSTable(hiveMetaStoreTable.getResourceName(), hiveMetaStoreTable.getDbName(),
-                    hiveMetaStoreTable.getTableName()).setPartitionKeys(partitionKeys);
+
+            List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+            context.getDumpInfo().getHMSTable(hmsTable.getCatalogName(), hmsTable.getDbName(),
+                    hmsTable.getTableName()).setPartitionNames(partitionNames);
+
+            Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
+            if (!hmsTable.isUnPartitioned()) {
+                long partitionId = 0;
+                for (String partName : partitionNames) {
+                    List<String> values = toPartitionValues(partName);
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
+                    partitionKeys.put(partitionKey, partitionId++);
+                }
+            } else {
+                partitionKeys.put(new PartitionKey(), 0L);
+            }
+
             for (Map.Entry<PartitionKey, Long> entry : partitionKeys.entrySet()) {
                 PartitionKey key = entry.getKey();
                 long partitionId = entry.getValue();

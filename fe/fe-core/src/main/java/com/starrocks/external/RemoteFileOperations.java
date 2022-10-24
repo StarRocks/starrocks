@@ -3,8 +3,10 @@
 package com.starrocks.external;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.hive.Partition;
+import com.starrocks.sql.PlannerProfile;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,11 +22,16 @@ public class RemoteFileOperations {
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService executor;
     private final boolean isRecursive;
+    private final boolean enableCatalogLevelCache;
 
-    public RemoteFileOperations(CachingRemoteFileIO remoteFileIO, ExecutorService executor, boolean isRecursive) {
+    public RemoteFileOperations(CachingRemoteFileIO remoteFileIO,
+                                ExecutorService executor,
+                                boolean isRecursive,
+                                boolean enableCatalogLevelCache) {
         this.remoteFileIO = remoteFileIO;
         this.executor = executor;
         this.isRecursive = isRecursive;
+        this.enableCatalogLevelCache = enableCatalogLevelCache;
     }
 
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions) {
@@ -32,25 +39,38 @@ public class RemoteFileOperations {
     }
 
     public List<RemoteFileInfo> getRemoteFiles(List<Partition> partitions, Optional<String> hudiTableLocation) {
-        Map<RemotePathKey, Partition> pathKeyToPartition = partitions.stream()
-                .collect(Collectors.toMap(
-                        partition -> RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation),
-                        Function.identity()));
+        Map<RemotePathKey, Partition> pathKeyToPartition = Maps.newHashMap();
+        for (Partition partition : partitions) {
+            RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+            pathKeyToPartition.put(key, partition);
+        }
+
+        int cacheMissSize = partitions.size();
+        if (enableCatalogLevelCache) {
+            cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(
+                    Lists.newArrayList(pathKeyToPartition.keySet())).size();
+        }
 
         List<RemoteFileInfo> resultRemoteFiles = Lists.newArrayList();
         List<Future<Map<RemotePathKey, List<RemoteFileDesc>>>> futures = Lists.newArrayList();
-        for (Partition partition : partitions) {
-            RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
-            Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() -> remoteFileIO.getRemoteFiles(pathKey));
-            futures.add(future);
-        }
-
         List<Map<RemotePathKey, List<RemoteFileDesc>>> result = Lists.newArrayList();
-        for (Future<Map<RemotePathKey, List<RemoteFileDesc>>> future : futures) {
-            try {
-                result.add(future.get());
-            } catch (InterruptedException | ExecutionException e) {
-                throw new StarRocksConnectorException("Failed to get remote files, msg: %s", e.getMessage());
+
+        PlannerProfile.addCustomProperties("HMS.PARTITIONS.getRemoteFiles", String.format("%s partitions", cacheMissSize));
+
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("HMS.getRemoteFiles")) {
+            for (Partition partition : partitions) {
+                RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive, hudiTableLocation);
+                Future<Map<RemotePathKey, List<RemoteFileDesc>>> future = executor.submit(() ->
+                        remoteFileIO.getRemoteFiles(pathKey));
+                futures.add(future);
+            }
+
+            for (Future<Map<RemotePathKey, List<RemoteFileDesc>>> future : futures) {
+                try {
+                    result.add(future.get());
+                } catch (InterruptedException | ExecutionException e) {
+                    throw new StarRocksConnectorException("Failed to get remote files, msg: %s", e.getMessage());
+                }
             }
         }
 
@@ -78,6 +98,14 @@ public class RemoteFileOperations {
         return fillFileInfo(presentFiles, pathKeyToPartition);
     }
 
+    public List<RemoteFileInfo> getRemoteFileInfoForStats(List<Partition> partitions, Optional<String> hudiTableLocation) {
+        if (enableCatalogLevelCache) {
+            return getPresentFilesInCache(partitions, hudiTableLocation);
+        } else {
+            return getRemoteFiles(partitions, hudiTableLocation);
+        }
+    }
+
     private List<RemoteFileInfo> fillFileInfo(
             Map<RemotePathKey, List<RemoteFileDesc>> files,
             Map<RemotePathKey, Partition> partitions) {
@@ -102,5 +130,9 @@ public class RemoteFileOperations {
                         .collect(Collectors.toList()));
 
         return builder.build();
+    }
+
+    public void invalidateAll() {
+        remoteFileIO.invalidateAll();
     }
 }

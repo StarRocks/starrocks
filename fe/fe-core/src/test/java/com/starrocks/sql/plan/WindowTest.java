@@ -108,6 +108,41 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testLeadAndLagWithBitmapAndHll() throws Exception {
+        String sql = "select lead(id2, 1, bitmap_empty()) OVER () from bitmap_table";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, bitmap_empty())");
+
+        sql = "select lead(id2, 1, null) OVER () from bitmap_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, null)");
+
+        sql = "select lag(id2, 1, bitmap_empty()) OVER () from bitmap_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, bitmap_empty())");
+
+        sql = "select lag(id2, 1, null) OVER () from bitmap_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, null)");
+
+        sql = "select lead(id2, 1, hll_empty()) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, hll_empty())");
+
+        sql = "select lead(id2, 1, null) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, null)");
+
+        sql = "select lag(id2, 1, hll_empty()) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, hll_empty())");
+
+        sql = "select lag(id2, 1, null) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, null)");
+    }
+
+    @Test
     public void testWindowWithAgg() throws Exception {
         String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS `rank` FROM t0 group BY v1, v2";
         String plan = getFragmentPlan(sql);

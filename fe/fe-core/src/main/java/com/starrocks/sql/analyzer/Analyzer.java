@@ -1,38 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.AddSqlBlackListStmt;
-import com.starrocks.analysis.AlterLoadStmt;
-import com.starrocks.analysis.AlterRoutineLoadStmt;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelExportStmt;
-import com.starrocks.analysis.CreateRepositoryStmt;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
-import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.LimitElement;
-import com.starrocks.analysis.LoadStmt;
-import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.RestoreStmt;
-import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetUserPropertyStmt;
-import com.starrocks.analysis.ShowExportStmt;
-import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.ShowRestoreStmt;
-import com.starrocks.analysis.ShowSnapshotStmt;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.ShowTransactionStmt;
-import com.starrocks.analysis.StatementBase;
-import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
@@ -43,41 +17,58 @@ import com.starrocks.sql.ast.AdminShowReplicaDistributionStmt;
 import com.starrocks.sql.ast.AdminShowReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
+import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.BaseViewStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelExportStmt;
 import com.starrocks.sql.ast.CancelLoadStmt;
 import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropFunctionStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.ast.PauseRoutineLoadStmt;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -85,6 +76,10 @@ import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshTableStmt;
+import com.starrocks.sql.ast.RestoreStmt;
+import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
@@ -92,11 +87,21 @@ import com.starrocks.sql.ast.ShowBackupStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
 import com.starrocks.sql.ast.ShowCatalogsStmt;
 import com.starrocks.sql.ast.ShowDynamicPartitionStmt;
+import com.starrocks.sql.ast.ShowExportStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowHistogramStatsMetaStmt;
 import com.starrocks.sql.ast.ShowResourcesStmt;
+import com.starrocks.sql.ast.ShowRestoreStmt;
+import com.starrocks.sql.ast.ShowSmallFilesStmt;
+import com.starrocks.sql.ast.ShowSnapshotStmt;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.ShowTransactionStmt;
 import com.starrocks.sql.ast.ShowUserPropertyStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 
 public class Analyzer {
@@ -110,7 +115,6 @@ public class Analyzer {
         }
 
         // ---------------------------------------- Database Statement -----------------------------------------------------
-
 
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext context) {
@@ -180,13 +184,13 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitShowUserPropertyStmt(ShowUserPropertyStmt statement, ConnectContext session) {
+        public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext session) {
             ShowUserPropertyAnalyzer.analyze(statement, session);
             return null;
         }
 
         @Override
-        public Void visitSetUserPropertyStmt(SetUserPropertyStmt statement, ConnectContext session) {
+        public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext session) {
             SetUserPropertyAnalyzer.analyze(statement, session);
             return null;
         }
@@ -206,7 +210,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitSubmitTaskStmt(SubmitTaskStmt statement, ConnectContext context) {
+        public Void visitSubmitTaskStatement(SubmitTaskStmt statement, ConnectContext context) {
             CreateTableAsSelectStmt createTableAsSelectStmt = statement.getCreateTableAsSelectStmt();
             QueryStatement queryStatement = createTableAsSelectStmt.getQueryStatement();
             Analyzer.analyze(queryStatement, context);
@@ -284,7 +288,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
+        public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
             DropStmtAnalyzer.analyze(statement, session);
             return null;
         }
@@ -314,7 +318,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             PrivilegeStmtAnalyzer.analyze(stmt, session);
             return null;
         }
@@ -408,7 +412,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterSystemStmt(AlterSystemStmt statement, ConnectContext context) {
+        public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
             AlterSystemStmtAnalyzer.analyze(statement, context);
             return null;
         }
@@ -426,19 +430,19 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitShowCatalogsStmt(ShowCatalogsStmt statement, ConnectContext context) {
+        public Void visitShowCatalogsStatement(ShowCatalogsStmt statement, ConnectContext context) {
             CatalogAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitDropFunctionStmt(DropFunctionStmt statement, ConnectContext context) {
+        public Void visitDropFunctionStatement(DropFunctionStmt statement, ConnectContext context) {
             DropStmtAnalyzer.analyze(statement, context);
             return null;
         }
 
         @Override
-        public Void visitCreateFunctionStmt(CreateFunctionStmt statement, ConnectContext context) {
+        public Void visitCreateFunctionStatement(CreateFunctionStmt statement, ConnectContext context) {
             try {
                 statement.analyze(context);
             } catch (AnalysisException e) {
@@ -454,7 +458,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAlterDatabaseQuotaStmt(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+        public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
             AlterDbQuotaAnalyzer.analyze(statement, context);
             return null;
         }
@@ -478,7 +482,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitRecoverDbStmt(RecoverDbStmt statement, ConnectContext context) {
+        public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
             return null;
         }
 
@@ -495,7 +499,7 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitRecoverPartitionStmt(RecoverPartitionStmt statement, ConnectContext context) {
+        public Void visitRecoverPartitionStatement(RecoverPartitionStmt statement, ConnectContext context) {
             RecoverPartitionAnalyzer.analyze(statement, context);
             return null;
         }
@@ -561,12 +565,6 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
-            statement.analyze();
-            return null;
-        }
-
-        @Override
         public Void visitShowAnalyzeJobStatement(ShowAnalyzeJobStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
@@ -591,10 +589,76 @@ public class Analyzer {
         }
 
         @Override
-        public Void visitShowTransactionStmt(ShowTransactionStmt statement, ConnectContext session) {
+        public Void visitShowTransactionStatement(ShowTransactionStmt statement, ConnectContext session) {
             ShowStmtAnalyzer.analyze(statement, session);
             return null;
         }
+
+        @Override
+        public Void visitLoadStatement(LoadStmt statement, ConnectContext context) {
+            LoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCancelLoadStatement(CancelLoadStmt statement, ConnectContext context) {
+            CancelLoadStmtAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Backup Restore Statement -------------------------------------------
+
+        @Override
+        public Void visitBackupStatement(BackupStmt statement, ConnectContext context) {
+            BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitRestoreStatement(RestoreStmt statement, ConnectContext context) {
+            BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowBackupStatement(ShowBackupStmt statement, ConnectContext context) {
+            BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowRestoreStatement(ShowRestoreStmt statement, ConnectContext context) {
+            BackupRestoreAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowSnapshotStatement(ShowSnapshotStmt statement, ConnectContext context) {
+            ShowSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRepositoryStatement(CreateRepositoryStmt statement, ConnectContext context) {
+            RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropRepositoryStatement(DropRepositoryStmt statement, ConnectContext context) {
+            RepositoryAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ------------------------------------ Sql BlackList And WhiteList Statement ----------------------------------
+
+        @Override
+        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext session) {
+            statement.analyze();
+            return null;
+        }
+
+        // ------------------------------------------- Export Statement ------------------------------------------------
 
         @Override
         public Void visitExportStatement(ExportStmt statement, ConnectContext context) {
@@ -614,57 +678,32 @@ public class Analyzer {
             return null;
         }
 
-        @Override
-        public Void visitLoadStmt(LoadStmt statement, ConnectContext context) {
-            LoadStmtAnalyzer.analyze(statement, context);
+        // ------------------------------------------- Plugin Statement ------------------------------------------------
+
+        public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
+            PluginAnalyzer.analyze(statement, context);
             return null;
         }
 
-        @Override
-        public Void visitCancelLoadStmt(CancelLoadStmt statement, ConnectContext context) {
-            CancelLoadStmtAnalyzer.analyze(statement, context);
+        public Void visitUninstallPluginStatement(UninstallPluginStmt statement, ConnectContext context) {
+            PluginAnalyzer.analyze(statement, context);
             return null;
         }
 
-        @Override
-        public Void visitBackupStmt(BackupStmt statement, ConnectContext context) {
-            BackupRestoreAnalyzer.analyze(statement, context);
+        // --------------------------------------- File Statement ------------------------------------------------------
+
+        public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
+            FileAnalyzer.analyze(statement, context);
             return null;
         }
 
-        @Override
-        public Void visitRestoreStmt(RestoreStmt statement, ConnectContext context) {
-            BackupRestoreAnalyzer.analyze(statement, context);
+        public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
+            FileAnalyzer.analyze(statement, context);
             return null;
         }
 
-        @Override
-        public Void visitShowBackupStmt(ShowBackupStmt statement, ConnectContext context) {
-            BackupRestoreAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
-        public Void visitShowRestoreStmt(ShowRestoreStmt statement, ConnectContext context) {
-            BackupRestoreAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
-        public Void visitShowSnapshotStmt(ShowSnapshotStmt statement, ConnectContext context) {
-            ShowSnapshotAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
-        public Void visitCreateRepositoryStmt(CreateRepositoryStmt statement, ConnectContext context) {
-            RepositoryAnalyzer.analyze(statement, context);
-            return null;
-        }
-
-        @Override
-        public Void visitDropRepositoryStmt(DropRepositoryStmt statement, ConnectContext context) {
-            RepositoryAnalyzer.analyze(statement, context);
+        public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
+            FileAnalyzer.analyze(statement, context);
             return null;
         }
     }

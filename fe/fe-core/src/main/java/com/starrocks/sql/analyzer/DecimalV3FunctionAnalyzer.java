@@ -72,12 +72,12 @@ public class DecimalV3FunctionAnalyzer {
         if (FunctionSet.HISTOGRAM.equals(fnName)) {
             return Type.VARCHAR;
         }
-        
+
         if (FunctionSet.MAX_BY.equals(fnName)) {
             if (argTypes[0].isDecimalV3()) {
-                return ScalarType.createDecimalV3Type(argTypes[0].getPrimitiveType(), 
-                            argTypes[0].getPrecision(), 
-                            ((ScalarType) argTypes[0]).getScalarScale());
+                return ScalarType.createDecimalV3Type(argTypes[0].getPrimitiveType(),
+                        argTypes[0].getPrecision(),
+                        ((ScalarType) argTypes[0]).getScalarScale());
             } else {
                 return argTypes[0];
             }

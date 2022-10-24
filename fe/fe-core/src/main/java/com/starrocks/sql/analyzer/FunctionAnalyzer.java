@@ -14,6 +14,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
 
@@ -197,24 +198,24 @@ public class FunctionAnalyzer {
                 throw new SemanticException("window argument must be numerical type");
             }
         }
-        
+
         if (fnName.getFunction().equals(FunctionSet.MAX_BY)) {
             if (functionCallExpr.getChildren().size() != 2 || functionCallExpr.getChildren().isEmpty()) {
                 throw new SemanticException(
                         "max_by requires two parameters: " + functionCallExpr.toSql());
             }
-            
+
             if (functionCallExpr.getChild(0).isConstant() || functionCallExpr.getChild(1).isConstant()) {
                 throw new SemanticException("max_by function args must be column");
             }
-            
+
             fnParams.setIsDistinct(false);  // DISTINCT is meaningless here
 
             Type sortKeyType = functionCallExpr.getChild(1).getType();
             if (!sortKeyType.canApplyToNumeric()) {
                 throw new SemanticException(Type.ONLY_METRIC_TYPE_ERROR_MSG);
             }
-            
+
             return;
         }
 
@@ -315,6 +316,13 @@ public class FunctionAnalyzer {
                     throw new SemanticException("percentile_approx requires the third parameter must be a constant : "
                             + functionCallExpr.toSql());
                 }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.EXCHANGE_BYTES) ||
+                fnName.getFunction().equals(FunctionSet.EXCHANGE_SPEED)) {
+            if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
+                throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1.");
             }
         }
     }

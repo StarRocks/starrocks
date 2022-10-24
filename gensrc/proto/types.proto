@@ -84,6 +84,12 @@ enum CompressionTypePB {
     LZ4_HADOOP = 13;
 }
 
+enum WriteQuorumTypePB {
+    ONE = 0;
+    MAJORITY = 1;
+    ALL = 2;
+}
+
 // Used to store additional information about a txn when it is finished/visible
 // It will be serialized with TransactionState
 message TxnFinishStatePB {
@@ -99,4 +105,31 @@ message TxnFinishStatePB {
     // it is considered abnormal, and put into abnormal list.
     repeated int64 normal_replicas = 1;
     repeated int64 abnormal_replicas_with_version = 2;
+}
+
+message DeletePredicatePB {
+    required int32 version = 1;
+    repeated string sub_predicates = 2;
+    repeated InPredicatePB in_predicates = 3;
+    // binary_predicates only set and used by a lake table now.
+    repeated BinaryPredicatePB binary_predicates = 4;
+    // is_null_predicates only set and used by a lake table now.
+    repeated IsNullPredicatePB is_null_predicates = 5;
+}
+
+message InPredicatePB {
+    optional string column_name = 1;
+    optional bool is_not_in = 2;
+    repeated string values = 3;
+}
+
+message BinaryPredicatePB {
+    optional string column_name = 1;
+    optional string op = 2;
+    optional string value = 3;
+}
+
+message IsNullPredicatePB {
+    optional string column_name = 1;
+    optional bool is_not_null = 2;
 }

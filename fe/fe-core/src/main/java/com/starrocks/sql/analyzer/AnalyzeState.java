@@ -61,7 +61,7 @@ public class AnalyzeState {
 
     /**
      * Columns that do not appear in GroupBy for use with MODE_ONLY_FULL_GROUP_BY.
-     * */
+     */
     private final List<Expr> columnNotInGroupBy = new ArrayList<>();
 
     public AnalyzeState() {
@@ -223,5 +223,5 @@ public class AnalyzeState {
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
     }
-    
+
 }

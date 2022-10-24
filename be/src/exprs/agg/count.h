@@ -130,6 +130,40 @@ public:
         this->data(state).count += !columns[0]->is_null(row_num);
     }
 
+    void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                      AggDataPtr* states) const override {
+        if (columns[0]->has_null()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
+            const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                this->data(states[i] + state_offset).count += !null_data[i];
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                this->data(states[i] + state_offset).count++;
+            }
+        }
+    }
+
+    void update_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
+                                  AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        if (columns[0]->has_null()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(columns[0]);
+            const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (filter[i] == 0) {
+                    this->data(states[i] + state_offset).count += !null_data[i];
+                }
+            }
+        } else {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (filter[i] == 0) {
+                    this->data(states[i] + state_offset).count++;
+                }
+            }
+        }
+    }
+
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         if (columns[0]->is_nullable()) {

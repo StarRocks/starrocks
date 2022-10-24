@@ -184,7 +184,7 @@ public class LakeTable extends OlapTable {
         }
         for (long shardId : shardIds) {
             LakeTablet tablet = new LakeTablet(shardId);
-            index.addTablet(tablet, null /* tablet meta */, true /* is restore */);
+            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
         return Status.OK;
     }

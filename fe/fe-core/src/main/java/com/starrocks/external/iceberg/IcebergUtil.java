@@ -35,8 +35,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static com.starrocks.external.HiveMetaStoreTableUtils.CONNECTOR_DATABASE_ID_ID_GENERATOR;
-import static com.starrocks.external.HiveMetaStoreTableUtils.CONNECTOR_TABLE_ID_ID_GENERATOR;
+import static com.starrocks.external.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergUtil {
 
@@ -181,11 +180,13 @@ public class IcebergUtil {
     }
 
     public static IcebergTable convertCustomCatalogToSRTable(org.apache.iceberg.Table icebergTable, String catalogImpl,
-             String dbName, String tblName, Map<String, String> customProperties) throws DdlException {
+                                                             String catalogName, String dbName, String tblName,
+                                                             Map<String, String> customProperties) throws DdlException {
         Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
-        properties.put(IcebergTable.ICEBERG_CATALOG, "CUSTOM_CATALOG");
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "CUSTOM_CATALOG");
         properties.put(IcebergTable.ICEBERG_IMPL, catalogImpl);
         properties.putAll(customProperties);
         return convertToSRTable(icebergTable, properties);
@@ -199,7 +200,8 @@ public class IcebergUtil {
             return partitionNames;
         }
 
-        if (icebergTable.spec().fields().stream().anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
+        if (icebergTable.spec().fields().stream()
+                .anyMatch(partitionField -> !partitionField.transform().isIdentity())) {
             return partitionNames;
         }
 
@@ -230,11 +232,13 @@ public class IcebergUtil {
     }
 
     public static IcebergTable convertHiveCatalogToSRTable(org.apache.iceberg.Table icebergTable, String metastoreURI,
-                                                           String dbName, String tblName) throws DdlException {
+                                                           String catalogName, String dbName,
+                                                           String tblName) throws DdlException {
         Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
         properties.put(IcebergTable.ICEBERG_DB, dbName);
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
-        properties.put(IcebergTable.ICEBERG_CATALOG, "HIVE_CATALOG");
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "HIVE_CATALOG");
         properties.put(IcebergTable.ICEBERG_METASTORE_URIS, metastoreURI);
         return convertToSRTable(icebergTable, properties);
     }
@@ -251,8 +255,8 @@ public class IcebergUtil {
             fullSchema.add(column);
         }
 
-        return new IcebergTable(CONNECTOR_TABLE_ID_ID_GENERATOR.getNextId().asInt(), icebergTable.name(),
-                fullSchema, properties);
+        return new IcebergTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), icebergTable,
+                true, icebergTable.name(), fullSchema, properties);
     }
 
     public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {
@@ -310,7 +314,7 @@ public class IcebergUtil {
     }
 
     public static Database convertToSRDatabase(String dbName) {
-        return new Database(CONNECTOR_DATABASE_ID_ID_GENERATOR.getNextId().asInt(), dbName);
+        return new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
     }
 
     private static ArrayType convertToArrayType(org.apache.iceberg.types.Type icebergType) {

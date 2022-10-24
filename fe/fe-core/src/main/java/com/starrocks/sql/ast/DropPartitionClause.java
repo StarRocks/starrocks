@@ -45,11 +45,6 @@ public class DropPartitionClause extends AlterTableClause {
     }
 
     @Override
-    public boolean isSupportNewPlanner() {
-        return true;
-    }
-
-    @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropPartitionClause(this, context);
     }

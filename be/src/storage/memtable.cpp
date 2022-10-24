@@ -231,7 +231,7 @@ Status MemTable::flush(SegmentPB* seg_info) {
     {
         SCOPED_RAW_TIMER(&duration_ns);
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info));
         } else {
             RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info));
         }

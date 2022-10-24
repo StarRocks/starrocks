@@ -87,7 +87,6 @@ set(SRC_FILES
     ${GEN_CPP_DIR}/segment.pb.cc
     ${GEN_CPP_DIR}/persistent_index.pb.cc
     ${GEN_CPP_DIR}/tablet_schema.pb.cc
-    ${GEN_CPP_DIR}/lake_delete.pb.cc
     ${GEN_CPP_DIR}/lake_types.pb.cc
     ${GEN_CPP_DIR}/lake_service.pb.cc
     #$${GEN_CPP_DIR}/opcode/functions.cc

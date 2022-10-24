@@ -1317,6 +1317,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean recover_with_empty_tablet = false;
 
+    /**
+     * Limit on the number of expr children of an expr tree.
+     */
+    @ConfField(mutable = true)
+    public static int expr_children_limit = 10000;
+
     @ConfField(mutable = true)
     public static long max_planner_scalar_rewrite_num = 100000;
 
@@ -1558,6 +1564,18 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long iceberg_worker_num_threads = 64;
+
+    /**
+     * size of iceberg table refresh pool
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_table_refresh_threads = 128;
+
+    /**
+     * interval to remove cached table in iceberg refresh cache
+     */
+    @ConfField(mutable = true)
+    public static int iceberg_table_refresh_expire_sec = 86400;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs

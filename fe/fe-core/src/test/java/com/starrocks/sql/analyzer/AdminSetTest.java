@@ -20,7 +20,7 @@ public class AdminSetTest {
     @Test
     public void testAdminSetConfig() {
         analyzeSuccess("admin set frontend config(\"alter_table_timeout_second\" = \"60\");");
-        analyzeFail("admin set frontend config;", "the right syntax to use near '<EOF>'");
+        analyzeFail("admin set frontend config;", "the right syntax to use near ';' ");
     }
 
     @Test

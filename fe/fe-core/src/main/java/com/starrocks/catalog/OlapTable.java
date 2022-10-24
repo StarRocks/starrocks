@@ -69,6 +69,7 @@ import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -111,7 +112,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
          * this state means table is under PENDING alter operation(SCHEMA_CHANGE or ROLLUP), and is not
          * stable. The tablet scheduler will continue fixing the tablets of this table. And the state will
          * change back to SCHEMA_CHANGE or ROLLUP after table is stable, and continue doing alter operation.
-         * This state is a in-memory state and no need to persist.
+         * This state is an in-memory state and no need to persist.
          */
         WAITING_STABLE
     }
@@ -560,7 +561,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);
-            index.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+            index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index*/);
 
             // replicas
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
@@ -574,7 +575,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 long newReplicaId = globalStateMgr.getNextId();
                 Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                         version, schemaHash);
-                newTablet.addReplica(replica, true /* is restore */);
+                newTablet.addReplica(replica, false/* update inverted index*/);
             }
         }
         return Status.OK;
@@ -862,6 +863,10 @@ public class OlapTable extends Table implements GsonPostProcessable {
     @Override
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
+    }
+
+    public int getNumberOfPartitions() {
+        return idToPartition.size();
     }
 
     // get only temp partitions
@@ -1631,6 +1636,23 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 .modifyTableProperties(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX,
                         Boolean.valueOf(enablePersistentIndex).toString());
         tableProperty.buildEnablePersistentIndex();
+    }
+
+    public TWriteQuorumType writeQuorum() {
+        if (tableProperty != null) {
+            return tableProperty.writeQuorum();
+        }
+        return TWriteQuorumType.MAJORITY;
+    }
+
+    public void setWriteQuorum(String writeQuorum) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM,
+                        writeQuorum);
+        tableProperty.buildWriteQuorum();
     }
 
     public void setStorageMedium(TStorageMedium storageMedium) {

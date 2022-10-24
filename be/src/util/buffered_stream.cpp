@@ -146,11 +146,29 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + *nbytes)) {
         return Status::RuntimeError("bad construction of shared buffer");
     }
-    if (sb.buffer.capacity() == 0) {
-        sb.buffer.reserve(sb.size);
-        RETURN_IF_ERROR(_file->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
+
+    int head_pad = 0;
+    if (_enable_block_cache) {
+        head_pad = sb.offset % config::block_cache_block_size;
+        if (sb.buffer.capacity() == 0) {
+            // we allocate enough room aligned with `block_cache_block_size`
+            // so cache_input_stream can use this buffer and do zero copy.
+            int tail_pad = (head_pad + sb.size) % config::block_cache_block_size;
+            if (tail_pad > 0) {
+                tail_pad = config::block_cache_block_size - tail_pad;
+            }
+            sb.buffer.reserve(sb.size + head_pad + tail_pad);
+            RETURN_IF_ERROR(
+                    _file->read_at_fully(sb.offset - head_pad, sb.buffer.data(), sb.size + head_pad + tail_pad));
+        }
+    } else {
+        if (sb.buffer.capacity() == 0) {
+            sb.buffer.reserve(sb.size);
+            RETURN_IF_ERROR(_file->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
+        }
     }
-    *buffer = sb.buffer.data() + offset - sb.offset;
+
+    *buffer = sb.buffer.data() + head_pad + offset - sb.offset;
     return Status::OK();
 }
 

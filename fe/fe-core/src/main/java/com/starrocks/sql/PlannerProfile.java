@@ -5,6 +5,8 @@ package com.starrocks.sql;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.qe.ConnectContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -12,6 +14,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.starrocks.external.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
 /**
  * To timing a function or a piece of code, you could
@@ -29,6 +33,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 
 public class PlannerProfile {
+    private static final Logger LOG = LogManager.getLogger(PlannerProfile.class);
     private ConnectContext ctx;
 
     public static class ScopedTimer implements AutoCloseable {
@@ -49,6 +54,14 @@ public class PlannerProfile {
             currentThreadId = 0;
             totalTime += (System.currentTimeMillis() - startTime);
             totalCount += 1;
+            printBackgroundLog();
+        }
+
+        private void printBackgroundLog() {
+            String threadName = Thread.currentThread().getName();
+            if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
+                LOG.info("Get partitions or partition statistics cost time: {}", totalTime);
+            }
         }
 
         public long getTotalTime() {
@@ -61,6 +74,7 @@ public class PlannerProfile {
     }
 
     private final Map<String, ScopedTimer> timers = new ConcurrentHashMap<>();
+    private final Map<String, String> customProperties = new ConcurrentHashMap<>();
 
     public PlannerProfile() {
     }
@@ -73,11 +87,9 @@ public class PlannerProfile {
         return timers.computeIfAbsent(name, (key) -> new ScopedTimer());
     }
 
-    private static final PlannerProfile DEFAULT_INSTANCE = new PlannerProfile();
-
     public static ScopedTimer getScopedTimer(String name) {
         // to avoid null.
-        PlannerProfile p = DEFAULT_INSTANCE;
+        PlannerProfile p = new PlannerProfile();
         ConnectContext ctx = ConnectContext.get();
         if (ctx != null) {
             p = ctx.getPlannerProfile();
@@ -85,6 +97,20 @@ public class PlannerProfile {
         ScopedTimer t = p.getOrCreateScopedTimer(name);
         t.start();
         return t;
+    }
+
+    public static void addCustomProperties(String name, String value) {
+        PlannerProfile p = new PlannerProfile();
+        ConnectContext ctx = ConnectContext.get();
+        if (ctx != null) {
+            p = ctx.getPlannerProfile();
+        }
+        p.customProperties.put(name, value);
+
+        String threadName = Thread.currentThread().getName();
+        if (threadName.startsWith(BACKGROUND_THREAD_NAME_PREFIX)) {
+            LOG.info("Background collect hive column statistics profile: [{}:{}]", name, value);
+        }
     }
 
     private RuntimeProfile getRuntimeProfile(RuntimeProfile parent, Map<String, RuntimeProfile> cache,
@@ -119,11 +145,11 @@ public class PlannerProfile {
     }
 
     public void buildTimers(RuntimeProfile parent) {
-        List<String> keys = new ArrayList<>(timers.keySet());
-        Collections.sort(keys);
-
         Map<String, RuntimeProfile> profilers = new HashMap<>();
         profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(timers.keySet());
+        Collections.sort(keys);
         for (String key : keys) {
             String prefix = getKeyPrefix(key);
             String name = key.substring(prefix.length());
@@ -133,11 +159,29 @@ public class PlannerProfile {
         }
     }
 
+    public void buildCustomProperties(RuntimeProfile parent) {
+        Map<String, RuntimeProfile> profilers = new HashMap<>();
+        profilers.put("", parent);
+
+        List<String> keys = new ArrayList<>(customProperties.keySet());
+        Collections.sort(keys);
+
+        for (String key : keys) {
+            String prefix = getKeyPrefix(key);
+            String name = key.substring(prefix.length());
+            RuntimeProfile p = getRuntimeProfile(parent, profilers, prefix);
+            String value = customProperties.get(key);
+            p.addInfoString(name, value);
+        }
+    }
+
     public void build(RuntimeProfile parent) {
         buildTimers(parent);
+        buildCustomProperties(parent);
     }
 
     public void reset() {
         timers.clear();
+        customProperties.clear();
     }
 }

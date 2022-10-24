@@ -11,16 +11,84 @@
 
 namespace starrocks::serde {
 
-int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk) {
+EncodeContext::EncodeContext(const int col_num, const int encode_level)
+        : _session_encode_level(encode_level), _times(0) {
+    for (auto i = 0; i < col_num; ++i) {
+        _column_encode_level.emplace_back(_session_encode_level);
+        _raw_bytes.emplace_back(0);
+        _encoded_bytes.emplace_back(0);
+    }
+    DCHECK(_session_encode_level != 0);
+    // the lowest bit is set and other bits are not zero, then enable adjust.
+    if (_session_encode_level & 1 && (_session_encode_level >> 1)) {
+        _enable_adjust = true;
+    }
+}
+
+void EncodeContext::update(const int col_id, uint64_t mem_bytes, uint64_t encode_byte) {
+    DCHECK(_session_encode_level != 0);
+    if (!_enable_adjust) {
+        return;
+    }
+    // decide to encode or not by the encoding ratio of the first EncodeSamplingNum of every _frequency chunks
+    if (_times % _frequency < EncodeSamplingNum) {
+        _raw_bytes[col_id] += mem_bytes;
+        _encoded_bytes[col_id] += encode_byte;
+    }
+}
+
+// if encode ratio < EncodeRatioLimit, encode it, otherwise not.
+void EncodeContext::_adjust(const int col_id) {
+    auto old_level = _column_encode_level[col_id];
+    if (_encoded_bytes[col_id] < _raw_bytes[col_id] * EncodeRatioLimit) {
+        _column_encode_level[col_id] = _session_encode_level;
+    } else {
+        _column_encode_level[col_id] = 0;
+    }
+    if (old_level != _column_encode_level[col_id] || _session_encode_level < -1) {
+        LOG(WARNING) << "Old encode level " << old_level << " is changed to " << _column_encode_level[col_id]
+                     << " because the first " << EncodeSamplingNum << " of " << _frequency << " in total " << _times
+                     << " chunks' compression ratio is " << _encoded_bytes[col_id] * 1.0 / _raw_bytes[col_id]
+                     << " higher than limit " << EncodeRatioLimit;
+    }
+    _encoded_bytes[col_id] = 0;
+    _raw_bytes[col_id] = 0;
+}
+
+void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
+    res->mutable_encode_level()->Reserve(static_cast<int>(_column_encode_level.size()));
+    for (const auto& level : _column_encode_level) {
+        res->mutable_encode_level()->Add(level);
+    }
+    ++_times;
+    // must adjust after writing the current encode_level
+    if (_enable_adjust && (_times % _frequency == EncodeSamplingNum)) {
+        for (auto col_id = 0; col_id < _column_encode_level.size(); ++col_id) {
+            _adjust(col_id);
+        }
+        _frequency = _frequency > 1000000000 ? _frequency : _frequency * 2;
+    }
+}
+
+int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk,
+                                                std::shared_ptr<EncodeContext> context) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
-    for (const auto& column : chunk.columns()) {
-        serialized_size += ColumnArraySerde::max_serialized_size(*column);
+
+    if (context == nullptr) {
+        for (const auto& column : chunk.columns()) {
+            serialized_size += ColumnArraySerde::max_serialized_size(*column);
+        }
+    } else {
+        for (auto i = 0; i < chunk.columns().size(); ++i) {
+            serialized_size += ColumnArraySerde::max_serialized_size(*chunk.columns()[i], context->get_encode_level(i));
+        }
     }
     return serialized_size;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk) {
-    StatusOr<ChunkPB> res = serialize_without_meta(chunk);
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
+                                                std::shared_ptr<EncodeContext> context) {
+    StatusOr<ChunkPB> res = serialize_without_meta(chunk, context);
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
@@ -53,27 +121,45 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk) 
     return res;
 }
 
-StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::Chunk& chunk) {
+StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::Chunk& chunk,
+                                                             std::shared_ptr<EncodeContext> context) {
     ChunkPB chunk_pb;
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 
     std::string* serialized_data = chunk_pb.mutable_data();
-    raw::stl_string_resize_uninitialized(serialized_data, ProtobufChunkSerde::max_serialized_size(chunk));
+    raw::stl_string_resize_uninitialized(serialized_data, ProtobufChunkSerde::max_serialized_size(chunk, context));
     auto* buff = reinterpret_cast<uint8_t*>(serialized_data->data());
     encode_fixed32_le(buff + 0, 1);
     encode_fixed32_le(buff + 4, chunk.num_rows());
     buff = buff + 8;
 
-    for (const auto& column : chunk.columns()) {
-        buff = ColumnArraySerde::serialize(*column, buff);
-        if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
+    if (context == nullptr) {
+        for (const auto& column : chunk.columns()) {
+            buff = ColumnArraySerde::serialize(*column, buff);
+            if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
+        }
+    } else {
+        for (auto i = 0; i < chunk.columns().size(); ++i) {
+            auto buff_begin = buff;
+            buff = ColumnArraySerde::serialize(*chunk.columns()[i], buff, false, context->get_encode_level(i));
+            if (UNLIKELY(buff == nullptr)) return Status::InternalError("has unsupported column");
+            context->update(i, chunk.columns()[i]->byte_size(), buff - buff_begin);
+        }
     }
     chunk_pb.set_serialized_size(buff - reinterpret_cast<const uint8_t*>(serialized_data->data()));
+    serialized_data->resize(chunk_pb.serialized_size());
     chunk_pb.set_uncompressed_size(serialized_data->size());
+    if (context) {
+        VLOG_ROW << "pb serialize data, memory bytes = " << chunk.bytes_usage()
+                 << " serialized size = " << chunk_pb.serialized_size()
+                 << " uncompressed size = " << chunk_pb.uncompressed_size()
+                 << " serialize ratio = " << chunk_pb.serialized_size() * 1.0 / chunk.bytes_usage();
+    }
     return std::move(chunk_pb);
 }
 
-StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb) {
+StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor& row_desc, const ChunkPB& chunk_pb,
+                                                            const int encode_level) {
     auto res = build_protobuf_chunk_meta(row_desc, chunk_pb);
     if (!res.ok()) {
         return res.status();
@@ -82,7 +168,7 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
         return Status::InvalidArgument("not data in ChunkPB");
     }
     int64_t deserialized_size = 0;
-    ProtobufChunkDeserializer deserializer(*res);
+    ProtobufChunkDeserializer deserializer(*res, &chunk_pb, encode_level);
     StatusOr<vectorized::Chunk> chunk = deserializer.deserialize(chunk_pb.data(), &deserialized_size);
     if (!chunk.ok()) return chunk;
 
@@ -99,7 +185,8 @@ StatusOr<vectorized::Chunk> ProtobufChunkSerde::deserialize(const RowDescriptor&
     // of calling `ProtobufChunkSerde::max_serialized_size()`.
     if (UNLIKELY(deserialized_size != chunk_pb.serialized_size())) {
         size_t expected = ProtobufChunkSerde::max_serialized_size(*chunk);
-        if (UNLIKELY(chunk_pb.data().size() != expected)) {
+        // if encode_level != 0, chunk_pb.data().size() is usually not equal to expected.
+        if (encode_level == 0 && UNLIKELY(chunk_pb.data().size() != expected)) {
             return Status::InternalError(strings::Substitute(
                     "deserialize chunk data failed. len: $0, expected: $1, ser_size: $2, deser_size: $3",
                     chunk_pb.data().size(), expected, chunk_pb.serialized_size(), deserialized_size));
@@ -129,8 +216,15 @@ StatusOr<vectorized::Chunk> ProtobufChunkDeserializer::deserialize(std::string_v
         columns[i] = ColumnHelper::create_column(_meta.types[i], _meta.is_nulls[i], _meta.is_consts[i], rows);
     }
 
-    for (auto& column : columns) {
-        cur = ColumnArraySerde::deserialize(cur, column.get());
+    if (_encode_level.empty()) {
+        for (auto& column : columns) {
+            cur = ColumnArraySerde::deserialize(cur, column.get());
+        }
+    } else {
+        DCHECK(_encode_level.size() == columns.size());
+        for (auto i = 0; i < columns.size(); ++i) {
+            cur = ColumnArraySerde::deserialize(cur, columns[i].get(), false, _encode_level[i]);
+        }
     }
 
     for (auto& col : columns) {

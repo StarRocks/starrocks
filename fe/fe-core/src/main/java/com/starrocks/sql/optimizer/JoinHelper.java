@@ -122,13 +122,14 @@ public class JoinHelper {
      * Conditions should contain:
      * 1. binary predicate operator is EQ or EQ_FOR_NULL type
      * 2. operands in each side of operator should totally belong to each side of join's input
+     *
      * @param leftColumns
      * @param rightColumns
      * @param predicate
      * @return
      */
     private static boolean isEqualBinaryPredicate(ColumnRefSet leftColumns, ColumnRefSet rightColumns,
-                                                 ScalarOperator predicate) {
+                                                  ScalarOperator predicate) {
         if (predicate instanceof BinaryPredicateOperator) {
             BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
             if (!binaryPredicate.getBinaryType().isEquivalence()) {

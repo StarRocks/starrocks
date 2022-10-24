@@ -24,6 +24,7 @@ package com.starrocks.common;
 import com.google.common.base.Strings;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.mysql.privilege.Role;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.system.SystemInfoService;
 
 public class FeNameFormat {
@@ -90,9 +91,9 @@ public class FeNameFormat {
         }
     }
 
-    public static void checkLabel(String label) throws AnalysisException {
+    public static void checkLabel(String label) {
         if (Strings.isNullOrEmpty(label) || !label.matches(LABEL_REGEX)) {
-            throw new AnalysisException("Label format error. regex: " + LABEL_REGEX + ", label: " + label);
+            throw new SemanticException("Label format error. regex: " + LABEL_REGEX + ", label: " + label);
         }
     }
 
@@ -128,9 +129,9 @@ public class FeNameFormat {
         checkCommonName("catalog", catalogName);
     }
 
-    public static void checkCommonName(String type, String name) throws AnalysisException {
+    public static void checkCommonName(String type, String name) {
         if (Strings.isNullOrEmpty(name) || !name.matches(COMMON_NAME_REGEX)) {
-            ErrorReport.reportAnalysisException(ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_NAME_FORMAT, type, name);
         }
     }
 }

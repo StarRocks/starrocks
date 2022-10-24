@@ -24,13 +24,12 @@ package com.starrocks.load.loadv2;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AlterLoadStmt;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.LabelName;
-import com.starrocks.analysis.LoadStmt;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.MetaNotFoundException;
@@ -42,7 +41,9 @@ import com.starrocks.load.EtlJobType;
 import com.starrocks.load.EtlStatus;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
+import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.task.LeaderTask;
 import com.starrocks.task.LeaderTaskExecutor;
 import com.starrocks.task.PriorityLeaderTask;
@@ -178,12 +179,12 @@ public class BrokerLoadJobTest {
 
     @Test
     public void testAlterLoad(@Injectable LoadStmt loadStmt,
-            @Injectable AlterLoadStmt alterLoadStmt,
-            @Injectable DataDescription dataDescription,
-            @Injectable LabelName labelName,
-            @Injectable Database database,
-            @Injectable OlapTable olapTable,
-            @Mocked GlobalStateMgr globalStateMgr) {
+                              @Injectable AlterLoadStmt alterLoadStmt,
+                              @Injectable DataDescription dataDescription,
+                              @Injectable LabelName labelName,
+                              @Injectable Database database,
+                              @Injectable OlapTable olapTable,
+                              @Mocked GlobalStateMgr globalStateMgr) {
 
         String label = "label";
         long dbId = 1;
@@ -248,6 +249,7 @@ public class BrokerLoadJobTest {
         }
 
     }
+
     @Test
     public void testGetTableNames(@Injectable BrokerFileGroupAggInfo fileGroupAggInfo,
                                   @Injectable BrokerFileGroup brokerFileGroup,
@@ -346,6 +348,7 @@ public class BrokerLoadJobTest {
                                           @Mocked PriorityLeaderTaskExecutor priorityLeaderTaskExecutor,
                                           @Injectable OlapTable olapTable,
                                           @Mocked LoadingTaskPlanner loadingTaskPlanner) {
+        Config.enable_pipeline_load = false;
         BrokerLoadJob brokerLoadJob = new BrokerLoadJob();
         Deencapsulation.setField(brokerLoadJob, "state", JobState.LOADING);
         long taskId = 1L;
@@ -401,6 +404,7 @@ public class BrokerLoadJobTest {
         Assert.assertEquals(true, finishedTaskIds.contains(taskId));
         Map<Long, LoadTask> idToTasks = Deencapsulation.getField(brokerLoadJob, "idToTasks");
         Assert.assertEquals(3, idToTasks.size());
+        Config.enable_pipeline_load = true;
     }
 
     @Test

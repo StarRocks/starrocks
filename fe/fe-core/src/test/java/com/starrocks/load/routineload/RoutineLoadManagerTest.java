@@ -24,12 +24,8 @@ package com.starrocks.load.routineload;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ColumnSeparator;
-import com.starrocks.analysis.CreateRoutineLoadStmt;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.PauseRoutineLoadStmt;
-import com.starrocks.analysis.ResumeRoutineLoadStmt;
-import com.starrocks.analysis.StopRoutineLoadStmt;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -48,6 +44,10 @@ import com.starrocks.persist.RoutineLoadOperation;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.PauseRoutineLoadStmt;
+import com.starrocks.sql.ast.ResumeRoutineLoadStmt;
+import com.starrocks.sql.ast.StopRoutineLoadStmt;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResourceInfo;
 import com.starrocks.utframe.UtFrameUtils;
@@ -785,7 +785,7 @@ public class RoutineLoadManagerTest {
         // 1. create a job that will be discard after image load
         long discardJobId = 1L;
         RoutineLoadJob discardJob = new KafkaRoutineLoadJob(discardJobId, "discardJob",
-                 1, 1, "xxx", "xxtopic");
+                1, 1, "xxx", "xxtopic");
         discardJob.setOrigStmt(new OriginStatement(createSQL, 0));
         leaderLoadManager.addRoutineLoadJob(discardJob, db);
         discardJob.updateState(RoutineLoadJob.JobState.CANCELLED,

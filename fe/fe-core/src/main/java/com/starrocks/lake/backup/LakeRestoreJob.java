@@ -33,10 +33,10 @@ import com.starrocks.common.io.Text;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.StorageInfo;
-import com.starrocks.lake.proto.RestoreInfo;
-import com.starrocks.lake.proto.RestoreSnapshotsRequest;
-import com.starrocks.lake.proto.RestoreSnapshotsResponse;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.proto.RestoreInfo;
+import com.starrocks.proto.RestoreSnapshotsRequest;
+import com.starrocks.proto.RestoreSnapshotsResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
@@ -64,7 +64,8 @@ public class LakeRestoreJob extends RestoreJob {
 
     private Map<Long, Future<RestoreSnapshotsResponse>> responses = Maps.newHashMap();
 
-    public LakeRestoreJob() {}
+    public LakeRestoreJob() {
+    }
 
     public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
                           boolean allowLoad, int restoreReplicationNum, long timeoutMs,

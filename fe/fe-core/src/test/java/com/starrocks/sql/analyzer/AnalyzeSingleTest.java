@@ -1,12 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.StatementBase;
+import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.utframe.UtFrameUtils;
@@ -510,5 +511,40 @@ public class AnalyzeSingleTest {
     @Test
     public void testSync() {
         analyzeSuccess("sync");
+    }
+
+    @Test
+    public void testUnsupportedStatement() {
+        analyzeSuccess("start transaction");
+        analyzeSuccess("start transaction with consistent snapshot");
+        analyzeSuccess("begin");
+        analyzeSuccess("begin work");
+        analyzeSuccess("commit");
+        analyzeSuccess("commit work");
+        analyzeSuccess("commit and no chain release");
+        analyzeSuccess("rollback");
+    }
+
+    @Test
+    public void testASTChildCountLimit() {
+        Config.expr_children_limit = 5;
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5)");
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4)");
+
+        analyzeFail("select * from test.t0 where v1 in (1,2,3,4,5,6)",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select [1,2,3,4,5,6]",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select array<int>[1,2,3,4,5,6]",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("select * from (values(1,2,3,4,5,6)) t",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("insert into t0 values(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3),(1,2,3)",
+                "Expression child number 6 exceeded the maximum 5");
+        analyzeFail("insert into t0 values(1,2,3,4,5,6)",
+                "Expression child number 6 exceeded the maximum 5");
+
+        Config.expr_children_limit = 100000;
+        analyzeSuccess("select * from test.t0 where v1 in (1,2,3,4,5,6)");
     }
 }

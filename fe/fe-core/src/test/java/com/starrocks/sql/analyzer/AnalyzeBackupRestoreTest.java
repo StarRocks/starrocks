@@ -114,9 +114,9 @@ public class AnalyzeBackupRestoreTest {
 
     @Test
     public void testShowRestore() {
-        analyzeSuccess("SHOW RESTORE FROM `test`;").toSql();
-        analyzeSuccess("SHOW RESTORE FROM test where true;").toSql();
-        analyzeSuccess("SHOW RESTORE;").toSql();
+        analyzeSuccess("SHOW RESTORE FROM `test`;");
+        analyzeSuccess("SHOW RESTORE FROM test where true;");
+        analyzeSuccess("SHOW RESTORE;");
         analyzeSuccess("SHOW RESTORE WHERE a=1;");
         analyzeFail("SHOW RESTORE FROM test1;");
         analyzeFail("SHOW RESTORE FROM `a:test1`;");

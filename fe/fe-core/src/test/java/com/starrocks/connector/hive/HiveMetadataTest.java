@@ -11,12 +11,11 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.external.CachingRemoteFileIO;
+import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.RemoteFileBlockDesc;
 import com.starrocks.external.RemoteFileDesc;
 import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.RemotePathKey;
-import com.starrocks.external.Utils;
 import com.starrocks.external.hive.CachingHiveMetastore;
 import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HiveMetastore;
@@ -44,6 +43,7 @@ import org.junit.Test;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -78,14 +78,14 @@ public class HiveMetadataTest {
         metastore = new HiveMetastore(client, "hive_catalog");
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
                 metastore, executorForHmsRefresh, 100, 10, 1000, false);
-        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore);
+        hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true);
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(TEST_FILES);
         hiveRemoteFileIO.setFileSystem(fs);
         cachingRemoteFileIO = CachingRemoteFileIO.createCatalogLevelInstance(
                 hiveRemoteFileIO, executorForRemoteFileRefresh, 100, 10, 10);
-        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false);
+        fileOps = new RemoteFileOperations(cachingRemoteFileIO, executorForPullFiles, false, true);
         statisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
 
         UtFrameUtils.createMinStarRocksCluster();
@@ -93,7 +93,7 @@ public class HiveMetadataTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
         optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
-        hiveMetadata = new HiveMetadata("xxx", "hive_catalog", hmsOps, fileOps, statisticsProvider);
+        hiveMetadata = new HiveMetadata("hive_catalog", hmsOps, fileOps, statisticsProvider, Optional.empty());
     }
 
     @After
@@ -137,7 +137,7 @@ public class HiveMetadataTest {
         Assert.assertEquals("tbl1", hiveTable.getTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getHdfsPath());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());
@@ -147,23 +147,23 @@ public class HiveMetadataTest {
     public void testGetHiveRemoteFiles() throws AnalysisException {
         FeConstants.runningUnitTest = true;
         String tableLocation = "hdfs://127.0.0.1:10000/hive.db/hive_tbl";
-        RemotePathKey pathKey = RemotePathKey.of(tableLocation, false);
-
         HiveMetaClient client = new HiveMetastoreTest.MockedHiveMetaClient();
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog");
         List<String> partitionNames = Lists.newArrayList("col1=1", "col1=2");
         Map<String, Partition> partitions = metastore.getPartitionsByNames("db1", "table1", partitionNames);
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
 
-        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
-        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         List<RemoteFileInfo> remoteFileInfos = hiveMetadata.getRemoteFileInfos(
                 hiveTable, Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));
         Assert.assertEquals(2, remoteFileInfos.size());
 
         RemoteFileInfo fileInfo = remoteFileInfos.get(0);
-        Assert.assertEquals(RemoteFileInputFormat.PARQUET, fileInfo.getFormat());
+        Assert.assertEquals(RemoteFileInputFormat.ORC, fileInfo.getFormat());
         Assert.assertEquals("hdfs://127.0.0.1:10000/hive.db/hive_tbl/col1=1", fileInfo.getFullPath());
 
         List<RemoteFileDesc> fileDescs = remoteFileInfos.get(0).getFiles();
@@ -191,8 +191,10 @@ public class HiveMetadataTest {
         HiveTable hiveTable = (HiveTable) hmsOps.getTable("db1", "table1");
         ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
-        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
-        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("2"), hiveTable.getPartitionColumns());
 
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
@@ -208,8 +210,10 @@ public class HiveMetadataTest {
         HiveTable hiveTable = (HiveTable) hiveMetadata.getTable("db1", "table1");
         ColumnRefOperator partColumnRefOperator = new ColumnRefOperator(0, Type.INT, "col1", true);
         ColumnRefOperator dataColumnRefOperator = new ColumnRefOperator(1, Type.INT, "col2", true);
-        PartitionKey hivePartitionKey1 = Utils.createPartitionKey(Lists.newArrayList("1"), hiveTable.getPartitionColumns());
-        PartitionKey hivePartitionKey2 = Utils.createPartitionKey(Lists.newArrayList("2"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey1 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("1"), hiveTable.getPartitionColumns());
+        PartitionKey hivePartitionKey2 = PartitionUtil.createPartitionKey(
+                Lists.newArrayList("2"), hiveTable.getPartitionColumns());
         Statistics statistics = hiveMetadata.getTableStatistics(
                 optimizerContext, hiveTable, Lists.newArrayList(partColumnRefOperator, dataColumnRefOperator),
                 Lists.newArrayList(hivePartitionKey1, hivePartitionKey2));

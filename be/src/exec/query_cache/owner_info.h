@@ -23,6 +23,7 @@ public:
         _owner_id = owner_id | (is_last_chunk ? LAST_CHUNK_BIT : 0);
     }
     int64_t owner_id() const { return _owner_id & LANE_OWNER_BITS; }
+    void set_last_chunk(bool on) { _owner_id = _owner_id | (on ? LAST_CHUNK_BIT : 0); }
     bool is_last_chunk() const { return (_owner_id & LAST_CHUNK_BIT) == LAST_CHUNK_BIT; }
     void set_passthrough(bool on) {
         if (on) {

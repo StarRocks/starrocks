@@ -217,6 +217,10 @@ public class Function implements Writable {
         this.userVisible = userVisible;
     }
 
+    public void setArgsType(Type[] newTypes) {
+        argTypes = newTypes;
+    }
+
     public Type getVarArgsType() {
         if (!hasVarArgs) {
             return Type.INVALID;

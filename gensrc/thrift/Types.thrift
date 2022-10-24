@@ -357,6 +357,7 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
+    DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW
@@ -447,4 +448,10 @@ enum TCompressionType {
     DEFLATE = 9;
     BZIP2 = 10;
     LZO = 11; // Deprecated
+}
+
+enum TWriteQuorumType {
+    ONE = 0;
+    MAJORITY = 1;
+    ALL = 2;
 }

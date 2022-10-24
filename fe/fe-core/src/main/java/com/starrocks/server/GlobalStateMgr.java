@@ -33,13 +33,7 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.CancelAlterSystemStmt;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.InstallPluginStmt;
-import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableName;
-import com.starrocks.analysis.UninstallPluginStmt;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -107,11 +101,12 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.QueryableReentrantLock;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.Util;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
-import com.starrocks.external.hive.HiveRepository;
 import com.starrocks.external.hive.events.MetastoreEventsProcessor;
 import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
@@ -193,7 +188,10 @@ import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
+import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.CancelAlterSystemStmt;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelBackupStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
@@ -203,6 +201,7 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.RecoverDbStmt;
@@ -210,9 +209,11 @@ import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
 import com.starrocks.sql.ast.RefreshTableStmt;
 import com.starrocks.sql.ast.ReplacePartitionClause;
+import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.sql.ast.RollupRenameClause;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -233,6 +234,7 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TTabletMetaType;
+import com.starrocks.thrift.TWriteQuorumType;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.PublishVersionDaemon;
 import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
@@ -307,9 +309,8 @@ public class GlobalStateMgr {
     private Daemon timePrinter;
     private EsRepository esRepository;  // it is a daemon, so add it here
     private StarRocksRepository starRocksRepository;
-    private HiveRepository hiveRepository;
-    private MetastoreEventsProcessor metastoreEventsProcessor;
     private IcebergRepository icebergRepository;
+    private MetastoreEventsProcessor metastoreEventsProcessor;
 
     // set to true after finished replay all meta and ready to serve
     // set to false when globalStateMgr is not ready.
@@ -540,9 +541,7 @@ public class GlobalStateMgr {
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
-        this.hiveRepository = new HiveRepository();
         this.icebergRepository = new IcebergRepository();
-        this.metastoreEventsProcessor = new MetastoreEventsProcessor(hiveRepository);
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -584,8 +583,8 @@ public class GlobalStateMgr {
         }
 
         this.localMetastore = new LocalMetastore(this, recycleBin, colocateTableIndex, nodeMgr.getClusterInfo());
-        this.metadataMgr = new MetadataMgr(localMetastore);
-        this.connectorMgr = new ConnectorMgr(metadataMgr);
+        this.connectorMgr = new ConnectorMgr();
+        this.metadataMgr = new MetadataMgr(localMetastore, connectorMgr);
         this.catalogMgr = new CatalogMgr(connectorMgr);
         this.taskManager = new TaskManager();
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
@@ -1109,11 +1108,12 @@ public class GlobalStateMgr {
         starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
+            // TODO(stephen): refactor auto sync hive metadata cache
             // load hive table to event processor and start to process hms events.
-            metastoreEventsProcessor.init();
-            metastoreEventsProcessor.start();
+            // metastoreEventsProcessor.init();
+            // metastoreEventsProcessor.start();
         }
-        if (! usingNewPrivilege) {
+        if (!usingNewPrivilege) {
             // domain resolver
             domainResolver.start();
         }
@@ -2127,6 +2127,13 @@ public class GlobalStateMgr {
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
+            // write quorum
+            if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
+                        .append("\" = \"");
+                sb.append(WriteQuorum.writeQuorumToName(olapTable.writeQuorum())).append("\"");
+            }
+
             // compression type
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_COMPRESSION)
                     .append("\" = \"");
@@ -2260,7 +2267,7 @@ public class GlobalStateMgr {
             // properties
             sb.append("\nPROPERTIES (\n");
             sb.append("\"database\" = \"").append(hudiTable.getDbName()).append("\",\n");
-            sb.append("\"table\" = \"").append(hudiTable.getTable()).append("\",\n");
+            sb.append("\"table\" = \"").append(hudiTable.getTableName()).append("\",\n");
             sb.append("\"resource\" = \"").append(hudiTable.getResourceName()).append("\"");
             sb.append("\n)");
         } else if (table.getType() == TableType.ICEBERG) {
@@ -2607,17 +2614,10 @@ public class GlobalStateMgr {
         return this.starRocksRepository;
     }
 
-    public HiveRepository getHiveRepository() {
-        return this.hiveRepository;
-    }
-
-    public void setHiveRepository(HiveRepository hiveRepository) {
-        this.hiveRepository = hiveRepository;
-    }
-
     public IcebergRepository getIcebergRepository() {
         return this.icebergRepository;
     }
+
 
     public MetastoreEventsProcessor getMetastoreEventsProcessor() {
         return this.metastoreEventsProcessor;
@@ -2917,10 +2917,18 @@ public class GlobalStateMgr {
         // Check auth for internal catalog.
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
-        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog()) &&
-                !auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    ctx.getQualifiedUser(), dbName);
+        if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
+            if (usingNewPrivilege) {
+                if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                            ctx.getQualifiedUser(), dbName);
+                }
+            } else {
+                if (!auth.checkDbPriv(ctx, dbName, PrivPredicate.SHOW)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                            ctx.getQualifiedUser(), dbName);
+                }
+            }
         }
 
         if (metadataMgr.getDb(ctx.getCurrentCatalog(), dbName) == null) {
@@ -3038,31 +3046,32 @@ public class GlobalStateMgr {
         return task;
     }
 
-    public void refreshExternalTable(TableName tableName, List<String> partitions) throws DdlException {
+    public void refreshExternalTable(TableName tableName, List<String> partitions) {
         String catalogName = tableName.getCatalog();
         String dbName = tableName.getDb();
         String tblName = tableName.getTbl();
         Database db = metadataMgr.getDb(catalogName, tableName.getDb());
         if (db == null) {
-            throw new DdlException("db: " + tableName.getDb() + " not exists");
+            throw new StarRocksConnectorException("db: " + tableName.getDb() + " not exists");
         }
-        HiveMetaStoreTable table;
+        HiveMetaStoreTable hmsTable;
+        Table table;
         db.readLock();
         try {
-            Table tbl = metadataMgr.getTable(catalogName, dbName, tblName);
-            if (tbl == null || !(tbl instanceof HiveMetaStoreTable)) {
-                throw new DdlException("table : " + tableName + " not exists, or is not hive/hudi external table");
+            table = metadataMgr.getTable(catalogName, dbName, tblName);
+            if (!(table instanceof HiveMetaStoreTable)) {
+                throw new StarRocksConnectorException("table : " + tableName + " not exists, or is not hive/hudi external table");
             }
-            table = (HiveMetaStoreTable) tbl;
+            hmsTable = (HiveMetaStoreTable) table;
         } finally {
             db.readUnlock();
         }
 
-        if (partitions != null && partitions.size() > 0) {
-            table.refreshPartCache(partitions);
-        } else {
-            table.refreshTableCache(dbName, tblName);
+        if (CatalogMgr.isInternalCatalog(catalogName)) {
+            catalogName = hmsTable.getCatalogName();
         }
+
+        metadataMgr.refreshTable(catalogName, dbName, tblName, table, partitions);
     }
 
     public void initDefaultCluster() {

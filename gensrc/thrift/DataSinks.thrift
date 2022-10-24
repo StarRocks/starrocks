@@ -56,7 +56,7 @@ struct TResultFileSinkOptions {
     7: optional map<string, string> broker_properties // only for remote file.
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    8: optional bool use_broker = false
+    8: optional bool use_broker
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     9: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -138,7 +138,7 @@ struct TExportSink {
 
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    7: optional bool use_broker = false
+    7: optional bool use_broker
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     8: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -166,6 +166,7 @@ struct TOlapTableSink {
     15: optional bool is_lake_table
     16: optional string txn_trace_parent
     17: optional Types.TKeysType keys_type
+    18: optional Types.TWriteQuorumType write_quorum_type
 }
 
 struct TDataSink {

@@ -4,6 +4,7 @@ package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.DdlException;
+import com.starrocks.connector.delta.DeltaLakeConnectorFactory;
 import com.starrocks.connector.hive.HiveConnectorFactory;
 import com.starrocks.connector.hudi.HudiConnectorFactory;
 import com.starrocks.connector.iceberg.IcebergConnectorFactory;
@@ -23,10 +24,7 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    private final MetadataMgr metadataMgr;
-
-    public ConnectorMgr(MetadataMgr metadataMgr) {
-        this.metadataMgr = metadataMgr;
+    public ConnectorMgr() {
         init();
     }
 
@@ -36,6 +34,7 @@ public class ConnectorMgr {
         addConnectorFactory(new IcebergConnectorFactory());
         addConnectorFactory(new HudiConnectorFactory());
         addConnectorFactory(new JDBCConnectorFactory());
+        addConnectorFactory(new DeltaLakeConnectorFactory());
     }
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {
@@ -64,25 +63,10 @@ public class ConnectorMgr {
         writeLock();
         try {
             connectors.put(catalogName, connector);
+            return connector;
         } finally {
             writeUnLock();
         }
-
-        // TODO (stephen): to test behavior that failed to create connector when fe starting.
-        try {
-            registerConnectorInternal(connector, context);
-        } catch (Exception e) {
-            writeLock();
-            try {
-                connectors.remove(catalogName);
-            } finally {
-                writeUnLock();
-            }
-            connector.shutdown();
-            throw new DdlException(String.format("Failed to create connector on [catalog : %s, type : %s]",
-                    catalogName, type), e);
-        }
-        return connector;
     }
 
     public void removeConnector(String catalogName) {
@@ -93,7 +77,6 @@ public class ConnectorMgr {
             readUnlock();
         }
 
-        removeConnectorInternal(catalogName);
         writeLock();
         try {
             Connector connector = connectors.remove(catalogName);
@@ -112,12 +95,13 @@ public class ConnectorMgr {
         }
     }
 
-    private void registerConnectorInternal(Connector connector, ConnectorContext context) throws Exception {
-        metadataMgr.addMetadata(context.getCatalogName(), connector.getMetadata());
-    }
-
-    private void removeConnectorInternal(String catalogName) {
-        metadataMgr.removeMetadata(catalogName);
+    public Connector getConnector(String catalogName) {
+        readLock();
+        try {
+            return connectors.get(catalogName);
+        } finally {
+            readUnlock();
+        }
     }
 
     private void readLock() {

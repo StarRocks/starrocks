@@ -7,12 +7,13 @@ import java.util.List;
 /**
  * Generate data by the control of `totalCount` & `multiplier`.
  * eg, data: [a, b, c], totalCount: 6, multiplier: 2, the generator will output each time:
- *   a,
- *   a,
- *   b,
- *   b,
- *   c,
- *   c
+ * a,
+ * a,
+ * b,
+ * b,
+ * c,
+ * c
+ *
  * @param <T>
  */
 public class Generator<T> {

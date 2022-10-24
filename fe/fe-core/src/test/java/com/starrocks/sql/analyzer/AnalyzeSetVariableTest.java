@@ -1,9 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.SetPassVar;
-import com.starrocks.analysis.SetStmt;
 import com.starrocks.analysis.Subquery;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;

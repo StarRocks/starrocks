@@ -16,6 +16,10 @@ public class ActionSet {
         }
     }
 
+    public ActionSet(ActionSet other) {
+        this.bitSet = other.bitSet;
+    }
+
     /**
      * private constructor: only construct by ActionSet itself
      */
@@ -37,6 +41,10 @@ public class ActionSet {
 
     public ActionSet difference(ActionSet other) {
         return new ActionSet(~bitSet & other.bitSet);
+    }
+
+    public boolean contains(ActionSet other) {
+        return (~bitSet & other.bitSet) == 0;
     }
 
     public boolean isEmpty() {

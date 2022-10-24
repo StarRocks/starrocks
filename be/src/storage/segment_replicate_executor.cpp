@@ -193,8 +193,13 @@ ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_t
         _replicate_channels.emplace_back(std::move(std::make_unique<ReplicateChannel>(
                 opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id())));
     }
-    // default quorom policy
-    _max_fail_replica_num = opt->replicas.size() - (opt->replicas.size() / 2 + 1);
+    if (opt->write_quorum == WriteQuorumTypePB::ONE) {
+        _max_fail_replica_num = opt->replicas.size();
+    } else if (opt->write_quorum == WriteQuorumTypePB::ALL) {
+        _max_fail_replica_num = 0;
+    } else {
+        _max_fail_replica_num = opt->replicas.size() - (opt->replicas.size() / 2 + 1);
+    }
 }
 
 Status ReplicateToken::submit(std::unique_ptr<SegmentPB> segment, bool eos) {
@@ -230,20 +235,40 @@ void ReplicateToken::_sync_segment(std::unique_ptr<SegmentPB> segment, bool eos)
     // 1. read segment from local storage
     butil::IOBuf data;
     if (segment) {
-        auto res = _fs->new_random_access_file(segment->path());
-        if (!res.ok()) {
-            LOG(WARNING) << "Failed to open file " << segment->DebugString() << " by " << debug_string() << " err "
-                         << res.status();
-            return set_status(res.status());
+        // 1.1 read segment file
+        if (segment->has_path()) {
+            auto res = _fs->new_random_access_file(segment->path());
+            if (!res.ok()) {
+                LOG(WARNING) << "Failed to open segment file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << res.status();
+                return set_status(res.status());
+            }
+            auto rfile = std::move(res.value());
+            auto buf = new uint8[segment->data_size()];
+            data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[](uint8*) buf; });
+            auto st = rfile->read_fully(buf, segment->data_size());
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to read segment " << segment->DebugString() << " by " << debug_string()
+                             << " err " << st;
+                return set_status(st);
+            }
         }
-        auto rfile = std::move(res.value());
-        auto buf = new uint8[segment->data_size()];
-        data.append_user_data(buf, segment->data_size(), [](void* buf) { delete[](uint8*) buf; });
-        auto st = rfile->read_fully(buf, segment->data_size());
-        if (!st.ok()) {
-            LOG(WARNING) << "Failed to read segment " << segment->DebugString() << " by " << debug_string() << " err "
-                         << st;
-            return set_status(st);
+        if (segment->has_delete_path()) {
+            auto res = _fs->new_random_access_file(segment->delete_path());
+            if (!res.ok()) {
+                LOG(WARNING) << "Failed to open delete file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << res.status();
+                return set_status(res.status());
+            }
+            auto rfile = std::move(res.value());
+            auto buf = new uint8[segment->delete_data_size()];
+            data.append_user_data(buf, segment->delete_data_size(), [](void* buf) { delete[](uint8*) buf; });
+            auto st = rfile->read_fully(buf, segment->delete_data_size());
+            if (!st.ok()) {
+                LOG(WARNING) << "Failed to read delete file " << segment->DebugString() << " by " << debug_string()
+                             << " err " << st;
+                return set_status(st);
+            }
         }
     }
 
