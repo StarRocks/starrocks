@@ -30,6 +30,11 @@ public class MaterializationContext {
     // for partitioned mv, records the partitions that need to be refreshed
     Set<String> partitionNamesToRefresh;
 
+    // Logical OptExpression for query
+    private OptExpression queryExpression;
+
+    private ColumnRefFactory queryRefFactory;
+
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory columnRefFactory,
@@ -72,5 +77,21 @@ public class MaterializationContext {
 
     public void setScanMvOutputExpressions(List<ColumnRefOperator> scanMvOutputExpressions) {
         this.scanMvOutputExpressions = scanMvOutputExpressions;
+    }
+
+    public OptExpression getQueryExpression() {
+        return queryExpression;
+    }
+
+    public void setQueryExpression(OptExpression queryExpression) {
+        this.queryExpression = queryExpression;
+    }
+
+    public ColumnRefFactory getQueryRefFactory() {
+        return queryRefFactory;
+    }
+
+    public void setQueryRefFactory(ColumnRefFactory queryRefFactory) {
+        this.queryRefFactory = queryRefFactory;
     }
 }

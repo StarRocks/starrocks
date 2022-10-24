@@ -2,34 +2,11 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Database;
-import com.starrocks.catalog.LocalTablet;
-import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.Replica;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.qe.StmtExecutor;
-import com.starrocks.scheduler.Task;
-import com.starrocks.scheduler.TaskBuilder;
-import com.starrocks.scheduler.TaskRun;
-import com.starrocks.scheduler.TaskRunBuilder;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import java.util.List;
 
 public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
     @BeforeClass
@@ -44,30 +21,49 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " as " +
                 " select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv" +
                 " where lo_orderpriority='5-LOW';");
+
+         */
+
+
+        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_2" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
                 " select LO_ORDERDATE, LO_ORDERKEY, LO_REVENUE from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 100000;");
 
+         */
+
+        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_3" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
                 " select LO_ORDERDATE, LO_ORDERKEY, LO_REVENUE from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 100000 and lo_orderpriority='5-LOW';");
 
+         */
+
+
+        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_4" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
                 " select LO_ORDERDATE, LO_ORDERKEY, LO_REVENUE, LO_SUPPLYCOST + 1 as add_one from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 100000 and lo_orderpriority='5-LOW';");
 
+         */
+
+
+        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_5" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
                 " select LO_ORDERDATE, LO_ORDERKEY, LO_REVENUE from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 50000 and lo_orderpriority='5-LOW';");
 
+         */
+
+        /*
         starRocksAssert.withNewMaterializedView("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -76,8 +72,8 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 = 1");
 
-
          */
+
         /*
         starRocksAssert.withNewMaterializedView("create materialized view agg_mv_1" +
                 " distributed by hash(LO_ORDERKEY)" +
@@ -101,6 +97,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
     @Test
     public void testFilterScan() throws Exception {
+        /*
         String query1 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv where lo_orderpriority='5-LOW';";
         String plan1 = getFragmentPlan(query1);
         assertContains(plan1, "1:Project\n" +
@@ -113,6 +110,8 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_1");
 
+
+
         String query2 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv where LO_REVENUE < 100000 ;";
         String plan2 = getFragmentPlan(query2);
         assertContains(plan2, "1:Project\n" +
@@ -124,7 +123,9 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_2");
+        */
 
+        /*
         String query3 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv where LO_REVENUE < 50000 ;";
         String plan3 = getFragmentPlan(query3);
         assertContains(plan3, "2:Project\n" +
@@ -140,6 +141,9 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_2");
 
+         */
+
+        /*
         String query4 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 50000 and lo_orderpriority='5-LOW';";
         String plan4 = getFragmentPlan(query4);
@@ -156,6 +160,9 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_3");
 
+         */
+
+        /*
         String query5 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 100000 and lo_orderpriority='5-LOW';";
         String plan5 = getFragmentPlan(query5);
@@ -168,6 +175,8 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_3");
+
+         */
 
         String query6 = "select LO_ORDERDATE, LO_ORDERKEY, (LO_SUPPLYCOST + 1) * 2 from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 50000 and lo_orderpriority='5-LOW';";
@@ -186,6 +195,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_4");
 
+
         String query7 = "select LO_ORDERKEY, (LO_SUPPLYCOST + 1) * 2, LO_ORDERDATE from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 50000 and lo_orderpriority='5-LOW';";
         String plan7 = getFragmentPlan(query7);
@@ -202,44 +212,12 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_4");
-
     }
 
     @Test
     public void testJoin() throws Exception {
-        new MockUp<StmtExecutor>() {
-            @Mock
-            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
-                if (stmt instanceof InsertStmt) {
-                    InsertStmt insertStmt = (InsertStmt) stmt;
-                    TableName tableName = insertStmt.getTableName();
-                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
-                    if (tableName.getTbl().equals("t0")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("t0"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    } else if (tableName.getTbl().equals("test_all_type")) {
-                        OlapTable tbl1 = ((OlapTable) testDb.getTable("test_all_type"));
-                        for (Partition partition : tbl1.getPartitions()) {
-                            if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
-                                setPartitionVersion(partition, partition.getVisibleVersion() + 1);
-                            }
-                        }
-                    }
-                }
-            }
-        };
-        Database db = connectContext.getGlobalStateMgr().getDb("test");
-        MaterializedView materializedView = (MaterializedView) db.getTable("join_mv_1");
-        Task task = TaskBuilder.buildMvTask(materializedView, db.getFullName());
 
-        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
-        taskRun.executeTaskRun();
-
+        /*
         String query1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 1";
         String plan1 = getFragmentPlan(query1);
@@ -259,9 +237,11 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: join_mv_1");
 
+         */
 
-        /*
-        String query2 = "SELECT test_all_type.t1d, test_all_type.t1c" +
+
+
+        String query2 = "SELECT t0.v1, test_all_type.t1d, test_all_type.t1c" +
                 " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d = 1";
         String plan2 = getFragmentPlan(query2);
         assertContains(plan2, "OUTPUT EXPRS:1: v1 | 7: t1d | 6: t1c\n" +
@@ -280,8 +260,6 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: join_mv_1");
 
-         */
-
     }
 
     @Test
@@ -298,43 +276,26 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
          */
     }
 
-    private void setPartitionVersion(Partition partition, long version) {
-        partition.setVisibleVersion(version, System.currentTimeMillis());
-        MaterializedIndex baseIndex = partition.getBaseIndex();
-        List<Tablet> tablets = baseIndex.getTablets();
-        for (Tablet tablet : tablets) {
-            List<Replica> replicas = ((LocalTablet) tablet).getImmutableReplicas();
-            for (Replica replica : replicas) {
-                replica.updateVersionInfo(version, -1, version);
-            }
-        }
-    }
-
     @Test
     public void testSingleTableAgg() throws Exception {
-        /*
+
         String query1 = "SELECT LO_ORDERKEY, sum(LO_REVENUE), count(LO_REVENUE)" +
                 " from lineorder_flat_for_mv group by LO_ORDERKEY";
         String plan1 = getFragmentPlan(query1);
         Assert.assertEquals("", plan1);
 
-         */
 
+        /*
         String query2 = "SELECT LO_ORDERKEY, LO_ORDERDATE, sum(LO_REVENUE), count(LO_REVENUE)" +
                 " from lineorder_flat_for_mv group by LO_ORDERKEY, LO_ORDERDATE";
         String plan2 = getFragmentPlan(query2);
         Assert.assertEquals("", plan2);
+
+         */
     }
 
     @Test
     public void testJoinAgg() throws Exception {
-        /*
-        String query1 = "SELECT LO_ORDERKEY, sum(LO_REVENUE), count(LO_REVENUE)" +
-                " from lineorder_flat_for_mv group by LO_ORDERKEY";
-        String plan1 = getFragmentPlan(query1);
-        Assert.assertEquals("", plan1);
-
-         */
 
         String query2 = "SELECT t0.v1 as v1, test_all_type.t1d," +
                 " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +

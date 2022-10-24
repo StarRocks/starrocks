@@ -8,7 +8,7 @@ public class OptimizerConfig {
         COST_BASED
     }
     private OptimizerAlgorithm optimizerAlgorithm;
-    private boolean enableMvRuleBasedRewrite;
+    private boolean enableMvRewrite;
 
     private static OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
 
@@ -18,19 +18,19 @@ public class OptimizerConfig {
 
     public OptimizerConfig() {
         this.optimizerAlgorithm = OptimizerAlgorithm.COST_BASED;
-        this.enableMvRuleBasedRewrite = true;
+        this.enableMvRewrite = true;
     }
 
-    public OptimizerConfig(OptimizerAlgorithm optimizerAlgorithm, boolean enableMvRuleBasedRewrite) {
+    public OptimizerConfig(OptimizerAlgorithm optimizerAlgorithm, boolean enableMvRewrite) {
         this.optimizerAlgorithm = optimizerAlgorithm;
-        this.enableMvRuleBasedRewrite = enableMvRuleBasedRewrite;
+        this.enableMvRewrite = enableMvRewrite;
     }
 
     public boolean isRuleBased() {
         return optimizerAlgorithm.equals(OptimizerAlgorithm.RULE_BASED);
     }
 
-    public boolean isEnableMvRuleBasedRewrite() {
-        return enableMvRuleBasedRewrite;
+    public boolean isEnableMvRewrite() {
+        return enableMvRewrite;
     }
 }

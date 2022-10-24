@@ -117,16 +117,16 @@ import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitAggregateRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitTopNRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFilterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateFilterScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.AggregateScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.FilterScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.OnlyScanRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.ProjectionFilterJoinRule;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.ProjectionFilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateFilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateFilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.FilterScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.ProjectionFilterJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.ProjectionFilterScanRule;
 
 import java.util.List;
 import java.util.Map;
@@ -332,9 +332,9 @@ public class RuleSet {
         ));
 
         REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
-                new OnlyScanRule(),
-                new FilterScanRule(),
-                new ProjectionFilterScanRule(),
+                OnlyScanRule.getInstance(),
+                FilterScanRule.getInstance(),
+                ProjectionFilterScanRule.getInstance(),
                 AggregateScanRule.getInstance(),
                 AggregateFilterScanRule.getInstance()
         ));

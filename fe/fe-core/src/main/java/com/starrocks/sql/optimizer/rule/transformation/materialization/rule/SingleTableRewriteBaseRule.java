@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.google.common.collect.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.BaseMaterializedViewRewriteRule;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
@@ -20,18 +21,18 @@ import java.util.List;
  * Keep single table rewrite in rule-base phase to reduce the search space
  *
  */
-public abstract class SingleTableRewriteRule extends BaseMaterializedViewRewriteRule {
-    public SingleTableRewriteRule(RuleType type, Pattern pattern) {
+public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRewriteRule {
+    public SingleTableRewriteBaseRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
 
+    // select OptExpression based on statistics
     @Override
     public List<OptExpression> transform(OptExpression queryExpression, OptimizerContext context) {
         List<OptExpression> expressions = super.transform(queryExpression, context);
         if (expressions == null || expressions.isEmpty()) {
             return Lists.newArrayList();
         } else {
-            // opt expression selection based on statistics
             if (expressions.size() == 1) {
                 return expressions;
             }
@@ -57,7 +58,7 @@ public abstract class SingleTableRewriteRule extends BaseMaterializedViewRewrite
         }
     }
 
-    protected void calculateStatistics(OptExpression expr, OptimizerContext context) {
+    private void calculateStatistics(OptExpression expr, OptimizerContext context) {
         // Avoid repeated calculate
         if (expr.getStatistics() != null) {
             return;

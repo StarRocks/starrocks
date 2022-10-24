@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rule.transformation.materialization;
+package com.starrocks.sql.optimizer.rule.transformation.materialization.rule;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -16,7 +16,9 @@ import com.starrocks.sql.optimizer.rule.RuleType;
  * Keep single table rewrite in rule-base phase to reduce the search space
  *
  */
-public class FilterScanRule extends SingleTableRewriteRule {
+public class FilterScanRule extends SingleTableRewriteBaseRule {
+    private static FilterScanRule INSTANCE = new FilterScanRule();
+
     public FilterScanRule() {
         super(RuleType.TF_MV_FILTER_SCAN_RULE, Pattern.create(OperatorType.LOGICAL_FILTER)
                 .addChildren(Pattern.create(OperatorType.PATTERN_SCAN)));
@@ -29,5 +31,9 @@ public class FilterScanRule extends SingleTableRewriteRule {
             return false;
         }
         return super.check(input, context);
+    }
+
+    public static FilterScanRule getInstance() {
+        return INSTANCE;
     }
 }
