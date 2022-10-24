@@ -1473,18 +1473,17 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     + "Do not allow create materialized view");
         }
         // check if all tablets are healthy, and no tablet is in tablet scheduler
-        boolean isStable = isStable(GlobalStateMgr.getCurrentSystemInfo(),
+        long unhealthyTabletId  = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
-        if (!isStable) {
-            throw new DdlException("table [" + name + "] is not stable."
-                    + " Some tablets of this table may not be healthy or are being "
-                    + "scheduled."
-                    + " You need to repair the table first"
-                    + " or stop cluster balance. See 'help admin;'.");
+        if (unhealthyTabletId != -1L) {
+            throw new DdlException("Table [" + name + "] is not stable. "
+                    + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId + ". "
+                    + "Some tablets of this table may not be healthy or are being scheduled. "
+                    + "You need to repair the table first or stop cluster balance.");
         }
     }
 
-    public boolean isStable(SystemInfoService infoService, TabletScheduler tabletScheduler) {
+    public long checkAndGetUnhealthyTablet(SystemInfoService infoService, TabletScheduler tabletScheduler) {
         List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
         for (Partition partition : idToPartition.values()) {
             long visibleVersion = partition.getVisibleVersion();
@@ -1493,7 +1492,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 for (Tablet tablet : mIndex.getTablets()) {
                     LocalTablet localTablet = (LocalTablet) tablet;
                     if (tabletScheduler.containsTablet(tablet.getId())) {
-                        return false;
+                        return localTablet.getId();
                     }
 
                     Pair<TabletStatus, TabletSchedCtx.Priority> statusPair = localTablet.getHealthStatusWithPriority(
@@ -1502,12 +1501,12 @@ public class OlapTable extends Table implements GsonPostProcessable {
                     if (statusPair.first != TabletStatus.HEALTHY) {
                         LOG.info("table {} is not stable because tablet {} status is {}. replicas: {}",
                                 id, tablet.getId(), statusPair.first, localTablet.getImmutableReplicas());
-                        return false;
+                        return localTablet.getId();
                     }
                 }
             }
         }
-        return true;
+        return -1L;
     }
 
     // arbitrarily choose a partition, and get the buckets backends sequence from base index.

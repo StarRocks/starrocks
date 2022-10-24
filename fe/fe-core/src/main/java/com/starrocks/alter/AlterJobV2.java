@@ -203,7 +203,7 @@ public abstract class AlterJobV2 implements Writable {
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
-        boolean isStable;
+        long unHealthyTabletId;
         db.readLock();
         try {
             tbl = (OlapTable) db.getTable(tableId);
@@ -211,7 +211,7 @@ public abstract class AlterJobV2 implements Writable {
                 throw new AlterCancelException("Table " + tableId + " does not exist");
             }
 
-            isStable = tbl.isStable(GlobalStateMgr.getCurrentSystemInfo(),
+            unHealthyTabletId = tbl.checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                     GlobalStateMgr.getCurrentState().getTabletScheduler());
         } finally {
             db.readUnlock();
@@ -219,8 +219,8 @@ public abstract class AlterJobV2 implements Writable {
 
         db.writeLock();
         try {
-            if (!isStable) {
-                errMsg = "table is unstable";
+            if (unHealthyTabletId != -1L) {
+                errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
                 LOG.warn("wait table {} to be stable before doing {} job", tableId, type);
                 tbl.setState(OlapTableState.WAITING_STABLE);
                 return false;
