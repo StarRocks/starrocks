@@ -474,12 +474,18 @@ public class ExternalOlapTable extends OlapTable {
                             replica.setLastFailedTime(replicaMeta.getLast_failed_time());
                             // forbidden repair for external table
                             replica.setNeedFurtherRepair(false);
-                            tablet.addReplica(replica, true);
+                            tablet.addReplica(replica, false);
                         }
                         TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
+<<<<<<< HEAD
                                                             tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
                                                             tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
                         index.addTablet(tablet, tabletMeta);
+=======
+                                tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
+                                tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
+                        index.addTablet(tablet, tabletMeta, false);
+>>>>>>> 316654710 ([BugFix]Fix olap external table meta synchronization bug (#12368))
                     }
                     if (indexMeta.getPartition_id() == partition.getId()) {
                         if (index.getId() != baseIndexId) {

@@ -131,17 +131,27 @@ public class LocalTablet extends Tablet {
         return delete || !hasBackend;
     }
 
+<<<<<<< HEAD
     public void addReplica(Replica replica, boolean isRestore) {
         if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
             replicas.add(replica);
             if (!isRestore) {
                 Catalog.getCurrentInvertedIndex().addReplica(id, replica);
+=======
+    public void addReplica(Replica replica, boolean updateInvertedIndex) {
+        synchronized (replicas) {
+            if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
+                replicas.add(replica);
+                if (updateInvertedIndex) {
+                    GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
+                }
+>>>>>>> 316654710 ([BugFix]Fix olap external table meta synchronization bug (#12368))
             }
         }
     }
 
     public void addReplica(Replica replica) {
-        addReplica(replica, false);
+        addReplica(replica, true);
     }
 
     public List<Replica> getReplicas() {

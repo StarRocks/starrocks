@@ -144,6 +144,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         tablets.clear();
     }
 
+<<<<<<< HEAD
     public void addTablet(LocalTablet tablet, TabletMeta tabletMeta) {
         addTablet(tablet, tabletMeta, false);
     }
@@ -153,6 +154,17 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
         tablets.add(tablet);
         if (!isRestore) {
             Catalog.getCurrentInvertedIndex().addTablet(tablet.getId(), tabletMeta);
+=======
+    public void addTablet(Tablet tablet, TabletMeta tabletMeta) {
+        addTablet(tablet, tabletMeta, true);
+    }
+
+    public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean updateInvertedIndex) {
+        idToTablets.put(tablet.getId(), tablet);
+        tablets.add(tablet);
+        if (updateInvertedIndex) {
+            GlobalStateMgr.getCurrentInvertedIndex().addTablet(tablet.getId(), tabletMeta);
+>>>>>>> 316654710 ([BugFix]Fix olap external table meta synchronization bug (#12368))
         }
     }
 

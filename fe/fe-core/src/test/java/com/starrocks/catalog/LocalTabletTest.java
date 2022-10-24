@@ -158,8 +158,8 @@ public class LocalTabletTest {
                 -1, 10, 10, ReplicaState.NORMAL, 9, 8);
         Replica normalReplica = new Replica(1L, 10002L, 9,
                 -1, 10, 10, ReplicaState.NORMAL, -1, 9);
-        tablet.addReplica(versionIncompleteReplica, true);
-        tablet.addReplica(normalReplica, true);
+        tablet.addReplica(versionIncompleteReplica, false);
+        tablet.addReplica(normalReplica, false);
         Assert.assertEquals(LocalTablet.TabletStatus.COLOCATE_REDUNDANT,
                 tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
     }
