@@ -811,7 +811,7 @@ public class RollupJob extends AlterJob {
                         localTablet.clearReplica();
                         for (Replica copiedReplica : copiedReplicas) {
                             Replica replica = invertedIndex.getReplica(tablet.getId(), copiedReplica.getBackendId());
-                            localTablet.addReplica(replica, true);
+                            localTablet.addReplica(replica, false);
                         }
                     }
                 }
