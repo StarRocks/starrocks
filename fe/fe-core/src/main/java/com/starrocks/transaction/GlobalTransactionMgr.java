@@ -387,7 +387,9 @@ public class GlobalTransactionMgr implements Writable {
             // so we just return false to indicate publish timeout
             throw new UserException("publish timeout: " + timeoutMillis);
         }
-        waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS);
+        if (!waiter.await(publishTimeoutMillis, TimeUnit.MILLISECONDS)) {
+            throw new UserException("publish timeout: " + timeoutMillis);
+        }
     }
 
     public boolean commitAndPublishTransaction(Database db, long transactionId,
@@ -739,5 +741,13 @@ public class GlobalTransactionMgr implements Writable {
         dos.writeInt(size);
         write(dos);
         return checksum;
+    }
+
+    public String getTxnPublishTimeoutDebugInfo(long dbId, long txnId) {
+        DatabaseTransactionMgr dbTransactionMgr = dbIdToDatabaseTransactionMgrs.get(dbId);
+        if (dbTransactionMgr == null) {
+            return "";
+        }
+        return dbTransactionMgr.getTxnPublishTimeoutDebugInfo(txnId);
     }
 }

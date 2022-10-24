@@ -783,7 +783,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
 
-    if (state->query_options().__isset.enable_replicated_storage && _keys_type != TKeysType::PRIMARY_KEYS) {
+    if (state->query_options().__isset.enable_replicated_storage) {
         _enable_replicated_storage = state->query_options().enable_replicated_storage;
     }
 

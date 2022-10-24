@@ -49,4 +49,9 @@ public interface PEntryObject extends Comparable<PEntryObject> {
     boolean equals(Object o);
 
     int hashCode();
+
+    /**
+     * used to deep copy when merging Privilege collections
+     **/
+    PEntryObject clone();
 }

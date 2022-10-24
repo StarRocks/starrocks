@@ -958,19 +958,19 @@ public class ExpressionTest extends PlanTestBase {
         String plan;
         sql = "select cast(cast(id_date as string) as boolean) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(9: id_date AS VARCHAR(65533)) AS BOOLEAN)");
+        assertContains(plan, "CAST(CAST(9: id_date AS VARCHAR(1048576)) AS BOOLEAN)");
 
         sql = "select cast(cast(id_date as datetime) as string) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(9: id_date AS DATETIME) AS VARCHAR(65533))");
+        assertContains(plan, "CAST(CAST(9: id_date AS DATETIME) AS VARCHAR(1048576))");
 
         sql = "select cast(cast(id_date as boolean) as string) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(9: id_date AS BOOLEAN) AS VARCHAR(65533))");
+        assertContains(plan, "CAST(CAST(9: id_date AS BOOLEAN) AS VARCHAR(1048576))");
 
         sql = "select cast(cast(id_datetime as string) as date) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(8: id_datetime AS VARCHAR(65533)) AS DATE)");
+        assertContains(plan, "CAST(CAST(8: id_datetime AS VARCHAR(1048576)) AS DATE)");
 
         sql = "select cast(cast(t1d as int) as boolean) from test_all_type;";
         plan = getFragmentPlan(sql);
@@ -1005,7 +1005,7 @@ public class ExpressionTest extends PlanTestBase {
         String plan;
         sql = "select cast(cast(t1c as bigint) as string) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(3: t1c AS VARCHAR(65533))");
+        assertContains(plan, "CAST(3: t1c AS VARCHAR(1048576))");
 
         sql = "select cast(cast(t1c as bigint) as int) from test_all_type;";
         plan = getFragmentPlan(sql);
@@ -1017,11 +1017,11 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select cast(cast(id_bool as bigint) as string) from test_bool;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(11: id_bool AS VARCHAR(65533))");
+        assertContains(plan, "CAST(11: id_bool AS VARCHAR(1048576))");
 
         sql = "select cast(cast(id_bool as boolean) as string) from test_bool;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(11: id_bool AS VARCHAR(65533))");
+        assertContains(plan, "CAST(11: id_bool AS VARCHAR(1048576))");
     }
 
     @Test

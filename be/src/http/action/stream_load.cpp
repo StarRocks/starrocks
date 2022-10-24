@@ -489,6 +489,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             return Status::InvalidArgument("Invalid load_dop format");
         }
     }
+    if (!http_req->header(HTTP_ENABLE_REPLICATED_STORAGE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "false")) {
+            request.__set_enable_replicated_storage(false);
+        } else if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "true")) {
+            request.__set_enable_replicated_storage(true);
+        } else {
+            return Status::InvalidArgument("Invalid enable replicated storage flag format. Must be bool type");
+        }
+    }
     if (ctx->timeout_second != -1) {
         request.__set_timeout(ctx->timeout_second);
     }

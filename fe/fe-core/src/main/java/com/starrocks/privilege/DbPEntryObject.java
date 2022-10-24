@@ -61,6 +61,11 @@ public class DbPEntryObject implements PEntryObject {
     }
 
     @Override
+    public PEntryObject clone() {
+        return new DbPEntryObject(id);
+    }
+
+    @Override
     public int compareTo(PEntryObject obj) {
         if (!(obj instanceof DbPEntryObject)) {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());

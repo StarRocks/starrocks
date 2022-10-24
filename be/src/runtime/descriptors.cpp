@@ -117,6 +117,12 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THudiTable& thrift_table,
           _location(thrift_partition.location.suffix),
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
+HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table,
+                                                 const THdfsPartition& thrift_partition)
+        : _file_format(thrift_partition.file_format),
+          _location(thrift_partition.location.suffix),
+          _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
+
 Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals));
     RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
@@ -139,6 +145,17 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
+}
+
+DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _table_location = tdesc.deltaLakeTable.location;
+    _columns = tdesc.deltaLakeTable.columns;
+    _partition_columns = tdesc.deltaLakeTable.partition_columns;
+    for (const auto& entry : tdesc.deltaLakeTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.deltaLakeTable, entry.second));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
 }
 
 HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -574,6 +591,12 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         }
         case TTableType::ICEBERG_TABLE: {
             desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
+            break;
+        }
+        case TTableType::DELTALAKE_TABLE: {
+            auto* delta_lake_desc = pool->add(new DeltaLakeTableDescriptor(tdesc, pool));
+            RETURN_IF_ERROR(delta_lake_desc->create_key_exprs(state, pool, chunk_size));
+            desc = delta_lake_desc;
             break;
         }
         case TTableType::HUDI_TABLE: {

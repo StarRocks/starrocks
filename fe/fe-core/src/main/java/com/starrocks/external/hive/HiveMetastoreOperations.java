@@ -17,6 +17,7 @@ import static com.google.common.base.Preconditions.checkState;
 import static com.starrocks.external.PartitionUtil.executeInNewThread;
 
 public class HiveMetastoreOperations {
+    public static String BACKGROUND_THREAD_NAME_PREFIX = "background-get-partitions-statistics-";
     private final CachingHiveMetastore metastore;
     private final boolean enableCatalogLevelCache;
 
@@ -82,7 +83,7 @@ public class HiveMetastoreOperations {
                 return partitionStats;
             }
 
-            String backgroundThreadName = String.format("background-get-partitions-statistics-%s-%s-%s",
+            String backgroundThreadName = String.format(BACKGROUND_THREAD_NAME_PREFIX + "%s-%s-%s",
                     catalogName, dbName, tblName);
             executeInNewThread(backgroundThreadName, () -> metastore.getPartitionStatistics(table, partitionNames));
         } else {

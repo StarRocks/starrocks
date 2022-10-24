@@ -534,6 +534,7 @@ PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
             ASSERT_EQ(values[i], get_values[i]);
         }
     }
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_wal) {

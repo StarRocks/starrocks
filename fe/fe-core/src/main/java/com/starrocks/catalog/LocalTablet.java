@@ -698,7 +698,6 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     // Note: this method does not require db lock to be held
     public boolean quorumReachVersion(long version, long quorum, TxnFinishState finishState) {
-        // TODO(cbl): support tablets doing schemachange/rollup
         long valid = 0;
         synchronized (replicas) {
             for (Replica replica : replicas) {
@@ -713,11 +712,37 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                     finishState.normalReplicas.add(replicaId);
                     finishState.abnormalReplicasWithVersion.remove(replicaId);
                 } else {
+                    if (replica.getState() == ReplicaState.ALTER && replicaVersion <= Partition.PARTITION_INIT_VERSION) {
+                        valid++;
+                    }
                     finishState.normalReplicas.remove(replicaId);
                     finishState.abnormalReplicasWithVersion.put(replicaId, replicaVersion);
                 }
             }
         }
         return valid >= quorum;
+    }
+
+    public void getAbnormalReplicaInfos(long version, long quorum, StringBuilder sb) {
+        synchronized (replicas) {
+            boolean empty = true;
+            for (Replica replica : replicas) {
+                long replicaVersion = replica.getVersion();
+                if (replicaVersion < version) {
+                    if (empty) {
+                        sb.append(String.format(" {tablet:%d quorum:%d version:%d #replica:%d err:", id, quorum, version,
+                                replicas.size()));
+                        empty = false;
+                    }
+                    Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(replica.getBackendId());
+                    sb.append(String.format("[be:%s,version:%d%s]",
+                            backend == null ? Long.toString(replica.getBackendId()) : backend.getHost(), replicaVersion,
+                            replica.getState() == ReplicaState.ALTER ? ",ALTER" : ""));
+                }
+            }
+            if (!empty) {
+                sb.append("}");
+            }
+        }
     }
 }

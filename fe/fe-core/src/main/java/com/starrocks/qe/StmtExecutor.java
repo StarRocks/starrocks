@@ -1473,6 +1473,15 @@ public class StmtExecutor {
         }
 
         String errMsg = "";
+        if (txnStatus.equals(TransactionStatus.COMMITTED)) {
+            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
+            LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
+            if (timeoutInfo.length() > 120) {
+                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            }
+            errMsg = "Publish timeout " + timeoutInfo;
+        }
         try {
             context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
                     EtlJobType.INSERT,
