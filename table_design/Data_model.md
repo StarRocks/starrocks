@@ -364,7 +364,7 @@ PROPERTIES("replication_num" = "3",
 
 - 创建表时，支持为指标列创建 BITMAP、Bloom Filter 等索引。
 
-- 主键模型目前不支持物化视图。
+- 自 2.4.0 版本起，主键模型支持单表和多表物化视图。
 
 - 暂不支持使用 ALTER TABLE 修改列类型。 ALTER TABLE 的相关语法说明和示例，请参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md)。
 
