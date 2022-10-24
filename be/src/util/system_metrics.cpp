@@ -209,7 +209,7 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("jemalloc_metadata_thp", &_memory_metrics->jemalloc_metadata_thp);
     registry->register_metric("jemalloc_resident_bytes", &_memory_metrics->jemalloc_resident_bytes);
     registry->register_metric("jemalloc_mapped_bytes", &_memory_metrics->jemalloc_mapped_bytes);
-    registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_mapped_bytes);
+    registry->register_metric("jemalloc_retained_bytes", &_memory_metrics->jemalloc_retained_bytes);
 #endif
 
     registry->register_metric("process_mem_bytes", &_memory_metrics->process_mem_bytes);
