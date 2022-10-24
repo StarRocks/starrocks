@@ -7,8 +7,8 @@
 namespace starrocks::vectorized {
 
 void AggregateFuncResolver::register_4() {
-    std::vector<std::string> names = {"variance", "variance_pop", "var_pop",    "variance_samp",
-                                      "var_samp", "stddev",       "stddev_pop", "stddev_samp"};
+    std::vector<std::string> names = {"variance", "variance_pop", "var_pop",    "variance_samp", "var_samp",
+                                      "stddev",   "std",          "stddev_pop", "stddev_samp"};
 
     for (auto var_name : names) {
         add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE>(var_name);

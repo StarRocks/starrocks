@@ -41,30 +41,20 @@ void AggregateFuncResolver::register_3() {
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_BIGINT>("multi_distinct_count2");
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_BIGINT>("multi_distinct_count2");
 
-    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_INT, TYPE_BIGINT>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_LARGEINT, TYPE_LARGEINT>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>("multi_distinct_sum");
-    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("multi_distinct_sum");
-
-    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_INT, TYPE_BIGINT>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_LARGEINT, TYPE_LARGEINT>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>("multi_distinct_sum2");
-    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("multi_distinct_sum2");
+    std::vector<std::string> sum_names = {"multi_distinct_sum", "multi_distinct_sum2", "sum"};
+    for (auto name : sum_names) {
+        add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>(name);
+        add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>(name);
+        add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT>(name);
+        add_aggregate_mapping<TYPE_INT, TYPE_BIGINT>(name);
+        add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>(name);
+        add_aggregate_mapping<TYPE_LARGEINT, TYPE_LARGEINT>(name);
+        add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>(name);
+        add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE>(name);
+        add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2>(name);
+        add_aggregate_mapping<TYPE_DECIMAL32, TYPE_DECIMAL64>(name);
+        add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64>(name);
+        add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>(name);
+    }
 }
 } // namespace starrocks::vectorized
