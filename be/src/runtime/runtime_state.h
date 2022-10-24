@@ -306,8 +306,6 @@ public:
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
 
-    bool use_sorted_agg() const { return _use_sorted_agg; };
-    void set_use_sorted_agg(bool use_sorted_agg) { _use_sorted_agg = use_sorted_agg; }
     bool enable_query_statistic() const;
     std::shared_ptr<QueryStatistics> intermediate_query_statistic();
     std::shared_ptr<QueryStatisticsRecvr> query_recv();

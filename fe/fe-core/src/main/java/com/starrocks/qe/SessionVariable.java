@@ -677,7 +677,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int parseTokensLimit = 3500000;
 
     @VarAttr(name = ENABLE_SORT_AGGREGATE)
-    private boolean enableSortAggregate = true;
+    private boolean enableSortAggregate = false;
 
     public boolean isEnableSortAggregate() {
         return enableSortAggregate;

@@ -173,7 +173,8 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         } else {
             _collect_iter = new_heap_merge_iterator(seg_iters);
         }
-    } else if (params.sorted_by_keys && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) && seg_iters.size() > 1) {
+    } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
+               seg_iters.size() > 1) {
         // when enable sorted by keys. we need call heap merge for DUP KEYS and PKS
         // but for UNIQ KEYS or AGG KEYS we need build new_aggregate_iterator for them.
         if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
