@@ -8,7 +8,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -102,7 +101,7 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
                 long partitionId = 0;
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
-                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table instanceof HudiTable);
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
                     partitionKeys.put(partitionKey, partitionId++);
                 }
             } else {
