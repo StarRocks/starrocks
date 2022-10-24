@@ -179,9 +179,7 @@ public:
         if (!lhs->is_constant()) {
             if (filter) {
                 for (int row = 0; row < size; ++row) {
-                    if (filter[row]) {
-                        data3[row] = check_value_existence<use_array>(data[row]);
-                    }
+                    data3[row] = (filter[row] && check_value_existence<use_array>(data[row]));
                 }
             } else {
                 for (int row = 0; row < size; ++row) {
