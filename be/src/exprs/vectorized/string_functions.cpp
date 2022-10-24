@@ -2660,7 +2660,7 @@ Status StringFunctions::regexp_replace_prepare(starrocks_udf::FunctionContext* c
     state->pattern = pattern_str;
 
     std::string search_string;
-    if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
+    if (pattern_str.size() && RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->use_hyperscan = true;
         state->size_of_pattern = pattern.size;
         std::string re_pattern(pattern.data, pattern.size);
