@@ -290,8 +290,8 @@ Status SchemaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
-    auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(id());
-    size_t dop = morsel_queue_factory->size();
+    // the dop of SchemaScanOperator should always be 1.
+    size_t dop = 1;
 
     size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
     int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
