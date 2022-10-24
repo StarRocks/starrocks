@@ -68,6 +68,7 @@ enum TPlanNodeType {
   STREAM_SCAN_NODE,
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
+  LAKE_META_SCAN_NODE,
 }
 
 // phases of an execution node

@@ -423,6 +423,8 @@ Status Expr::prepare(RuntimeState* state, ExprContext* context) {
 }
 
 Status Expr::open(const std::vector<ExprContext*>& ctxs, RuntimeState* state) {
+    // for debug
+    LOG(INFO) << "enter Expr::open";
     for (auto ctx : ctxs) {
         RETURN_IF_ERROR(ctx->open(state));
     }

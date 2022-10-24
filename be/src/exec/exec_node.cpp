@@ -48,6 +48,7 @@
 #include "exec/vectorized/hash_join_node.h"
 #include "exec/vectorized/intersect_node.h"
 #include "exec/vectorized/olap_meta_scan_node.h"
+#include "exec/vectorized/lake_meta_scan_node.h"
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/project_node.h"
 #include "exec/vectorized/repeat_node.h"
@@ -128,6 +129,8 @@ void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
 }
 
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
+    // for debug
+    LOG(INFO) << "enter ExecNode::push_down_join_runtime_filter"; 
     if (collector->empty()) return;
     if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
@@ -219,11 +222,15 @@ Status ExecNode::prepare(RuntimeState* state) {
 }
 
 Status ExecNode::open(RuntimeState* state) {
+    // for debug
+    LOG(INFO) << "enter ExecNode::open";
     RETURN_IF_ERROR(exec_debug_action(TExecNodePhase::OPEN));
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_runtime_filter_collector.open(state));
     push_down_join_runtime_filter(state, &_runtime_filter_collector);
     _runtime_filter_collector.wait(is_scan_node());
+    // for debug
+    LOG(INFO) << "after _runtime_filter_collector.wait";
     return Status::OK();
 }
 
@@ -408,6 +415,9 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         return Status::OK();
     case TPlanNodeType::META_SCAN_NODE:
         *node = pool->add(new vectorized::OlapMetaScanNode(pool, tnode, descs));
+        return Status::OK();
+    case TPlanNodeType::LAKE_META_SCAN_NODE:
+        *node = pool->add(new vectorized::LakeMetaScanNode(pool, tnode, descs));
         return Status::OK();
     case TPlanNodeType::AGGREGATION_NODE:
         if (tnode.agg_node.__isset.use_streaming_preaggregation && tnode.agg_node.use_streaming_preaggregation) {
@@ -773,6 +783,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::ES_HTTP_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::HDFS_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::META_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::LAKE_META_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
@@ -787,6 +798,8 @@ void ExecNode::init_runtime_profile(const std::string& name) {
 }
 
 Status ExecNode::exec_debug_action(TExecNodePhase::type phase) {
+    // for debug
+    LOG(INFO) << "enter ExecNode::exec_debug_action";
     DCHECK(phase != TExecNodePhase::INVALID);
 
     if (_debug_phase != phase) {

@@ -489,6 +489,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     // Set up sink if required
     std::unique_ptr<DataSink> datasink;
     if (request.isset_output_sink()) {
+        // for debug
+        LOG(INFO) << "request.isset_output_sink in FragmentExecutor::_prepare_pipeline_driver";
         const auto& tsink = request.output_sink();
         if (tsink.type == TDataSinkType::RESULT_SINK) {
             _query_ctx->set_result_sink(true);
@@ -587,10 +589,14 @@ Status FragmentExecutor::_prepare_global_dict(const UnifiedExecPlanFragmentParam
     // Set up global dict
     auto* runtime_state = _fragment_ctx->runtime_state();
     if (fragment.__isset.query_global_dicts) {
+        // for debug
+        LOG(INFO) << "fragment set query_global_dicts";
         RETURN_IF_ERROR(runtime_state->init_query_global_dict(fragment.query_global_dicts));
     }
 
     if (fragment.__isset.load_global_dicts) {
+        // for debug
+        LOG(INFO) << "fragment set load_global_dicts";
         RETURN_IF_ERROR(runtime_state->init_load_global_dict(fragment.load_global_dicts));
     }
     return Status::OK();

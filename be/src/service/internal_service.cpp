@@ -156,6 +156,9 @@ void PInternalServiceImplBase<T>::exec_plan_fragment(google::protobuf::RpcContro
                                                      const PExecPlanFragmentRequest* request,
                                                      PExecPlanFragmentResult* response,
                                                      google::protobuf::Closure* done) {
+
+    // for debug
+    LOG(INFO) << "enter PInternalServiceImplBase<T>::exec_plan_fragment";                                                 
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
@@ -176,6 +179,8 @@ void PInternalServiceImplBase<T>::exec_batch_plan_fragments(google::protobuf::Rp
                                                             const PExecBatchPlanFragmentsRequest* request,
                                                             PExecBatchPlanFragmentsResult* response,
                                                             google::protobuf::Closure* done) {
+    // for debug
+    LOG(INFO) << "enter PInternalServiceImplBase<T>::exec_batch_plan_fragments";                                                             
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     if (k_starrocks_exit.load(std::memory_order_relaxed)) {
@@ -235,6 +240,9 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) {
+    // for debug
+    LOG(INFO) << "enter Status PInternalServiceImplBase<T>::_exec_plan_fragment";
+
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
@@ -255,6 +263,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller* cntl) {
+    // for debug
+    LOG(INFO) << "enter Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments";
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
@@ -302,6 +312,9 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecPlanFragmentParams& t_common_param,
                                                                     const TExecPlanFragmentParams& t_unique_request) {
+    // for debug
+    LOG(INFO) << "enter Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline";
+
     pipeline::FragmentExecutor fragment_executor;
     auto status = fragment_executor.prepare(_exec_env, t_common_param, t_unique_request);
     if (status.ok()) {
@@ -313,6 +326,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_pipeline(const TExecP
 
 template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_non_pipeline(const TExecPlanFragmentParams& t_request) {
+    // for debug
+    LOG(INFO) << "enter Status PInternalServiceImplBase<T>::_exec_plan_fragment_by_non_pipeline";
     return _exec_env->fragment_mgr()->exec_plan_fragment(t_request);
 }
 

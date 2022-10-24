@@ -747,6 +747,8 @@ public class Coordinator {
                 usePipeline && connectContext.getSessionVariable().isEnableDeliverBatchFragments();
 
         if (enableDeliverBatchFragments) {
+            // for debug
+            LOG.info("enableDeliverBatchFragments in deliverExecFragments()");
             deliverExecBatchFragmentsRequests(usePipeline);
         } else {
             deliverExecFragmentRequests(usePipeline);

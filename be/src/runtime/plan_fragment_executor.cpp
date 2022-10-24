@@ -201,15 +201,24 @@ Status PlanFragmentExecutor::open() {
 }
 
 Status PlanFragmentExecutor::_open_internal_vectorized() {
+    // for debug
+    LOG(INFO) << "enter PlanFragmentExecutor::_open_internal_vectorized";
     {
         SCOPED_TIMER(profile()->total_time_counter());
+        // for debug
+        LOG(INFO) << "after profile()->total_time_counter()";
         RETURN_IF_ERROR(_plan->open(_runtime_state));
+        // for debug
+        LOG(INFO) << "after _plan->open in _open_internal_vectorized";
     }
 
     if (_sink == nullptr) {
         return Status::OK();
     }
     RETURN_IF_ERROR(_sink->open(runtime_state()));
+
+    // for debug
+    LOG(INFO) << "after _sink->open in _open_internal_vectorized";
 
     // If there is a sink, do all the work of driving it here, so that
     // when this returns the query has actually finished
@@ -218,6 +227,9 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
         RETURN_IF_ERROR(runtime_state()->check_mem_limit("QUERY"));
 
         RETURN_IF_ERROR(_get_next_internal_vectorized(&chunk));
+
+        // for debug
+        LOG(INFO) << "after _get_next_internal_vectorized in _open_internal_vectorized";
 
         if (chunk == nullptr) {
             break;
@@ -235,6 +247,9 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
             collect_query_statistics();
         }
         RETURN_IF_ERROR(_sink->send_chunk(runtime_state(), chunk.get()));
+
+        // for debug
+        LOG(INFO) << "after _sink->send_chunk in _open_internal_vectorized";
     }
 
     // Close the sink *before* stopping the report thread. Close may
@@ -258,6 +273,9 @@ Status PlanFragmentExecutor::_open_internal_vectorized() {
             status = _status;
         }
         close_status = _sink->close(runtime_state(), status);
+
+        // for debug
+        LOG(INFO) << "after _sink->close in _open_internal_vectorized";
     }
 
     update_status(close_status);
