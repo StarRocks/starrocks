@@ -1,4 +1,4 @@
-// This file is licensed under the Elastic License 2.0. Copyright 2022-present, StarRocks Inc.
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include "exprs/vectorized/subfield_expr.h"
 

@@ -52,8 +52,6 @@
 #include "exprs/vectorized/map_element_expr.h"
 #include "exprs/vectorized/placeholder_ref.h"
 #include "exprs/vectorized/subfield_expr.h"
-#include "gen_cpp/Exprs_types.h"
-#include "gen_cpp/Types_types.h"
 #include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
