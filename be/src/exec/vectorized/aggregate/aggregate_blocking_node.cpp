@@ -172,7 +172,7 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
+    context->has_aggregation = true;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
     auto& agg_node = _tnode.agg_node;
     if (agg_node.need_finalize) {

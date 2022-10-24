@@ -32,13 +32,14 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through,
+            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through, bool enable_exchange_perf,
             PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
+              _enable_exchange_perf(enable_exchange_perf),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
               _chunks(num_shuffles) {}
 
@@ -98,6 +99,9 @@ private:
     const PlanNodeId _dest_node_id;
 
     const bool _enable_exchange_pass_through;
+    // enable it to profile exchange's performance, which ignores computing local data for exchange_speed/_bytes,
+    // because local data isn't accessed by remote network.
+    const bool _enable_exchange_perf;
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
@@ -113,6 +117,8 @@ private:
 
     bool _is_inited = false;
     bool _use_pass_through = false;
+    // local data is shuffled without really remote network, so it cannot be considered in computing exchange speed.
+    bool _ignore_local_data = false;
 };
 
 bool ExchangeSinkOperator::Channel::is_local() {
@@ -156,6 +162,7 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     }
     _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
     _prepare_pass_through();
+    _ignore_local_data = _enable_exchange_perf && is_local();
 
     _is_inited = true;
     return Status::OK();
@@ -187,6 +194,11 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
                                                      int32_t driver_sequence, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
+
+    if (_ignore_local_data && !eos) {
+        return Status::OK();
+    }
+
     if (_chunk_request == nullptr) {
         _chunk_request = std::make_shared<PTransmitChunkParams>();
         _chunk_request->set_node_id(_dest_node_id);
@@ -241,6 +253,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
 Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment,
                                                          int64_t attachment_physical_bytes) {
+    if (_ignore_local_data) {
+        return Status::OK();
+    }
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
@@ -280,15 +295,13 @@ void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* 
     state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
 }
 
-ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                           int32_t driver_sequence, const std::shared_ptr<SinkBuffer>& buffer,
-                                           TPartitionType::type part_type,
-                                           const std::vector<TPlanFragmentDestination>& destinations,
-                                           bool is_pipeline_level_shuffle, const int32_t num_shuffles_per_channel,
-                                           int32_t sender_id, PlanNodeId dest_node_id,
-                                           const std::vector<ExprContext*>& partition_expr_ctxs,
-                                           bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
-                                           const std::vector<int32_t>& output_columns)
+ExchangeSinkOperator::ExchangeSinkOperator(
+        OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+        const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
+        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
+        const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
+        const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
+        bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
         : Operator(factory, id, "exchange_sink", plan_node_id, driver_sequence),
           _buffer(buffer),
           _part_type(part_type),
@@ -316,7 +329,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
         } else {
             std::unique_ptr<Channel> channel = std::make_unique<Channel>(
                     this, destination.brpc_server, fragment_instance_id, dest_node_id, _num_shuffles_per_channel,
-                    enable_exchange_pass_through, pass_through_chunk_buffer);
+                    enable_exchange_pass_through, enable_exchange_perf, pass_through_chunk_buffer);
             _channels.emplace_back(channel.get());
             _instance_id2channel.emplace(fragment_instance_id.lo, std::move(channel));
         }
@@ -691,7 +704,7 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
-        std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through,
+        std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through, bool enable_exchange_perf,
         FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
@@ -703,14 +716,15 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
           _enable_exchange_pass_through(enable_exchange_pass_through),
+          _enable_exchange_perf(enable_exchange_perf),
           _fragment_ctx(fragment_ctx),
           _output_columns(output_columns) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _buffer, _part_type,
-                                                  _destinations, _is_pipeline_level_shuffle, _num_shuffles_per_channel,
-                                                  _sender_id, _dest_node_id, _partition_expr_ctxs,
-                                                  _enable_exchange_pass_through, _fragment_ctx, _output_columns);
+    return std::make_shared<ExchangeSinkOperator>(
+            this, _id, _plan_node_id, driver_sequence, _buffer, _part_type, _destinations, _is_pipeline_level_shuffle,
+            _num_shuffles_per_channel, _sender_id, _dest_node_id, _partition_expr_ctxs, _enable_exchange_pass_through,
+            _enable_exchange_perf, _fragment_ctx, _output_columns);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {
