@@ -141,13 +141,14 @@ public:
 
     Columns& fields_column() { return _fields; }
 
-    ColumnPtr& field_column(std::string field_name) {
+    ColumnPtr field_column(std::string field_name) {
         for (size_t i = 0; i < _field_names->size(); i++) {
             if (field_name == _field_names->get_slice(i)) {
                 return _fields.at(i);
             }
         }
         DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
+        return nullptr;
     }
 
     const BinaryColumn& field_names() const { return *_field_names; }
