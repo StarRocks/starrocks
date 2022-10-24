@@ -49,5 +49,12 @@ size_t CacheManager::hit_count() {
     return _cache.get_hit_count();
 }
 
+void CacheManager::invalidate_all() {
+    auto old_capacity = _cache.get_capacity();
+    // set capacity of cache to zero, the cache shall prune all cache entries.
+    _cache.set_capacity(0);
+    _cache.set_capacity(old_capacity);
+}
+
 } // namespace query_cache
 } // namespace starrocks

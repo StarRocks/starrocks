@@ -69,6 +69,8 @@ public:
     size_t capacity();
     size_t lookup_count();
     size_t hit_count();
+    // vacuum cache by invalidate all cache entries
+    void invalidate_all();
 
 private:
     ShardedLRUCache _cache;
