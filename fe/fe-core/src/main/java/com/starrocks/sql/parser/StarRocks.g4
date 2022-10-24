@@ -279,10 +279,10 @@ createTableStatement
           engineDesc?
           charsetDesc?
           keyDesc?
-          orderByDesc?
           comment?
           partitionDesc?
           distributionDesc?
+          orderByDesc?
           rollupDesc?
           properties?
           extProperties?
