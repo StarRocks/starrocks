@@ -9,8 +9,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+<<<<<<< HEAD
 import com.starrocks.common.util.MasterDaemon;
 import com.starrocks.ha.FrontendNodeType;
+=======
+import com.starrocks.common.util.LeaderDaemon;
+>>>>>>> 316654710 ([BugFix]Fix olap external table meta synchronization bug (#12368))
 import com.starrocks.meta.MetaContext;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -69,7 +73,7 @@ public class StarRocksRepository extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (GlobalStateMgr.getCurrentState().getRole() != FrontendNodeType.FOLLOWER) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
         for (ExternalOlapTable table : srTables.values()) {
