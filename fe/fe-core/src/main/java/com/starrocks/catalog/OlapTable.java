@@ -561,7 +561,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);
-            index.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+            index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index*/);
 
             // replicas
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
@@ -575,7 +575,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 long newReplicaId = globalStateMgr.getNextId();
                 Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                         version, schemaHash);
-                newTablet.addReplica(replica, true /* is restore */);
+                newTablet.addReplica(replica, false/* update inverted index*/);
             }
         }
         return Status.OK;
