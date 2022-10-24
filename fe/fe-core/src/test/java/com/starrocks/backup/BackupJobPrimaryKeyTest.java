@@ -68,20 +68,20 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class BackupJobTest {
+public class BackupJobPrimaryKeyTest {
 
     private BackupJob job;
     private Database db;
 
-    private long dbId = 1;
-    private long tblId = 2;
-    private long partId = 3;
-    private long idxId = 4;
-    private long tabletId = 5;
+    private long dbId = 11;
+    private long tblId = 12;
+    private long partId = 13;
+    private long idxId = 14;
+    private long tabletId = 15;
     private long backendId = 10000;
-    private long version = 6;
+    private long version = 16;
 
-    private long repoId = 20000;
+    private long repoId = 30000;
     private AtomicLong id = new AtomicLong(50000);
 
     @Mocked
@@ -148,7 +148,7 @@ public class BackupJobTest {
         // Thread is unmockable after Jmockit version 1.48, so use reflection to set field instead.
         Deencapsulation.setField(globalStateMgr, "backupHandler", backupHandler);
 
-        db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.AGG_KEYS);
+        db = UnitTestUtil.createDb(dbId, tblId, partId, idxId, tabletId, backendId, version, KeysType.PRIMARY_KEYS);
 
         new Expectations(globalStateMgr) {
             {
@@ -236,8 +236,7 @@ public class BackupJobTest {
         String snapshotPath = "/path/to/snapshot";
         List<String> snapshotFiles = Lists.newArrayList();
         snapshotFiles.add("1.dat");
-        snapshotFiles.add("1.idx");
-        snapshotFiles.add("1.hdr");
+        snapshotFiles.add("meta");
         TStatus taskStatus = new TStatus(TStatusCode.OK);
         TBackend tBackend = new TBackend("", 0, 1);
         TFinishTaskRequest request = new TFinishTaskRequest(tBackend, TTaskType.MAKE_SNAPSHOT,
@@ -280,13 +279,11 @@ public class BackupJobTest {
         tabletFileMap.put(tabletId, tabletFiles);
         Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
         tabletFiles.add("1.dat.4f158689243a3d6030352fec3cfd3798");
-        tabletFiles.add("wrong_files.idx.4f158689243a3d6030352fec3cfd3798");
-        tabletFiles.add("wrong_files.hdr.4f158689243a3d6030352fec3cfd3798");
+        tabletFiles.add("wrong_files.4f158689243a3d6030352fec3cfd3798");
         Assert.assertFalse(job.finishSnapshotUploadTask(upTask, request));
         tabletFiles.clear();
         tabletFiles.add("1.dat.4f158689243a3d6030352fec3cfd3798");
-        tabletFiles.add("1.idx.4f158689243a3d6030352fec3cfd3798");
-        tabletFiles.add("1.hdr.4f158689243a3d6030352fec3cfd3798");
+        tabletFiles.add("meta.4f158689243a3d6030352fec3cfd3798");
         Assert.assertTrue(job.finishSnapshotUploadTask(upTask, request));
         job.run();
         Assert.assertEquals(Status.OK, job.getStatus());
