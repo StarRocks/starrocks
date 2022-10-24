@@ -21,7 +21,7 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
-    return _queue.blocking_put(std::move(task));
+    return _queue.try_put(std::move(task));
 }
 
 /// WorkGroupScanTaskQueue.
