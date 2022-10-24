@@ -40,8 +40,6 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TPlanFragment;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
@@ -85,8 +83,6 @@ import java.util.stream.Collectors;
  * fix that
  */
 public class PlanFragment extends TreeNode<PlanFragment> {
-    private static final Logger LOG = LogManager.getLogger(PlanFragment.class);
-
     // id for this plan fragment
     protected final PlanFragmentId fragmentId;
 
@@ -196,11 +192,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
             if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
                 this.parallelExecNum = 1;
                 this.pipelineDop = ConnectContext.get().getSessionVariable().getDegreeOfParallelism();
-                LOG.info("enable pipeline, dop {}", this.pipelineDop);
             } else {
                 this.parallelExecNum = ConnectContext.get().getSessionVariable().getParallelExecInstanceNum();
                 this.pipelineDop = 1;
-                LOG.info("disable pipeline, dop {}", this.pipelineDop);
             }
         }
     }
