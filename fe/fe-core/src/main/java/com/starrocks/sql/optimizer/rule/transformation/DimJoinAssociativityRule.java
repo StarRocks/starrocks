@@ -1,10 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
-
 package com.starrocks.sql.optimizer.rule.transformation;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -26,62 +24,37 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/*
- *        Join          Join
- *       /    \        /    \
- *    Join     C  =>  A     Join
- *   /    \                /    \
- *  A     B               B      C
- * */
-public class JoinAssociativityRule extends TransformationRule {
-    private JoinAssociativityRule() {
-        super(RuleType.TF_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
-                .addChildren(Pattern.create(OperatorType.LOGICAL_JOIN)
-                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF, OperatorType.PATTERN_MULTI_LEAF))
-                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)))
-                .addChildren(Pattern.create(OperatorType.PATTERN_LEAF)));
+
+/**
+ * If InnerJoin(LeftJoin(a, b), c) doesn't have any conjunction between b and c
+ *      inner join                  left join
+ *      /        \                  /       \
+ *   left join     c   <=>      inner join    b
+ *  /       \                  /        \
+ * a         b                a          c
+ *
+ */
+public class DimJoinAssociativityRule extends JoinAssociativityRule {
+    private DimJoinAssociativityRule() {
+        super(RuleType.TF_DIM_JOIN_ASSOCIATIVITY, Pattern.create(OperatorType.LOGICAL_JOIN)
+                .addChildren(
+                        Pattern.create(OperatorType.LOGICAL_JOIN).addChildren(
+                                Pattern.create(OperatorType.PATTERN_LEAF)
+                                        .addChildren(Pattern.create(OperatorType.PATTERN_MULTI_LEAF)),
+                                Pattern.create(OperatorType.PATTERN_LEAF)),
+                        Pattern.create(OperatorType.PATTERN_LEAF)));
     }
 
-    protected JoinAssociativityRule(RuleType type, Pattern pattern) {
-        super(type, pattern);
-    }
-
-
-    private static final JoinAssociativityRule INSTANCE = new JoinAssociativityRule();
-
-    public static JoinAssociativityRule getInstance() {
-        return INSTANCE;
-    }
+    private static final DimJoinAssociativityRule INSTANCE = new DimJoinAssociativityRule();
 
     public boolean check(final OptExpression input, OptimizerContext context) {
-        LogicalJoinOperator joinOperator = (LogicalJoinOperator) input.getOp();
-        if (!joinOperator.getJoinHint().isEmpty() ||
-                !((LogicalJoinOperator) input.inputAt(0).getOp()).getJoinHint().isEmpty()) {
+        if (!context.getSessionVariable().isCboEnableDimJoinReorder()) {
             return false;
         }
-
-        if (!joinOperator.getJoinType().isInnerJoin()) {
-            return false;
-        }
-
-        LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) input.inputAt(0).getOp();
-        if (leftChildJoin.getProjection() != null) {
-            Projection projection = leftChildJoin.getProjection();
-            // 1. Forbidden expression column on join-reorder
-            // 2. Forbidden on-predicate use columns from two children at same time
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : projection.getColumnRefMap().entrySet()) {
-                if (!entry.getValue().isColumnRef() &&
-                        entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(0).getOutputColumns()) &&
-                        entry.getValue().getUsedColumns().isIntersect(input.inputAt(0).inputAt(1).getOutputColumns())) {
-                    return false;
-                }
-            }
-        }
-        return true;
+        return super.check(input, context);
     }
 
     @Override
@@ -92,44 +65,34 @@ public class JoinAssociativityRule extends TransformationRule {
         LogicalJoinOperator parentJoin = (LogicalJoinOperator) input.getOp();
         LogicalJoinOperator leftChildJoin = (LogicalJoinOperator) leftChild.getOp();
         // We do this check here not in check method, because check here is very simple
-        if (!leftChildJoin.getJoinType().isInnerJoin() && !leftChildJoin.getJoinType().isCrossJoin()) {
+        if (!(leftChildJoin.getJoinType().isLeftOuterJoin() || leftChildJoin.getJoinType().isInnerJoin())
+                && !(parentJoin.getJoinType().isInnerJoin() || parentJoin.getJoinType().isLeftOuterJoin())) {
             return Collections.emptyList();
         }
-
         List<ScalarOperator> parentConjuncts = Utils.extractConjuncts(parentJoin.getOnPredicate());
         List<ScalarOperator> childConjuncts = Utils.extractConjuncts(leftChildJoin.getOnPredicate());
+
+        OptExpression leftChild1 = leftChild.inputAt(0);
+        OptExpression leftChild2 = leftChild.inputAt(1);
+        //parent conjunct can't contains any leftchild2 columns
+        for (ScalarOperator parentConjunct : parentConjuncts) {
+            if (parentConjunct.getUsedColumns().isIntersect(leftChild2.getOutputColumns())) {
+                return Collections.emptyList();
+            }
+        }
+        ColumnRefSet newLeftChildColumns = new ColumnRefSet();
+        newLeftChildColumns.union(leftChild1.getOutputColumns());
+        newLeftChildColumns.union(rightChild.getOutputColumns());
+
+        List<ScalarOperator> newChildConjuncts = Lists.newArrayList();
+        List<ScalarOperator> newParentConjuncts = Lists.newArrayList();
 
         List<ScalarOperator> allConjuncts = Lists.newArrayList();
         allConjuncts.addAll(parentConjuncts);
         allConjuncts.addAll(childConjuncts);
 
-        OptExpression leftChild1 = leftChild.inputAt(0);
-        OptExpression leftChild2 = leftChild.inputAt(1);
-        // todo
-        //          join (b+c=a)                    join (b+c=a)
-        //        /      \                          /   \
-        //      join      C           ->           A    join
-        //      /  \                                    /   \
-        //     A    B                                  B     C
-        // cross join on predicate b+c=a transform to inner join predicate, and it's equals on predicate, but it need to
-        // generate projection xx = b+c on the new right join which we could not do now. so we just forbidden this
-        // transform easily.
-        for (ScalarOperator parentConjunct : parentConjuncts) {
-            if (parentConjunct.getUsedColumns().isIntersect(leftChild1.getOutputColumns()) &&
-                    parentConjunct.getUsedColumns().isIntersect(leftChild2.getOutputColumns()) &&
-                    parentConjunct.getUsedColumns().isIntersect(rightChild.getOutputColumns())) {
-                return Collections.emptyList();
-            }
-        }
-
-        ColumnRefSet newRightChildColumns = new ColumnRefSet();
-        newRightChildColumns.union(rightChild.getOutputColumns());
-        newRightChildColumns.union(leftChild2.getOutputColumns());
-
-        List<ScalarOperator> newChildConjuncts = Lists.newArrayList();
-        List<ScalarOperator> newParentConjuncts = Lists.newArrayList();
         for (ScalarOperator conjunct : allConjuncts) {
-            if (newRightChildColumns.containsAll(conjunct.getUsedColumns())) {
+            if (newLeftChildColumns.containsAll(conjunct.getUsedColumns())) {
                 newChildConjuncts.add(conjunct);
             } else {
                 newParentConjuncts.add(conjunct);
@@ -143,6 +106,7 @@ public class JoinAssociativityRule extends TransformationRule {
 
         LogicalJoinOperator.Builder topJoinBuilder = new LogicalJoinOperator.Builder();
 
+        // same to JoinAssociativityRule
         // If left child join contains predicate, it's means the predicate must can't push down to child, it's
         // will use columns which from all children, so we should add the predicate to new top join
         ScalarOperator topJoinPredicate = parentJoin.getPredicate();
@@ -151,14 +115,14 @@ public class JoinAssociativityRule extends TransformationRule {
         }
 
         LogicalJoinOperator topJoinOperator = topJoinBuilder.withOperator(parentJoin)
-                .setJoinType(JoinOperator.INNER_JOIN)
+                .setJoinType(leftChildJoin.getJoinType())
                 .setOnPredicate(Utils.compoundAnd(newParentConjuncts))
                 .setPredicate(topJoinPredicate)
                 .build();
 
         ColumnRefSet parentJoinRequiredColumns = parentJoin.getOutputColumns(new ExpressionContext(input));
         parentJoinRequiredColumns.union(topJoinOperator.getRequiredChildInputColumns());
-        List<ColumnRefOperator> newRightOutputColumns = newRightChildColumns.getStream()
+        List<ColumnRefOperator> newLeftOutputColumns = newLeftChildColumns.getStream()
                 .filter(parentJoinRequiredColumns::contains)
                 .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
@@ -168,91 +132,88 @@ public class JoinAssociativityRule extends TransformationRule {
         if (leftChildJoinProjection != null) {
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftChildJoinProjection.getColumnRefMap()
                     .entrySet()) {
-                // To handle mappings of expressions in projection, special processing is needed like
-                // ColumnRefOperator -> ColumnRefOperator mappings with name ("1: expr" -> "2: column_name", or "1: sum" -> "2: sum"),
-                // it needs to be handled like expression mapping.
-                String keyIdentifier = entry.getKey().toString();
-                String valueIdentifier = entry.getValue().toString();
-                boolean isProjectToColumnRef = Objects.equals(keyIdentifier, valueIdentifier);
-                if (!isProjectToColumnRef &&
-                        newRightChildColumns.containsAll(entry.getValue().getUsedColumns())) {
-                    rightExpression.put(entry.getKey(), entry.getValue());
-                } else if (!isProjectToColumnRef &&
-                        leftChild1.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
+                if (!entry.getValue().isColumnRef() &&
+                        newLeftChildColumns.containsAll(entry.getValue().getUsedColumns())) {
                     leftExpression.put(entry.getKey(), entry.getValue());
+                } else if (!entry.getValue().isColumnRef() &&
+                        leftChild2.getOutputColumns().containsAll(entry.getValue().getUsedColumns())) {
+                    rightExpression.put(entry.getKey(), entry.getValue());
                 }
             }
         }
 
-        //build new right child join
-        OptExpression newRightChildJoin;
-        if (rightExpression.isEmpty()) {
-            LogicalJoinOperator.Builder rightChildJoinOperatorBuilder = new LogicalJoinOperator.Builder();
-            LogicalJoinOperator rightChildJoinOperator = rightChildJoinOperatorBuilder
-                    .setJoinType(JoinOperator.INNER_JOIN)
+        //build new left child join
+        OptExpression newLeftChildJoin;
+        if (leftExpression.isEmpty()) {
+            LogicalJoinOperator.Builder leftChildJoinOperatorBuilder = new LogicalJoinOperator.Builder();
+            LogicalJoinOperator leftChildJoinOperator = leftChildJoinOperatorBuilder
+                    .setJoinType(parentJoin.getJoinType())
                     .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
-                    .setProjection(new Projection(newRightOutputColumns.stream()
+                    .setProjection(new Projection(newLeftOutputColumns.stream()
                             .collect(Collectors.toMap(Function.identity(), Function.identity())), new HashMap<>()))
                     .build();
-            newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
+            newLeftChildJoin = OptExpression.create(leftChildJoinOperator, leftChild1, rightChild);
         } else {
-            rightExpression.putAll(newRightOutputColumns.stream()
+            rightExpression.putAll(newLeftOutputColumns.stream()
                     .collect(Collectors.toMap(Function.identity(), Function.identity())));
             LogicalJoinOperator.Builder rightChildJoinOperatorBuilder = new LogicalJoinOperator.Builder();
             LogicalJoinOperator rightChildJoinOperator = rightChildJoinOperatorBuilder
-                    .setJoinType(JoinOperator.INNER_JOIN)
+                    .setJoinType(parentJoin.getJoinType())
                     .setOnPredicate(Utils.compoundAnd(newChildConjuncts))
                     .setProjection(new Projection(rightExpression))
                     .build();
-            newRightChildJoin = OptExpression.create(rightChildJoinOperator, leftChild2, rightChild);
-
-            newRightOutputColumns = new ArrayList<>(rightExpression.keySet());
+            newLeftChildJoin = OptExpression.create(rightChildJoinOperator, leftChild1, rightChild);
+            newLeftOutputColumns = new ArrayList<>(rightExpression.keySet());
         }
 
-        //build left
-        if (!leftExpression.isEmpty()) {
-            OptExpression left;
+        //build right
+        if (!rightExpression.isEmpty()) {
+            OptExpression right;
             Map<ColumnRefOperator, ScalarOperator> expressionProject;
-            if (leftChild1.getOp().getProjection() == null) {
-                expressionProject = leftChild1.getOutputColumns().getStream()
+            if (leftChild2.getOp().getProjection() == null) {
+                expressionProject = leftChild2.getOutputColumns().getStream()
                         .mapToObj(id -> context.getColumnRefFactory().getColumnRef(id))
                         .collect(Collectors.toMap(Function.identity(), Function.identity()));
             } else {
-                expressionProject = Maps.newHashMap(leftChild1.getOp().getProjection().getColumnRefMap());
+                expressionProject = Maps.newHashMap(leftChild2.getOp().getProjection().getColumnRefMap());
             }
             // Use leftChild1 projection to rewrite the leftExpression, it's like two project node merge.
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(expressionProject);
             Map<ColumnRefOperator, ScalarOperator> rewriteMap = Maps.newHashMap(expressionProject);
-            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : leftExpression.entrySet()) {
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : rightExpression.entrySet()) {
                 rewriteMap.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
             }
 
-            Operator.Builder builder = OperatorBuilderFactory.build(leftChild1.getOp());
-            Operator newOp = builder.withOperator(leftChild1.getOp())
+            Operator.Builder builder = OperatorBuilderFactory.build(leftChild2.getOp());
+            Operator newOp = builder.withOperator(leftChild2.getOp())
                     .setProjection(new Projection(rewriteMap)).build();
-            left = OptExpression.create(newOp, leftChild1.getInputs());
+            right = OptExpression.create(newOp, leftChild2.getInputs());
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
             if (new ColumnRefSet(new ArrayList<>(expressionProject.keySet())).containsAll(
                     topJoinOperator.getOnPredicate().getUsedColumns())
-                    || new ColumnRefSet(newRightOutputColumns).containsAll(
+                    || new ColumnRefSet(newLeftOutputColumns).containsAll(
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
 
-            OptExpression topJoin = OptExpression.create(topJoinOperator, left, newRightChildJoin);
+            OptExpression topJoin = OptExpression.create(topJoinOperator, newLeftChildJoin, right);
             return Lists.newArrayList(topJoin);
         } else {
 
             //If all the columns in onPredicate come from one side, it means that it is CrossJoin, and give up this Plan
-            if (leftChild1.getOutputColumns().containsAll(topJoinOperator.getOnPredicate().getUsedColumns())
-                    || new ColumnRefSet(newRightOutputColumns).containsAll(
+            if (leftChild2.getOutputColumns().containsAll(topJoinOperator.getOnPredicate().getUsedColumns())
+                    || new ColumnRefSet(newLeftOutputColumns).containsAll(
                     topJoinOperator.getOnPredicate().getUsedColumns())) {
                 return Collections.emptyList();
             }
 
-            OptExpression topJoin = OptExpression.create(topJoinOperator, leftChild1, newRightChildJoin);
+            OptExpression topJoin = OptExpression.create(topJoinOperator, newLeftChildJoin, leftChild2);
             return Lists.newArrayList(topJoin);
         }
+    }
+
+    public static DimJoinAssociativityRule getInstance() {
+        return INSTANCE;
     }
 }

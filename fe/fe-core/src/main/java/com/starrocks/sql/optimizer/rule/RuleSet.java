@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.rule.implementation.WindowImplementationRule;
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.DimJoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.EsScanPartitionPruneRule;
@@ -333,6 +334,7 @@ public class RuleSet {
     public void addJoinTransformationRules() {
         transformRules.add(JoinCommutativityRule.getInstance());
         transformRules.add(JoinAssociativityRule.getInstance());
+        transformRules.add(DimJoinAssociativityRule.getInstance());
     }
 
     public void addJoinCommutativityWithOutInnerRule() {
