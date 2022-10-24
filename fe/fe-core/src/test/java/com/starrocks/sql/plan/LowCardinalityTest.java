@@ -758,6 +758,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  \n" +
                 "  3:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  hash predicates:\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: S_SUPPKEY = 9: S_SUPPKEY");
     }
