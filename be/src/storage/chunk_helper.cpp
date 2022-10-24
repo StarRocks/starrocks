@@ -292,7 +292,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         }
 
         for (size_t j = 1; j <= num_rows; ++j) {
-            new_offset[j] = static_cast<unsigned int>(len * j);
+            new_offset[j] = static_cast<uint32_t>(len * j);
         }
 
         const auto& field = schema.field(field_index);
