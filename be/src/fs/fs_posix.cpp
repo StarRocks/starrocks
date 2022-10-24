@@ -181,6 +181,7 @@ public:
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
+        _pending_sync = true;
         return Status::OK();
     }
 
@@ -214,6 +215,7 @@ public:
             RETRY_ON_EINTR(ret, ftruncate(_fd, _filesize));
             if (ret != 0) {
                 s = io_error(_filename, errno);
+                _pending_sync = true;
             }
         }
 
@@ -257,7 +259,10 @@ public:
     }
 
     Status sync() override {
-        RETURN_IF_ERROR(do_sync(_fd, _filename));
+        if (_pending_sync) {
+            _pending_sync = false;
+            RETURN_IF_ERROR(do_sync(_fd, _filename));
+        }
         return Status::OK();
     }
 
@@ -268,6 +273,7 @@ private:
     std::string _filename;
     int _fd;
     const bool _sync_on_close = false;
+    bool _pending_sync = false;
     bool _closed = false;
     uint64_t _filesize = 0;
     uint64_t _pre_allocated_size = 0;
