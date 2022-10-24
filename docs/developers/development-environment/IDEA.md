@@ -143,10 +143,11 @@ To standardize the coding style, you should import the `fe/starrocks_intellij_st
 ## Attach debugger
 
 
-If you started the FE with the `debug` option, you can then attach IDEA debugger to the FE process.
+If you started the FE with the debug option, you can then attach the IDEA debugger to the FE process.
 
-See https://www.jetbrains.com/help/idea/attaching-to-local-process.html#attach-to-local.
 
 ```
 ./start_fe.sh --debug
 ```
+
+See https://www.jetbrains.com/help/idea/attaching-to-local-process.html#attach-to-local.
