@@ -7,6 +7,7 @@
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "storage/chunk_helper.h"
 
 namespace starrocks {
 
@@ -89,6 +90,8 @@ private:
 
     // =========================
     RuntimeState* _runtime_state = nullptr;
+    ChunkPipelineAccumulator _ck_acc;
+    Status _status = Status::OK();
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
