@@ -1,4 +1,4 @@
-# SHOW ALTER
+# SHOW ALTER TABLE
 
 ## 功能
 
