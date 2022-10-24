@@ -34,7 +34,6 @@ private:
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     const TupleDescriptor* _dest_tuple_desc;
-    std::unique_ptr<vectorized::SchemaScannerParam> _param;
     std::unique_ptr<vectorized::SchemaScanner> _scanner;
 
     OlapSchemaScanContextPtr _ctx;

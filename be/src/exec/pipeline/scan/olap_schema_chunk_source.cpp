@@ -28,10 +28,9 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get schema table descriptor");
     }
 
-    _param = std::make_unique<vectorized::SchemaScannerParam>();
-    *_param = *(_ctx->param());
-    _param->_rpc_timer = ADD_TIMER(_runtime_profile, "FERPC");
-    _param->_fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunk");
+    auto param = _ctx->param();
+    param->_rpc_timer = ADD_TIMER(_runtime_profile, "FERPC");
+    param->_fill_chunk_timer = ADD_TIMER(_runtime_profile, "FillChunk");
 
     _filter_timer = ADD_TIMER(_runtime_profile, "FilterTime");
 
@@ -40,7 +39,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
         return Status::InternalError("schema scanner get null pointer");
     }
 
-    RETURN_IF_ERROR(_scanner->init(_param.get(), _ctx->object_pool()));
+    RETURN_IF_ERROR(_scanner->init(param, _ctx->object_pool()));
     return _scanner->start(state);
 }
 

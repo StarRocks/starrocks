@@ -29,9 +29,6 @@ public:
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
 
 private:
-    TPlanNode _t_node;
-    std::vector<Expr*> _conjuncts;
-    std::vector<ExprContext*> _conjunct_ctxs;
     OlapSchemaScanContextPtr _ctx;
     BalancedChunkBuffer _chunk_buffer;
 };
