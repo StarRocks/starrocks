@@ -224,6 +224,7 @@ struct TSnapshotRequest {
     // [range1_start, range1_end(inclusive), ... rangeN_start (implicit to INT64_MAX)]
     // size must be 2*N + 1
     10:optional list<Types.TVersion> missing_version_ranges
+    11:optional bool is_restore_task = false;
 }
 
 struct TReleaseSnapshotRequest {
