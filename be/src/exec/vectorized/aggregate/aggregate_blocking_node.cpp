@@ -230,6 +230,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
 
+    context->has_aggregation = true;
     bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 

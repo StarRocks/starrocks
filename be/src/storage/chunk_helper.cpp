@@ -458,4 +458,49 @@ void ChunkAccumulator::finalize() {
     }
 }
 
+void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    DCHECK(_out_chunk == nullptr);
+    if (_in_chunk == nullptr) {
+        _in_chunk = chunk;
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+        _out_chunk = std::move(_in_chunk);
+        _in_chunk = chunk;
+    } else {
+        _in_chunk->append(*chunk);
+    }
+
+    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
+                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+        _out_chunk = std::move(_in_chunk);
+    }
+}
+
+void ChunkPipelineAccumulator::reset() {
+    _in_chunk.reset();
+    _out_chunk.reset();
+}
+
+void ChunkPipelineAccumulator::finalize() {
+    _finalized = true;
+}
+
+vectorized::ChunkPtr& ChunkPipelineAccumulator::pull() {
+    if (_finalized && _out_chunk == nullptr) {
+        return _in_chunk;
+    }
+    return _out_chunk;
+}
+
+bool ChunkPipelineAccumulator::has_output() const {
+    return _out_chunk != nullptr || (_finalized && _in_chunk != nullptr);
+}
+
+bool ChunkPipelineAccumulator::need_input() const {
+    return !_finalized && _out_chunk == nullptr;
+}
+
+bool ChunkPipelineAccumulator::is_finished() const {
+    return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
+}
+
 } // namespace starrocks

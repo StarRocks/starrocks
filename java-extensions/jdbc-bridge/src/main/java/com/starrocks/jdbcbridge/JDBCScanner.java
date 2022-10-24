@@ -32,13 +32,15 @@ public class JDBCScanner {
 
     public void open() throws Exception {
 
-        dataSource = DataSourceCache.getInstance().getSource(driverLocation, () -> {
+        dataSource = DataSourceCache.getInstance().getSource(scanContext.getJdbcURL(), () -> {
             HikariConfig config = new HikariConfig();
             config.setDriverClassName(scanContext.getDriverClassName());
             config.setJdbcUrl(scanContext.getJdbcURL());
             config.setUsername(scanContext.getUser());
             config.setPassword(scanContext.getPassword());
             config.setMaximumPoolSize(scanContext.getConnectionPoolSize());
+            config.setMinimumIdle(scanContext.getMinimumIdleConnections());
+            config.setIdleTimeout(scanContext.getConnectionIdleTimeoutMs());
             dataSource = new HikariDataSource(config);
             return dataSource;
         });

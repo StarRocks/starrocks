@@ -18,6 +18,7 @@ import org.junit.rules.ExpectedException;
 public class AggregateTest extends PlanTestBase {
     @Rule
     public ExpectedException expectedException = ExpectedException.none();
+
     @Test
     public void testHaving() throws Exception {
         String sql = "select v2 from t0 group by v2 having v2 > 0";
@@ -858,7 +859,8 @@ public class AggregateTest extends PlanTestBase {
                 + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
                 + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
                 + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
-                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                +
+                "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv group by 1,2";
         String plan = getFragmentPlan(sql);
@@ -874,7 +876,8 @@ public class AggregateTest extends PlanTestBase {
                 + "= 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'A', "
                 + "(case when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate  "
                 + "as BIGINT)) + 1) % 3) = 1) then 'B' else 'C' end) = 'B',(case when ((((cast(lo_orderdate as "
-                + "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
+                +
+                "BIGINT)) + 1) % 3) = 0) then 'A' when ((((cast(lo_orderdate as BIGINT)) + 1) % 3) = 1) then 'B' else "
                 + "'C' end) = 'C'])) as __col_4, (count(distinct lo_orderdate)) "
                 + "as __col_18 from lineorder_flat_for_mv";
         String plan = getFragmentPlan(sql);
@@ -907,7 +910,7 @@ public class AggregateTest extends PlanTestBase {
         expectedException.expectMessage("mode argument's range must be [0-7]");
         String sql =
                 "select L_ORDERKEY,window_funnel(1800, L_SHIPDATE, 8, [L_PARTKEY = 1]) from lineitem_partition_colocate" +
-                " group by L_ORDERKEY;";
+                        " group by L_ORDERKEY;";
         try {
             getFragmentPlan(sql);
         } finally {
@@ -1701,4 +1704,17 @@ public class AggregateTest extends PlanTestBase {
         connectContext.getSessionVariable().setEnableSortAggregate(false);
     }
 
+    @Test
+    public void testMergeAggPruneColumnPruneWindow() throws Exception {
+        String sql = "select v2 " +
+                "from ( " +
+                "   select v2, x3 " +
+                "   from (select v2, sum(v1) over (partition by v3) as x3 from t0) as tt0 " +
+                "   group by v2, x3 " +
+                ") ttt0 " +
+                "group by v2";
+        String plan = getFragmentPlan(sql);
+        Assert.assertFalse(plan.contains("ANALYTIC"));
+        Assert.assertEquals(1, StringUtils.countMatches(plan, ":AGGREGATE"));
+    }
 }

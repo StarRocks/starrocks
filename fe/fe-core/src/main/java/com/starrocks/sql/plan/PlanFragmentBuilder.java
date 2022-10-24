@@ -271,7 +271,7 @@ public class PlanFragmentBuilder {
 
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+            if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
                 return;
             }
 
@@ -292,20 +292,21 @@ public class PlanFragmentBuilder {
                 outputColumnIds.add(colref.getId());
             }
 
-            // we only support single pred like: a = xx, single pre can push down to scan node
-            // complex pred like: a + b = xx, can not push down to scan node yet
-            // so the columns in complex pred, it useful for the stage after scan
+            // NOTE:
+            // - only support push down single predicate(eg, a = xx) to scan node.
+            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused columns.
+            // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
+            // so the columns in complex predicate are useful for the stage after scan.
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-            Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
             if (referenceTable.getKeysType().isAggregationFamily() ||
                     referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                List<Column> fullColumn = referenceTable.getFullSchema();
-                for (Column col : fullColumn) {
-                    if (!col.isKey()) {
-                        aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
-                    }
-                }
+                aggOrPrimaryKeyTableValueColumnNames =
+                        referenceTable.getFullSchema().stream()
+                                .filter(col -> !col.isKey())
+                                .map(col -> col.getName())
+                                .collect(Collectors.toSet());
             }
 
             for (ScalarOperator predicate : predicates) {
@@ -333,7 +334,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
         }
 
         @Override
@@ -1259,18 +1260,25 @@ public class PlanFragmentBuilder {
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
+            // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
+            // the group-by expressions just denote the hash distribution of an exchange operator.
+            boolean forExchangePerf = node.getAggregations().values().stream().anyMatch(aggFunc ->
+                    aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                            aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED)) &&
+                    ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 1;
+            if (!forExchangePerf) {
+                for (ColumnRefOperator grouping : node.getGroupBys()) {
+                    Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
-            for (ColumnRefOperator grouping : node.getGroupBys()) {
-                Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                    groupingExpressions.add(groupingExpr);
 
-                groupingExpressions.add(groupingExpr);
-
-                SlotDescriptor slotDesc =
-                        context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
-                slotDesc.setType(groupingExpr.getType());
-                slotDesc.setIsNullable(groupingExpr.isNullable());
-                slotDesc.setIsMaterialized(true);
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
+                    slotDesc.setType(groupingExpr.getType());
+                    slotDesc.setIsNullable(groupingExpr.isNullable());
+                    slotDesc.setIsMaterialized(true);
+                }
             }
 
             ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();
