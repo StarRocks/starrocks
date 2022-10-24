@@ -553,7 +553,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePredicateReorder = false;
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
-    private boolean enableFilterUnusedColumnsInScanStage = false;
+    private boolean enableFilterUnusedColumnsInScanStage = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -936,7 +936,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePredicateReorder = true;
     }
 
-    public boolean isAbleFilterUnusedColumnsInScanStage() {
+    public boolean isEnableFilterUnusedColumnsInScanStage() {
         return enableFilterUnusedColumnsInScanStage;
     }
 

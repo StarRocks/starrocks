@@ -271,7 +271,7 @@ public class PlanFragmentBuilder {
 
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+            if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
                 return;
             }
 
@@ -292,20 +292,21 @@ public class PlanFragmentBuilder {
                 outputColumnIds.add(colref.getId());
             }
 
-            // we only support single pred like: a = xx, single pre can push down to scan node
-            // complex pred like: a + b = xx, can not push down to scan node yet
-            // so the columns in complex pred, it useful for the stage after scan
+            // NOTE:
+            // - only support push down single predicate(eg, a = xx) to scan node.
+            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused columns.
+            // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
+            // so the columns in complex predicate are useful for the stage after scan.
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-            Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
             if (referenceTable.getKeysType().isAggregationFamily() ||
                     referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                List<Column> fullColumn = referenceTable.getFullSchema();
-                for (Column col : fullColumn) {
-                    if (!col.isKey()) {
-                        aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
-                    }
-                }
+                aggOrPrimaryKeyTableValueColumnNames =
+                        referenceTable.getFullSchema().stream()
+                                .filter(col -> !col.isKey())
+                                .map(col -> col.getName())
+                                .collect(Collectors.toSet());
             }
 
             for (ScalarOperator predicate : predicates) {
@@ -333,7 +334,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
         }
 
         @Override
