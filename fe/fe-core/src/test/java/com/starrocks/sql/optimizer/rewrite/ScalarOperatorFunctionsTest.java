@@ -315,6 +315,19 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime().toString());
+
+        assertEquals("2013-05-17T12:35:10.000123", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.123"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
+
+        assertEquals("2013-05-17T12:35:10.000001", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00001"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
+
+        assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00000"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
+
         assertEquals("2013-05-17T00:35:10", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 00:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime().toString());

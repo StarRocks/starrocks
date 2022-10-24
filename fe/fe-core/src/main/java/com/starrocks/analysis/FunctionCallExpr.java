@@ -30,6 +30,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.thrift.TAggregateExpr;
@@ -458,5 +459,15 @@ public class FunctionCallExpr extends Expr {
             return true;
         }
         return false;
+    }
+
+    @Override
+    public Expr uncheckedCastTo(Type targetType) throws AnalysisException {
+        Type type = getFn().getReturnType();
+	if (!type.equals(targetType)) {
+            return super.uncheckedCastTo(targetType);
+        } else {
+            return this;
+        }
     }
 }

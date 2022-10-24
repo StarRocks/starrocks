@@ -17,6 +17,7 @@
 #include "exprs/agg/bitmap_union_int.h"
 #include "exprs/agg/count.h"
 #include "exprs/agg/distinct.h"
+#include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
 #include "exprs/agg/hll_ndv.h"
@@ -69,6 +70,9 @@ public:
     static AggregateFunctionPtr MakeCountDistinctAggregateFunction();
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeCountDistinctAggregateFunctionV2();
+
+    template <AggExchangePerfType PerfType>
+    static AggregateFunctionPtr MakeExchangePerfAggregateFunction();
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakeGroupConcatAggregateFunction();
@@ -212,6 +216,11 @@ AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakeCountDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::COUNT>>();
+}
+
+template <AggExchangePerfType PerfType>
+AggregateFunctionPtr AggregateFactory::MakeExchangePerfAggregateFunction() {
+    return std::make_shared<ExchangePerfAggregateFunction<PerfType>>();
 }
 
 template <PrimitiveType PT>
@@ -516,8 +525,9 @@ public:
         //so here are the separate processing function percentile_approx
         if (name == "percentile_approx") {
             return AggregateFactory::MakePercentileApproxAggregateFunction();
+        } else if (name == "lead" || name == "lag") {
+            return AggregateFactory::MakeLeadLagWindowFunction<ArgPT>();
         }
-
         return nullptr;
     }
 
@@ -719,6 +729,10 @@ public:
             return AggregateFactory::MakeHistogramAggregationFunction<ArgPT>();
         } else if (name == "max_by") {
             return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
+        } else if (name == "exchange_bytes") {
+            return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>();
+        } else if (name == "exchange_speed") {
+            return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>();
         }
         return nullptr;
     }
@@ -920,6 +934,9 @@ AggregateFuncResolver::AggregateFuncResolver() {
     ADD_ALL_TYPE("min", true);
     ADD_ALL_TYPE("any_value", true);
     add_aggregate_mapping<TYPE_JSON, TYPE_JSON>("any_value");
+    // just hack the arguments' types, because they are various.
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("exchange_speed");
 
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BIGINT>("multi_distinct_count");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT>("multi_distinct_count");
@@ -1120,7 +1137,11 @@ AggregateFuncResolver::AggregateFuncResolver() {
     ADD_ALL_TYPE("first_value", true);
     ADD_ALL_TYPE("last_value", true);
     ADD_ALL_TYPE("lead", true);
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lead");
+    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lead");
     ADD_ALL_TYPE("lag", true);
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lag");
+    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lag");
 
     add_object_mapping<TYPE_HLL, TYPE_HLL>("hll_union");
     add_object_mapping<TYPE_HLL, TYPE_HLL>("hll_raw_agg");

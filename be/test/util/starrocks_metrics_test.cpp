@@ -259,7 +259,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
-    
+
     auto lookup_metric = metrics->get_metric("page_cache_lookup_count");
     ASSERT_TRUE(lookup_metric != nullptr);
     auto hit_metric = metrics->get_metric("page_cache_hit_count");
@@ -285,7 +285,7 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     metrics->collect(&visitor);
     ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
     ASSERT_STREQ("1", hit_metric->to_string().c_str());
-    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());   
+    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
 }
 
 } // namespace starrocks

@@ -952,6 +952,22 @@ build_cachelib() {
     mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
 }
 
+# streamvbyte
+build_streamvbyte() {
+    check_if_source_exist $STREAMVBYTE_SOURCE
+
+    cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE/
+
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
+
+    make -j$PARALLEL
+    make install
+}
+
 export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
 export CPPFLAGS=$CXXFLAGS
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
@@ -1000,6 +1016,7 @@ build_jemalloc
 build_benchmark
 build_fast_float
 build_cachelib
+build_streamvbyte
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

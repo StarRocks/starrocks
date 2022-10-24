@@ -270,7 +270,13 @@ public class OptimizerTraceUtil {
 
         @Override
         public String visitLogicalAnalytic(LogicalWindowOperator node, Void context) {
-            return super.visitLogicalAnalytic(node, context);
+            StringBuilder sb = new StringBuilder("LogicalWindowOperator");
+            sb.append(" {window=").append(node.getWindowCall());
+            sb.append(", partitions=").append(node.getPartitionExpressions());
+            sb.append(", orderBy=").append(node.getOrderByElements());
+            sb.append(", enforceSort").append(node.getEnforceSortColumns());
+            sb.append("}");
+            return sb.toString();
         }
 
         @Override

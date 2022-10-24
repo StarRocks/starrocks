@@ -364,7 +364,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
-                                   bool enable_exchange_pass_through)
+                                   bool enable_exchange_pass_through, bool enable_exchange_perf)
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
@@ -378,6 +378,7 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
           _enable_exchange_pass_through(enable_exchange_pass_through),
+          _enable_exchange_perf(enable_exchange_perf),
           _output_columns(sink.output_columns) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
