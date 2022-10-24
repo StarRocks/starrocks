@@ -213,9 +213,9 @@ This section describes some system parameters that you need to configure if you 
 
   **Timeout period of each load job > Amount of data to be loaded/Average loading speed**
 
-  > Note: **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the server configurations and the number of allowed concurrent queries. You need to deduct the average loading speed based on the loading speeds of historical load jobs.
+  For example, if the size of the data file that you want to load is 10 GB and the average loading speed of your StarRocks cluster is 100 MB/s, set the timeout period to more than 100 seconds.
 
-  For example, if the size of the data file that you want to load is 10 GB and the average loading speed of your StarRocks cluster is 10 MB/s, set the timeout period to more than 1024 seconds.
+  > Note: **Average loading speed** in the preceding formula is the average loading speed of your StarRocks cluster. It varies depending on the disk I/O and the number of BEs in your StarRocks cluster.
 
   Stream Load also provides the `timeout` parameter, which allows you to specify the timeout period of an individual load job. For more information, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
