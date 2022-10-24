@@ -122,6 +122,55 @@ public class LakeTable extends OlapTable {
     @Override
     public Runnable delete(boolean replay) {
         GlobalStateMgr.getCurrentState().getLocalMetastore().onEraseTable(this);
+<<<<<<< HEAD
         return new DeleteTableTask(this);
+=======
+        return replay ? null : new DeleteLakeTableTask(this);
+    }
+
+    @Override
+    public AlterJobV2Builder alterTable() {
+        return new LakeTableAlterJobV2Builder(this);
+    }
+
+    @Override
+    public Map<String, String> getProperties() {
+        Map<String, String> properties = super.getProperties();
+        if (tableProperty != null) {
+            StorageInfo storageInfo = tableProperty.getStorageInfo();
+            if (storageInfo != null) {
+                // enable_storage_cache
+                properties.put(PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE,
+                        String.valueOf(storageInfo.isEnableStorageCache()));
+
+                // storage_cache_ttl
+                properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL,
+                        String.valueOf(storageInfo.getStorageCacheTtlS()));
+
+                // allow_async_write_back
+                properties.put(PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK,
+                        String.valueOf(storageInfo.isAllowAsyncWriteBack()));
+            }
+        }
+        return properties;
+    }
+
+    @Override
+    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
+        ShardStorageInfo shardStorageInfo = getPartitionShardStorageInfo(partitionId);
+        List<Long> shardIds = null;
+        try {
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, shardStorageInfo);
+        } catch (DdlException e) {
+            LOG.error(e.getMessage());
+            return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
+        }
+        for (long shardId : shardIds) {
+            LakeTablet tablet = new LakeTablet(shardId);
+            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
+        }
+        return Status.OK;
+>>>>>>> 316654710 ([BugFix]Fix olap external table meta synchronization bug (#12368))
     }
 }

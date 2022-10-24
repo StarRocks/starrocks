@@ -568,6 +568,34 @@ public class OlapTable extends Table implements GsonPostProcessable {
         return Status.OK;
     }
 
+<<<<<<< HEAD
+=======
+    public Status createTabletsForRestore(int tabletNum, MaterializedIndex index, GlobalStateMgr globalStateMgr,
+                                          int replicationNum, long version, int schemaHash, long partitionId) {
+        for (int i = 0; i < tabletNum; i++) {
+            long newTabletId = globalStateMgr.getNextId();
+            LocalTablet newTablet = new LocalTablet(newTabletId);
+            index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index*/);
+
+            // replicas
+            List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
+                    .seqChooseBackendIds(replicationNum, true, true);
+            if (CollectionUtils.isEmpty(beIds)) {
+                return new Status(ErrCode.COMMON_ERROR, "failed to find "
+                        + replicationNum
+                        + " different hosts to create table: " + name);
+            }
+            for (Long beId : beIds) {
+                long newReplicaId = globalStateMgr.getNextId();
+                Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
+                        version, schemaHash);
+                newTablet.addReplica(replica, false/* update inverted index*/);
+            }
+        }
+        return Status.OK;
+    }
+
+>>>>>>> 316654710 ([BugFix]Fix olap external table meta synchronization bug (#12368))
     public Map<Long, MaterializedIndexMeta> getIndexIdToMeta() {
         return indexIdToMeta;
     }
