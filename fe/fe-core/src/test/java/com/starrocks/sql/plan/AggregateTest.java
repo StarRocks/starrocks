@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.common.FeConstants;
+import org.junit.Assert;
 import org.junit.Test;
 
 public class AggregateTest extends PlanTestBase {
@@ -32,5 +34,37 @@ public class AggregateTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:EXCHANGE");
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
+    }
+
+    @Test
+    public void testLocalAggregateWithMultiStage() throws Exception {
+        FeConstants.runningUnitTest = true;
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        String sql = "select distinct L_ORDERKEY from lineitem_partition_colocate where L_ORDERKEY = 59633893 ;";
+        ExecPlan plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(3);
+        sql = "select count(distinct L_ORDERKEY) " +
+                "from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem_partition_colocate";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        sql = "select count(*) from lineitem_partition_colocate";
+        plan = getExecPlan(sql);
+        Assert.assertFalse(plan.getFragments().get(1).getPlanRoot().isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(distinct L_ORDERKEY) " +
+                "from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        connectContext.getSessionVariable().setNewPlanerAggStage(0);
+        FeConstants.runningUnitTest = false;
     }
 }
