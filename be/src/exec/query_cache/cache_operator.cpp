@@ -95,11 +95,13 @@ struct PerLaneBuffer {
                 chunks[next_gc_chunk_idx++].reset();
             }
             ++next_gc_chunk_idx;
+            return std::move(chunks[next_chunk_idx++]);
+        } else {
+            // CRITICAL(by satanson): The method is invoked when cloning chunk, when query cache enabled, chunk
+            // may be accessed by multi-thread, so we must clone a chunk when pull chunk from cache operator.
+            ChunkPtr chunk = std::move(chunks[next_chunk_idx++]->clone_unique());
+            return chunk;
         }
-        // CRITICAL(by satanson): The method is invoked when cloning chunk, when query cache enabled, chunk
-        // may be accessed by multi-thread, so we must clone a chunk when pull chunk from cache operator.
-        ChunkPtr chunk = std::move(chunks[next_chunk_idx++]->clone_unique());
-        return chunk;
     }
 };
 
