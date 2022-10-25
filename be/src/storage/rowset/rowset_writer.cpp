@@ -530,7 +530,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                                                      segments.size()) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
         CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
-                                                  _context.tablet_schema->num_key_columns(),
+                                                  _context.tablet_schema->sort_key_idxes(),
                                                   config::vertical_compaction_max_columns_per_group, &column_groups);
 
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
