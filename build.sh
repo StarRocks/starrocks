@@ -266,9 +266,9 @@ if [ ${BUILD_BE} -eq 1 ] ; then
     echo "Build Java Extensions"
     cd ${STARROCKS_HOME}/java-extensions
     if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} -U clean
+        ${MVN_CMD} clean
     fi
-    ${MVN_CMD} -U package -DskipTests
+    ${MVN_CMD} package -DskipTests
     cd ${STARROCKS_HOME}
 fi
 
@@ -290,9 +290,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     echo "Build Frontend Modules: $FE_MODULES"
     cd ${STARROCKS_HOME}/fe
     if [ ${CLEAN} -eq 1 ]; then
-        ${MVN_CMD} -U clean
+        ${MVN_CMD} clean
     fi
-    ${MVN_CMD} -U package -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} package -pl ${FE_MODULES} -DskipTests
     cd ${STARROCKS_HOME}
 fi
 

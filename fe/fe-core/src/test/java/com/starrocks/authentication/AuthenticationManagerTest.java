@@ -304,6 +304,7 @@ public class AuthenticationManagerTest {
                 "create user user_with_host@['host01'] identified by 'abc'", ctx), ctx);
         Assert.assertTrue(manager.doesUserExist(testUserWithHost));
         Assert.assertEquals(new HashSet<String>(Arrays.asList("host01")), manager.getAllHostnames());
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.1", scramble, seed));
 
         // update host -> ip list
         Map<String, Set<String>> hostToIpList = new HashMap<>();
@@ -360,6 +361,8 @@ public class AuthenticationManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user sort_user@['host01'] identified by 'abc'", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user sort_user@'10.1.1.2' identified by 'abc'", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user sort_user@'10.1.1.1' identified by 'abc'", ctx), ctx);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create user sort_user@'%' identified by 'abc'", ctx), ctx);
@@ -372,6 +375,7 @@ public class AuthenticationManagerTest {
                 l.add(userIdentity.toString());
             }
         }
-        Assert.assertEquals(Arrays.asList("'sort_user'@'10.1.1.1'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
+        Assert.assertEquals(Arrays.asList(
+                    "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
     }
 }

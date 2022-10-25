@@ -52,13 +52,13 @@ public class DomainResolver extends LeaderDaemon {
     private AuthenticationManager authenticationManager;
 
     public DomainResolver(Auth auth) {
-        super("domain resolver", 10 * 1000);
+        super("domain resolver", 10L * 1000);
         this.auth = auth;
         this.authenticationManager = null;
     }
 
     public DomainResolver(AuthenticationManager authenticationManager) {
-        super("domain resolver", 10 * 1000);
+        super("domain resolver", 10L * 1000);
         this.auth = null;
         this.authenticationManager = authenticationManager;
     }
