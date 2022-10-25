@@ -35,7 +35,7 @@ public:
                                                           const std::vector<ColumnId>& cids);
 
     // Get schema with format v2 type containing short key columns from TabletSchema.
-    static vectorized::Schema get_short_key_schema_with_format_v2(const TabletSchema& schema);
+    static vectorized::Schema get_short_key_schema_with_format_v2(const TabletSchema& tablet_schema);
 
     static ColumnId max_column_id(const vectorized::Schema& schema);
 

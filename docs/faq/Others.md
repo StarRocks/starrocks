@@ -184,7 +184,7 @@ If you execute the DROP TABLE statement to delete a table, StarRocks takes a whi
 
 ## How to view the current version of StarRocks?
 
-Run the `select current_version();` command or the CLI command `sh bin/show_fe_version.sh` to view the current version.
+Run the `select current_version();` command or the CLI command `./bin/show_fe_version.sh` to view the current version.
 
 ## How to set the memory size of an FE?
 

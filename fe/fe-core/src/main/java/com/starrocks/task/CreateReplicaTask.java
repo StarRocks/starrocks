@@ -60,6 +60,7 @@ public class CreateReplicaTask extends AgentTask {
     private TStorageMedium storageMedium;
 
     private List<Column> columns;
+    private List<Integer> sortKeyIdxes;
 
     // bloom filter columns
     private Set<String> bfColumns;
@@ -97,6 +98,20 @@ public class CreateReplicaTask extends AgentTask {
                              boolean isInMemory,
                              boolean enablePersistentIndex,
                              TTabletType tabletType, TCompressionType compressionType) {
+        this(backendId, dbId, tableId, partitionId, indexId, tabletId, shortKeyColumnCount,
+                schemaHash, version, keysType, storageType, storageMedium, columns, bfColumns,
+                bfFpp, latch, indexes, isInMemory, enablePersistentIndex, tabletType, compressionType, null);
+    }
+
+    public CreateReplicaTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
+                             short shortKeyColumnCount, int schemaHash, long version,
+                             KeysType keysType, TStorageType storageType,
+                             TStorageMedium storageMedium, List<Column> columns,
+                             Set<String> bfColumns, double bfFpp, MarkedCountDownLatch<Long, Long> latch,
+                             List<Index> indexes,
+                             boolean isInMemory,
+                             boolean enablePersistentIndex,
+                             TTabletType tabletType, TCompressionType compressionType, List<Integer> sortKeyIdxes) {
         super(null, backendId, TTaskType.CREATE, dbId, tableId, partitionId, indexId, tabletId);
 
         this.shortKeyColumnCount = shortKeyColumnCount;
@@ -109,6 +124,7 @@ public class CreateReplicaTask extends AgentTask {
         this.storageMedium = storageMedium;
 
         this.columns = columns;
+        this.sortKeyIdxes = sortKeyIdxes;
 
         this.bfColumns = bfColumns;
         this.indexes = indexes;
@@ -194,6 +210,7 @@ public class CreateReplicaTask extends AgentTask {
             tColumns.add(tColumn);
         }
         tSchema.setColumns(tColumns);
+        tSchema.setSort_key_idxes(sortKeyIdxes);
 
         if (CollectionUtils.isNotEmpty(indexes)) {
             List<TOlapTableIndex> tIndexes = new ArrayList<>();

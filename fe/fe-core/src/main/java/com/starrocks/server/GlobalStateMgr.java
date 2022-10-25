@@ -2032,7 +2032,15 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (index.getSortKeyIdxes() != null) {
+                sb.append("\nORDER BY(");
+                List<String> sortKeysColumnNames = Lists.newArrayList();
+                for (Integer i : index.getSortKeyIdxes()) {
+                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+                }
+                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
+            }
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
@@ -2662,15 +2670,21 @@ public class GlobalStateMgr {
 
     public static short calcShortKeyColumnCount(List<Column> columns, Map<String, String> properties)
             throws DdlException {
-        List<Column> indexColumns = new ArrayList<Column>();
-        for (Column column : columns) {
+        List<Integer> sortKeyIdxes = new ArrayList<>();
+        for (int i = 0; i < columns.size(); ++i) {
+            Column column = columns.get(i);
             if (column.isKey()) {
-                indexColumns.add(column);
+                sortKeyIdxes.add(i);
             }
         }
-        LOG.debug("index column size: {}", indexColumns.size());
-        Preconditions.checkArgument(indexColumns.size() > 0);
+        return calcShortKeyColumnCount(columns, properties, sortKeyIdxes);
+    }
 
+    public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
+            List<Integer> sortKeyIdxes)
+            throws DdlException {
+        LOG.debug("sort key size: {}", sortKeyIdxes.size());
+        Preconditions.checkArgument(sortKeyIdxes.size() > 0);
         // figure out shortKeyColumnCount
         short shortKeyColumnCount = (short) -1;
         try {
@@ -2683,13 +2697,11 @@ public class GlobalStateMgr {
             if (shortKeyColumnCount <= 0) {
                 throw new DdlException("Invalid short key: " + shortKeyColumnCount);
             }
-
-            if (shortKeyColumnCount > indexColumns.size()) {
-                throw new DdlException("Short key is too large. should less than: " + indexColumns.size());
+            if (shortKeyColumnCount > sortKeyIdxes.size()) {
+                throw new DdlException("Short key is too large. should less than: " + sortKeyIdxes.size());
             }
-
             for (int pos = 0; pos < shortKeyColumnCount; pos++) {
-                if (indexColumns.get(pos).getPrimitiveType() == PrimitiveType.VARCHAR &&
+                if (indexColumns.get(sortKeyIdxes.get(pos)).getPrimitiveType() == PrimitiveType.VARCHAR &&
                         pos != shortKeyColumnCount - 1) {
                     throw new DdlException("Varchar should not in the middle of short keys.");
                 }
@@ -2699,15 +2711,15 @@ public class GlobalStateMgr {
              * Calc short key column count. NOTE: short key column count is
              * calculated as follow: 1. All index column are taking into
              * account. 2. Max short key column count is Min(Num of
-             * indexColumns, META_MAX_SHORT_KEY_NUM). 3. Short key list can
+             * sortKeyIdxes, META_MAX_SHORT_KEY_NUM). 3. Short key list can
              * contains at most one VARCHAR column. And if contains, it should
              * be at the last position of the short key list.
              */
             shortKeyColumnCount = 0;
             int shortKeySizeByte = 0;
-            int maxShortKeyColumnCount = Math.min(indexColumns.size(), FeConstants.shortkey_max_column_count);
+            int maxShortKeyColumnCount = Math.min(sortKeyIdxes.size(), FeConstants.shortkey_max_column_count);
             for (int i = 0; i < maxShortKeyColumnCount; i++) {
-                Column column = indexColumns.get(i);
+                Column column = indexColumns.get(sortKeyIdxes.get(i));
                 shortKeySizeByte += column.getOlapColumnIndexSize();
                 if (shortKeySizeByte > FeConstants.shortkey_maxsize_bytes) {
                     if (column.getPrimitiveType().isCharFamily()) {
@@ -2730,7 +2742,6 @@ public class GlobalStateMgr {
             if (shortKeyColumnCount == 0) {
                 throw new DdlException("Data type of first column cannot be " + indexColumns.get(0).getType());
             }
-
         } // end calc shortKeyColumnCount
 
         return shortKeyColumnCount;

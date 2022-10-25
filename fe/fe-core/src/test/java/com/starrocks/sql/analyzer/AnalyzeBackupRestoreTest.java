@@ -52,6 +52,8 @@ public class AnalyzeBackupRestoreTest {
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeSuccess("BACKUP SNAPSHOT snapshot_label2 TO `repo` " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
+        analyzeSuccess("BACKUP SNAPSHOT snapshot_pk_label TO `repo` ON ( tprimary ) " +
+                "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t0 ) " +
                 "PROPERTIES (\"type\" = \"full\",\"timeout\" = \"3600\");");
         analyzeFail("BACKUP SNAPSHOT test.snapshot_label2 TO `repo` ON ( t0, t1 ) " +
@@ -87,6 +89,10 @@ public class AnalyzeBackupRestoreTest {
                 "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
                 "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
         analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_2` FROM `repo` " +
+                "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
+                "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
+                "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
+        analyzeSuccess("RESTORE SNAPSHOT test.`snapshot_pk_label` FROM `repo` ON ( `tprimary` )" +
                 "PROPERTIES ( \"backup_timestamp\"=\"2018-05-04-17-11-01\",\"allow_load\"=\"true\"," +
                 "\"replication_num\"=\"1\",\"meta_version\"=\"10\"," +
                 "\"starrocks_meta_version\"=\"10\",\"timeout\"=\"3600\" );");
