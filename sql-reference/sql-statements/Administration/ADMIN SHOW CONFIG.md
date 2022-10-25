@@ -19,7 +19,7 @@ ADMIN SHOW FRONTEND CONFIG [LIKE "pattern"];
 2. Value：      配置项值
 3. Type：       配置项类型
 4. IsMutable：  是否可以通过 ADMIN SET CONFIG 命令设置
-5. MasterOnly： 是否仅适用于 Master FE
+5. MasterOnly： 是否仅适用于 Leader FE
 6. Comment：    配置项说明
 ```
 

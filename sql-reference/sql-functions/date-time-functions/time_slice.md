@@ -14,7 +14,7 @@ DATETIME time_slice(DATETIME dt, INTERVAL N type)
 
 - `dt`：需要转化的时间。支持的数据类型为 DATETIME。
 
-- `INTERVAL N type`：`N`是INT类型的时间周期；`type`值可以是：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND, WEEK, QUARTER。
+- `INTERVAL N type`：`N`是INT类型的时间周期；`type`值可以是：YEAR，MONTH，DAY，HOUR，MINUTE，SECOND，WEEK，QUARTER。
 
 ## 返回值说明
 

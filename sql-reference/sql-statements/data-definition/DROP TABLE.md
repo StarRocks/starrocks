@@ -30,7 +30,7 @@ DROP TABLE [IF EXISTS] [db_name.]table_name [FORCE];
     DROP TABLE IF EXISTS example_db.my_table;
     ```
 
-3. 强制删除表, 并清理磁盘文件。
+3. 强制删除表，并清理磁盘文件。
 
     ```sql
     DROP TABLE my_table FORCE;

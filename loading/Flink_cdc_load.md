@@ -118,7 +118,7 @@
    # 设置 Binlog 的存储位置
    log_bin =/var/lib/mysql/mysql-bin
    # 设置 server_id 
-   # 在 MySQL 5.7.3 及以后版本，如果没有 server_id, 那么设置 binlog 后无法开启 MySQL 服务 
+   # 在 MySQL 5.7.3 及以后版本，如果没有 server_id，那么设置 binlog 后无法开启 MySQL 服务 
    server_id = 1
    # 设置 Binlog 模式为 ROW
    binlog_format = ROW

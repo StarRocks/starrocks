@@ -107,7 +107,7 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 2. 如果用在建表时 `REPLACE_IF_NOT_NULL` 列指定了 NOT NULL，那么 StarRocks 仍然会将其转化 NULL，不会向用户报错。用户可以借助这个类型完成「部分列导入」的功能。
 该类型只对聚合模型有用(`key_desc` 的 `type` 为 `AGGREGATE KEY`)。
 
-**NULL | NOT NULL**：是否允许为 NULL: 默认为 NULL, PRIMARY KEY的key列默认为NOT NULL, NULL 值在导入数据中用 \N 来表示。
+**NULL | NOT NULL**：是否允许为 NULL。默认为 NULL，PRIMARY KEY 的 key 列默认为 NOT NULL。NULL 值在导入数据中用 \N 来表示。
 
 ### **index_definition**
 
@@ -128,7 +128,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
 
 ### **ENGINE 类型**
 
-默认为 olap。可选 mysql, elasticsearch, hive。
+默认为 olap。可选 mysql，elasticsearch，hive。
 
 1. 如果是 mysql，则需要在 properties 提供以下信息：
 
@@ -162,7 +162,7 @@ INDEX index_name (col_name[, col_name, ...]) [USING BITMAP] COMMENT 'xxxxxx'
     )
     ```
 
-    其中 host 为 ES 集群连接地址，可指定一个或者多个, user/password 为开启 basic 认证的 ES 集群的用户名/密码，index 是 StarRocks 中的表对应的 ES 的 index 名字，可以是 alias，type 指定 index 的 type，默认是 doc。
+    其中 host 为 ES 集群连接地址，可指定一个或者多个，user/password 为开启 basic 认证的 ES 集群的用户名/密码，index 是 StarRocks 中的表对应的 ES 的 index 名字，可以是 alias，type 指定 index 的 type，默认是 doc。
 
 3. 如果是 hive，则需要在 properties 提供以下信息：
 
@@ -617,7 +617,7 @@ PROPERTIES ("storage_type" = "column");
 
  创建动态分区表需要在 FE 配置中开启 **动态分区** 功能。
 
- 该表每天提前创建 3 天的分区，并删除 3 天前的分区。例如今天为 `2020-01-08`，则会创建分区名为 `p20200108`, `p20200109`, `p20200110`, `p20200111` 的分区. 分区范围分别为:
+ 该表每天提前创建 3 天的分区，并删除 3 天前的分区。例如今天为 `2020-01-08`，则会创建分区名为 `p20200108`，`p20200109`，`p20200110`，`p20200111` 的分区. 分区范围分别为:
 
 ``` plain text
 [types: [DATE]; keys: [2020-01-08]; ‥types: [DATE]; keys: [2020-01-09]; )

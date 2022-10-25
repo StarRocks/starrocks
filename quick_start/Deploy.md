@@ -170,7 +170,7 @@ ReplayedJournalId: 1303
 ```
 
 * 当 **Role** 为 **FOLLOWER** 时，当前节点是一个能参与选主的 FE 节点。
-* 当 **IsMaster** 为 **true** 时，当前 FE 节点为主节点。
+* 当 **IsMaster** 为 **true** 时，当前 FE 节点为主节点 (Leader FE)。
 
 如果 MySQL 客户端连接失败，可以通过查看 **log/fe.warn.log** 日志文件发现问题。
 

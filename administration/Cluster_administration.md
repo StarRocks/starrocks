@@ -26,18 +26,18 @@
 
 #### 启动 FE 进程
 
-进入 FE 进程的部署路径并运行命令启动服务。启动多 FE 节点时，您需要逐台启动 FE Follower 节点。
+进入 FE 进程的部署路径并运行命令启动服务。启动多 FE 节点时，您需要逐台启动 Follower FE 节点。
 
 ```shell
 cd StarRocks-x.x.x/fe
 sh bin/start_fe.sh --daemon
 ```
 
-为了保证 FE 高可用，您需要部署多个 FE 节点。我们建议您部署 3 个 FE 节点，其中包含 1 个 FE Leader 节点和 2 个 FE Follower 节点。
+为了保证 FE 高可用，您需要部署多个 FE 节点。我们建议您部署 3 个 FE 节点，其中包含 1 个 Leader FE 节点和 2 个 Follower FE 节点。
 
 > 注意
 >
-> 当拥有多个 FE Follower 节点时，集群内需要有半数以上的 FE Follower 节点存活才能够选举出 FE Master 节点，从而提供查询服务。
+> 当拥有多个 Follower FE 节点时，集群内需要有半数以上的 Follower FE 节点存活才能够选举出 Leader FE 节点，从而提供查询服务。
 
 每启动一台 FE 节点后，建议您验证该节点是否启动成功。您可以通过发送查询的方式进行验证。
 
@@ -168,7 +168,7 @@ sh bin/stop_cn.sh
 
 ### 升级 BE 前的准备
 
-为了避免 BE 重启期间不必要的 Tablet 修复，进而影响升级后的集群性能，建议在升级前先在 FE Leader 上执行如下命令以禁用 Tablet 调度功能，
+为了避免 BE 重启期间不必要的 Tablet 修复，进而影响升级后的集群性能，建议在升级前先在 Leader FE 上执行如下命令以禁用 Tablet 调度功能，
 
 ```sql
 admin set frontend config ("max_scheduling_tablets"="0");
@@ -229,7 +229,7 @@ ps aux | grep starrocks_be
 2. 修改测试用的 FE 的配置文件 **fe.conf**，将所有端口设置为与生产环境不同。
 3. 在 **fe.conf** 添加配置 `cluster_id = 123456`。
 4. 在 **fe.conf** 添加配置 `metadata_failure_recovery = true`。
-5. 拷贝生产环境中 Master FE 的元数据路径 **meta** 到测试环境。
+5. 拷贝生产环境中 Leader FE 的元数据路径 **meta** 到测试环境。
 6. 修改测试环境中 **meta/image/VERSION** 文件中的 `cluster_id` 为 `123456`（即与第 3 步中相同）。
 7. 在测试环境中，运行 `sh bin/start_fe.sh` 启动 FE。
 8. 通过 FE 日志 **fe.log** 验证测试 FE 节点是否成功启动。
@@ -240,7 +240,7 @@ ps aux | grep starrocks_be
 
 ### 升级 FE 节点
 
-升级 FE 集群时，您需要先升级各 FE Follower 节点，最后升级 FE Master 节点，从而在 FE Follower 节点升级失败时可以提前发现问题，防止其影响集群查询功能。
+升级 FE 集群时，您需要先升级各 Follower FE 节点，最后升级 Leader FE 节点，从而在 Follower FE 节点升级失败时可以提前发现问题，防止其影响集群查询功能。
 
 进入 FE 路径，并替换相关文件。以下示例以大版本升级为例。
 
@@ -390,7 +390,7 @@ ps aux | grep StarRocksFE
 
 ### 回滚 BE 节点前的准备
 
-为了避免 BE 重启期间不必要的 Tablet 修复，进而影响回滚后的集群性能，建议在回滚前先在 FE Leader 上执行如下命令以禁用 Tablet 调度功能，
+为了避免 BE 重启期间不必要的 Tablet 修复，进而影响回滚后的集群性能，建议在回滚前先在 Leader FE 上执行如下命令以禁用 Tablet 调度功能，
 
 ```sql
 admin set frontend config ("max_scheduling_tablets"="0");

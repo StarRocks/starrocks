@@ -173,7 +173,7 @@
     cd /home/doris/doris/be && ./control.sh stop && cd -
     ```
 
-    * 如果没有部署 Supervisor, 您需要手动关闭 BE。
+    * 如果没有部署 Supervisor，您需要手动关闭 BE。
 
     ```bash
     sh /home/doris/doris/be/bin/stop_be.sh
@@ -215,7 +215,7 @@
 
     * 查看 **be.out**，检查是否有异常日志。
     * 查看 **be.INFO**，检查 heartbeat 是否正常。
-    * 查看 **be.WARN**, 检查是否有异常日志。
+    * 查看 **be.WARN**， 检查是否有异常日志。
 
 > 注意：成功升级 2 个 BE 节点后，您可以通过 `SHOW FRONTENDS;` 查看 `ReplayedJournalId` 是否在增长，以检测导入是否存在问题。
 
@@ -223,7 +223,7 @@
 
 成功升级 BE 节点后，您可以继续升级 FE 节点。
 
-> 注意：升级 FE 遵循**先升级 Observer，再升级 Follower，最后升级 Master** 的顺序。
+> 注意：升级 FE 遵循**先升级 Observer，再升级 Follower，最后升级 Leader** 的顺序。
 
 1. 修改 FE 源码（可选，如果您无需从 Apache Doris 0.13.15 版本升级，可以跳过此步骤）。
 
@@ -249,13 +249,13 @@
     ./build.sh --fe --clean
     ```
 
-2. 通过 MySQL 客户端确定各 FE 节点的 Master 和 Follower 身份。
+2. 通过 MySQL 客户端确定各 FE 节点的 Leader 和 Follower 身份。
 
     ```sql
     SHOW FRONTENDS;
     ```
 
-    如果 `IsMaster` 为 `true`，代表该节点为 Master，否则为 Follower 或 Observer。
+    如果 `IsMaster` 为 `true`，代表该节点为 Leader，否则为 Follower 或 Observer。
 
 3. 检查系统是否使用 Supervisor 启动的 FE，并关闭 FE。
 
@@ -272,7 +272,7 @@
     cd /home/doris/doris/fe && ./control.sh stop && cd -
     ```
 
-    * 如果没有部署 Supervisor, 您需要手动关闭 BE。
+    * 如果没有部署 Supervisor，您需要手动关闭 BE。
 
     ```bash
     sh /home/doris/doris/fe/bin/stop_fe.sh
@@ -291,7 +291,7 @@
     ps aux | grep supervisor
     ```
 
-5. 升级 Follower 或者 Master 之前，务必确保备份元数据。您可以使用升级的日期做备份时间。
+5. 升级 Follower 或者 Leader 之前，务必确保备份元数据。您可以使用升级的日期做备份时间。
 
     ```bash
     cp -r /home/doris/doris/fe/palo-meta /home/doris/doris/fe/doris-meta

@@ -17,7 +17,7 @@ StarRocks 集群由 FE 和 BE 构成， 可以使用 MySQL 客户端访问 StarR
 * FE 的 Planner 负责把逻辑计划转化为可分布式执行的物理计划，分发给一组 BE。
 * FE 监督 BE，管理 BE 的上下线， 根据 BE 的存活和健康状态， 维持 tablet 的副本的数量。
 * FE 协调数据导入， 保证数据导入的一致性。
-* [FE 高可用部署](../loading/Loading_intro.md)，使用复制协议选主和主从同步元数据，所有的元数据修改操作，由 FE leader 节点完成， FE follower 节点可执行读操作。 元数据的读写满足顺序一致性。FE 的节点数目采用 2n+1，可容忍 n 个节点故障。当 FE leader 故障时，从现有的 follower 节点重新选主，完成故障切换。
+* [FE 高可用部署](../loading/Loading_intro.md)，使用复制协议选主和主从同步元数据，所有的元数据修改操作，由 Leader FE 节点完成， Follower FE 节点可执行读操作。 元数据的读写满足顺序一致性。FE 的节点数目采用 2n+1，可容忍 n 个节点故障。当 Leader FE 故障时，从现有的 follower 节点重新选主，完成故障切换。
 
 ### BackEnd
 

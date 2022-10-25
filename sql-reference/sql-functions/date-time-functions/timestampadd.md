@@ -6,7 +6,7 @@
 
 `interval`的单位由unit参数给出，应该是下列值之一:
 
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR。
+SECOND，MINUTE，HOUR，DAY，WEEK，MONTH，YEAR
 
 ## 语法
 
