@@ -2,9 +2,9 @@
 
 package com.starrocks.sql.plan;
 
-
 import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -13,7 +13,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-public class RemoveAggTest extends PlanTestBase{
+public class RemoveAggTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
@@ -61,6 +61,8 @@ public class RemoveAggTest extends PlanTestBase{
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
-
-
+    @AfterAll
+    public static void afterClass() {
+        FeConstants.runningUnitTest = false;
+    }
 }
