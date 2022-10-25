@@ -77,13 +77,17 @@ inline void restore_small_permutation(const SmallPermutation& perm, Permutation&
 
 // Convert a permutation to selection vector, which could be used to filter chunk
 template <class Permutation>
-void permutate_to_selective(const Permutation& perm, std::vector<uint32_t>* select) {
+inline void permutate_to_selective(const Permutation& perm, std::vector<uint32_t>* select) {
     DCHECK(!!select);
     select->resize(perm.size());
     for (size_t i = 0; i < perm.size(); i++) {
         (*select)[i] = perm[i].index_in_chunk;
     }
 }
+
+// Materialize chunk by permutation
+void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm);
+void materialize_column_by_permutation(Column* dst, const Columns& columns, const Permutation& perm);
 
 // Tie and TieIterator
 // Tie is a compact representation of equal ranges in a vector, in which `1` means equal and `0` means not equal.

@@ -77,11 +77,6 @@ Status SortContext::_init_merger() {
         _required_rows = ((_limit < 0) ? _total_rows.load() : std::min<int64_t>(_limit + _offset, _total_rows));
     }
 
-    std::vector<SortedRuns> partial_sorted_runs;
-    for (int i = 0; i < _num_partition_sinkers; ++i) {
-        auto& partition_sorter = _chunks_sorter_partitions[i];
-        partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
-    }
     _partial_cursors.reserve(_num_partition_sinkers);
     for (int i = 0; i < _num_partition_sinkers; i++) {
         vectorized::ChunkProvider provider = [i, this](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {

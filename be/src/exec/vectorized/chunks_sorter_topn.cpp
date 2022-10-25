@@ -353,7 +353,7 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
         right_chunks.push_back(segment.chunk);
     }
     ChunkPtr right_chunk = big_chunk->clone_empty(permutation_second.size());
-    append_by_permutation(right_chunk.get(), right_chunks, permutation_second);
+    materialize_by_permutation(right_chunk.get(), right_chunks, permutation_second);
     Columns right_columns;
     // ExprContext::evaluate may report error if input chunk is empty
     if (right_chunk->is_empty()) {
@@ -379,7 +379,7 @@ Status ChunksSorterTopn::_merge_sort_common(ChunkPtr& big_chunk, DataSegments& s
     merged_perm.resize(rows_to_keep);
 
     std::vector<ChunkPtr> chunks{left_chunk, right_chunk};
-    append_by_permutation(big_chunk.get(), chunks, merged_perm);
+    materialize_by_permutation(big_chunk.get(), chunks, merged_perm);
     return Status::OK();
 }
 
@@ -416,7 +416,7 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
     // First, we find elements from `SMALLER_THAN_MIN_OF_SEGMENT`
     if (first_size > 0) {
         big_chunk.reset(segments[new_permutation.first[0].chunk_index].chunk->clone_empty(first_size).release());
-        append_by_permutation(big_chunk.get(), chunks, new_permutation.first);
+        materialize_by_permutation(big_chunk.get(), chunks, new_permutation.first);
         rows_to_keep -= first_size;
     }
 
@@ -474,7 +474,7 @@ Status ChunksSorterTopn::_hybrid_sort_first_time(RuntimeState* state, Permutatio
         chunks.push_back(segment.chunk);
     }
     new_permutation.resize(rows_to_keep);
-    append_by_permutation(big_chunk.get(), chunks, new_permutation);
+    materialize_by_permutation(big_chunk.get(), chunks, new_permutation);
 
     RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
     _merged_segment.init(_sort_exprs, big_chunk);

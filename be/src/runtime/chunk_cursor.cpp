@@ -200,7 +200,7 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
         auto column = EVALUATE_NULL_IF_ERROR(expr, expr->root(), chunk.get());
         sort_columns.push_back(column);
     }
-    return {std::move(chunk), sort_columns};
+    return {std::move(chunk), std::move(sort_columns)};
 }
 
 bool SimpleChunkSortCursor::is_eos() {

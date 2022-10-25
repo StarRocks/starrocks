@@ -190,7 +190,10 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
         auto [column, expr] = suite.build_column(type_desc, i, params.low_card, params.nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -292,7 +295,11 @@ static void do_heap_merge(benchmark::State& state, int num_runs, bool use_merger
         auto [column, expr] = suite.build_sorted_column(type_desc, i, false, false);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
+
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -373,7 +380,10 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
         auto [column, expr] = suite.build_sorted_column(type_desc, i, false, nullable);
         columns.push_back(column);
         exprs.emplace_back(std::move(expr));
-        sort_exprs.push_back(new ExprContext(exprs.back().get()));
+        auto sort_expr = new ExprContext(exprs.back().get());
+        ASSERT_OK(sort_expr->prepare(suite._runtime_state.get()));
+        ASSERT_OK(sort_expr->open(suite._runtime_state.get()));
+        sort_exprs.push_back(sort_expr);
         asc_arr.push_back(true);
         null_first.push_back(true);
         map[i] = i;
@@ -394,7 +404,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
             }
         }
         SortedRuns merged;
-        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged, 0);
+        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
         ASSERT_EQ(input_rows, merged.num_rows());
 
         num_rows += merged.num_rows();
