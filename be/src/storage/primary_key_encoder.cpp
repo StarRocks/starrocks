@@ -244,22 +244,22 @@ bool PrimaryKeyEncoder::is_supported(const vectorized::Field& f) {
     }
 }
 
-bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema) {
-    size_t n = schema.num_key_fields();
-    for (size_t i = 0; i < n; i++) {
-        if (!is_supported(*schema.field(i))) {
+bool PrimaryKeyEncoder::is_supported(const vectorized::Schema& schema, const std::vector<ColumnId>& key_idxes) {
+    for (const auto key_idx : key_idxes) {
+        if (!is_supported(*schema.field(key_idx))) {
             return false;
         }
     }
     return true;
 }
 
-FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema) {
-    if (!is_supported(schema)) {
+FieldType PrimaryKeyEncoder::encoded_primary_key_type(const vectorized::Schema& schema,
+                                                      const std::vector<ColumnId>& key_idxes) {
+    if (!is_supported(schema, key_idxes)) {
         return OLAP_FIELD_TYPE_NONE;
     }
-    if (schema.num_key_fields() == 1) {
-        return schema.field(0)->type()->type();
+    if (key_idxes.size() == 1) {
+        return schema.field(key_idxes[0])->type()->type();
     }
     return OLAP_FIELD_TYPE_VARCHAR;
 }
@@ -279,17 +279,26 @@ size_t PrimaryKeyEncoder::get_encoded_fixed_size(const vectorized::Schema& schem
 
 Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema,
                                         std::unique_ptr<vectorized::Column>* pcolumn) {
-    if (!is_supported(schema)) {
+    std::vector<ColumnId> key_idxes(schema.num_key_fields());
+    for (ColumnId i = 0; i < schema.num_key_fields(); ++i) {
+        key_idxes[i] = i;
+    }
+    return PrimaryKeyEncoder::create_column(schema, pcolumn, key_idxes);
+}
+
+Status PrimaryKeyEncoder::create_column(const vectorized::Schema& schema, std::unique_ptr<vectorized::Column>* pcolumn,
+                                        const std::vector<ColumnId>& key_idxes) {
+    if (!is_supported(schema, key_idxes)) {
         return Status::NotSupported("type not supported for primary key encoding");
     }
     // TODO: let `Chunk::column_from_field_type` and `Chunk::column_from_field` return a
     // `std::unique_ptr<Column>` instead of `std::shared_ptr<Column>`, in order to reuse
     // its code here.
-    if (schema.num_key_fields() == 1) {
+    if (key_idxes.size() == 1) {
         // simple encoding
         // integer's use fixed length original column
         // varchar use binary
-        auto type = schema.field(0)->type()->type();
+        auto type = schema.field(key_idxes[0])->type()->type();
         switch (type) {
         case OLAP_FIELD_TYPE_BOOL:
             *pcolumn = vectorized::BooleanColumn::create_mutable();
