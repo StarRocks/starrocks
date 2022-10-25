@@ -79,7 +79,7 @@
 
 3. **下载 [flink-connector-starrocks](https://search.maven.org/artifact/com.starrocks/flink-connector-starrocks)**，并且其版本需要对应 Flink 的版本。
 
-      > flink-connector-starrocks 的 JAR 包 (**x.x.x_flink-****y****.****yy****_****z****.****zz****.jar**) 会包含三个版本号：
+      > flink-connector-starrocks 的 JAR 包 (**x.x.x_flink-y.yy_z.zz.jar**) 会包含三个版本号：
       >
       > - 第一个版本号 x.x.x 为 flink-connector-starrocks 的版本号。
       >
