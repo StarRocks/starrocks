@@ -12,8 +12,7 @@ public class RefreshMaterializedViewExecutor implements DataDefinitionExecutor {
     public ShowResultSet execute(StatementBase stmt, ConnectContext context) throws Exception {
         final RefreshMaterializedViewStatement refreshMaterializedViewStatement = (RefreshMaterializedViewStatement) stmt;
         context.getGlobalStateMgr().getLocalMetastore()
-                .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
-                        refreshMaterializedViewStatement.getMvName().getTbl(), Constants.TaskRunPriority.NORMAL.value());
+                .refreshMaterializedView(refreshMaterializedViewStatement, Constants.TaskRunPriority.NORMAL.value());
         return null;
     }
 }

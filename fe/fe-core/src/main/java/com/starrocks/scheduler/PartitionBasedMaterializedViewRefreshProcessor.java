@@ -52,6 +52,7 @@ import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -122,7 +123,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     continue;
                 }
                 checked = true;
-                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView();
+                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 LOG.debug("materialized view partitions to refresh:{}", partitionsToRefresh);
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
@@ -344,14 +345,30 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return false;
     }
 
-    private Set<String> getPartitionsToRefreshForMaterializedView() {
+    private Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties)
+            throws AnalysisException {
+        String start = properties.get(TaskRun.PARTITION_START);
+        String end = properties.get(TaskRun.PARTITION_END);
+        boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-
+        Set<String> rangePartitionNames = null;
+        if (StringUtils.isEmpty(start) && StringUtils.isEmpty(end) && force) {
+            LOG.debug("materialized view force to refresh all partitions.");
+            return materializedView.getPartitionNames();
+        }
+        if (!StringUtils.isEmpty(start) && !StringUtils.isEmpty(end)) {
+            rangePartitionNames = SyncPartitionUtils.getPartitionNamesByRange(materializedView, start, end);
+            LOG.debug("materialized view refresh partitions {}", rangePartitionNames);
+            if (force) {
+                return rangePartitionNames;
+            }
+        }
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
             if (needToRefreshNonPartitionTable()) {
                 needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+                return needRefreshMvPartitionNames;
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = getPartitionExpr();
@@ -383,6 +400,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             }
         } else {
             throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
+        }
+        if (null != rangePartitionNames) {
+            needRefreshMvPartitionNames.retainAll(rangePartitionNames);
         }
         return needRefreshMvPartitionNames;
     }

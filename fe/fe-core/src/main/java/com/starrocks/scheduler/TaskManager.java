@@ -271,7 +271,9 @@ public class TaskManager {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build(), option);
+        return taskRunManager
+                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).build(),
+                        option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {

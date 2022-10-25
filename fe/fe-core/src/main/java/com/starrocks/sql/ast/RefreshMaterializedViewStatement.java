@@ -6,9 +6,15 @@ import com.starrocks.analysis.TableName;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
     private final TableName mvName;
+    private final RangePartitionWithoutIntervalDesc rangePartitionWithoutIntervalDesc;
+    private final boolean force;
 
-    public RefreshMaterializedViewStatement(TableName mvName) {
+    public RefreshMaterializedViewStatement(TableName mvName,
+                                            RangePartitionWithoutIntervalDesc rangePartitionWithoutIntervalDesc,
+                                            boolean force) {
         this.mvName = mvName;
+        this.rangePartitionWithoutIntervalDesc = rangePartitionWithoutIntervalDesc;
+        this.force = force;
     }
 
     public TableName getMvName() {
@@ -23,5 +29,13 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
     @Override
     public boolean isSupportNewPlanner() {
         return true;
+    }
+
+    public RangePartitionWithoutIntervalDesc getRangePartitionWithoutIntervalDesc() {
+        return rangePartitionWithoutIntervalDesc;
+    }
+
+    public boolean isForce() {
+        return force;
     }
 }

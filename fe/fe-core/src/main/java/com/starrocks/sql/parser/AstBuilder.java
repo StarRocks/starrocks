@@ -225,6 +225,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.RangePartitionWithoutIntervalDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
@@ -1163,7 +1164,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.RefreshMaterializedViewStatementContext context) {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
-        return new RefreshMaterializedViewStatement(mvName);
+        RangePartitionWithoutIntervalDesc rangePartitionWithoutIntervalDesc = null;
+        if (context.rangePartitionWithoutIntervalDesc() != null) {
+            rangePartitionWithoutIntervalDesc =
+                    (RangePartitionWithoutIntervalDesc) visit(context.rangePartitionWithoutIntervalDesc());
+        }
+        return new RefreshMaterializedViewStatement(mvName, rangePartitionWithoutIntervalDesc, context.FORCE() != null);
     }
 
     @Override

@@ -468,7 +468,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION rangePartitionWithoutIntervalDesc)? FORCE?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1629,6 +1629,14 @@ singleRangePartition
 multiRangePartition
     : START '(' string ')' END '(' string ')' EVERY '(' interval ')'
     | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
+    ;
+
+rangePartitionWithoutIntervalDesc
+    : multiRangePartitionWithoutInterval
+    ;
+
+multiRangePartitionWithoutInterval
+    : START '(' string ')' END '(' string ')'
     ;
 
 partitionKeyDesc
