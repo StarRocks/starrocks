@@ -53,7 +53,7 @@ struct CacheValue {
     size_t size() {
         size_t value_size = 0;
         for (auto& chk : result) {
-            value_size += chk->bytes_usage();
+            value_size += chk->memory_usage();
         }
         return value_size;
     }
