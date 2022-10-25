@@ -236,18 +236,17 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|作用|
 |---|---|---|
-|async_load_task_pool_size|10|导入任务执行的线程池大小|
-|load_checker_interval_second|5|导入轮询的间隔|
-|transaction_clean_interval_second|30|清理已结束事务的周期|
-|label_clean_interval_second|14400|label 清理的间隔|
-|spark_dpp_version|1.0.0|Spark dpp 版本|
-|spark_resource_path|空字符串|Spark 依赖包的根目录|
-|spark_launcher_log_dir|sys_log_dir/spark_launcher_log|Spark 日志目录|
-|yarn_client_path|STARROCKS_HOME_DIR/lib/yarn-client/hadoop/bin/yarn|Yarn 客户端根目录|
-|yarn_config_dir|STARROCKS_HOME_DIR/lib/yarn-config|Yarn 配置文件目录|
-|export_checker_interval_second|5|导出线程轮询间隔|
-|export_task_pool_size|5|导出任务线程池大小，默认 5 个|
-|export_checker_interval_second|5|导出作业调度器的调度周期|
+|async_load_task_pool_size|10|导入任务执行的线程池大小。本参数仅适用于 Broker Load。|
+|load_checker_interval_second|5|导入轮询的间隔，单位为秒。|
+|transaction_clean_interval_second|30|清理已结束事务的周期，单位为秒。|
+|label_clean_interval_second|14400|label 清理的间隔，单位为秒。|
+|spark_dpp_version|1.0.0|Spark dpp 版本。|
+|spark_resource_path|空字符串|Spark 依赖包的根目录。|
+|spark_launcher_log_dir|sys_log_dir + "/spark_launcher_log"|Spark 日志目录。|
+|yarn_client_path|StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-client/hadoop/bin/yarn"|Yarn 客户端根目录。|
+|yarn_config_dir|StarRocksFE.STARROCKS_HOME_DIR + "/lib/yarn-config"|Yarn 配置文件目录。|
+|export_checker_interval_second|5|导出作业调度器的调度周期。|
+|export_task_pool_size|5|导出任务线程池大小。|
 
 * **存储相关**
 
