@@ -7,6 +7,7 @@
 #include "exec/vectorized/olap_scan_node.h"
 #include "exec/vectorized/olap_scan_prepare.h"
 #include "exec/workgroup/work_group.h"
+#include "fmt/core.h"
 #include "gutil/map_util.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -306,6 +307,9 @@ Status OlapChunkSource::_init_global_dicts(vectorized::TabletReaderParams* param
             auto& dict_map = iter->second.first;
             int32_t index = _tablet->field_index(slot->col_name());
             DCHECK(index >= 0);
+            if (index < 0) {
+                return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
+            }
             global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
         }
     }

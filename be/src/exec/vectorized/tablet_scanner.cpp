@@ -236,6 +236,9 @@ Status TabletScanner::_init_global_dicts() {
             auto& dict_map = iter->second.first;
             int32_t index = _tablet->field_index(slot->col_name());
             DCHECK(index >= 0);
+            if (index < 0) {
+                return Status::InternalError(fmt::format("invalid field name: {}", slot->col_name()));
+            }
             global_dict->emplace(index, const_cast<GlobalDictMap*>(&dict_map));
         }
     }
