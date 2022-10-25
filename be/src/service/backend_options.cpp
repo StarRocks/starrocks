@@ -74,7 +74,7 @@ bool BackendOptions::init() {
         LOG(INFO) << "fail to find one valid non-loopback address, use loopback address.";
         _s_localhost = loopback;
     }
-    LOG(INFO) << "local host" << _s_localhost;
+    LOG(INFO) << "localhost " << _s_localhost;
     return true;
 }
 
