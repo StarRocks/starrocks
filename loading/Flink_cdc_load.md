@@ -141,7 +141,7 @@
 
    ```Plain
    -- 连接 MySQL
-   mysql -h xxx.xx.xxx.xx -uroot -p xxxxxx
+   mysql -h xxx.xx.xxx.xx -P 3306 -u root -pxxxxxx
 
    -- 检查是否已经开启 MySQL Binlog，`ON`就表示已开启
    mysql> SHOW VARIABLES LIKE 'log_bin'; 
@@ -233,7 +233,7 @@
     > 您也可以根据业务需要，修改 SQL 文件中的建表语句，基于[非主键模型](../table_design/Data_model.md#主键模型)创建目标表。但是源 MySQL 中的 DELETE 操作无法同步至非主键模型，请谨慎使用。
 
     ```Bash
-    mysql -h <fe_host> -P <fe_query_port> -u user2 -p xxxxxx < starrocks-create.all.sql
+    mysql -h <fe_host> -P <fe_query_port> -u user2 -pxxxxxx < starrocks-create.all.sql
     ```
 
     如果数据需要经过 Flink 处理后写入目标表，目标表与源表的结构不一样，则您需要修改 SQL 文件 **starrocks-create.all.sql** 中的建表语句。本示例中目标表仅需要保留商品 ID (product_id)、商品名称(product_name)，并且对商品销量进行实时排名，因此可以使用如下建表语句。
