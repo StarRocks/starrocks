@@ -51,29 +51,6 @@ Before you set up the BE, configure the  `storage_root_path` parameter and the c
 | heartbeat_service_port | 9050                                | The port that is used by the BE to receive heartbeats from an FE. |
 | brpc                   | 8060                                | The port that is used for communication between the BEs in a cluster. |
 
-<<<<<<< HEAD
-=======
-### Start a Compute Node (Optional)
-
-#### Check the configuration of the Compute Node
-
-|Configuration|Description|Default|
-|---|---|---|
-|thrift_port|Thrift Server port of the Compute Node. The port is used to receive requests from FE.|9060|
-|webserver_port|HTTP Server port of the Compute Node.|8040|
-|heartbeat_service_port|Thrift server port of the Compute Node. The port is used to receive requests from FE.|9050|
-|brpc_port|RPC port between BE and the Compute Node.|8060|
-
-#### Start the Compute Node process
-
-Navigate to the deployment directory of the Compute Node and start the Compute Node process.
-
-```shell
-cd StarRocks-x.x.x/be
-./bin/start_cn.sh --daemon
-```
-
->>>>>>> b827ba2e8 ([Docs] Remove /bin/sh when starting binary (#12434))
 ### Check the health status of a cluster
 
 After you set up the BEs and FEs of a cluster, you need to check the statuses of FEs and BEs to ensure the FEs and BEs are started normally:
@@ -90,18 +67,6 @@ To stop a cluster, you need to stop all the FEs and BEs in the cluster:
 
 - Go to the deployment directory of each BE and run `./bin/stop_be.sh`.
 
-<<<<<<< HEAD
-=======
-#### Stop a Compute Node
-
-Navigate to the deployment directory of the Compute Node and stop the Compute Node process.
-
-```shell
-cd StarRocks-x.x.x/be
-./bin/stop_cn.sh
-```
-
->>>>>>> b827ba2e8 ([Docs] Remove /bin/sh when starting binary (#12434))
 ### Upgrade a cluster
 
 StarRocks can perform a rolling upgrade, which allows you to first upgrade the BEs, then the FEs, and finally the Brokers in a cluster. StarRocks ensures that the BEs are backward compatible with the FEs.
@@ -161,19 +126,6 @@ cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
 ps aux | grep StarRocksFE
 ```
 
-<<<<<<< HEAD
-=======
-##### Upgrade a Compute Node
-
-Since the Compute Node node is stateless, you only need to replace the binary file and restart the process. We recommend to stop it gracefully.
-
-```shell
-./bin/stop_cn.sh --graceful
-```
-
-By using this method, the Compute Node waits until the currently running task finishes before exiting the process.
-
->>>>>>> b827ba2e8 ([Docs] Remove /bin/sh when starting binary (#12434))
 ##### Upgrade a Broker
 
 ```Plain%20Text
