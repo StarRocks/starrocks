@@ -37,7 +37,7 @@
 
 修复了以下问题：
 
-- 子查询中有 LIMIT 时，`order by``...`` limit``...``offset`结果不准确。（[#9698](https://github.com/StarRocks/starrocks/issues/9698)）
+- 子查询中有 LIMIT 时，`order by...limit...offset...`结果不准确。（[#9698](https://github.com/StarRocks/starrocks/issues/9698)）
 - 大规模数据的 Partial update 导致 BE crash。([#9809](https://github.com/StarRocks/starrocks/issues/9809))
 - 当 Bitmap 超过 2 GB 时，compaction 会导致 crash。([#11159](https://github.com/StarRocks/starrocks/pull/11159))
 - like/regexp 函数中 pattern 超过 16 KB 无法使用。([#10364](https://github.com/StarRocks/starrocks/issues/10364))
