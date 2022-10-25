@@ -972,6 +972,14 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
+        if (!node.hasLimit() && context.getChildOperator(0).hasLimit() ||
+                (node.hasLimit() && context.getChildOperator(0).hasLimit() &&
+                        node.getLimit() != context.getChildOperator(0).getLimit())) {
+            PhysicalPropertySet gather = createLimitGatherProperty(context.getChildOperator(0).getLimit());
+            outputInputProps.add(OutputInputProperty.of(gather, gather));
+            return visitOperator(node, context);
+        }
+
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
             return visitOperator(node, context);
@@ -982,6 +990,14 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalFilter(PhysicalFilterOperator node, ExpressionContext context) {
+        if (!node.hasLimit() && context.getChildOperator(0).hasLimit() ||
+                (node.hasLimit() && context.getChildOperator(0).hasLimit() &&
+                        node.getLimit() != context.getChildOperator(0).getLimit())) {
+            PhysicalPropertySet gather = createLimitGatherProperty(context.getChildOperator(0).getLimit());
+            outputInputProps.add(OutputInputProperty.of(gather, gather));
+            return visitOperator(node, context);
+        }
+
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements()));
@@ -993,6 +1009,14 @@ public class ChildPropertyDeriver extends OperatorVisitor<Void, ExpressionContex
 
     @Override
     public Void visitPhysicalTableFunction(PhysicalTableFunctionOperator node, ExpressionContext context) {
+        if (!node.hasLimit() && context.getChildOperator(0).hasLimit() ||
+                (node.hasLimit() && context.getChildOperator(0).hasLimit() &&
+                        node.getLimit() != context.getChildOperator(0).getLimit())) {
+            PhysicalPropertySet gather = createLimitGatherProperty(context.getChildOperator(0).getLimit());
+            outputInputProps.add(OutputInputProperty.of(gather, gather));
+            return visitOperator(node, context);
+        }
+
         // Pass through the requirements to the child
         if (getRequiredLocalDesc().isPresent()) {
             outputInputProps.add(OutputInputProperty.of(distributeRequirements(), distributeRequirements()));
