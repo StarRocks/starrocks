@@ -308,7 +308,7 @@ properties (
 
 * `driver_class`：JDBC 驱动程序的类名称。以下列举常见 JDBC 驱动程序的类名称：
 
-  * MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 6.x 及以上版本）
+  * MySQL：com.mysql.jdbc.Driver（MySQL 5.x 及以下版本）、com.mysql.cj.jdbc.Driver （MySQL 8.x 及以上版本）
   * SQL Server：com.microsoft.sqlserver.jdbc.SQLServerDriver
   * Oracle： oracle.jdbc.driver.OracleDriver
   * PostgreSQL：org.postgresql.Driver
