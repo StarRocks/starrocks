@@ -9,6 +9,7 @@ HyperLogLog 是一种近似去重算法，在部分对去重精度要求不高�
 使用 HLL 去重，需要在建表语句中，将目标指标列的类型设置为 **HLL**，聚合函数设置为 **HLL_UNION**。只有聚合模型表 (Aggregate Key) 支持 HLL 类型列。
 
 > 说明
+>
 > 您无需向 HLL 列导入数据。HLL 列的数据将根据您指定的 `HLL_HASH` 函数基于导入的数据自动生成。导入数据时，该函数将自动根据指定的列生成 HLL 列。HLL 算法常用于替代 `count distinct`，通过结合物化视图在业务上用于快速计算 uv。
 
 以下示例创建 `test` 表，其中包含 DATE 数据类型列 `dt`，INT 数据类型列 `id`，以及 HLL 类型列 `uv`，其使用的 `HLL_HASH` 函数为 `HLL_UNION`。
