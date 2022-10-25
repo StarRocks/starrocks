@@ -27,6 +27,7 @@ import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergCustomCatalog;
+import static com.starrocks.external.iceberg.IcebergUtil.getIcebergGlueCatalog;
 import static com.starrocks.external.iceberg.IcebergUtil.getIcebergHiveCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
@@ -54,6 +55,9 @@ public class IcebergMetadata implements ConnectorMetadata {
             properties.remove(ICEBERG_CATALOG_TYPE);
             properties.remove(ICEBERG_IMPL);
             customProperties = properties;
+        } else if (IcebergCatalogType.GLUE_CATALOG == IcebergCatalogType.fromString(properties.get(ICEBERG_CATALOG_TYPE))) {
+            catalogType = properties.get(ICEBERG_CATALOG_TYPE);
+            icebergCatalog = getIcebergGlueCatalog(catalogName, properties);
         } else {
             throw new RuntimeException(String.format("Property %s is missing or not supported now.",
                     ICEBERG_CATALOG_TYPE));
@@ -91,8 +95,11 @@ public class IcebergMetadata implements ConnectorMetadata {
             if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.CUSTOM_CATALOG)) {
                 return IcebergUtil.convertCustomCatalogToSRTable(icebergTable, catalogImpl, catalogName, dbName,
                         tblName, customProperties);
+            } else if (IcebergCatalogType.fromString(catalogType).equals(IcebergCatalogType.GLUE_CATALOG)) {
+                return IcebergUtil.convertGlueCatalogToSRTable(icebergTable, catalogName, dbName, tblName);
+            } else {
+                return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, catalogName, dbName, tblName);
             }
-            return IcebergUtil.convertHiveCatalogToSRTable(icebergTable, metastoreURI, catalogName, dbName, tblName);
         } catch (DdlException e) {
             LOG.error("Failed to get iceberg table " + IcebergUtil.getIcebergTableIdentifier(dbName, tblName), e);
             return null;

@@ -173,11 +173,11 @@ public class CatalogToHiveConverter {
         hiveSd.setOutputFormat(catalogSd.getOutputFormat());
         hiveSd.setCompressed(catalogSd.getCompressed());
         hiveSd.setNumBuckets(catalogSd.getNumberOfBuckets());
-        hiveSd.setSerdeInfo(convertSerDeInfo(catalogSd.getSerdeInfo()));
+        hiveSd.setSerdeInfo(catalogSd.getSerdeInfo() == null ? null : convertSerDeInfo(catalogSd.getSerdeInfo()));
         hiveSd.setBucketCols(firstNonNull(catalogSd.getBucketColumns(), Lists.<String>newArrayList()));
         hiveSd.setSortCols(convertOrderList(catalogSd.getSortColumns()));
         hiveSd.setParameters(firstNonNull(catalogSd.getParameters(), Maps.<String, String>newHashMap()));
-        hiveSd.setSkewedInfo(convertSkewedInfo(catalogSd.getSkewedInfo()));
+        hiveSd.setSkewedInfo(catalogSd.getSkewedInfo() == null ? null : convertSkewedInfo(catalogSd.getSkewedInfo()));
         hiveSd.setStoredAsSubDirectories(catalogSd.getStoredAsSubDirectories());
 
         return hiveSd;
