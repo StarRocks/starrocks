@@ -108,24 +108,28 @@ PROPERTIES
 
 PROPERTIES 是 Spark 资源相关参数，如下：
 
-* **type**：资源类型，必填，目前仅支持 spark。
+* `type`：资源类型，必填，目前仅支持 spark。
 * `spark.master`: 必填，目前支持 yarn。
 * `spark.submit.deployMode`: Spark 程序的部署模式，必填，支持 cluster，client 两种。
 * `spark.hadoop.fs.defaultFS`: master 为 yarn 时必填。
 * yarn resource manager 相关参数，master 为 yarn 时需要填写。
-* 单点 resource manager 需要配置
+
+   单点 resource manager 需要配置：
 * `spark.hadoop.yarn.resourcemanager.address`: 单点 resource manager 地址。
-* HA resource manager 需要配置，其中 hostname 和 address 任选一个配置。
+
+   HA resource manager 需要配置（其中 hostname 和 address 任选一个配置）：
 * `spark.hadoop.yarn.resourcemanager.ha.enabled`: resource manager 启用 HA，设置为 true。
 * `spark.hadoop.yarn.resourcemanager.ha.rm-ids`: resource manager 逻辑 id 列表。
 * `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: 对于每个 rm-id，指定 resource manager 对应的主机名。
 * `spark.hadoop.yarn.resourcemanager.address.rm-id`: 对于每个 rm-id，指定 host: port 以供客户端提交作业。
-* 其他参数为可选，参考 [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)
-* **working_dir**: ETL 使用的目录。spark 作为 ETL 资源使用时必填。例如：hdfs://host: port/tmp/starrocks。
-* **broker**: broker 名字。spark 作为 ETL 资源使用时必填。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
+
+   其他参数为可选，参考 [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)
+
+* `working_dir`: ETL 使用的目录。spark 作为 ETL 资源使用时必填。例如：hdfs://host: port/tmp/starrocks。
+* `broker`: broker 名字。spark 作为 ETL 资源使用时必填。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
 * `broker.property_key`: broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD)。
 
-其他 Resource 详细参数请参考 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)
+   其他 Resource 详细参数请参考 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)
 
 #### 查看资源
 
@@ -423,5 +427,4 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 * Q：报错 Cannot execute hadoop-yarn/bin/../libexec/yarn-config.sh
 
-  A：使用 CDH 的 Hadoop 时，需要配置 HADOOP_LIBEXEC_DIR 环境变量，由于 hadoop-yarn 和 hadoop 目录不同，默认 libexec 目录会找 hadoop-yarn/bin/../libexec，而 libexec 在 hadoop 目录下。
- ```yarn application status```命令获取Spark任务状态报错导致导入作业失败。
+  A：使用 CDH 的 Hadoop 时，需要配置 HADOOP_LIBEXEC_DIR 环境变量，由于 hadoop-yarn 和 hadoop 目录不同，默认 libexec 目录会找 hadoop-yarn/bin/../libexec，而 libexec 在 hadoop 目录下，yarn application status命令获取Spark任务状态报错导致导入作业失败。
