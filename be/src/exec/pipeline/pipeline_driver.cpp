@@ -409,12 +409,14 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             // Acquire the pointer to avoid be released when removing query
             auto query_trace = _query_ctx->shared_query_trace();
             auto wg = _workgroup;
+            auto fragment_ctx_ptr = uintptr_t(_fragment_ctx);
+            auto query_ctx_ptr = uintptr_t(_query_ctx);
             if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (wg) {
                     VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
-                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
+                             << ",fragment_ctx address=" << fragment_ctx_ptr << ",fragment_instance_id=" << frag_id
                              << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
-                             << ", query_ctx address=" << _query_ctx;
+                             << ", query_ctx address=" << query_ctx_ptr;
                     wg->decr_num_queries();
                 }
             }
