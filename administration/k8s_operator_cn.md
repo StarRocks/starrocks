@@ -1,6 +1,6 @@
 # 使用 StarRocks Operator 在 Kubernetes 部署和管理 CN
 
-自从 2.4 版本起，StarRocks 在 FE 、BE 基础上，提供了一种计算节点（Compute Node，以下简称 CN）。CN 是一种无状态的计算服务，自身不维护数据，可以承担部分 SQL 计算。并且支持基于 Kubernetes 的容器化部署，实现弹性伸缩，支撑数据湖分析等消耗大量计算资源的分析场景。
+自 2.4 版本起，StarRocks 在 FE 、BE 节点基础上，提供了一种新的计算节点（Compute Node，以下简称 CN）。CN 是一种无状态的计算服务，自身不维护数据，可以承担部分 SQL 计算。并且支持基于 Kubernetes 的容器化部署，实现弹性伸缩，支撑数据湖分析等消耗大量计算资源的分析场景。
 
 本文介绍如何使用 StarRocks Operator 在 Kubernetes 上部署 CN 并实现弹性伸缩。
 
@@ -26,7 +26,7 @@
 
 **CN**
 
-CN 是 StarRocks 提供的一种无状态计算服务，自身不维护数据，可以承担执行计划中的部分计算。StarRocks operator 使用 HPA 感知 CN 所有实例的 CPU和内存负载，并且根据您配置的策略自动扩缩 CN。
+CN 是 StarRocks 提供的一种无状态计算服务，自身不维护数据，可以承担执行计划中的部分计算。StarRocks operator 使用 HPA 感知 CN 所有实例的 CPU 和内存负载，并且根据您配置的策略自动扩缩 CN。
 
 ## 工作原理
 
@@ -36,19 +36,19 @@ CN 是 StarRocks 提供的一种无状态计算服务，自身不维护数据，
 
 StarRocks Operator 通过 FE 的 IP 地址和 FE 的查询端口连接 FE ，将 CN 加入至 StarRocks 集群中。
 
-FE 按照数据分布情况和算子类型将执行计划中计算任务分配给 CN，并告诉 CN 数据的来源。CN 从数据源中获取数据进行计算，结束后将结果返回给FE。
+FE 按照数据分布情况和算子类型将执行计划中的计算任务分配给 CN，并告诉 CN 数据的来源。CN 从数据源中获取数据进行计算，结束后将结果返回给FE。
 
 **自动扩缩容策略**
 
-在部署 computenodegroup 资源时需要指定自动扩缩容策略，StarRocks operator会根据策略创建一个 HPA资源， HPA 会根据 CN 的 CPU 和 内存等指标自动扩缩 CN 节点。
+在部署 computenodegroup 资源时需要指定自动扩缩容策略，StarRocks operator 会根据策略创建一个 HPA 资源， HPA 会根据 CN 的 CPU 和 内存等指标自动扩缩 CN 节点。
 
 ## 环境准备
 
-- 一个部署好的 StarRocks 集群。部署方式，请参考[部署 StarRocks](https://docs.starrocks.com/zh-cn/latest/quick_start/Deploy)。
+- 部署 StarRocks 集群。部署方式请参考[部署 StarRocks](https://docs.starrocks.com/zh-cn/latest/quick_start/Deploy)。
 
-- 各个节点的网络互通性： FE 能够直接访问 K8s 集群中的 pod，并且 CN 能够访问 BE。
+- 各个节点的网络互通： FE 能够直接访问 K8s 集群中的 pod，并且 CN 能够访问 BE。
 
-- 一个 [Kubernetes 集群](https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/)。
+- 部署 [Kubernetes 集群](https://kubernetes.io/zh-cn/docs/setup/production-environment/tools/kubeadm/)。
 
   > 如果您想要快速体验本特性，可以使用 [Minikube](https://kubernetes.io/zh-cn/docs/tutorials/kubernetes-basics/create-cluster/cluster-intro/) 创建单节点 Kubernetes 集群。
 
@@ -81,7 +81,7 @@ FE 按照数据分布情况和算子类型将执行计划中计算任务分配�
 
 4. 执行 `docker login`，按照提示输入账号和密码，登录远端 Docker 仓库  [Docker Hub](https://hub.docker.com)。
 
-    > 说明：您需要提前在  [Docker Hub](https://hub.docker.com) 中注册账号、创建 Docker 仓库。
+    > 说明：您需要提前在 [Docker Hub](https://hub.docker.com) 中注册账号、创建 Docker 仓库。
 
 5. 标记 StarRocks Operator 镜像，并推送至远端 Docker 仓库。
 
@@ -125,7 +125,7 @@ FE 按照数据分布情况和算子类型将执行计划中计算任务分配�
 
 ### 制作 CN  辅助服务镜像
 
-CN 辅助服务是指 **component** 目录下的register、offline，会将CN 注册到至FE 或者从 FE 中摘除。
+CN 辅助服务是指 **component** 目录下的register、offline，会将 CN 注册到至 FE 或者从 FE 中摘除。
 
 1. 进入 **starrocks-kubernetes-operator****/components** 目录。
 
@@ -166,7 +166,7 @@ CN 辅助服务是指 **component** 目录下的register、offline，会将CN �
     kubectl apply -f manager.yaml 
     ```
 
-4. 执行 `kubectl get pod -n starrocks` 查看 pod 状态。如果返回结果中 `STATUS` 显示`Running`，则表示pod正在运行。
+4. 执行 `kubectl get pod -n starrocks` 查看 pod 状态。如果返回结果中 `STATUS` 显示`Running`，则表示 pod 正在运行。
 
     ```Bash
     kubectl get pod -n starrocks
@@ -185,7 +185,7 @@ CN 辅助服务是指 **component** 目录下的register、offline，会将CN �
 2. 修改 **cn.yaml**。
    1. 修改 `cnImage` 为推送到远端仓库的 CN 镜像文件标签。例如:  `starrocks/sr-cn-test:v3`
    2. 修改 `componentsImage` 为推送到远端仓库的 CN Group 镜像文件标签。例如:  `starrocks/computenodegroup:v1.0`
-   3. 修改 `<fe_ip>:<fe_query_port>` 为 任意一个 FE 节点 IP 地址和 `query_port` 端口号（默认为 `9030`）。
+   3. 修改 `<fe_ip>:<fe_query_port>` 为任意一个 FE 节点 IP 地址和 `query_port` 端口号（默认为 `9030`）。
 
       ```Bash
           feInfo:
@@ -194,7 +194,7 @@ CN 辅助服务是指 **component** 目录下的register、offline，会将CN �
                 - <fe_ip>:<fe_query_port>
         ```
 
-   4. 增加 `command` 配置选项，并且修改路径为 CN Group 镜像中**start_cn.shell** 的绝对路径。
+   4. 增加 `command` 配置选项，并且修改路径为 CN Group 镜像中 **start_cn.shell** 的绝对路径。
       - ![image](../assets/9.3.png)
 
 3. 部署 CN。
@@ -218,12 +218,12 @@ CN 辅助服务是指 **component** 目录下的register、offline，会将CN �
     starrocks     computenodegroup-sample-8-4-21-45-5dcb56ff5-s7dwz   2/2     Running            0               12m
     ```
 
-CN 部署成功后， StarRocks Operator 自动调用 **cn.yaml** 文件中配置**的**  FE IP 和查询端口号，将 CN 加至 StarRocks 集群中。
+CN 部署成功后， StarRocks Operator 自动调用 **cn.yaml** 文件中配置的 FE IP 和查询端口号，将 CN 加至 StarRocks 集群中。
 
 ## 配置自动水平扩缩容策略
 
 1. 如果需要配置 CN 自动扩缩策略，则可以修改 **cn.yaml** 配置文件`$your_code_path/starrocks-kubernetes-operator/examples/cn/cn.yaml`。
-   1. 例如，您需要基于 K8s 中 CN 的内存和 CPU 使用率实现弹性伸缩，则需要配置内存和 CPU 平均使用率为资源指标，触发弹性伸缩的阈值；弹性伸缩上限和下限，即 pod 副本数量或者说 CN 数量的上限和下限。
+   1. 例如，您需要基于 K8s 中 CN 的内存和 CPU 使用率实现弹性伸缩，则需要配置内存和 CPU 平均使用率为资源指标，触发弹性伸缩的阈值。弹性伸缩上限和下限即 pod 副本数量或者 CN 数量的上限和下限。
 
    2. Kubernetes 还支持使用 `behavior`，根据业务场景定制扩缩容行为，实现快速扩容，缓慢缩容，禁用缩容等。
 
@@ -237,10 +237,10 @@ CN 部署成功后， StarRocks Operator 自动调用 **cn.yaml** 文件中配�
                 resource: 
                   name: memory # 资源指标为内存
                   target:
-                    averageUtilization: 30 # 触发水平扩缩容的阈值为30 %。 K8s 集群中 CN 内存使用率超过 30% 时，增加 CN 数量进行扩容，低于 30% 时，减少 CN 数量进行缩容
+                    averageUtilization: 30 # 触发水平扩缩容的阈值为30%。 K8s 集群中 CN 内存使用率超过 30% 时，增加 CN 数量进行扩容，低于 30% 时，减少 CN 数量进行缩容。
                     type: Utilization
               - type: Resource
-                resource: # 触发水平扩缩容的阈值为 60 %。K8s 集群中 CN CPU 内存使用率超过 60% 时，增加 CN 数量进行扩容，低于 60% 时，减少 CN 数量进行缩容
+                resource: # 触发水平扩缩容的阈值为 60%。K8s 集群中 CN CPU 内存使用率超过 60% 时，增加 CN 数量进行扩容，低于 60% 时，减少 CN 数量进行缩容。
                   name: cpu
                   target:
                     averageUtilization: 60
@@ -294,7 +294,7 @@ CN 部署成功后， StarRocks Operator 自动调用 **cn.yaml** 文件中配�
 - 问题：如果 `reason` 显示 `unhealthy`，则表示 HTTP 健康检查失败。
   ![image](../assets/9.4.png)
 
-- 解决方式：参考[部署CN ](/部署 CN)，检查 **cn.yaml** 文件中的  FE 节点 IP 地址和 FE 的查询端口号。
+- 解决方式：参考[部署CN ](/部署 CN)，检查 **cn.yaml** 文件中的 FE 节点 IP 地址和 FE 的查询端口号。
 
   ![image](../assets/9.5.png)
 
@@ -315,4 +315,4 @@ CN 部署成功后， StarRocks Operator 自动调用 **cn.yaml** 文件中配�
       Warning  BackOff    41s (x27 over 5m46s)   kubelet            Back-off restarting failed container
     ```
 
-- 解决方式：参考[部署CN](/部署 CN)，检查 **cn.yaml** 文件中的 **start_cn.shell** 的路径是否正确。
+- 解决方式：参考[在 K8s 中部署 CN](#在-k8s-中部署-cn)，检查 **cn.yaml** 文件中的 **start_cn.shell** 的路径是否正确。
