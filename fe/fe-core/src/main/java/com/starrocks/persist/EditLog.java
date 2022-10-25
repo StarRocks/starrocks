@@ -88,6 +88,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -933,6 +934,11 @@ public class EditLog {
                     globalStateMgr.getPrivilegeManager().replayDropRole(info);
                     break;
                 }
+                case OperationType.OP_AUTH_UPGRDE_V2: {
+                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
+                    globalStateMgr.replayAuthUpgrade(info);
+                    break;
+                }
                 default: {
                     if (Config.ignore_unknown_log_id) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1623,5 +1629,9 @@ public class EditLog {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                 roleId, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
+    }
+
+    public void logAuthUpgrade(Map<String, Long> roleNameToId) {
+        logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 }

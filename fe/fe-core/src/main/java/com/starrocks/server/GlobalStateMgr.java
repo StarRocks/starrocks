@@ -145,7 +145,9 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
@@ -362,7 +364,7 @@ public class GlobalStateMgr {
     // This is used to turned on in hard code.
     public static final boolean USING_NEW_PRIVILEGE = false;
     // change to true in UT
-    private boolean usingNewPrivilege = USING_NEW_PRIVILEGE;
+    private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationManager authenticationManager;
     private PrivilegeManager privilegeManager;
@@ -535,7 +537,7 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-        initAuth(usingNewPrivilege);
+        initAuth(USING_NEW_PRIVILEGE);
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
@@ -891,13 +893,14 @@ public class GlobalStateMgr {
     // set usingNewPrivilege = true in UT
     public void initAuth(boolean usingNewPrivilege) {
         if (usingNewPrivilege) {
-            this.usingNewPrivilege = usingNewPrivilege;
+            this.usingNewPrivilege = new AtomicBoolean(true);
             this.auth = null;
             this.authenticationManager = new AuthenticationManager();
             this.domainResolver = new DomainResolver(authenticationManager);
             this.privilegeManager = new PrivilegeManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
+            this.usingNewPrivilege = new AtomicBoolean(false);
             this.auth = new Auth();
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
@@ -905,8 +908,13 @@ public class GlobalStateMgr {
         }
     }
 
+    @VisibleForTesting
+    public void setAuth(Auth auth) {
+        this.auth = auth;
+    }
+
     public boolean isUsingNewPrivilege() {
-        return usingNewPrivilege;
+        return usingNewPrivilege.get();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1177,7 +1185,7 @@ public class GlobalStateMgr {
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             auth = new Auth();
         }
 
@@ -1239,8 +1247,22 @@ public class GlobalStateMgr {
 
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
-        if (usingNewPrivilege) {
-            auth = null;
+        if (isUsingNewPrivilege()) {
+            AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+            if (!upgrader.needUpgrade()) {
+                // meta already updated
+                auth = null;  // remove references to useless objects to release memory
+            } else if (isLeader()) {
+                // upgrade metadata in old privilege framework to the new one
+                upgrader.upgradeAsLeader();
+                auth = null;  // remove references to useless objects to release memory
+            } else {
+                // follower will treat itself as old privilege
+                usingNewPrivilege.set(false);
+                authenticationManager = null;
+                privilegeManager = null;
+                domainResolver = new DomainResolver(auth);
+            }
         }
 
         long loadImageEndTime = System.currentTimeMillis();
@@ -1317,7 +1339,7 @@ public class GlobalStateMgr {
 
     // TODO put this at the end of the image before 3.0 release
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             this.authenticationManager = AuthenticationManager.load(dis);
             this.privilegeManager = PrivilegeManager.load(dis, this, null);
             this.domainResolver = new DomainResolver(authenticationManager);
@@ -1438,7 +1460,7 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             auth = new Auth();
         }
 
@@ -1487,7 +1509,7 @@ public class GlobalStateMgr {
             saveRBACPrivilege(dos);
         }
 
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             auth = null;
         }
 
@@ -1529,7 +1551,7 @@ public class GlobalStateMgr {
 
     // TODO put this at the end of the image before 3.0 release
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             this.authenticationManager.save(dos);
             this.privilegeManager.save(dos);
         }
@@ -2933,7 +2955,7 @@ public class GlobalStateMgr {
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
-            if (usingNewPrivilege) {
+            if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
@@ -3205,6 +3227,15 @@ public class GlobalStateMgr {
         } catch (Exception e) {
             LOG.warn("replay uninstall plugin failed.", e);
         }
+    }
+
+    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
+        this.authenticationManager = new AuthenticationManager();
+        this.privilegeManager = new PrivilegeManager(this, null);
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        upgrader.replayUpgradeAsFollower(info.getRoleNameToId());
+        usingNewPrivilege.set(true);
+        this.auth = null;
     }
 
     // entry of checking tablets operation
