@@ -51,6 +51,10 @@ public:
     // Access the unique fields by the following methods.
     int32_t backend_num() const { return _unique_request.backend_num; }
     int32_t pipeline_dop() const { return _unique_request.__isset.pipeline_dop ? _unique_request.pipeline_dop : 0; }
+    int32_t pipeline_sink_dop() const {
+        return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 0;
+    }
+
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }
     int32_t sender_id() const { return _unique_request.params.sender_id; }
 
@@ -99,7 +103,8 @@ private:
 
     Status _decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                             const UnifiedExecPlanFragmentParams& request,
-                                            std::unique_ptr<starrocks::DataSink>& datasink);
+                                            std::unique_ptr<starrocks::DataSink>& datasink,
+                                            const TDataSink& thrift_sink, const std::vector<TExpr>& output_exprs);
 
     int64_t _fragment_start_time = 0;
     QueryContext* _query_ctx = nullptr;

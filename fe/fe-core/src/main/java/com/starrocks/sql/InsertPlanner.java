@@ -19,6 +19,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.MysqlTableSink;
 import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.PlanFragment;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
@@ -77,6 +78,7 @@ import static com.starrocks.catalog.DefaultExpr.SUPPORTED_DEFAULT_FNS;
 public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
+    private boolean shuffleServiceEnable = false;
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
@@ -108,10 +110,9 @@ public class InsertPlanner {
 
         // TODO: remove forceDisablePipeline when all the operators support pipeline engine.
         boolean isEnablePipeline = session.getSessionVariable().isEnablePipelineEngine();
-        // Parallel pipeline loads are currently not supported, so disable the pipeline engine when users need parallel load
         boolean canUsePipeline =
                 isEnablePipeline && DataSink.canTableSinkUsePipeline(insertStmt.getTargetTable()) &&
-                        logicalPlan.canUsePipeline() && session.getSessionVariable().getParallelExecInstanceNum() <= 1;
+                        logicalPlan.canUsePipeline();
         boolean forceDisablePipeline = isEnablePipeline && !canUsePipeline;
         try {
             if (forceDisablePipeline) {
@@ -161,15 +162,31 @@ public class InsertPlanner {
 
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
                         insertStmt.getTargetPartitionIds(), canUsePipeline, writeQuorum);
-                // At present, we only support dop=1 for olap table sink.
-                // because tablet writing needs to know the number of senders in advance
-                // and guaranteed order of data writing
-                // It can be parallel only in some scenes, for easy use 1 dop now.
                 execPlan.getFragments().get(0).setPipelineDop(1);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
+            }
+            
+            if (isEnablePipeline && canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
+                PlanFragment sinkFragment = execPlan.getFragments().get(0);
+                if (shuffleServiceEnable) {
+                    // For shuffle insert into, we only support tablet sink dop = 1
+                    // because for tablet sink dop > 1, local passthourgh exchange will influence the order of sending,
+                    // which may lead to inconsisten replica for primary key.
+                    // If you want to set tablet sink dop > 1, please enable single tablet loading and disable shuffle service
+                    sinkFragment.setPipelineDop(1);
+                } else {
+                    if (ConnectContext.get().getSessionVariable().getPipelineSinkDop() <= 0) {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getParallelExecInstanceNum());
+                    } else {
+                        sinkFragment.setPipelineDop(ConnectContext.get().getSessionVariable().getPipelineSinkDop());
+                    }
+                }
+                sinkFragment.setHasOlapTableSink();
+                sinkFragment.setForceSetTableSinkDop();
+                sinkFragment.setForceAssignScanRangesPerDriverSeq();
             }
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
@@ -406,6 +423,9 @@ public class InsertPlanner {
                 new HashDistributionDesc(keyColumnIds, HashDistributionDesc.SourceType.SHUFFLE_AGG);
         DistributionSpec spec = DistributionSpec.createHashDistributionSpec(desc);
         DistributionProperty property = new DistributionProperty(spec);
+
+        shuffleServiceEnable = true;
+        
         return new PhysicalPropertySet(property);
     }
 }
