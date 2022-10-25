@@ -42,7 +42,7 @@
 
 ## 时区设置的影响
 
-- 时区设置会影响 SHOW LOAD 和 SHOW BACKENDS 语句返回的时间值，但并不影响 CREATE TABLE 语句中分区列为 DATE 或 DATETIME 类型时 `LESS THAN` 字句指定的值，以及 DATE 或 DATETIME 类型的数据。
+- 时区设置会影响 SHOW LOAD 和 SHOW BACKENDS 语句返回的时间值，但并不影响 CREATE TABLE 语句中分区列为 DATE 或 DATETIME 类型时 `LESS THAN` 子句指定的值，以及 DATE 或 DATETIME 类型的数据。
 - 受时区设置影响的函数包括：
   - **from_unixtime**：给定一个 UTC 时间戳，返回指定时区的日期时间。如全局时区为 `Asia/Shanghai`，`select FROM_UNIXTIME(0);` 返回 `1970-01-01 08:00:00`。
   - **unix_timestamp**：给定一个指定时区的日期时间，返回 UTC 时间戳。如全局时区为 `Asia/Shanghai`，`select UNIX_TIMESTAMP('1970-01-01 08:00:00');` 返回 `0`。
