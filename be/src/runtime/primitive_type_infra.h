@@ -73,10 +73,15 @@ namespace starrocks {
     case type:                    \
         return fun.template operator()<type>(args...);
 
+// Aggregate types
 template <class Functor, class... Args>
-auto type_dispatch_numeric(PrimitiveType ptype, Functor fun, Args... args) {
+auto type_dispatch_aggregate(PrimitiveType ptype, Functor fun, Args... args) {
     switch (ptype) {
         APPLY_FOR_ALL_NUMBER_TYPE(_TYPE_DISPATCH_CASE)
+        _TYPE_DISPATCH_CASE(TYPE_BOOLEAN)
+        _TYPE_DISPATCH_CASE(TYPE_DATE)
+        _TYPE_DISPATCH_CASE(TYPE_DATETIME)
+        _TYPE_DISPATCH_CASE(TYPE_DECIMALV2)
     default:
         CHECK(false) << "Unknown type: " << ptype;
         __builtin_unreachable();

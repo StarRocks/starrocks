@@ -29,6 +29,41 @@ struct AggregateFuncMapHash {
     }
 };
 
+// Infer ResultType from ArgType
+template <template <PrimitiveType PT, typename = guard::Guard> class ResultTypeTrait>
+struct ResultTypeDispatcher {
+    template <PrimitiveType pt>
+    PrimitiveType operator()() {
+        return ResultTypeTrait<pt>::value;
+    }
+};
+
+// Build the aggregate function from the function template
+template <template <PrimitiveType arg_type, typename = guard::Guard> class ResultTrait,
+          template <class T> class StateTypeTrait,
+          template <PrimitiveType arg_type, typename T = RunTimeCppType<arg_type>,
+                    PrimitiveType res_type = PrimitiveType::TYPE_NULL, typename ResultType = RunTimeCppType<res_type>>
+          class FunImpl>
+struct AggFunctionDispatcher {
+    template <PrimitiveType pt>
+    AggregateFunctionPtr operator()(bool nullable, bool is_window) {
+        auto agg = std::make_shared<FunImpl<pt>>();
+        if (!nullable) {
+            return agg;
+        }
+
+        using ArgCppType = RunTimeCppType<pt>;
+        constexpr PrimitiveType res_type = ResultTrait<pt>::value;
+        using ResultCppType = RunTimeCppType<res_type>;
+        using StateType = StateTypeTrait<ResultCppType>;
+        if (is_window) {
+            return AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true>(agg);
+        } else {
+            return AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false>(agg);
+        }
+    }
+};
+
 // TODO(murphy) refactor the function creator
 class AggregateFuncResolver {
     DECLARE_SINGLETON(AggregateFuncResolver);
@@ -52,13 +87,17 @@ public:
         return pair->second.get();
     }
 
+    template <class AggData>
     void add_aggregate_mapping(const std::string& name, PrimitiveType arg, PrimitiveType ret, bool is_window,
                                AggregateFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, arg, ret, false, false), fun);
-        _infos_mapping.emplace(std::make_tuple(name, arg, ret, false, true), fun);
+        auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<AggData, false>(fun);
+        _infos_mapping.emplace(std::make_tuple(name, arg, ret, false, true), nullable_agg);
+
         if (is_window) {
             _infos_mapping.emplace(std::make_tuple(name, arg, ret, true, false), fun);
-            _infos_mapping.emplace(std::make_tuple(name, arg, ret, true, true), fun);
+            auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<AggData, true>(fun);
+            _infos_mapping.emplace(std::make_tuple(name, arg, ret, true, true), nullable_agg);
         }
     }
 
@@ -378,24 +417,6 @@ public:
             return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>();
         } else if (name == "exchange_speed") {
             return AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>();
-        }
-        return nullptr;
-    }
-
-    template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool IsWindowFunc, bool IsNull>
-    std::enable_if_t<pt_is_json<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
-        // TODO: support more functions for JSON type
-        if constexpr (IsNull) {
-            if (name == "any_value") {
-                auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>, IsWindowFunc>(
-                        any_value);
-                return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-            }
-        } else {
-            if (name == "any_value") {
-                return AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-            }
         }
         return nullptr;
     }

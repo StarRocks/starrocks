@@ -20,11 +20,8 @@ void AggregateFuncResolver::register_5() {
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("rank");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("row_number");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("ntile");
-
-    add_aggregate_mapping("exchange_bytes", TYPE_BIGINT, TYPE_BIGINT, false,
-                          std::make_shared<ExchangePerfAggregateFunction<AggExchangePerfType::BYTES>>());
-    add_aggregate_mapping("exchange_speed", TYPE_BIGINT, TYPE_VARCHAR, false,
-                          std::make_shared<ExchangePerfAggregateFunction<AggExchangePerfType::SPEED>>());
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("exchange_speed");
 
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT>("exchange_bytes");
     add_aggregate_mapping<TYPE_BIGINT, TYPE_VARCHAR>("exchange_speed");

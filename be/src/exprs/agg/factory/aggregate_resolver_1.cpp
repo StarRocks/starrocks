@@ -7,7 +7,7 @@
 namespace starrocks::vectorized {
 
 void AggregateFuncResolver::register_1() {
-    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE, true>("avg");
+    add_aggregate_mapping<TYPE_BOOLEAN, AvgResultPT<TYPE_BOOLEAN>, true>("avg");
     add_aggregate_mapping<TYPE_TINYINT, TYPE_DOUBLE, true>("avg");
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_DOUBLE, true>("avg");
     add_aggregate_mapping<TYPE_INT, TYPE_DOUBLE, true>("avg");

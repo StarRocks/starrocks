@@ -36,7 +36,8 @@ void AggregateFuncResolver::register_2() {
     ADD_ALL_TYPE("max", true);
     ADD_ALL_TYPE("min", true);
     ADD_ALL_TYPE("any_value", true);
-    add_aggregate_mapping<TYPE_JSON, TYPE_JSON>("any_value");
+    add_aggregate_mapping<AnyValueAggregateData<TYPE_JSON>>(
+            "any_value", TYPE_JSON, TYPE_JSON, false, AggregateFactory::MakeAnyValueAggregateFunction<TYPE_JSON>());
 }
 
 } // namespace starrocks::vectorized
