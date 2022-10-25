@@ -138,7 +138,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|描述|
 |---|---|---|
-|plugin_enable|TRUE|是否开启了插件功能。只能在 master 安装/卸载插件|
+|plugin_enable|TRUE|是否开启了插件功能。只能在 Leader FE 安装/卸载插件|
 |max_small_file_number|100|允许存储小文件数目的最大值。|
 |max_small_file_size_bytes|1024 \* 1024|存储文件的大小上限，单位为 Byte。|
 |agent_task_resend_wait_time_ms|5000|当代理任务的创建时间被设置，并且距离现在超过该值，才能重新发送代理任务，单位为 ms。|
@@ -265,7 +265,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |authentication_ldap_simple_server_host|空字符串|LDAP 服务的 host 地址。|
 |authentication_ldap_simple_server_port|389|LDAP 服务的端口。|
 |authentication_ldap_simple_user_search_attr|uid|LDAP 对象中标识用户的属性名称。|
-|auth_token|空字符串|Token 是否自动开启。为空则在 Master FE 第一次启动时随机生成一个。|
+|auth_token|空字符串|Token 是否自动开启。为空则在 Leader FE 第一次启动时随机生成一个。|
 |tmp_dir|StarRocksFE.STARROCKS_HOME_DIR + "/temp_dir"|临时文件保存目录，例如 backup/restore 等进程保留的目录。|
 |locale|zh_CN.UTF-8|字符集。|
 |hive_meta_load_concurrency|4|Hive 元数据并发线程数。|
@@ -274,7 +274,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |hive_meta_store_timeout_s|10|连接 Hive Metastore 的超时时间。|
 |es_state_sync_interval_second|10|FE 获取 Elasticsearch Index 的时间，单位为秒。|
 |enable_auth_check|TRUE|是否开启鉴权。|
-|auth_token|空字符串|为空则在 Master FE 第一次启动时随机生成一个。|
+|auth_token|空字符串|为空则在 Leader FE 第一次启动时随机生成一个。|
 |enable_metric_calculator|TRUE|是否开启定期收集 metrics。|
 |backup_plugin_path|/tools/trans_file_tool/trans_files.sh|Deprecated。Backup 和 Restore 的插件路径。|
 
@@ -381,7 +381,7 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD|
 |check_consistency_worker_count|1|计算 tablet 的校验和(checksum)|
 |alter_tablet_timeout_seconds|86400|Schema change 超时时间|
-|sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括 INFO, WARNING, ERROR, FATAL 等日志|
+|sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志|
 |user_function_dir|${STARROCKS_HOME}/lib/udf|UDF 程序存放的地方|
 |small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录|
 |sys_log_level|INFO|日志级别，INFO < WARNING < ERROR < FATAL|

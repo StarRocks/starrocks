@@ -55,7 +55,7 @@ bin/install.sh -h \
 
 配置 FE 节点相关信息。端口的含义参考下方[端口列表](#端口列表)。
 
-建议您配置 1 或者 3 个 FE Follower。如果请求压力较大，建议您酌情增加 FE Observer 数量。
+建议您配置 1 或者 3 个 Follower FE。如果请求压力较大，建议您酌情增加 Observer FE  数量。
 
 ![配置 FE 实例](../assets/8.1.1.3-3.png)
 

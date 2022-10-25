@@ -14,7 +14,7 @@ DATETIME DATE_SUB(DATETIME date,INTERVAL expr type)
 
 * `date` ：合法的日期表达式。
 * `expr` ：要减去的时间间隔。
-* `type` ：可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND。
+* `type` ：可以是下列值：YEAR，MONTH，DAY，HOUR，MINUTE，SECOND。
 
 ## 示例
 

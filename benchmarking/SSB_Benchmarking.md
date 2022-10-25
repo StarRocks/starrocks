@@ -2,7 +2,7 @@
 
 ## 一、测试结论
 
-Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。Clickhouse 通过改写 SSB，将星型模型打平转化成宽表，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)）。本报告记录了 StarRocks、Apache Druid 和 Clickhouse 在 SSB 单表数据集上的性能对比结果，并记录了在用户经常碰到的低基数聚合场景下 StarRocks 和 ClickHouse 的性能对比结果。测试结论如下：
+Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用的一个星型模型测试集（来源[论文](https://www.cs.umb.edu/~poneil/StarSchemaB.PDF)），通过这个测试集合可以方便的对比各种 OLAP 产品的基础性能指标。ClickHouse 通过改写 SSB，将星型模型打平转化成宽表，改造成了一个单表测试 benchmark（参考[链接](https://clickhouse.tech/docs/en/getting-started/example-datasets/star-schema/)）。本报告记录了 StarRocks、Apache Druid 和 ClickHouse 在 SSB 单表数据集上的性能对比结果，并记录了在用户经常碰到的低基数聚合场景下 StarRocks 和 ClickHouse 的性能对比结果。测试结论如下：
 
 - 在标准测试数据集的 13 个查询上，ClickHouse 的整体查询时间是 StarRocks 的 1.7 倍，Apache Druid 的整体查询时间是 StarRocks 的 2.2 倍。
 - 在 StarRocks 启用 bitmap index 和 cache 的情况下，性能更胜一筹，尤其在 Q2.2 Q2.3 Q3.3 上有显著提升。整体性能是 ClickHouse 的 2.2 倍，Apache Druid 的 2.9 倍。
@@ -28,17 +28,17 @@ Star Schema Benchmark（以下简称 SSB）是学术界和工业界广泛使用�
 
 ### （二）软件环境
 
-StarRocks，Apache Druid 和 Clickhouse 部署在相同配置的机器上分别进行启动测试。
+StarRocks，Apache Druid 和 ClickHouse 部署在相同配置的机器上分别进行启动测试。
 
 - StarRocks 部署 3BE 1FE；
-- Clickhouse 部署三个节点后建立分布式表；
+- ClickHouse 部署三个节点后建立分布式表；
 - Apache Druid 多一台 8core 的 master 主机，部署了 Broker/Coordinator/Overlord/Router（但是测试压力不在 master，影响较小可以忽略），Historical/MiddleManager 混合部署在与 SR，CK 同等配置的主机上。
 
 内核版本：Linux 3.10.0-1127.13.1.el7.x86_64
 
 操作系统版本：CentOS Linux release 7.8.2003
 
-软件版本：StarRocks 社区版 2.1，Aapche Druid 0.20.1，Clickhouse 21.9
+软件版本：StarRocks 社区版 2.1，Apache Druid 0.20.1，ClickHouse 21.9
 
 ## 三、测试数据与结果
 

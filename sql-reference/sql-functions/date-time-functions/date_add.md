@@ -16,7 +16,7 @@ DATETIME DATE_ADD(DATETIME date,INTERVAL expr type)
 
 `expr`：需要添加的时间间隔。
 
-`type`：可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND。
+`type`：可以是下列值：YEAR，MONTH，DAY，HOUR，MINUTE，SECOND。
 
 ## 示例
 

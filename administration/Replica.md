@@ -175,7 +175,7 @@ TabletScheduler 里等待被调度的分片会根据状态不同，被赋予不�
 ADMIN REPAIR TABLE tbl [PARTITION (p1, p2, ...)];
 ```
 
-> 注意：此命令只是一个 Hint，并不能保证一定能修复成功，且副本的优先级仍会随 TabletScheduler 的调度而发生变化。当 Master FE 节点切换或重启后，该命令所包含的信息会丢失。
+> 注意：此命令只是一个 Hint，并不能保证一定能修复成功，且副本的优先级仍会随 TabletScheduler 的调度而发生变化。当 Leader FE 节点切换或重启后，该命令所包含的信息会丢失。
 
 您也可以通过以下命令取消优先级调度。
 

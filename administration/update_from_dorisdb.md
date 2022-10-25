@@ -1,6 +1,6 @@
 # 升级标准版 DorisDB 至社区版 StarRocks
 
-本文介绍如何将标准版 DorisDB 升级至社区版 StarRocks。标准版 DorisDB 包括安装包命名格式为 DorisDB-x 的版本, 社区版 StarRocks 包含安装包命名格式为 StarRocks-x 的版本。
+本文介绍如何将标准版 DorisDB 升级至社区版 StarRocks。标准版 DorisDB 包括安装包命名格式为 DorisDB-x 的版本，社区版 StarRocks 包含安装包命名格式为 StarRocks-x 的版本。
 
 StarRocks 支持前向兼容，因此您可以灰度升级。
 
@@ -95,7 +95,7 @@ StarRocks 支持前向兼容，因此您可以灰度升级。
 
 > 注意：
 >
-> * FE 节点升级应按照先升级 Observer，再升级 Follower，最后升级 Master 的顺序。
+> * FE 节点升级应按照先升级 Observer，再升级 Follower，最后升级 Leader 的顺序。
 > * 请确保同步升级集群中未启动的 FE 节点，以防后续这些节点启动出现 FE 节点版本不一致的情况。
 
 1. 停止当前 FE 节点。

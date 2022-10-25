@@ -193,7 +193,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
 
 * 如果遇到导入停止的 情况，请尝试增加flink任务的内存。
 
-* 如果代码运行正常且能接收到数据，但是写入不成功时请确认当前机器能访问BE的http_port端口，这里指能ping通集群show backends显示的ip:port。举个例子：如果一台机器有外网和内网ip，且FE/BE的http_port均可通过外网ip:port访问，集群里绑定的ip为内网ip，任务里loadurl写的FE外网ip:http_port,FE会将写入任务转发给BE内网ip:port,这时如果Client机器ping不通BE的内网ip就会写入失败。
+* 如果代码运行正常且能接收到数据，但是写入不成功时请确认当前机器能访问BE的http_port端口，这里指能ping通集群show backends显示的ip:port。举个例子：如果一台机器有外网和内网ip，且FE/BE的http_port均可通过外网ip:port访问，集群里绑定的ip为内网ip，任务里loadurl写的FE外网ip:http_port，FE会将写入任务转发给BE内网ip:port，这时如果Client机器ping不通BE的内网ip就会写入失败。
 
 ## 导入数据可观测指标
 
