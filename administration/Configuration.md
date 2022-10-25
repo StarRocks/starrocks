@@ -240,7 +240,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 |配置项|默认值|描述|
 |---|---|---|
-|async_load_task_pool_size|10|导入任务执行的线程池大小。|
+|async_load_task_pool_size|10|导入任务执行的线程池大小。本参数仅适用于 Broker Load。|
 |load_checker_interval_second|5|导入轮询的间隔，单位为秒。|
 |transaction_clean_interval_second|30|清理已结束事务的周期，单位为秒。|
 |label_clean_interval_second|14400|label 清理的间隔，单位为秒。|
