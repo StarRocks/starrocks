@@ -5,18 +5,24 @@ package com.starrocks.sql.plan;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.external.MockedMetadataMgrForHive;
+import com.starrocks.connector.MockedMetadataMgr;
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import org.junit.BeforeClass;
 
 import java.util.Map;
 
-public class HivePlanTestBase extends PlanTestBase {
+public class ConnectorPlanTestBase extends PlanTestBase {
+    private static MockedMetadataMgr metadataMgr = null;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         FeConstants.runningUnitTest = true;
+        GlobalStateMgr gsmMgr = connectContext.getGlobalStateMgr();
+        metadataMgr = new MockedMetadataMgr(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
+        gsmMgr.setMetadataMgr(metadataMgr);
+
         mockHiveCatalog();
     }
 
@@ -27,8 +33,7 @@ public class HivePlanTestBase extends PlanTestBase {
         properties.put("hive.metastore.uris", "thrift://127.0.0.1:9083");
         GlobalStateMgr.getCurrentState().getCatalogMgr().createCatalog("hive", "hive0", "", properties);
 
-        GlobalStateMgr gsmMgr = connectContext.getGlobalStateMgr();
-        MockedMetadataMgrForHive metadataMgr = new MockedMetadataMgrForHive(gsmMgr.getLocalMetastore(), gsmMgr.getConnectorMgr());
-        gsmMgr.setMetadataMgr(metadataMgr);
+        MockedHiveMetadata mockedHiveMetadata = new MockedHiveMetadata();
+        metadataMgr.registerMockedMetadata(MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME, mockedHiveMetadata);
     }
 }

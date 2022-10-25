@@ -1,6 +1,6 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.external;
+package com.starrocks.connector.hive;
 
 import com.clearspring.analytics.util.Lists;
 import com.google.common.collect.ImmutableList;
@@ -14,8 +14,12 @@ import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.connector.ConnectorMgr;
+import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.external.CachingRemoteFileIO;
+import com.starrocks.external.RemoteFileIO;
+import com.starrocks.external.RemoteFileInfo;
+import com.starrocks.external.RemoteFileOperations;
 import com.starrocks.external.hive.CachingHiveMetastore;
 import com.starrocks.external.hive.HiveMetaClient;
 import com.starrocks.external.hive.HiveMetastore;
@@ -24,8 +28,6 @@ import com.starrocks.external.hive.HiveMetastoreOperations;
 import com.starrocks.external.hive.HivePartitionStats;
 import com.starrocks.external.hive.HiveRemoteFileIO;
 import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.server.LocalMetastore;
-import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -50,48 +52,45 @@ import static com.starrocks.sql.optimizer.Utils.getLongFromDateTime;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 
-public class MockedMetadataMgrForHive extends MetadataMgr {
-
-    // catalog -> db -> tableName -> table
-    private static final Map<String, Map<String, Map<String, HiveTableInfo>>> MOCK_TABLE_MAP = Maps.newHashMap();
+public class MockedHiveMetadata implements ConnectorMetadata {
+    // db -> tableName -> table
+    private static final Map<String, Map<String, HiveTableInfo>> MOCK_TABLE_MAP = Maps.newHashMap();
     private final AtomicLong idGen = new AtomicLong(0L);
     private static final List<RemoteFileInfo> MOCKED_FILES = ImmutableList.of(
             new RemoteFileInfo(null, ImmutableList.of(), null));
+    public static final String MOCKED_HIVE_CATALOG_NAME = "hive0";
+    public static final String MOCKED_TPCH_DB_NAME = "tpch";
+    public static final String MOCKED_PARTITIONED_DB_NAME = "partitioned_db";
 
     static {
         mockTPCHTable();
         mockPartitionTable();
     }
 
-    public MockedMetadataMgrForHive(LocalMetastore localMetastore, ConnectorMgr connectorMgr) {
-        super(localMetastore, connectorMgr);
+    @Override
+    public com.starrocks.catalog.Table getTable(String dbName, String tblName) {
+        return MOCK_TABLE_MAP.get(dbName).get(tblName).table;
     }
 
     @Override
-    public com.starrocks.catalog.Table getTable(String catalogName, String dbName, String tblName) {
-        return MOCK_TABLE_MAP.get(catalogName).get(dbName).get(tblName).table;
-    }
-
-    @Override
-    public Database getDb(String catalogName, String dbName) {
+    public Database getDb(String dbName) {
         return new Database(idGen.getAndIncrement(), dbName);
     }
 
     @Override
-    public List<String> listPartitionNames(String catalogName, String dbName, String tableName) {
-        return MOCK_TABLE_MAP.get(catalogName).get(dbName).get(tableName).partitionNames;
+    public List<String> listPartitionNames(String dbName, String tableName) {
+        return MOCK_TABLE_MAP.get(dbName).get(tableName).partitionNames;
     }
 
     @Override
     public Statistics getTableStatistics(OptimizerContext session,
-                                         String catalogName,
                                          com.starrocks.catalog.Table table,
                                          List<ColumnRefOperator> columns,
                                          List<PartitionKey> partitionKeys) {
         HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
         String hiveDb = hmsTable.getDbName();
         String tblName = hmsTable.getTableName();
-        HiveTableInfo info = MOCK_TABLE_MAP.get(catalogName).get(hiveDb).get(tblName);
+        HiveTableInfo info = MOCK_TABLE_MAP.get(hiveDb).get(tblName);
         Statistics.Builder builder = Statistics.builder();
         builder.setOutputRowCount(info.rowCount);
         for (ColumnRefOperator columnRefOperator : columns) {
@@ -102,20 +101,16 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
     }
 
     @Override
-    public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, com.starrocks.catalog.Table table,
-                                                   List<PartitionKey> partitionKeys) {
+    public List<RemoteFileInfo> getRemoteFileInfos(com.starrocks.catalog.Table table, List<PartitionKey> partitionKeys) {
         HiveMetaStoreTable hmsTbl = (HiveMetaStoreTable) table;
         int size = partitionKeys.size();
-        return MOCK_TABLE_MAP.get(catalogName).get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).partitions.subList(0, size);
+        return MOCK_TABLE_MAP.get(hmsTbl.getDbName()).get(hmsTbl.getTableName()).partitions.subList(0, size);
     }
 
     public static void mockTPCHTable() {
-        String catalogName = "hive0";
-        String dbName = "tpch";
-
-        Map<String, HiveTableInfo> mockTables = Maps.newHashMap();
-        Map<String, Map<String, HiveTableInfo>> mockDbTables = Maps.newHashMap();
-        mockDbTables.put(dbName, mockTables);
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_TPCH_DB_NAME, Maps.newHashMap());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_TPCH_DB_NAME);
+        MOCK_TABLE_MAP.put(MOCKED_TPCH_DB_NAME, mockTables);
 
         // Mock table region
         List<FieldSchema> cols = Lists.newArrayList();
@@ -132,8 +127,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
 
         Table region = new Table("region", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(region.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(region, catalogName),
-                ImmutableList.of(), 5, regionStats, MOCKED_FILES));
+        mockTables.put(region.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(region,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 5, regionStats, MOCKED_FILES));
 
         // Mock table nation
         cols = Lists.newArrayList();
@@ -151,8 +146,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         nationStats.put("n_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 0, 25));
         Table nation = new Table("nation", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(nation.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(nation, catalogName),
-                ImmutableList.of(), 25, nationStats, MOCKED_FILES));
+        mockTables.put(nation.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(nation,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 25, nationStats, MOCKED_FILES));
 
         // Mock table supplier
         cols = Lists.newArrayList();
@@ -176,8 +171,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         supplierStats.put("s_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 101, 984748));
         Table suppler = new Table("supplier", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(suppler.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(suppler, catalogName),
-                ImmutableList.of(), 1000000, supplierStats, MOCKED_FILES));
+        mockTables.put(suppler.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(suppler,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 1000000, supplierStats, MOCKED_FILES));
 
         // Mock table part
         cols = Lists.newArrayList();
@@ -205,7 +200,7 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         partStats.put("p_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 0, 3927659));
         Table part = new Table("part", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        HiveTableInfo hiveTableInfo = new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(part, catalogName),
+        HiveTableInfo hiveTableInfo = new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(part, MOCKED_HIVE_CATALOG_NAME),
                 ImmutableList.of(), 20000000, partStats, MOCKED_FILES);
         mockTables.put(part.getTableName(), hiveTableInfo);
 
@@ -227,8 +222,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         partSuppStats.put("ps_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 199, 71873944));
         Table partSupp = new Table("partsupp", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(partSupp.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partSupp, catalogName),
-                ImmutableList.of(), 80000000, partSuppStats, MOCKED_FILES));
+        mockTables.put(partSupp.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(partSupp,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 80000000, partSuppStats, MOCKED_FILES));
 
         // Mock customer table
         cols = Lists.newArrayList();
@@ -254,8 +249,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         customerStats.put("c_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 117, 14788744));
         Table customer = new Table("customer", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(customer.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(customer, catalogName),
-                ImmutableList.of(), 15000000, customerStats, MOCKED_FILES));
+        mockTables.put(customer.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(customer,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 15000000, customerStats, MOCKED_FILES));
 
         // Mock table orders
         cols = Lists.newArrayList();
@@ -286,8 +281,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         ordersStats.put("o_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 79, 110204136));
         Table orders = new Table("orders", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(orders.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(orders, catalogName),
-                ImmutableList.of(), 150000000, ordersStats, MOCKED_FILES));
+        mockTables.put(orders.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(orders,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 150000000, ordersStats, MOCKED_FILES));
 
         // Mock table lineitem
         cols = Lists.newArrayList();
@@ -338,20 +333,13 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         lineitemStats.put("l_comment", new ColumnStatistic(NEGATIVE_INFINITY, POSITIVE_INFINITY, 0, 44, 142089728));
         Table lineitem = new Table("lineitem", "tpch", null, 0, 0, 0,  sd,
                 Lists.newArrayList(), Maps.newHashMap(), null, null, "EXTERNAL_TABLE");
-        mockTables.put(lineitem.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(lineitem, catalogName),
-                ImmutableList.of(), 600037902, lineitemStats, MOCKED_FILES));
-
-        MOCK_TABLE_MAP.put(catalogName, mockDbTables);
+        mockTables.put(lineitem.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(lineitem,
+                MOCKED_HIVE_CATALOG_NAME), ImmutableList.of(), 600037902, lineitemStats, MOCKED_FILES));
     }
 
     public static void mockPartitionTable() {
-        String catalogName = "hive0";
-        String dbName = "partitioned_db";
-
-        MOCK_TABLE_MAP.putIfAbsent(catalogName, Maps.newHashMap());
-        Map<String, Map<String, HiveTableInfo>> mockDbTables = MOCK_TABLE_MAP.get(catalogName);
-        mockDbTables.putIfAbsent(dbName, Maps.newHashMap());
-        Map<String, HiveTableInfo> mockTables = mockDbTables.get(dbName);
+        MOCK_TABLE_MAP.putIfAbsent(MOCKED_PARTITIONED_DB_NAME, Maps.newHashMap());
+        Map<String, HiveTableInfo> mockTables = MOCK_TABLE_MAP.get(MOCKED_PARTITIONED_DB_NAME);
 
         List<FieldSchema> cols = Lists.newArrayList();
         cols.add(new FieldSchema("c1", "int", null));
@@ -382,7 +370,8 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
                 metastore, Executors.newSingleThreadExecutor(), 0, 0, 0, false);
         HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, false);
         RemoteFileIO remoteFileIO = new HiveRemoteFileIO(new Configuration());
-        CachingRemoteFileIO cacheIO = new CachingRemoteFileIO(remoteFileIO, Executors.newSingleThreadExecutor(), 0, 0, 0);
+        CachingRemoteFileIO cacheIO = CachingRemoteFileIO.createCatalogLevelInstance(remoteFileIO,
+                Executors.newSingleThreadExecutor(), 0, 0, 0);
         RemoteFileOperations fileOps = new RemoteFileOperations(cacheIO, Executors.newSingleThreadExecutor(), false, false);
 
         HiveStatisticsProvider hiveStatisticsProvider = new HiveStatisticsProvider(hmsOps, fileOps);
@@ -406,7 +395,7 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         partitions.add(new RemoteFileInfo(null, ImmutableList.of(), null));
         partitions.add(new RemoteFileInfo(null, ImmutableList.of(), null));
 
-        mockTables.put(t1.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, catalogName),
+        mockTables.put(t1.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(t1, MOCKED_HIVE_CATALOG_NAME),
                 partitionNames, (long) rowCount, columnStatisticMap, partitions));
 
         cols = Lists.newArrayList();
@@ -471,7 +460,7 @@ public class MockedMetadataMgrForHive extends MetadataMgr {
         columnStatisticMap.put("l_shipdate", partitionColumnStats);
 
         mockTables.put(lineItemPar.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(
-                lineItemPar, catalogName), partitionNames, (long) rowCount, columnStatisticMap1, partitions1));
+                lineItemPar, MOCKED_HIVE_CATALOG_NAME), partitionNames, (long) rowCount, columnStatisticMap1, partitions1));
     }
 
     private static class HiveTableInfo {

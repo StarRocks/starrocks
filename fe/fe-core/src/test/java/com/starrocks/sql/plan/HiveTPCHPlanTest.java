@@ -9,10 +9,10 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class HiveTPCHPlanTest extends HivePlanTestBase {
+public class HiveTPCHPlanTest extends ConnectorPlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        HivePlanTestBase.beforeClass();
+        ConnectorPlanTestBase.beforeClass();
         UtFrameUtils.addMockBackend(10002);
         UtFrameUtils.addMockBackend(10003);
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.tpch");

@@ -39,7 +39,7 @@ public class MetadataMgr {
         this.connectorMgr = connectorMgr;
     }
 
-    private Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
+    protected Optional<ConnectorMetadata> getOptionalMetadata(String catalogName) {
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return Optional.of(localMetastore);
         } else {
