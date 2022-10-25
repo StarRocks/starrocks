@@ -416,10 +416,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
         // Broadcast join need only create one hash table, because all the HashJoinProbeOperators
         // use the same hash table with their own different probe states.
         rhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), rhs_operators);
-
-        bool force_local_passthrough = false;
-        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(
-                runtime_state(), lhs_operators, context->degree_of_parallelism(), force_local_passthrough);
+        lhs_operators = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), lhs_operators,
+                                                                              context->degree_of_parallelism());
     } else {
         // "col NOT IN (NULL, val1, val2)" always returns false, so hash join should
         // return empty result in this case. Hash join cannot be divided into multiple
