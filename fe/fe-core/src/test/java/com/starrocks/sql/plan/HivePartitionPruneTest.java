@@ -7,7 +7,7 @@ import com.starrocks.server.GlobalStateMgr;
 import org.junit.Before;
 import org.junit.Test;
 
-public class HivePartitionPruneTest extends HivePlanTestBase {
+public class HivePartitionPruneTest extends ConnectorPlanTestBase {
     @Before
     public void setUp() throws DdlException {
         GlobalStateMgr.getCurrentState().changeCatalogDb(connectContext, "hive0.partitioned_db");
