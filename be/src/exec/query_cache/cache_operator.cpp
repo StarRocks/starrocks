@@ -348,14 +348,14 @@ void CacheOperator::populate_cache(int64_t tablet_id) {
     const std::string cache_key = _cache_param.digest + cache_key_suffix_it->second;
     int64_t current = GetMonoTimeMicros();
     auto chunks = remap_chunks(buffer->chunks, _cache_param.slot_remapping);
-    CacheValue value{0, 0, current, buffer->required_version, std::move(chunks)};
+    CacheValue cache_value(current, buffer->required_version, std::move(chunks));
     // If the cache implementation is global, populate method must be asynchronous and try its best to
     // update the cache.
     _cache_populate_bytes_counter->update(buffer->num_bytes);
     _cache_populate_chunks_counter->update(buffer->chunks.size());
     _cache_populate_rows_counter->update(buffer->num_rows);
     _populate_tablets.insert(tablet_id);
-    _cache_mgr->populate(cache_key, value);
+    _cache_mgr->populate(cache_key, cache_value);
     buffer->state = PLBS_POPULATE;
 }
 
