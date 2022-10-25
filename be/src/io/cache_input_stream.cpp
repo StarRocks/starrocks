@@ -81,6 +81,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
 
         if (!can_zero_copy) {
             memcpy(p, src + shift, size);
+            _stats.read_cache_bytes += size;
         }
         p += size;
         _offset += size;

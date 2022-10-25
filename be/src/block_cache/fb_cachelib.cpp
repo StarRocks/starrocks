@@ -53,6 +53,7 @@ StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, siz
     if (!handle) {
         return Status::NotFound("not found cachelib item");
     }
+    DCHECK((off + size) <= handle->getSize());
     std::memcpy(value, (char*)handle->getMemory() + off, size);
     if (handle->hasChainedItem()) {
     }
