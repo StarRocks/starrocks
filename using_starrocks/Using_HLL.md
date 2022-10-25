@@ -88,7 +88,7 @@ id int,
 uv_set hll hll_union)
 distributed by hash(id) buckets 32;
 
-insert into test_uv select id, uv from test;
+insert into test_uv1 select id, uv from test;
 ~~~
 
 * 创建针对 HLL 列计算的新表，并插入通过 `HLL_HASH` 基于原示例表中相关数据生成的 HLL 列。
@@ -99,7 +99,7 @@ id int,
 uv_set hll hll_union)
 distributed by hash(id) buckets 32;
 
-insert into test_uv select id, hll_hash(id) from test;
+insert into test_uv2 select id, hll_hash(id) from test;
 ~~~
 
 ## 查询数据
