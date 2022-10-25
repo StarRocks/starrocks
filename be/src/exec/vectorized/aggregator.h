@@ -464,10 +464,10 @@ public:
         }
 
         _it_hash = it;
-        vectorized::ChunkPtr result_chunk = _build_output_chunk(group_by_columns, agg_result_columns);
+        auto result_chunk = _build_output_chunk(group_by_columns, agg_result_columns);
         _num_rows_returned += read_index;
         _num_rows_processed += read_index;
-        *chunk = std::move(_result_chunk);
+        *chunk = std::move(result_chunk);
     }
 
     template <typename HashSetWithKey>
