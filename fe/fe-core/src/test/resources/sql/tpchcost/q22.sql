@@ -105,7 +105,7 @@ HASH_PARTITIONED: 1: C_CUSTKEY
 9:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  colocate: false, reason:
-|  other predicates: 6: C_ACCTBAL > 19: avg
+|  other join predicates: 6: C_ACCTBAL > 19: avg
 |
 |----8:EXCHANGE
 |

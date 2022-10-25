@@ -532,9 +532,16 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                               DistributionDesc distributionDesc) {
         String lowerBound = partitionKeyRange.lowerEndpoint().getKeys().get(0).getStringValue();
         String upperBound = partitionKeyRange.upperEndpoint().getKeys().get(0).getStringValue();
+        boolean isMaxValue = partitionKeyRange.upperEndpoint().isMaxValue();
+        PartitionValue upperPartitionValue;
+        if (isMaxValue) {
+            upperPartitionValue = PartitionValue.MAX_VALUE;
+        } else {
+            upperPartitionValue = new PartitionValue(upperBound);
+        }
         PartitionKeyDesc partitionKeyDesc = new PartitionKeyDesc(
                 Collections.singletonList(new PartitionValue(lowerBound)),
-                Collections.singletonList(new PartitionValue(upperBound)));
+                Collections.singletonList(upperPartitionValue));
         SingleRangePartitionDesc singleRangePartitionDesc =
                 new SingleRangePartitionDesc(false, partitionName, partitionKeyDesc, partitionProperties);
         try {

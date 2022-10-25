@@ -50,11 +50,8 @@ void ResultSinkOperator::close(RuntimeState* state) {
             // the visibility of _num_written_rows is guaranteed by _num_result_sinkers.fetch_sub().
             _sender->update_num_written_rows(_num_written_rows.load(std::memory_order_relaxed));
 
-            auto query_statistic = std::make_shared<QueryStatistics>();
             QueryContext* query_ctx = state->query_ctx();
-            query_statistic->add_scan_stats(query_ctx->cur_scan_rows_num(), query_ctx->get_scan_bytes());
-            query_statistic->add_cpu_costs(query_ctx->cpu_cost());
-            query_statistic->add_mem_costs(query_ctx->mem_cost_bytes());
+            auto query_statistic = query_ctx->final_query_statistic();
             query_statistic->set_returned_rows(_num_written_rows);
             _sender->set_query_statistics(query_statistic);
 

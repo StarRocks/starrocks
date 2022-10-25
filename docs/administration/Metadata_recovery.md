@@ -59,7 +59,7 @@ The restoration steps vary for each FE based on the role of an FE. We recommend 
 We recommend that you restore a follower FE. Perform the following steps to restore a follower FE:
 
 1. Set `metadata_failure_recovery` in the **fe.conf** file to `true` to delete the metadata of other FEs in BDBJE except for the metadata of the FE that needs to be restored. In this way, the FE cannot connect with other FEs and starts as a standalone FE.
-2. Run `sh bin/start_fe.sh --deamon` to start the FE, which works as the leader FE. You can see `transfer from XXXX to MASTER` in the **fe.log** log.
+2. Run `./bin/start_fe.sh --deamon` to start the FE, which works as the leader FE. You can see `transfer from XXXX to MASTER` in the **fe.log** log.
 3. You can send queries to the FE to check whether the FE is started successfully. If an error occurs, view the log of the FE and troubleshoot the error based on the log data and then restart the FE. If no error occurs, you can run the `show frontends` command to check the details of all the FEs that are added to your StarRocks cluster before. The current FE is the leader FE.
 4. Delete `metadata_failure_recovery=true` from the **fe.conf** file or change `true` to `false`. Then restart the FE. Otherwise, the metadata of BDBJE is deleted when you restart the FE, and other FEs cannot work properly.
 
@@ -71,7 +71,7 @@ Perform the following steps to restore an observer FE:
 
 2. Set `metadata_failure_recovery` in the **fe.conf** file of the FE to `true` to delete the metadata of other FEs in BDBJE except for the metadata of the FE that needs to be restored. In this way, the FE cannot connect with other FEs and starts as a standalone FE.
 
-3. Run `sh bin/start_fe.sh --deamon` to start the FE, which works as the leader FE. You can see `transfer from XXXX to MASTER` in the **fe.log** log.
+3. Run `./bin/start_fe.sh --deamon` to start the FE, which works as the leader FE. You can see `transfer from XXXX to MASTER` in the **fe.log** log.
 
 4. You can send queries to the FE to check whether the FE is started successfully. If an error occurs, view the log of the FE and troubleshoot the error based on the log data and then restart the FE. If no error occurs, you can run the `show frontends` command to check the details of all the FEs that are added to your StarRocks cluster before.
 

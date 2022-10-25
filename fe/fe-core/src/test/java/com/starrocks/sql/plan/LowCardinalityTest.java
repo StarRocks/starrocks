@@ -880,6 +880,20 @@ public class LowCardinalityTest extends PlanTestBase {
         sql = "select part_v2.p_partkey from lineitem join part_v2 on L_COMMENT = hex(P_NAME);";
         plan = getFragmentPlan(sql);
         Assert.assertFalse(plan.contains("Decode"));
+
+        // TopN with HashJoinNode
+        sql = "select * from supplier l join supplier_nullable r where l.S_SUPPKEY = r.S_SUPPKEY " +
+                "order by l.S_ADDRESS limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:TOP-N\n" +
+                "  |  order by: <slot 17> 17: S_ADDRESS ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  limit: 10\n" +
+                "  |  \n" +
+                "  3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: S_SUPPKEY = 9: S_SUPPKEY");
     }
 
     @Test
@@ -945,6 +959,19 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  <function id 11> : DictExpr(10: S_ADDRESS,[substr(<place-holder>, 0, 1)])"));
         Assert.assertTrue(plan.contains("  5:SORT\n" +
                 "  |  order by: [11, INT, true] ASC"));
+
+        sql = "select approx_count_distinct(S_ADDRESS), upper(S_ADDRESS) from supplier " +
+                " group by upper(S_ADDRESS)" +
+                "order by 2";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, " 3:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  aggregate: approx_count_distinct[([3, VARCHAR, false]);");
+        assertContains(plan, "2:Decode\n" +
+                "  |  <dict id 11> : <string id 3>\n" +
+                "  |  <dict id 12> : <string id 9>");
+
+        // TODO add a case: Decode node before Sort Node
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
     }
@@ -1101,9 +1128,7 @@ public class LowCardinalityTest extends PlanTestBase {
         String sql = "select count(*), S_ADDRESS from supplier group by S_ADDRESS limit 10";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:Decode\n" +
-                "  |  <dict id 10> : <string id 3>\n" +
-                "  |  limit: 10");
-        ;
+                "  |  <dict id 10> : <string id 3>\n");
     }
 
     @Test

@@ -38,6 +38,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
@@ -391,4 +392,21 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
     return Status::OK();
 }
 
+bool RuntimeState::enable_query_statistic() const {
+    return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
+}
+
+std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
+    if (!enable_query_statistic()) {
+        return nullptr;
+    }
+    return _query_ctx->intermediate_query_statistic();
+}
+
+std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
+    if (!enable_query_statistic()) {
+        return nullptr;
+    }
+    return _query_ctx->maintained_query_recv();
+}
 } // end namespace starrocks

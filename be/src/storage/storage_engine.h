@@ -246,6 +246,8 @@ private:
 
     void* _tablet_checkpoint_callback(void* arg);
 
+    void* _adjust_pagecache_callback(void* arg);
+
     void _start_clean_fd_cache();
     Status _perform_cumulative_compaction(DataDir* data_dir);
     Status _perform_base_compaction(DataDir* data_dir);
@@ -311,6 +313,7 @@ private:
     std::vector<std::pair<int64_t, std::vector<std::pair<uint32_t, std::string>>>> _executed_repair_compaction_tasks;
     // threads to clean all file descriptor not actively in use
     std::thread _fd_cache_clean_thread;
+    std::thread _adjust_cache_thread;
     std::vector<std::thread> _path_gc_threads;
     // threads to scan disk paths
     std::vector<std::thread> _path_scan_threads;

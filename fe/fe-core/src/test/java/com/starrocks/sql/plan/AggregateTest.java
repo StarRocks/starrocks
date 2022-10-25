@@ -862,11 +862,21 @@ public class AggregateTest extends PlanTestBase {
         sql =
                 "select count(distinct L_ORDERKEY) from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
         plan = getExecPlan(sql);
-        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        sql = "select count(distinct L_ORDERKEY) from lineitem_partition_colocate";
+        plan = getExecPlan(sql);
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
+
+        sql = "select count(*) from lineitem_partition_colocate";
+        plan = getExecPlan(sql);
+        Assert.assertFalse(plan.getFragments().get(1).getPlanRoot().isColocate());
 
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
+        sql = "select count(distinct L_ORDERKEY) " +
+                "from lineitem_partition_colocate where L_ORDERKEY = 59633893 group by L_ORDERKEY;";
         plan = getExecPlan(sql);
-        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChildren().get(0).isColocate());
+        Assert.assertTrue(plan.getFragments().get(1).getPlanRoot().getChild(0).isColocate());
 
         connectContext.getSessionVariable().setNewPlanerAggStage(0);
         FeConstants.runningUnitTest = false;

@@ -2586,6 +2586,7 @@ void TabletUpdates::_remove_unused_rowsets() {
         }
         rowset->close();
         rowset->set_need_delete_file();
+        StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
         auto ost = rowset->remove();
         VLOG(1) << "remove rowset " << _tablet.tablet_id() << "@" << rowset->rowset_meta()->get_rowset_seg_id() << "@"
                 << rowset->rowset_id() << ": " << ost << " tablet:" << _tablet.tablet_id();
