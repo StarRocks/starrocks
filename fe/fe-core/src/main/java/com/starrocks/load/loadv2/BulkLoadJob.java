@@ -96,7 +96,6 @@ public abstract class BulkLoadJob extends LoadJob {
             SessionVariable var = ConnectContext.get().getSessionVariable();
             sessionVariables.put(SessionVariable.SQL_MODE, Long.toString(var.getSqlMode()));
             sessionVariables.put(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE, var.getloadTransmissionCompressionType());
-            sessionVariables.put(SessionVariable.ENABLE_REPLICATED_STORAGE, Boolean.toString(var.getEnableReplicatedStorage()));
         } else {
             sessionVariables.put(SessionVariable.SQL_MODE, String.valueOf(SqlModeHelper.MODE_DEFAULT));
         }

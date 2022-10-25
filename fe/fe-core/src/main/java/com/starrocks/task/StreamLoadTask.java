@@ -258,9 +258,6 @@ public class StreamLoadTask {
         if (request.isSetLoad_dop()) {
             loadParallelRequestNum = request.getLoad_dop();
         }
-        if (request.isSetEnable_replicated_storage()) {
-            enableReplicatedStorage = request.isEnable_replicated_storage();
-        }
     }
 
     public static StreamLoadTask fromRoutineLoadJob(RoutineLoadJob routineLoadJob) {
@@ -304,10 +301,6 @@ public class StreamLoadTask {
         if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
             compressionType = CompressionUtils.findTCompressionByName(
                     routineLoadJob.getSessionVariables().get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
-        }
-        if (routineLoadJob.getSessionVariables().containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
-            enableReplicatedStorage = Boolean
-                    .parseBoolean(routineLoadJob.getSessionVariables().get(SessionVariable.ENABLE_REPLICATED_STORAGE));
         }
     }
 

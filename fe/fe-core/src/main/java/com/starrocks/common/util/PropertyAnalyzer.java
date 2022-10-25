@@ -90,6 +90,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
+    public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";

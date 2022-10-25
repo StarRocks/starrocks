@@ -328,6 +328,7 @@ public class ExternalOlapTable extends OlapTable {
             tableProperty.buildInMemory();
             tableProperty.buildDynamicProperty();
             tableProperty.buildWriteQuorum();
+            tableProperty.buildReplicatedStorage();
 
             indexes = null;
             if (meta.isSetIndex_infos()) {

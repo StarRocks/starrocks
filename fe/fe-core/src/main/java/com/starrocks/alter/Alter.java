@@ -510,6 +510,7 @@ public class Alter {
                 Map<String, String> properties = alterClause.getProperties();
                 Preconditions.checkState(properties.containsKey(PropertyAnalyzer.PROPERTIES_INMEMORY) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX) ||
+                        properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE) ||
                         properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
 
                 OlapTable olapTable = (OlapTable) db.getTable(tableName);
@@ -526,6 +527,9 @@ public class Alter {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
                             TTabletMetaType.WRITE_QUORUM);
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                    ((SchemaChangeHandler) schemaChangeHandler).updateTableMeta(db, tableName, properties,
+                            TTabletMetaType.REPLICATED_STORAGE);
                 }
             } else {
                 throw new DdlException("Invalid alter opertion: " + alterClause.getOpType());

@@ -103,13 +103,15 @@ public class OlapTableSink extends DataSink {
 
     private boolean enablePipelineLoad;
     private TWriteQuorumType writeQuorum;
+    private boolean enableReplicatedStorage;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
-                         TWriteQuorumType writeQuorum) {
-        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum);
+            TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
+        this(dstTable, tupleDescriptor, partitionIds, true, writeQuorum, enableReplicatedStorage);
     }
 
-    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds, boolean enablePipelineLoad, TWriteQuorumType writeQuorum) {
+    public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
+            boolean enablePipelineLoad, TWriteQuorumType writeQuorum, boolean enableReplicatedStorage) {
         this.dstTable = dstTable;
         this.tupleDescriptor = tupleDescriptor;
         Preconditions.checkState(!CollectionUtils.isEmpty(partitionIds));
@@ -117,6 +119,7 @@ public class OlapTableSink extends DataSink {
         this.clusterId = dstTable.getClusterId();
         this.enablePipelineLoad = enablePipelineLoad;
         this.writeQuorum = writeQuorum;
+        this.enableReplicatedStorage = enableReplicatedStorage;
     }
 
     public void init(TUniqueId loadId, long txnId, long dbId, long loadChannelTimeoutS)
@@ -135,6 +138,7 @@ public class OlapTableSink extends DataSink {
         tSink.setIs_lake_table(dstTable.isLakeTable());
         tSink.setKeys_type(dstTable.getKeysType().toThrift());
         tSink.setWrite_quorum_type(writeQuorum);
+        tSink.setEnable_replicated_storage(enableReplicatedStorage);
         tDataSink = new TDataSink(TDataSinkType.DATA_SPLIT_SINK);
         tDataSink.setType(TDataSinkType.OLAP_TABLE_SINK);
         tDataSink.setOlap_table_sink(tSink);

@@ -2166,6 +2166,14 @@ public class GlobalStateMgr {
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
 
+            // replicated_storage
+            if (olapTable.enableReplicatedStorage()) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
+            }
+
             // write quorum
             if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
                 sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)
