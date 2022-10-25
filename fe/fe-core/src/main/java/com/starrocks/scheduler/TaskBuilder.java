@@ -18,6 +18,7 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.optimizer.Utils;
 
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 // TaskBuilder is responsible for converting Stmt to Task Class
 // and also responsible for generating taskId and taskName
@@ -66,7 +67,7 @@ public class TaskBuilder {
         return task;
     }
 
-    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc)
+    public static void updateTaskInfo(Task task, RefreshSchemeDesc refreshSchemeDesc, MaterializedView materializedView)
             throws DdlException {
         MaterializedView.RefreshType refreshType = refreshSchemeDesc.getType();
         if (refreshType == MaterializedView.RefreshType.MANUAL) {
@@ -79,9 +80,16 @@ public class TaskBuilder {
                     task.setType(Constants.TaskType.EVENT_TRIGGERED);
                 } else {
                     final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
-                    long startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime, step.getLongValue(),
-                            TimeUtils.convertUnitIdentifierToTimeUnit(intervalLiteral.getUnitIdentifier().getDescription()));
+                    TimeUnit timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
+                            intervalLiteral.getUnitIdentifier().getDescription());
+                    long startTime;
+                    if (asyncRefreshSchemeDesc.isDefineStartTime()) {
+                        startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
+                    } else {
+                        MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
+                        startTime = refreshScheme.getAsyncRefreshContext().getStartTime();
+                    }
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime, step.getLongValue(), timeUnit);
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
                 }
