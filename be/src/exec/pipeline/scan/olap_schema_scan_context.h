@@ -36,7 +36,7 @@ public:
 
     TupleId tuple_id() { return _tuple_id; }
 
-    ObjectPool* object_pool() { return &_obj_pool; }
+    ObjectPool* const object_pool() { return &_obj_pool; }
 
     std::vector<ExprContext*>& conjunct_ctxs() { return _conjunct_ctxs; }
 
