@@ -345,7 +345,7 @@ RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 例如，当存活 BE 节点数增至 6 个，待消费分区为`"0,1,2,3,4,5,6,7"`时，如果您希望提高实际的导入并行度，则可以通过以下语句，将期望任务并行度`desired_concurrent_number` 增加至 `6`（大于等于存活 BE 节点数），并且调整待消费分区和起始消费位点。
 
-> 说明：由于实际导入并行度由多个参数的最小值决定，此时，您还需要确保 FE 动态参数 `routine_load_task_consume_second`的值大于或等于 `6`。
+> 说明：由于实际导入并行度由多个参数的最小值决定，此时，您还需要确保 FE 动态参数 `max_routine_load_task_concurrent_num`的值大于或等于 `6`。
 
 ```SQL
 ALTER ROUTINE LOAD FOR example_tbl2_ordertest2
