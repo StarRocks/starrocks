@@ -888,8 +888,8 @@ public class GlobalStateMgr {
         if (usingNewPrivilege) {
             this.usingNewPrivilege = usingNewPrivilege;
             this.auth = null;
-            this.domainResolver = null;
             this.authenticationManager = new AuthenticationManager();
+            this.domainResolver = new DomainResolver(authenticationManager);
             this.privilegeManager = new PrivilegeManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
