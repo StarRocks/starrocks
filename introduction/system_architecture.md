@@ -10,15 +10,15 @@ StarRocks 架构简洁，整个系统的核心只有 FE（Frontend）、BE（Bac
 
 FE 是 StarRocks 的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。每个 FE 节点都会在内存保留一份完整的元数据，这样每个 FE 节点都能够提供无差别的服务。
 
-FE 根据配置会有两种角色：Follower 和 Observer。Follower 会通过类 Paxos 的 BDBJE 协议选主出一个 Leader。三者区别如下：
+FE 根据配置会有两种角色：Follower 和 Observer。Follower 会通过类 Paxos 的 BDBJE 协议选举出一个 Leader。三者区别如下：
 
 - Leader
   - 提供元数据读写服务。只有 Leader 节点会对元数据进行写操作，Follower 和 Observer 只有读取权限。Follower 和 Observer 将元数据写入请求路由到 Leader 节点，Leader 更新完数据后，会通过 BDB JE 同步给 Follower 和 Observer。必须有半数以上的 Follower 节点同步成功才算作元数据写入成功。
-  - Leader 从 Follower 中选举，实现选主需要集群中有半数以上的 Follower 节点存活。如果 Leader 节点失败，Follower 会发起新一轮选主。
+  - Leader 从 Follower 中选出，进行选主需要集群中有半数以上的 Follower 节点存活。如果 Leader 节点失败，Follower 会发起新一轮选举。
 
 - Follower
   - 只有元数据读取权限，无写入权限。通过回放 Leader 的元数据日志来异步同步数据。
-  - 参与 Leader 选主，必须有半数以上的 Follower 节点存活才能进行选主。
+  - 参与 Leader 选举，必须有半数以上的 Follower 节点存活才能进行选主。
 
 - Observer
   - 主要用于扩展集群的查询并发能力，可选部署。
@@ -31,7 +31,7 @@ BE 是 StarRocks 的后端节点，负责数据存储、SQL执行等工作。
 
 - 数据存储方面，StarRocks 的 BE 节点都是完全对等的，FE 按照一定策略将数据分配到对应的 BE 节点。BE 负责将导入数据写成对应的格式存储下来，并生成相关索引。
 
-- 在执行 SQL 计算时，一条SQL语句首先会按照具体的语义规划成逻辑执行单元，然后再按照数据的分布情况拆分成具体的物理执行单元。物理执行单元会在对应的数据存储节点上执行，这样可以实现本地计算，避免数据的传输与拷贝，从而能够得到极致的查询性能。
+- 在执行 SQL 计算时，一条 SQL 语句首先会按照具体的语义规划成逻辑执行单元，然后再按照数据的分布情况拆分成具体的物理执行单元。物理执行单元会在对应的数据存储节点上执行，这样可以实现本地计算，避免数据的传输与拷贝，从而能够得到极致的查询性能。
 
 > 在进行 Stream load 导入时，FE 会选定一个 BE 节点作为 Coordinator BE，负责将数据分发到其他 BE 节点。导入的最终结果由 Coordinator BE 返回给用户。更多信息，参见 [Stream load](../loading/StreamLoad.md)。
 

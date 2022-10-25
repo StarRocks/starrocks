@@ -20,7 +20,7 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate];
 | Database   | 数据库名。                                                   |
 | Table      | 表名。                                                       |
 | Columns    | 列名列表。                                                   |
-| Type       | 统计信息的类型，包括 FULL, SAMPLE, HISTOGRAM。               |
+| Type       | 统计信息的类型，包括 FULL，SAMPLE，HISTOGRAM。               |
 | Schedule   | 调度的类型。`ONCE`表示手动，`SCHEDULE`表示自动。             |
 | Status     | 任务状态，包括 RUNNING（正在执行）、SUCCESS（执行成功）和 FAILED（执行失败）。 |
 | StartTime  | 任务开始执行的时间。                                         |

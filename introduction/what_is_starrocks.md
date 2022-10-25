@@ -1,10 +1,10 @@
 # 什么是 StarRocks
 
-StarRocks 是**新一代极速全场景MPP数据库**。StarRocks 的愿景是能够让用户的**数据分析变得更加简单和敏捷**。用户无需经过复杂的预处理，就可以用 StarRocks 来支持多种数据分析场景的极速分析。
+StarRocks 是**新一代极速全场景 MPP (Massively Parallel Processing) 数据库**。StarRocks 的愿景是能够让用户的**数据分析变得更加简单和敏捷**。用户无需经过复杂的预处理，就可以用 StarRocks 来支持多种数据分析场景的极速分析。
 
-StarRocks 的**架构简洁**，采用了全面向量化引擎，并配备全新设计的 CBO 优化器，**查询速度（尤其是多表关联查询）远超同类产品**。
+StarRocks **架构简洁**，采用了全面向量化引擎，并配备全新设计的 CBO (Cost Based Optimizer) 优化器，**查询速度（尤其是多表关联查询）远超同类产品**。
 
-StarRocks 能很好地支持实时数据分析，并能实现对实时更新数据的高效查询。StarRocks 还支持现代化物化视图，以进一步加速查询。
+StarRocks 能很好地支持实时数据分析，并能实现对实时更新数据的高效查询。StarRocks 还支持现代化物化视图，进一步加速查询。
 
 使用 StarRocks，用户可以灵活构建包括大宽表、星型模型、雪花模型在内的各类模型。
 
@@ -12,7 +12,7 @@ StarRocks 兼容 MySQL 协议，支持标准 SQL 语法，易于对接使用，�
 
 ## 适用场景
 
-StarRocks 可以满足企业级用户的多种分析需求，包括 OLAP 多维分析、定制报表、实时数据分析和 Ad-hoc 数据分析等。
+StarRocks 可以满足企业级用户的多种分析需求，包括 OLAP (Online Analytical Processing) 多维分析、定制报表、实时数据分析和 Ad-hoc 数据分析等。
 
 ### OLAP 多维分析
 
@@ -68,4 +68,4 @@ StarRocks 通过良好的数据分布特性，灵活的索引以及物化视图�
 
 - 通过使用一套系统解决多维分析、高并发查询、预计算、实时分析查询等场景，降低系统复杂度和多技术栈开发与维护成本。
 
-- 使用StarRocks 来统一数据湖和数据仓库，将高并发和实时要求性很高的业务放在StarRocks中分析，把数据湖上的分析使用StarRocks外表查询，统一使用 StarRocks 管理湖仓数据。
+- 使用 StarRocks 来统一数据湖和数据仓库，将高并发和实时要求性很高的业务放在 StarRocks 中分析，把数据湖上的分析使用StarRocks外表查询，统一使用 StarRocks 管理湖仓数据。

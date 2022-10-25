@@ -48,7 +48,7 @@ SET
 )
 ```
 
-上述示例，表示将 Parquet 或 ORC 文件中以 `tmp_c1` 和 `tmp_c2` 为列名的列，分别映射到 StarRocks 表中的 `name` 和 `id` 列。如果没有使用 `SET` 子句, 则以 `column_list` 参数中指定的列作为映射。具体请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
+上述示例，表示将 Parquet 或 ORC 文件中以 `tmp_c1` 和 `tmp_c2` 为列名的列，分别映射到 StarRocks 表中的 `name` 和 `id` 列。如果没有使用 `SET` 子句，则以 `column_list` 参数中指定的列作为映射。具体请参见 [BROKER LOAD](/sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md)。
 
 > 注意：如果导入的是 Apache Hive™ 版本直接生成的 ORC 文件，并且 ORC 文件中的表头并 Hive 表的元数据，而是 `(_col0, _col1, _col2, ...)`，可能导致 "Invalid Column Name" 错误。这时候需要使用 `SET` 子句设置列转换规则。
 

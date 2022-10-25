@@ -2,7 +2,7 @@
 
 ## 功能
 
-将 UNIX 时间戳转化为对应的 TIME 格式，返回的格式由 `string_format` 指定。默认为 yyyy-MM-dd HH:mm:ss ,也支持date_format中的格式。
+将 UNIX 时间戳转化为对应的 TIME 格式，返回的格式由 `string_format` 指定。默认为 yyyy-MM-dd HH:mm:ss，也支持date_format中的格式。
 
 传入的是整形，返回的是字符串类型。
 

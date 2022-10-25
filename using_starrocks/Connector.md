@@ -43,7 +43,7 @@ DROP EXTERNAL CATALOG <catalog_name>
 
 #### 示例
 
-删除hive catalog
+删除 hive catalog
 
 ```sql
 DROP EXTERNAL CATALOG hive_catalog;
@@ -51,7 +51,7 @@ DROP EXTERNAL CATALOG hive_catalog;
 
 ### 使用Catalog
 
-当前Catalog分为两种，分别为Internal Catalog与External Catalog. 用户可通过`SHOW CATALOGS`查看当前存在哪些Catalog. Internal Catalog在StarRocks中只存在一个默认实例，默认值为`default_catalog`. 用户在从mysql client登录StarRocks之后，当前连接的默认Catalog为`default_catalog`, 如果用户只使用Internal Catalog中的OLAP表功能，其使用方式与原有保持不变。用户可通过`show databases`查看Internal Catalog中有哪些databases.
+当前Catalog分为两种，分别为Internal Catalog与External Catalog。用户可通过`SHOW CATALOGS`查看当前存在哪些Catalog。Internal Catalog在StarRocks中只存在一个默认实例，默认值为`default_catalog`。用户在从mysql client登录StarRocks之后，当前连接的默认Catalog为`default_catalog`，如果用户只使用Internal Catalog中的OLAP表功能，其使用方式与原有保持不变。用户可通过`show databases`查看Internal Catalog中有哪些databases。
 对于External Catalog，用户可使用`SHOW DATABASES FROM <external_catalog_name>`的方式查看存在哪些Database，然后可通过`USE external_catalog.db`的方式切换当前连接的current_catalog和current_db. 当前只支持Use到DB级别，暂不支持Use到Catalog级别，后面会陆续开放该功能。
 
 #### 示例

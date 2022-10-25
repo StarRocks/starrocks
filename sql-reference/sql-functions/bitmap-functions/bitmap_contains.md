@@ -14,7 +14,7 @@ BITMAP_CONTAINS(bitmap, input)
 
 `bitmap`: 支持的数据类型为 BITMAP。
 
-`input`: 输入值, 支持的数据类型为 BIGINT。
+`input`: 输入值，支持的数据类型为 BIGINT。
 
 ## 返回值说明
 

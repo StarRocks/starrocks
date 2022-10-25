@@ -226,7 +226,7 @@ Data Source 配置项简介
 页面左上角为 Dashboard 名称，右上角显示当前监控时间范围。您可以下拉选择不同的时间范围，还可以指定定时刷新页面间隔。
 
 * cluster_name: 即 Prometheus 配置文件中的各个 `job_name`，代表一个 StarRocks 集群。如果选择不同的 Cluster，下方的图表将展示对应集群的监控信息。
-* fe_master: 对应集群的 FE Master  节点。
+* fe_master: 对应集群的 Leader FE 节点。
 * fe_instance: 对应集群的所有 FE 节点。选择不同的 FE，下方的图表将展示对应 FE 的监控信息。
 * be_instance: 对应集群的所有 BE 节点。选择不同的 BE，下方的图表将展示对应 BE 的监控信息。
 * interval: 部分图表展示了速率相关的监控项，这里可选择以特定间隔进行采样计算速率。

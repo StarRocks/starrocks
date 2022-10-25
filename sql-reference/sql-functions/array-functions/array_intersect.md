@@ -12,7 +12,7 @@ output array_intersect(input0, input1, ...)
 
 ## 参数说明
 
-* input：不限数量(1个或多个)的具有相同元素类型的数组(input0, input1, ...), 具体类型可以任意。
+* input：不限数量(1个或多个)的具有相同元素类型的数组(input0, input1, ...)，具体类型可以任意。
 
 ## 返回值说明
 
