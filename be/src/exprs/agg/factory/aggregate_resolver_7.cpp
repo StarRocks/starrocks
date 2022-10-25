@@ -3,33 +3,44 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
 
+template <PrimitiveType pt>
+struct HLLRawBuilder {
+    AggregateFunctionPtr operator()() { return AggregateFactory::MakeHllRawAggregateFunction<pt>(); }
+};
+
+template <PrimitiveType pt>
+using HLLStateTrait = HyperLogLog;
+
 void AggregateFuncResolver::register_7() {
-    add_object_mapping<TYPE_BOOLEAN, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_TINYINT, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_SMALLINT, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_INT, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_BIGINT, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_LARGEINT, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_FLOAT, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DOUBLE, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_CHAR, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_VARCHAR, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DECIMALV2, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DATETIME, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DATE, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DECIMAL32, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DECIMAL64, TYPE_HLL>("hll_raw");
-    add_object_mapping<TYPE_DECIMAL128, TYPE_HLL>("hll_raw");
+    add_object_mapping<TYPE_BOOLEAN, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_TINYINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_SMALLINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_INT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_BIGINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_LARGEINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_FLOAT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DOUBLE, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_CHAR, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_VARCHAR, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DECIMALV2, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DATETIME, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DATE, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL32, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL64, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    add_object_mapping<TYPE_DECIMAL128, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
 
     add_object_mapping<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx");
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");
-    add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE>("percentile_union");
     add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_cont");
     add_aggregate_mapping<TYPE_DATE, TYPE_DATE>("percentile_cont");
     add_aggregate_mapping<TYPE_DATETIME, TYPE_DATETIME>("percentile_cont");
+
+    add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, false, PercentileValue>(
+            "percentile_union", AggregateFactory::MakePercentileUnionAggregateFunction());
 
     add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");
