@@ -32,5 +32,6 @@
 使用 DROP FILE 语句删除文件。具体的语法和参数等信息，参见 [DROP FILE](../sql-reference/sql-statements/Administration/DROP%20FILE.md)。
 
 ## 使用文件
+
 - 如 FE 要使用文件，SmallFileMgr 类会直接将 FE 内存中的数据保存为本地文件，存储在指定的目录中，并返回本地文件的路径供 FE 使用。
 - 如 BE 要使用文件，BE 会通过 FE 的 HTTP 接口 /api/get_small_file 将文件下载到 BE 指定的目录中使用。同时，BE 也会在内存中记录当前已经下载过的文件的信息。当 BE 请求使用一个文件时，会先查看本地文件是否存在该文件并对该文件进行校验。如果校验通过，则返回本地文件路径。如果校验失败，则会删除本地文件，重新从 FE 下载。当 BE 重启时，会预先加载本地的文件到内存中。
