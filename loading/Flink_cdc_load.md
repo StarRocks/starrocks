@@ -134,7 +134,7 @@
     # 使用 service 启动
     service mysqld restart
     # 使用 mysqld 脚本启动
-    /etc/inint.d/mysqld restart
+    /etc/init.d/mysqld restart
    ```
 
 3. 连接 MySQL，执行如下语句确认是否已经开启 Binlog：
