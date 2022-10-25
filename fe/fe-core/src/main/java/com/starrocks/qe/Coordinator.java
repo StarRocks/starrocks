@@ -2196,6 +2196,16 @@ public class Coordinator {
                     });
                 }
 
+                // ScanNode with scanId in BE uses maxDriverSeq+1 in nodeToPerDriverSeqScanRanges[scanId] as pipelineDop.
+                // PipelineDop of all the ScanNodes in the fragment should be the same regardless of the difference of
+                // each ScanNode's tablets, so maxDriverSeq=pipelineDop-1 is forced to set to empty list if it is absent.
+                if (assignPerDriverSeq && instanceParam.pipelineDop > 0) {
+                    int maxDriverSeq = instanceParam.pipelineDop - 1;
+                    instanceParam.nodeToPerDriverSeqScanRanges.forEach((scanId, perDriverSeqScanRanges) -> {
+                        perDriverSeqScanRanges.computeIfAbsent(maxDriverSeq, k -> new ArrayList<>());
+                    });
+                }
+
                 params.instanceExecParams.add(instanceParam);
             }
         }
