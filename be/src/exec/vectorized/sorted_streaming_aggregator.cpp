@@ -282,7 +282,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     // finalize state
     // group[i] != group[i - 1] means we have add a new state for group[i], then we need call finalize for group[i - 1]
     // get result from aggregate values. such as count(*), sum(col)
-    auto agg_result_columns = _create_agg_result_columns();
+    auto agg_result_columns = _create_agg_result_columns(chunk_size);
     _get_agg_result_columns(chunk_size, selector, agg_result_columns);
 
     DCHECK_LE(agg_result_columns[0]->size(), _state->chunk_size());
@@ -290,7 +290,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     _close_group_by(chunk_size, selector);
 
     // combine group by keys
-    auto res_group_by_columns = _create_group_by_columns();
+    auto res_group_by_columns = _create_group_by_columns(chunk_size);
     RETURN_IF_ERROR(_build_group_by_columns(chunk_size, selected_size, selector, res_group_by_columns));
     auto result_chunk = _build_output_chunk(res_group_by_columns, agg_result_columns);
 
@@ -423,7 +423,7 @@ StatusOr<vectorized::ChunkPtr> SortedStreamingAggregator::pull_eos_chunk() {
     if (_last_state == nullptr) {
         return nullptr;
     }
-    auto agg_result_columns = _create_agg_result_columns();
+    auto agg_result_columns = _create_agg_result_columns(1);
     auto group_by_columns = _last_columns;
 
     _finalize_to_chunk(_last_state, agg_result_columns);
