@@ -19,6 +19,7 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
     private List<String> partitionNames;
     private List<String> partColumnNames;
     private List<String> dataColumnNames;
+    private double rowCount;
     private static final String TYPE = "hive";
 
     @Override
@@ -54,6 +55,16 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
     @Override
     public String getType() {
         return TYPE;
+    }
+
+    @Override
+    public double getScanRowCount() {
+        return rowCount;
+    }
+
+    @Override
+    public void setScanRowCount(double rowCount) {
+        this.rowCount = rowCount;
     }
 
     public static class HiveTableDumpInfoSerializer implements JsonSerializer<HiveTableDumpInfo> {
@@ -93,6 +104,8 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
                 result.add("DataColumns", dataColumnNamesJson);
             }
 
+            result.addProperty("OutputRowCount", String.valueOf(hiveTableDumpInfo.rowCount));
+
             return result;
         }
     }
@@ -105,13 +118,8 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
             HiveTableDumpInfo hiveTableDumpInfo = new HiveTableDumpInfo();
             JsonObject dumpJsonObject = jsonElement.getAsJsonObject();
 
-            // deserialize partition names
-            JsonArray partitionNamesJson = dumpJsonObject.getAsJsonArray("PartitionNames");
-            List<String> partitionNames = Lists.newArrayList();
-            for (JsonElement partitionName : partitionNamesJson) {
-                partitionNames.add(partitionName.getAsString());
-            }
-            hiveTableDumpInfo.setPartitionNames(partitionNames);
+            double rowCount = dumpJsonObject.getAsJsonPrimitive("OutputRowCount").getAsDouble();
+            hiveTableDumpInfo.setScanRowCount(rowCount);
 
             // deserialize partition columns
             JsonArray partitionColumnsJson = dumpJsonObject.getAsJsonArray("PartitionColumns");
@@ -128,6 +136,14 @@ public class HiveTableDumpInfo implements HiveMetaStoreTableDumpInfo {
                 dataColumns.add(dataColumn.getAsString());
             }
             hiveTableDumpInfo.setDataColumnNames(dataColumns);
+
+            // deserialize partition names
+            JsonArray partitionNamesJson = dumpJsonObject.getAsJsonArray("PartitionNames");
+            List<String> partitionNames = Lists.newArrayList();
+            for (JsonElement partitionName : partitionNamesJson) {
+                partitionNames.add(partitionName.getAsString());
+            }
+            hiveTableDumpInfo.setPartitionNames(partitionNames);
 
             return hiveTableDumpInfo;
         }

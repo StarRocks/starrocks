@@ -372,7 +372,7 @@ public class UtFrameUtils {
         // session variable
         connectContext.setSessionVariable(replayDumpInfo.getSessionVariable());
         // create resource
-        for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
+        for (String createResourceStmt : replayDumpInfo.getCreateCatalogStmtList()) {
             starRocksAssert.withResource(createResourceStmt);
         }
 

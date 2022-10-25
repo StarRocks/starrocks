@@ -58,6 +58,26 @@ public class Catalog implements Writable {
         result.addRow(Lists.newArrayList(this.getName(), config.get(CATALOG_TYPE), this.getComment()));
     }
 
+    public String getDdlStmt() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("CREATE EXTERNAL CATALOG \"");
+        sb.append(name);
+        sb.append("\" PROPERTIES (");
+        sb.append("\"type\" = \"");
+        sb.append(config.get(CATALOG_TYPE));
+        for (Map.Entry<String, String> entry : config.entrySet()) {
+            if (entry.getKey().equalsIgnoreCase(CATALOG_TYPE)) {
+                continue;
+            }
+            sb.append("\", ");
+            sb.append("\"").append(entry.getKey()).append("\"");
+            sb.append(" = \"");
+            sb.append(entry.getValue());
+        }
+        sb.append("\");");
+        return sb.toString();
+    }
+
     public static Catalog read(DataInput in) throws IOException {
         String json = Text.readString(in);
         return GsonUtils.GSON.fromJson(json, Catalog.class);
@@ -68,4 +88,10 @@ public class Catalog implements Writable {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
+
+    @Override
+    public String toString() {
+        return GsonUtils.GSON.toJson(this);
+    }
+
 }

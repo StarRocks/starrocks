@@ -4,7 +4,7 @@ package com.starrocks.sql.optimizer.dump;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.Pair;
@@ -22,10 +22,10 @@ import java.util.Set;
 
 public class QueryDumpInfo implements DumpInfo {
     private String originStmt = "";
-    private final Set<Resource> resourceSet = new HashSet<>();
+    private final Set<Catalog> catalogSet = new HashSet<>();
     // tableId-><dbName, table>
     private final Map<Long, Pair<String, Table>> tableMap = new HashMap<>();
-    // resourceName->dbName->tableName->externalTable
+    // catalogName->dbName->tableName->externalTable
     private final Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> hmsTableMap = new HashMap<>();
     // viewId-><dbName, view>
     private final Map<Long, Pair<String, View>> viewMap = new LinkedHashMap<>();
@@ -39,7 +39,7 @@ public class QueryDumpInfo implements DumpInfo {
     // viewName->createViewStmt
     private final Map<String, String> createViewStmtMap = new LinkedHashMap<>();
 
-    private final List<String> createResourceStmtList = new ArrayList<>();
+    private final List<String> createCatalogStmtList = new ArrayList<>();
 
     private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
@@ -99,12 +99,12 @@ public class QueryDumpInfo implements DumpInfo {
     }
 
     @Override
-    public void addResource(Resource resource) {
-        resourceSet.add(resource);
+    public void addCatalog(Catalog catalog) {
+        catalogSet.add(catalog);
     }
 
-    public Set<Resource> getResourceSet() {
-        return resourceSet;
+    public Set<Catalog> getCatalogSet() {
+        return catalogSet;
     }
 
     @Override
@@ -120,7 +120,7 @@ public class QueryDumpInfo implements DumpInfo {
         this.tableStatisticsMap.clear();
         this.createTableStmtMap.clear();
         this.numOfHardwareCoresPerBe.clear();
-        this.resourceSet.clear();
+        this.catalogSet.clear();
         this.hmsTableMap.clear();
         this.exceptionList.clear();
     }
@@ -136,8 +136,8 @@ public class QueryDumpInfo implements DumpInfo {
         return partitionRowCountMap;
     }
 
-    public HiveMetaStoreTableDumpInfo getHMSTable(String resourceName, String dbName, String tableName) {
-        return hmsTableMap.getOrDefault(resourceName, new HashMap<>()).getOrDefault(dbName, new HashMap<>())
+    public HiveMetaStoreTableDumpInfo getHMSTable(String catalogName, String dbName, String tableName) {
+        return hmsTableMap.getOrDefault(catalogName, new HashMap<>()).getOrDefault(dbName, new HashMap<>())
                 .getOrDefault(tableName, new HiveTableDumpInfo());
     }
 
@@ -147,13 +147,13 @@ public class QueryDumpInfo implements DumpInfo {
     }
 
     @Override
-    public void addHMSTable(String resourceName, String dbName, String tableName) {
-        addHMSTable(resourceName, dbName, tableName, new HiveTableDumpInfo());
+    public void addHMSTable(String catalogName, String dbName, String tableName) {
+        addHMSTable(catalogName, dbName, tableName, new HiveTableDumpInfo());
     }
 
-    public void addHMSTable(String resourceName, String dbName, String tableName, HiveMetaStoreTableDumpInfo dumpInfo) {
-        hmsTableMap.putIfAbsent(resourceName, new HashMap<>());
-        Map<String, Map<String, HiveMetaStoreTableDumpInfo>> dbTable = hmsTableMap.get(resourceName);
+    public void addHMSTable(String catalogName, String dbName, String tableName, HiveMetaStoreTableDumpInfo dumpInfo) {
+        hmsTableMap.putIfAbsent(catalogName, new HashMap<>());
+        Map<String, Map<String, HiveMetaStoreTableDumpInfo>> dbTable = hmsTableMap.get(catalogName);
         dbTable.putIfAbsent(dbName, new HashMap<>());
         Map<String, HiveMetaStoreTableDumpInfo> tableMap = dbTable.get(dbName);
         tableMap.putIfAbsent(tableName, dumpInfo);
@@ -206,12 +206,12 @@ public class QueryDumpInfo implements DumpInfo {
         createViewStmtMap.put(viewName, createViewStmt);
     }
 
-    public void addResourceCreateStmt(String resourceCreateStmt) {
-        createResourceStmtList.add(resourceCreateStmt);
+    public void addCatalogCreateStmt(String catalogCreateStmt) {
+        createCatalogStmtList.add(catalogCreateStmt);
     }
 
-    public List<String> getCreateResourceStmtList() {
-        return createResourceStmtList;
+    public List<String> getCreateCatalogStmtList() {
+        return createCatalogStmtList;
     }
 
     @Override

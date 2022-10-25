@@ -144,6 +144,9 @@ public class HiveMetadata implements ConnectorMetadata {
             session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
         }
 
+        session.getDumpInfo().getHMSTable(catalogName, ((HiveMetaStoreTable) table).getDbName(), table.getName())
+                .setScanRowCount(statistics.getOutputRowCount());
+
         return statistics;
     }
 

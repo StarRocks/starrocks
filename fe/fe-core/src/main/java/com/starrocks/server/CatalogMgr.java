@@ -122,6 +122,10 @@ public class CatalogMgr {
         }
     }
 
+    public Catalog getCatalog(String catalogName) {
+        return catalogs.get(catalogName);
+    }
+
     // TODO @caneGuy we should put internal catalog into catalogmgr
     public boolean catalogExists(String catalogName) {
         if (catalogName.equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {

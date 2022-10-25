@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer.dump;
 
-import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -28,17 +28,17 @@ public interface DumpInfo {
     default void addPartitionRowCount(Table table, String partition, long rowCount) {
     }
 
-    default void addResource(Resource resource) {
+    default void addCatalog(Catalog catalog) {
     }
 
-    default void addHMSTable(String resourceName, String dbName, String tableName) {
+    default void addHMSTable(String catalogName, String dbName, String tableName) {
     }
 
     default Map<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> getHmsTableMap() {
         return null;
     }
 
-    default HiveMetaStoreTableDumpInfo getHMSTable(String resourceName, String dbName, String tableName) {
+    default HiveMetaStoreTableDumpInfo getHMSTable(String catalogName, String dbName, String tableName) {
         return new HiveTableDumpInfo();
     }
 

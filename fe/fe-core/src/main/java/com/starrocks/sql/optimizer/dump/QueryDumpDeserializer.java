@@ -10,7 +10,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonParseException;
 import com.google.gson.reflect.TypeToken;
-import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.logging.log4j.LogManager;
@@ -32,13 +32,13 @@ public class QueryDumpDeserializer implements JsonDeserializer<QueryDumpInfo> {
         // statement
         String statement = dumpJsonObject.get("statement").getAsString();
         dumpInfo.setOriginStmt(statement);
-        // resource
-        if (dumpJsonObject.has("resources")) {
-            JsonObject resourceMeta = dumpJsonObject.getAsJsonObject("resources");
-            for (Map.Entry<String, JsonElement> entry : resourceMeta.entrySet()) {
-                String resourceInfo = entry.getValue().getAsString();
-                Resource resource = GsonUtils.GSON.fromJson(resourceInfo, Resource.class);
-                dumpInfo.addResourceCreateStmt(resource.getDdlStmt());
+        // catalog
+        if (dumpJsonObject.has("catalogs")) {
+            JsonObject catalogMeta = dumpJsonObject.getAsJsonObject("catalogs");
+            for (Map.Entry<String, JsonElement> entry : catalogMeta.entrySet()) {
+                String catalogInfo = entry.getValue().getAsString();
+                Catalog catalog = GsonUtils.GSON.fromJson(catalogInfo, Catalog.class);
+                dumpInfo.addCatalogCreateStmt(catalog.getDdlStmt());
             }
         }
         // table meta data

@@ -8,7 +8,7 @@ import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSerializationContext;
 import com.google.gson.JsonSerializer;
-import com.starrocks.catalog.Resource;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.View;
 import com.starrocks.common.FeConstants;
@@ -36,13 +36,13 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         JsonObject dumpJson = new JsonObject();
         // statement
         dumpJson.addProperty("statement", dumpInfo.getOriginStmt());
-        // resource
-        if (!dumpInfo.getResourceSet().isEmpty()) {
-            JsonObject resourceMetaData = new JsonObject();
-            for (Resource resource : dumpInfo.getResourceSet()) {
-                resourceMetaData.addProperty(resource.getName(), resource.toString());
+        // catalog
+        if (!dumpInfo.getCatalogSet().isEmpty()) {
+            JsonObject catalogMetaData = new JsonObject();
+            for (Catalog catalog : dumpInfo.getCatalogSet()) {
+                catalogMetaData.addProperty(catalog.getName(), catalog.toString());
             }
-            dumpJson.add("resources", resourceMetaData);
+            dumpJson.add("catalogs", catalogMetaData);
         }
         // table meta
         JsonObject tableMetaData = new JsonObject();
@@ -58,15 +58,15 @@ public class QueryDumpSerializer implements JsonSerializer<QueryDumpInfo> {
         // hive meta store table info
         if (!dumpInfo.getHmsTableMap().isEmpty()) {
             JsonObject externalTableInfoData = new JsonObject();
-            for (Map.Entry<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> resourceEntry :
+            for (Map.Entry<String, Map<String, Map<String, HiveMetaStoreTableDumpInfo>>> catalogEntry :
                     dumpInfo.getHmsTableMap().entrySet()) {
-                String resourceName = resourceEntry.getKey();
+                String catalogName = catalogEntry.getKey();
                 for (Map.Entry<String, Map<String, HiveMetaStoreTableDumpInfo>> dbEntry :
-                        resourceEntry.getValue().entrySet()) {
+                        catalogEntry.getValue().entrySet()) {
                     String dbName = dbEntry.getKey();
                     for (Map.Entry<String, HiveMetaStoreTableDumpInfo> tableEntry : dbEntry.getValue().entrySet()) {
                         String tableName = tableEntry.getKey();
-                        String fullName = String.join("%", resourceName, dbName, tableName);
+                        String fullName = String.join("%", catalogName, dbName, tableName);
                         JsonObject tableTypeObject = new JsonObject();
                         tableTypeObject.addProperty("type", tableEntry.getValue().getType());
                         JsonArray jsonArray = new JsonArray();
