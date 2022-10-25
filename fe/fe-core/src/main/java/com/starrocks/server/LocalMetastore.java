@@ -1599,6 +1599,11 @@ public class LocalMetastore implements ConnectorMetadata {
             partition.updateVisibleVersion(version);
         }
 
+        // create shard group
+        if (table.isLakeTable()) {
+            GlobalStateMgr.getCurrentState().getStarOSAgent().createShardGroup(partitionId);
+        }
+
         short replicationNum = partitionInfo.getReplicationNum(partitionId);
         TStorageMedium storageMedium = partitionInfo.getDataProperty(partitionId).getStorageMedium();
         for (Map.Entry<Long, MaterializedIndex> entry : indexMap.entrySet()) {
