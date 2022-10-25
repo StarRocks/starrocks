@@ -1770,7 +1770,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } catch (UserException e) {
                     throw new DdlException(e.getMessage());
                 }
-
+                
                 CreateReplicaTask task = new CreateReplicaTask(
                         primaryBackendId,
                         dbId,
@@ -1792,7 +1792,7 @@ public class LocalMetastore implements ConnectorMetadata {
                         table.getPartitionInfo().getIsInMemory(partition.getId()),
                         table.enablePersistentIndex(),
                         TTabletType.TABLET_TYPE_LAKE,
-                        table.getCompressionType());
+                        table.getCompressionType(), indexMeta.getSortKeyIdxes());
                 tasks.add(task);
             } else {
                 for (Replica replica : ((LocalTablet) tablet).getImmutableReplicas()) {
@@ -1817,7 +1817,7 @@ public class LocalMetastore implements ConnectorMetadata {
                             table.getPartitionInfo().getIsInMemory(partition.getId()),
                             table.enablePersistentIndex(),
                             table.getPartitionInfo().getTabletType(partition.getId()),
-                            table.getCompressionType());
+                            table.getCompressionType(), indexMeta.getSortKeyIdxes());
                     tasks.add(task);
                 }
             }
@@ -1974,10 +1974,22 @@ public class LocalMetastore implements ConnectorMetadata {
         Preconditions.checkNotNull(distributionDesc);
         DistributionInfo distributionInfo = distributionDesc.toDistributionInfo(baseSchema);
 
-        // calc short key column count
-        short shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, stmt.getProperties());
+        short shortKeyColumnCount = 0;
+        List<Integer> sortKeyIdxes = new ArrayList<>();
+        if (stmt.getSortKeys() != null) {
+            List<String> baseSchemaNames = baseSchema.stream().map(Column::getName).collect(Collectors.toList());
+            for (String column : stmt.getSortKeys()) {
+                int idx = baseSchemaNames.indexOf(column);
+                if (idx == -1) {
+                    throw new DdlException("Invalid column '" + column + "': not exists in all columns.");
+                }
+                sortKeyIdxes.add(idx);
+            }
+            shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, stmt.getProperties(), sortKeyIdxes);
+        } else {
+            shortKeyColumnCount = GlobalStateMgr.calcShortKeyColumnCount(baseSchema, stmt.getProperties());
+        }
         LOG.debug("create table[{}] short key column count: {}", tableName, shortKeyColumnCount);
-
         // indexes
         TableIndexes indexes = new TableIndexes(stmt.getIndexes());
 
@@ -2171,8 +2183,14 @@ public class LocalMetastore implements ConnectorMetadata {
             throw new DdlException(e.getMessage());
         }
         int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
-        olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
-                shortKeyColumnCount, baseIndexStorageType, keysType);
+
+        if (stmt.getSortKeys() != null) {
+            olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                    shortKeyColumnCount, baseIndexStorageType, keysType, null, sortKeyIdxes);
+        } else {
+            olapTable.setIndexMeta(baseIndexId, tableName, baseSchema, schemaVersion, schemaHash,
+                    shortKeyColumnCount, baseIndexStorageType, keysType, null);
+        }
 
         for (AlterClause alterClause : stmt.getRollupAlterClauseList()) {
             AddRollupClause addRollupClause = (AddRollupClause) alterClause;

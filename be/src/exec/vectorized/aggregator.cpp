@@ -330,6 +330,8 @@ Status Aggregator::_reset_state(RuntimeState* state) {
     _num_input_rows = 0;
     _is_sink_complete = false;
     _it_hash.reset();
+    _num_rows_processed = 0;
+
     {
         typeof(_buffer) empty_buffer;
         _buffer.swap(empty_buffer);
@@ -537,7 +539,7 @@ Status Aggregator::_evaluate_const_columns(int i) {
 
 void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
     // TODO(kks): we should approve memory allocate here
-    vectorized::Columns agg_result_column = _create_agg_result_columns();
+    vectorized::Columns agg_result_column = _create_agg_result_columns(1);
     auto use_intermediate = _use_intermediate_as_output();
     if (!use_intermediate) {
         _finalize_to_chunk(_single_agg_state, agg_result_column);
@@ -563,6 +565,7 @@ void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
         result_chunk->append_column(std::move(agg_result_column[i]), tuple_desc->slots()[i]->id());
     }
     ++_num_rows_returned;
+    ++_num_rows_processed;
     *chunk = std::move(result_chunk);
     _is_ht_eos = true;
 }
@@ -596,7 +599,9 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     }
 
     if (!_agg_fn_ctxs.empty()) {
-        vectorized::Columns agg_result_column = _create_agg_result_columns();
+        DCHECK(!_group_by_columns.empty());
+        const auto num_rows = _group_by_columns[0]->size();
+        vectorized::Columns agg_result_column = _create_agg_result_columns(num_rows);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             size_t id = _group_by_columns.size() + i;
             auto slot_id = slots[id]->id();
@@ -613,6 +618,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
 
     _num_pass_through_rows += result_chunk->num_rows();
     _num_rows_returned += result_chunk->num_rows();
+    _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
     COUNTER_SET(_pass_through_row_count, _num_pass_through_rows);
 }
@@ -698,7 +704,7 @@ Status Aggregator::check_has_error() {
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
-vectorized::Columns Aggregator::_create_agg_result_columns() {
+vectorized::Columns Aggregator::_create_agg_result_columns(size_t num_rows) {
     vectorized::Columns agg_result_columns(_agg_fn_types.size());
     auto use_intermediate = _use_intermediate_as_output();
 
@@ -708,24 +714,24 @@ vectorized::Columns Aggregator::_create_agg_result_columns() {
             // we need to create a not-nullable column.
             agg_result_columns[i] = vectorized::ColumnHelper::create_column(
                     _agg_fn_types[i].result_type, _agg_fn_types[i].has_nullable_child & _agg_fn_types[i].is_nullable);
-            agg_result_columns[i]->reserve(_state->chunk_size());
+            agg_result_columns[i]->reserve(num_rows);
         }
     } else {
         for (size_t i = 0; i < _agg_fn_types.size(); ++i) {
             agg_result_columns[i] = vectorized::ColumnHelper::create_column(_agg_fn_types[i].serde_type,
                                                                             _agg_fn_types[i].has_nullable_child);
-            agg_result_columns[i]->reserve(_state->chunk_size());
+            agg_result_columns[i]->reserve(num_rows);
         }
     }
     return agg_result_columns;
 }
 
-vectorized::Columns Aggregator::_create_group_by_columns() {
+vectorized::Columns Aggregator::_create_group_by_columns(size_t num_rows) {
     vectorized::Columns group_by_columns(_group_by_types.size());
     for (size_t i = 0; i < _group_by_types.size(); ++i) {
         group_by_columns[i] =
                 vectorized::ColumnHelper::create_column(_group_by_types[i].result_type, _group_by_types[i].is_nullable);
-        group_by_columns[i]->reserve(_state->chunk_size());
+        group_by_columns[i]->reserve(num_rows);
     }
     return group_by_columns;
 }

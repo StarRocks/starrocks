@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -50,7 +51,7 @@ public class OlapTableTest {
             }
         };
 
-        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7);
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
         List<Table> tables = db.getTables();
 
         for (Table table : tables) {

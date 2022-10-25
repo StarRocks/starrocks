@@ -496,7 +496,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties.put(property.getKey(), property.getValue());
             }
         }
-
         return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
@@ -514,7 +513,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 context.rollupDesc() == null ?
-                        null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()));
+                        null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
+                context.orderByDesc() == null ? null :
+                visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                        .stream().map(Identifier::getValue).collect(toList()));
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {

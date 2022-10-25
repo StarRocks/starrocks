@@ -264,6 +264,7 @@ protected:
 
     int64_t _limit = -1;
     int64_t _num_rows_returned = 0;
+    int64_t _num_rows_processed = 0;
 
     // only used in pipeline engine
     std::atomic<bool> _is_sink_complete = false;
@@ -396,8 +397,10 @@ public:
         auto it = std::any_cast<RawHashTableIterator>(_it_hash);
         auto end = _state_allocator.end();
 
-        vectorized::Columns group_by_columns = _create_group_by_columns();
-        vectorized::Columns agg_result_columns = _create_agg_result_columns();
+        const auto hash_map_size = _hash_map_variant.size();
+        auto num_rows = std::min<size_t>(hash_map_size - _num_rows_processed, chunk_size);
+        vectorized::Columns group_by_columns = _create_group_by_columns(num_rows);
+        vectorized::Columns agg_result_columns = _create_agg_result_columns(num_rows);
 
         auto use_intermediate = _use_intermediate_as_output();
         int32_t read_index = 0;
@@ -463,7 +466,8 @@ public:
         _it_hash = it;
         vectorized::ChunkPtr result_chunk = _build_output_chunk(group_by_columns, agg_result_columns);
         _num_rows_returned += read_index;
-        *chunk = std::move(result_chunk);
+        _num_rows_processed += read_index;
+        *chunk = std::move(_result_chunk);
     }
 
     template <typename HashSetWithKey>
@@ -472,8 +476,9 @@ public:
         using Iterator = typename HashSetWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
         auto end = hash_set.hash_set.end();
-
-        vectorized::Columns group_by_columns = _create_group_by_columns();
+        const auto hash_set_size = _hash_set_variant.size();
+        auto num_rows = std::min<size_t>(hash_set_size - _num_rows_processed, chunk_size);
+        vectorized::Columns group_by_columns = _create_group_by_columns(num_rows);
 
         // Computer group by columns and aggregate result column
         int32_t read_index = 0;
@@ -524,6 +529,7 @@ public:
             }
         }
         _num_rows_returned += read_index;
+        _num_rows_processed += read_index;
         *chunk = std::move(result_chunk);
     }
 
@@ -550,8 +556,8 @@ protected:
     Status _evaluate_const_columns(int i);
 
     // Create new aggregate function result column by type
-    vectorized::Columns _create_agg_result_columns();
-    vectorized::Columns _create_group_by_columns();
+    vectorized::Columns _create_agg_result_columns(size_t num_rows);
+    vectorized::Columns _create_group_by_columns(size_t num_rows);
 
     void _serialize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
                              const vectorized::Columns& agg_result_columns);

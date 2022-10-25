@@ -98,7 +98,7 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
         auto f = convert_field(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
 }
 
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
@@ -148,8 +148,9 @@ starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const sta
 
 starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
     std::vector<ColumnId> short_key_cids;
-    for (ColumnId cid = 0; cid < schema.num_short_key_columns(); ++cid) {
-        short_key_cids.push_back(cid);
+    const auto& sort_key_idxes = schema.sort_key_idxes();
+    for (auto i = 0; i < schema.num_short_key_columns(); ++i) {
+        short_key_cids.push_back(sort_key_idxes[i]);
     }
     return starrocks::vectorized::Schema(schema.schema(), short_key_cids);
 }

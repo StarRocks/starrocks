@@ -20,6 +20,8 @@ struct SortedRun {
 
     SortedRun() = default;
     ~SortedRun() = default;
+    SortedRun(const SortedRun& rhs) = default;
+    SortedRun& operator=(const SortedRun& rhs) = default;
 
     SortedRun(ChunkPtr ichunk, const Columns& columns)
             : chunk(ichunk), orderby(columns), range(0, ichunk->num_rows()) {}
@@ -29,17 +31,7 @@ struct SortedRun {
         DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
     }
 
-    SortedRun(const SortedRun& rhs) : chunk(rhs.chunk), orderby(rhs.orderby), range(rhs.range) {}
-
     SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs);
-
-    SortedRun& operator=(const SortedRun& rhs) {
-        if (&rhs == this) return *this;
-        chunk = rhs.chunk;
-        orderby = rhs.orderby;
-        range = rhs.range;
-        return *this;
-    }
 
     size_t num_columns() const { return orderby.size(); }
     size_t start_index() const { return range.first; }
@@ -147,19 +139,12 @@ private:
 
 class SimpleChunkSortCursor;
 
-// ColumnWise Merge algorithms
+// Merge implementations
+// Underlying algorithm is multi-level cascade-merge, which could be streaming and short-circuit
 Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRun& left, const SortedRun& right,
                                    Permutation* output);
-Status merge_sorted_chunks_two_way(const SortDescs& sort_desc, const SortedRuns& left, const SortedRuns& right,
-                                   SortedRuns* output);
 Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<ChunkPtr>& chunks, SortedRuns* output, size_t limit);
-Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext*>* sort_exprs,
-                           const std::vector<SortedRuns>& runs_batch, SortedRuns* output, size_t limit);
-
-// ColumnWise merge streaming merge
-Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
-                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output);
+                           const std::vector<ChunkPtr>& chunks, SortedRuns* output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
                                    ChunkConsumer consumer);
