@@ -648,7 +648,7 @@ Status OlapScanConjunctsManager::get_column_predicates(PredicateParser* parser,
                 std::stringstream ss;
                 ss << "invalid filter, slot=" << slot_desc->debug_string();
                 if (ctx != nullptr) {
-                    ss << "expr=" << ctx->root()->debug_string();
+                    ss << ", expr=" << ctx->root()->debug_string();
                 }
                 LOG(WARNING) << ss.str();
                 return Status::RuntimeError("invalid filter");
