@@ -463,6 +463,8 @@ pipeline::OpFactories HashJoinNode::decompose_to_pipeline(pipeline::PipelineBuil
 
     size_t num_right_partitions = down_cast<SourceOperatorFactory*>(rhs_operators[0].get())->degree_of_parallelism();
     size_t num_left_partitions = down_cast<SourceOperatorFactory*>(lhs_operators[0].get())->degree_of_parallelism();
+    // For non-broadcast join, the number of left and right partitions must be the same.
+    DCHECK(_distribution_mode == TJoinDistributionMode::BROADCAST || num_right_partitions == num_left_partitions);
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
     HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
