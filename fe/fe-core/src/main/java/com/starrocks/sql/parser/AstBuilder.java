@@ -4189,7 +4189,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
                 ParseNode e3 = visit(context.expression(2));
                 if (!(e3 instanceof UnitBoundary)) {
-                    e3 = new UnitBoundary("floor");
+                    throw new ParsingException(functionName + " must use FLOOR/CEIL as third parameter");
                 }
                 UnitBoundary unitBoundary = (UnitBoundary) e3;
                 FunctionCallExpr functionCallExpr = new FunctionCallExpr(fnName, getArgumentsForTimeSlice(e1,
