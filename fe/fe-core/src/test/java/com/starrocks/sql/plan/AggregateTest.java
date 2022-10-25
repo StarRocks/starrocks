@@ -1697,7 +1697,8 @@ public class AggregateTest extends PlanTestBase {
             sql = "select count(l) from (select sum(length(v3)) l from t0 group by v1) tx";
             plan = getCostExplain(sql);
             assertContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                    "  |  aggregate: sum[([4: length, INT, true]); args: INT; result: BIGINT; args nullable: true; result nullable: true]\n" +
+                    "  |  aggregate: sum[([4: length, INT, true]); args: INT; result: BIGINT; args nullable: true;" +
+                    " result nullable: true]\n" +
                     "  |  group by: [1: v1, BIGINT, true]\n" +
                     "  |  sorted streaming: true");
         }
