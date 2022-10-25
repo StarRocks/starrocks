@@ -10,7 +10,7 @@ SQL 语句在 StarRocks 中的生命周期可以分为查询解析、规划、�
 
 在执行阶段，BE 执行数据 shuffle 前的计算任务以及将数据写入写出磁盘。CN 从 BE 读取 shuffle 后的数据，执行部分计算任务（例如 JOIN），最终将计算结果返回给 FE。
 
-此外，如果单纯查询外部数据源（例如 HDFS、AWS S3），则 FE 则将执行计划分配给 CN，由 CN 直接访问外部数据源，执行全部计算任务，最终将计算结果返回给 FE。
+此外，如果单纯查询外部数据源（例如 HDFS、AWS S3），则 FE 将执行计划分配给 CN，由 CN 直接访问外部数据源，执行全部计算任务，最终将计算结果返回给 FE。
 
 ## 下载并解压安装包
 
@@ -35,11 +35,11 @@ cd StarRocks-x.x.x/be
 > 注意
 >
 > 将以上路径名修改为解压后的路径名。
-修改 CN 节点配置文件 **conf/cn.conf**。因默认配置即可启动集群，以下示例并未修改 CN 节点配置。如需在生产环境中对集群进行详细优化配置，因为大部分参数均继承自BE，可以参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
+修改 CN 节点配置文件 **conf/cn.conf**。因默认配置即可启动集群，以下示例并未修改 CN 节点配置。如需在生产环境中对集群进行详细优化配置，因为大部分参数均继承自 BE，可以参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
 
 ## 添加 CN 节点
 
-通过 MySQL 客户端将 CN 节点添加至 StarRocks 集群。
+通过 MySQL 客户端执行命令将 CN 节点添加至 StarRocks 集群。
 
 ```sql
 mysql> ALTER SYSTEM ADD COMPUTE NODE "host:port";
@@ -47,7 +47,7 @@ mysql> ALTER SYSTEM ADD COMPUTE NODE "host:port";
 
 > 注意
 >
-> `host` 需要与 `priority_networks` 相匹配，`port` 需要与 **cn.conf** 文件中的设置的 `heartbeat_service_port` 相同，默认为 `9050`。
+> `host` 需要与 `priority_networks` 相匹配，`port` 需要与 **cn.conf** 文件中设置的 `heartbeat_service_port` 相同，默认为 `9050`。
 如添加过程出现错误，需要通过以下命令将该 CN 节点从集群移除。
 
 ```sql
@@ -55,6 +55,7 @@ mysql> ALTER SYSTEM drop COMPUTE NODE "host:port";
 ```
 
 > 说明
+>
 > `host` 和 `port` 与添加的 CN 节点一致。
 
 ## 启动 CN 节点
