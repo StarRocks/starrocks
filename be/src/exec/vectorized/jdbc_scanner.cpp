@@ -37,7 +37,7 @@ Status JDBCScanner::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(_init_jdbc_scanner());
 
-    RETURN_IF_ERROR(_init_column_class_name());
+    RETURN_IF_ERROR(_init_column_class_name(state));
 
     RETURN_IF_ERROR(_init_jdbc_util());
 
