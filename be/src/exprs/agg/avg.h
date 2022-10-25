@@ -7,6 +7,7 @@
 #include "exprs/agg/sum.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 

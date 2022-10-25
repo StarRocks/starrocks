@@ -7,15 +7,6 @@
 namespace starrocks::vectorized {
 
 void AggregateFuncResolver::register_6() {
-    ADD_ALL_TYPE("first_value", true);
-    ADD_ALL_TYPE("last_value", true);
-    ADD_ALL_TYPE("lead", true);
-    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lead");
-    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lead");
-    ADD_ALL_TYPE("lag", true);
-    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lag");
-    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lag");
-
     add_object_mapping<TYPE_HLL, TYPE_HLL>("hll_union");
     add_object_mapping<TYPE_HLL, TYPE_HLL>("hll_raw_agg");
     add_object_mapping<TYPE_HLL, TYPE_BIGINT>("hll_union_agg");
