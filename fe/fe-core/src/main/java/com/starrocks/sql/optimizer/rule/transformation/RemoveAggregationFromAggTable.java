@@ -146,6 +146,8 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
                 ScalarOperator rewrittenOperator = rewriter.rewrite(entry.getValue());
                 newProjectMap.put(entry.getKey(), rewrittenOperator);
             }
+        } else {
+            newProjectMap = projectMap;
         }
 
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(newProjectMap);

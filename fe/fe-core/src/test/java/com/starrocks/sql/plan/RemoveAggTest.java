@@ -48,6 +48,7 @@ public class RemoveAggTest extends PlanTestBase {
         sqlList.add("select max(v1) + min(v2) from test_agg group by k1, k2, k3 having (max(v1) + min(v2)) is not null");
         sqlList.add("select max(v1) + min(v2) from test_agg group by k1, k2, k3 " +
                 "having ((max(v1) + min(v2)) is not null or k1 > 4)");
+        sqlList.add("select k1, k2 from test_agg group by k1, k2, k3 having k1 > 1");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
