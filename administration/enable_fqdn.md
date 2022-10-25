@@ -38,13 +38,15 @@ sh bin/start_fe.sh --host_type IP --daemon
 
 ### 为 FE 节点启用 FQDN 访问
 
-在为 FE 节点启用 FQDN 访问时，您需要先修改所有非 Leader Follower FE 节点，最后修改 Leader FE 节点。
+在为 FE 节点启用 FQDN 访问时，您需要先修改所有非 Leader 节点的 Follower FE 节点，最后修改 Leader FE 节点。
 
 > **注意**
 >
 > 请您确保集群中至少有 3 个 Follower FE 节点，否则无法为 FE 节点启用 FQDN 访问。
 
-#### 修改非 Leader Follower FE 节点
+#### 修改 Follower FE 节点
+
+在修改 Leader FE 节点前，请务必首先修改所有非 Leader 节点的 Follower FE 节点。
 
 1. 进入 FE 节点的部署目录，执行以下命令停止 FE 节点。
 
@@ -78,11 +80,11 @@ sh bin/start_fe.sh --host_type IP --daemon
     SHOW PROC '/frontends'\G
     ```
 
-6. 在当前FE节点的 `Alive` 状态为 `true` 后，重复上述步骤，依次为其他非 Leader Follower FE 节点启用 FQDN 访问。
+6. 在当前FE节点的 `Alive` 状态为 `true` 后，重复上述步骤，依次为其他 Follower FE 节点启用 FQDN 访问。
 
-#### 修改 Leader Follower FE 节点
+#### 修改 Leader FE 节点
 
-在修改完所有非 Leader Follower FE 节点并成功重启后，您就可以为 Leader FE 节点启用 FQDN 访问了。
+在修改完所有非 Leader 节点的 Follower FE 节点并成功重启后，您就可以为 Leader FE 节点启用 FQDN 访问了。
 
 > **说明**
 >
