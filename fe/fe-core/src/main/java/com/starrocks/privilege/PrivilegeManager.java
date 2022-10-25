@@ -344,8 +344,8 @@ public class PrivilegeManager {
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
             // to avoid circle, verify roleName is not predecessor role of parentRoleName
-            Set<Long> parentRolePrecessors = getAllPredecessorsUnlocked(parentRoleId);
-            if (parentRolePrecessors.contains(roleId)) {
+            Set<Long> parentRolePredecessors = getAllPredecessorsUnlocked(parentRoleId);
+            if (parentRolePredecessors.contains(roleId)) {
                 throw new PrivilegeException(String.format("role %s[%d] is already a predecessor role of %s[%d]",
                         roleName, roleId, parentRoleName, parentRoleId));
             }
@@ -355,9 +355,9 @@ public class PrivilegeManager {
             parentCollection.addSubRole(roleId);
             try {
                 // verify role inheritance depth
-                parentRolePrecessors = getAllPredecessorsUnlocked(parentRoleId);
-                parentRolePrecessors.add(parentRoleId);
-                for (long i : parentRolePrecessors) {
+                parentRolePredecessors = getAllPredecessorsUnlocked(parentRoleId);
+                parentRolePredecessors.add(parentRoleId);
+                for (long i : parentRolePredecessors) {
                     long cnt = getMaxRoleInheritanceDepthInner(0, i);
                     if (cnt > Config.privilege_max_role_depth) {
                         String name = getRolePrivilegeCollectionUnlocked(i, true).getName();
