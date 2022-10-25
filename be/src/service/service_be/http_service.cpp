@@ -30,6 +30,7 @@
 #include "http/action/meta_action.h"
 #include "http/action/metrics_action.h"
 #include "http/action/pprof_actions.h"
+#include "http/action/query_cache_action.h"
 #include "http/action/reload_tablet_action.h"
 #include "http/action/restore_tablet_action.h"
 #include "http/action/runtime_filter_cache_action.h"
@@ -211,6 +212,11 @@ Status HttpServiceBE::start() {
     CompactRocksDbMetaAction* compact_rocksdb_meta_action = new CompactRocksDbMetaAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/compact_rocksdb_meta", compact_rocksdb_meta_action);
     _http_handlers.emplace_back(compact_rocksdb_meta_action);
+
+    QueryCacheAction* query_cache_action = new QueryCacheAction(_env);
+    _ev_http_server->register_handler(HttpMethod::GET, "/api/query_cache/{action}", query_cache_action);
+    _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
+    _http_handlers.emplace_back(query_cache_action);
 
     RETURN_IF_ERROR(_ev_http_server->start());
     return Status::OK();

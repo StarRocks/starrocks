@@ -98,6 +98,16 @@ public:
     METRIC_DEFINE_INT_GAUGE(fd_num_used, MetricUnit::NOUNIT);
 };
 
+class QueryCacheMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(query_cache_capacity, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(query_cache_usage, MetricUnit::BYTES);
+    METRIC_DEFINE_DOUBLE_GAUGE(query_cache_usage_ratio, MetricUnit::PERCENT);
+    METRIC_DEFINE_INT_GAUGE(query_cache_lookup_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(query_cache_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_DOUBLE_GAUGE(query_cache_hit_ratio, MetricUnit::PERCENT);
+};
+
 SystemMetrics::SystemMetrics() = default;
 
 SystemMetrics::~SystemMetrics() {
@@ -129,6 +139,7 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
     _install_net_metrics(registry, network_interfaces);
     _install_fd_metrics(registry);
     _install_snmp_metrics(registry);
+    _install_query_cache_metrics(registry);
     _registry = registry;
 }
 
@@ -139,6 +150,7 @@ void SystemMetrics::update() {
     _update_net_metrics();
     _update_fd_metrics();
     _update_snmp_metrics();
+    _update_query_cache_metrics();
 }
 
 void SystemMetrics::_install_cpu_metrics(MetricRegistry* registry) {
@@ -621,10 +633,39 @@ void SystemMetrics::_update_snmp_metrics() {
     fclose(fp);
 }
 
+void SystemMetrics::_update_query_cache_metrics() {
+    auto* cache_mgr = ExecEnv::GetInstance()->cache_mgr();
+    if (UNLIKELY(cache_mgr == nullptr)) {
+        return;
+    }
+    auto capacity = cache_mgr->capacity();
+    auto usage = cache_mgr->memory_usage();
+    auto lookup_count = cache_mgr->lookup_count();
+    auto hit_count = cache_mgr->hit_count();
+    auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
+    auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
+    _query_cache_metrics->query_cache_capacity.set_value(capacity);
+    _query_cache_metrics->query_cache_usage.set_value(usage);
+    _query_cache_metrics->query_cache_usage_ratio.set_value(usage_ratio);
+    _query_cache_metrics->query_cache_lookup_count.set_value(lookup_count);
+    _query_cache_metrics->query_cache_hit_count.set_value(hit_count);
+    _query_cache_metrics->query_cache_hit_ratio.set_value(hit_ratio);
+}
+
 void SystemMetrics::_install_fd_metrics(MetricRegistry* registry) {
     _fd_metrics = std::make_unique<FileDescriptorMetrics>();
     registry->register_metric("fd_num_limit", &_fd_metrics->fd_num_limit);
     registry->register_metric("fd_num_used", &_fd_metrics->fd_num_used);
+}
+
+void SystemMetrics::_install_query_cache_metrics(starrocks::MetricRegistry* registry) {
+    _query_cache_metrics = std::make_unique<QueryCacheMetrics>();
+    registry->register_metric("query_cache_capacity", &_query_cache_metrics->query_cache_capacity);
+    registry->register_metric("query_cache_usage", &_query_cache_metrics->query_cache_usage);
+    registry->register_metric("query_cache_usage_ratio", &_query_cache_metrics->query_cache_usage_ratio);
+    registry->register_metric("query_cache_lookup_count", &_query_cache_metrics->query_cache_lookup_count);
+    registry->register_metric("query_cache_hit_count", &_query_cache_metrics->query_cache_hit_count);
+    registry->register_metric("query_cache_hit_ratio", &_query_cache_metrics->query_cache_hit_ratio);
 }
 
 void SystemMetrics::_update_fd_metrics() {

@@ -29,7 +29,7 @@ StatusOr<CacheValue> CacheManager::probe(const std::string& key) {
         return CACHE_MISS;
     }
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    CacheValue cache_value = *reinterpret_cast<CacheValue*>(_cache.value(handle));
+    CacheValue cache_value(*reinterpret_cast<CacheValue*>(_cache.value(handle)));
     return cache_value;
 }
 
@@ -39,6 +39,21 @@ size_t CacheManager::memory_usage() {
 
 size_t CacheManager::capacity() {
     return _cache.get_capacity();
+}
+
+size_t CacheManager::lookup_count() {
+    return _cache.get_lookup_count();
+}
+
+size_t CacheManager::hit_count() {
+    return _cache.get_hit_count();
+}
+
+void CacheManager::invalidate_all() {
+    auto old_capacity = _cache.get_capacity();
+    // set capacity of cache to zero, the cache shall prune all cache entries.
+    _cache.set_capacity(0);
+    _cache.set_capacity(old_capacity);
 }
 
 } // namespace query_cache

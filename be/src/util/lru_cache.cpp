@@ -461,9 +461,15 @@ uint64_t ShardedLRUCache::new_id() {
     return ++(_last_id);
 }
 
+size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)()) {
+    size_t n = 0;
+    for (auto& shard : _shards) {
+        n += (shard.*mem_fun)();
+    }
+    return n;
+}
 size_t ShardedLRUCache::get_capacity() {
-    std::lock_guard l(_mutex);
-    return _capacity;
+    return _get_stat(&LRUCache::get_capacity);
 }
 
 void ShardedLRUCache::prune() {
@@ -475,27 +481,15 @@ void ShardedLRUCache::prune() {
 }
 
 size_t ShardedLRUCache::get_memory_usage() {
-    size_t total_usage = 0;
-    for (auto& _shard : _shards) {
-        total_usage += _shard.get_usage();
-    }
-    return total_usage;
+    return _get_stat(&LRUCache::get_usage);
 }
 
-uint64_t ShardedLRUCache::get_lookup_count() {
-    uint64_t total_count = 0;
-    for (auto& _shard : _shards) {
-        total_count += _shard.get_lookup_count();
-    }
-    return total_count;
+size_t ShardedLRUCache::get_lookup_count() {
+    return _get_stat(&LRUCache::get_lookup_count);
 }
 
-uint64_t ShardedLRUCache::get_hit_count() {
-    uint64_t total_count = 0;
-    for (auto& _shard : _shards) {
-        total_count += _shard.get_hit_count();
-    }
-    return total_count;
+size_t ShardedLRUCache::get_hit_count() {
+    return _get_stat(&LRUCache::get_hit_count);
 }
 
 void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {
