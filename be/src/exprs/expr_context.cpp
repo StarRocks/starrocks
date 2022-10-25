@@ -187,7 +187,7 @@ StatusOr<ColumnPtr> ExprContext::evaluate(vectorized::Chunk* chunk) {
 StatusOr<ColumnPtr> ExprContext::evaluate(Expr* e, vectorized::Chunk* chunk) {
     DCHECK(_prepared);
     DCHECK(_opened);
-    DCHECK(!_closed);
+    // DCHECK(!_closed);
 #ifndef NDEBUG
     if (chunk != nullptr) {
         chunk->check_or_die();
