@@ -837,13 +837,13 @@ public class PrivilegeManagerTest {
         //      \-> role3
         int oldValue = Config.privilege_max_role_depth;
         // simulate exception
-        Config.privilege_max_role_depth = 4;
+        Config.privilege_max_role_depth = 3;
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role2 to role role4", ctx), ctx);
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("role inheritance depth for role0"));
-            Assert.assertTrue(e.getMessage().contains("is 4 >= 4"));
+            Assert.assertTrue(e.getMessage().contains("is 4 > 3"));
         }
         Assert.assertEquals(3, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         Config.privilege_max_role_depth = oldValue;
@@ -854,7 +854,7 @@ public class PrivilegeManagerTest {
 
         // grant too many roles to user
         oldValue = Config.privilege_max_total_roles_per_user;
-        Config.privilege_max_total_roles_per_user = 5;
+        Config.privilege_max_total_roles_per_user = 4;
         UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("user_test_role_inheritance", "%");
         UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -870,7 +870,7 @@ public class PrivilegeManagerTest {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                     "grant role4 to user_test_role_inheritance", ctx), ctx);
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles >= 5"));
+            Assert.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 5 predecessor roles > 4"));
         }
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(collection));

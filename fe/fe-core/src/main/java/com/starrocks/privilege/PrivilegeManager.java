@@ -311,10 +311,10 @@ public class PrivilegeManager {
                 boolean verifyDone = false;
                 try {
                     Set<Long> result = getAllPredecessorsUnlocked(collection);
-                    if (result.size() >= Config.privilege_max_total_roles_per_user) {
+                    if (result.size() > Config.privilege_max_total_roles_per_user) {
                         LOG.warn("too many predecessor roles {} for user {}", result, user);
                         throw new PrivilegeException(String.format(
-                                "%s has total %d predecessor roles >= %d!",
+                                "%s has total %d predecessor roles > %d!",
                                 user, result.size(), Config.privilege_max_total_roles_per_user));
                     }
                     verifyDone = true;
@@ -359,10 +359,10 @@ public class PrivilegeManager {
                 parentRolePrecessors.add(parentRoleId);
                 for (long i : parentRolePrecessors) {
                     long cnt = getMaxRoleInheritanceDepthInner(0, i);
-                    if (cnt >= Config.privilege_max_role_depth) {
+                    if (cnt > Config.privilege_max_role_depth) {
                         String name = getRolePrivilegeCollectionUnlocked(i, true).getName();
                         throw new PrivilegeException(String.format(
-                                "role inheritance depth for %s[%d] is %d >= %d",
+                                "role inheritance depth for %s[%d] is %d > %d",
                                 name, i, cnt, Config.privilege_max_role_depth));
                     }
                 }

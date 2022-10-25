@@ -83,7 +83,7 @@ public class PrivilegeStmtAnalyzer {
         }
 
         /**
-         * check if role name valid and get full role name
+         * check if role name valid
          */
         private void validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
             try {

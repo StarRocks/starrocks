@@ -914,7 +914,6 @@ public class StmtExecutor {
 
     private void handleSetRole() throws PrivilegeException, UserException {
         SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
-
     }
 
     private void handleUnsupportedStmt() {
