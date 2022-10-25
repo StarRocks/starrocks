@@ -28,7 +28,7 @@ bvar::Adder<int> g_lake_pending_compactions("lake_pending_compactions");
 using BThreadCountDownLatch = GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable>;
 
 LakeServiceImpl::LakeServiceImpl(ExecEnv* env) : _env(env) {
-#if defined(USE_STAROS) || defined(BE_UT)
+#if defined(USE_STAROS) || defined(BE_TEST)
     auto st = ThreadPoolBuilder("lake_compact")
                       .set_min_threads(0)
                       .set_max_threads(config::compact_threads)
