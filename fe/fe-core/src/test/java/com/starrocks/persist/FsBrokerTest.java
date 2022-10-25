@@ -60,7 +60,7 @@ public class FsBrokerTest {
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
-        fsBroker.handleHbResponse(hbResponse);
+        fsBroker.handleHbResponse(hbResponse, false);
         fsBroker.write(dos);
         dos.flush();
         dos.close();
@@ -88,7 +88,7 @@ public class FsBrokerTest {
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
-        fsBroker.handleHbResponse(hbResponse);
+        fsBroker.handleHbResponse(hbResponse, false);
         fsBroker.write(dos);
         dos.flush();
         dos.close();

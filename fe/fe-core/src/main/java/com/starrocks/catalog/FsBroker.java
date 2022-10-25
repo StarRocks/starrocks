@@ -63,7 +63,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
      * handle Broker's heartbeat response.
      * return true if alive state is changed.
      */
-    public boolean handleHbResponse(BrokerHbResponse hbResponse) {
+    public boolean handleHbResponse(BrokerHbResponse hbResponse, boolean isReplay) {
         boolean isChanged = false;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!isAlive) {
@@ -89,10 +89,15 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
             // this heartbeat info also need to be synced to follower.
             // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
             // if this heartbeat is not synchronized to the follower, 
-            // that will cause the Follower and master’s memory to be inconsistent
+            // that will cause the Follower and leader’s memory to be inconsistent
             isChanged = true;
         }
-
+        if (!isReplay) {
+            hbResponse.aliveStatus = isAlive;
+        } else {
+            isAlive = hbResponse.aliveStatus;
+            heartbeatRetryTimes = 0;
+        }
         return isChanged;
     }
 

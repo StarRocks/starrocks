@@ -14,7 +14,7 @@ public class ComputeNodeTest {
         hbResponse.status = HbStatus.BAD;
 
         ComputeNode node = new ComputeNode();
-        boolean needSync = node.handleHbResponse(hbResponse);
+        boolean needSync = node.handleHbResponse(hbResponse, false);
         Assert.assertTrue(needSync);
     }
 
@@ -25,7 +25,7 @@ public class ComputeNodeTest {
         hbResponse.status = HbStatus.OK;
         hbResponse.setRebootTime(1000L);
         ComputeNode node = new ComputeNode();
-        boolean needSync = node.handleHbResponse(hbResponse);
+        boolean needSync = node.handleHbResponse(hbResponse, false);
         Assert.assertTrue(node.getLastStartTime() == 1000000L);    
         Assert.assertTrue(needSync);
     }

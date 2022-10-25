@@ -154,8 +154,14 @@ public class Frontend implements Writable {
             // this heartbeat info also need to be synced to follower.
             // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
             // if this heartbeat is not synchronized to the follower, 
-            // that will cause the Follower and master’s memory to be inconsistent
+            // that will cause the Follower and leader’s memory to be inconsistent
             isChanged = true;
+        }
+        if (!isReplay) {
+            hbResponse.aliveStatus = isAlive;
+        } else {
+            isAlive = hbResponse.aliveStatus;
+            heartbeatRetryTimes = 0;
         }
         return isChanged;
     }
