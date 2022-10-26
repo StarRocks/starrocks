@@ -1,4 +1,4 @@
-# Deploy a Compute Node
+# Deploy a Compute Node [Preview]
 
 A Compute Node (CN) a stateless computing service that does not maintain data itself. It only provides extra computing resources during queries. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
 
