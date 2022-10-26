@@ -107,6 +107,7 @@ void StructColumn::assign(size_t n, size_t idx) {
 
 void StructColumn::append_datum(const Datum& datum) {
     const DatumStruct& datum_struct = datum.get<DatumStruct>();
+    DCHECK_EQ(_fields.size(), datum_struct.size());
     for (size_t col = 0; col < datum_struct.size(); col++) {
         _fields.at(col)->append_datum(datum_struct.at(col));
     }
@@ -162,9 +163,15 @@ void StructColumn::append_value_multiple_times(const Column& src, uint32_t index
 }
 
 bool StructColumn::append_nulls(size_t count) {
+    // check subfield column is nullable column first
+    for (const ColumnPtr& field : _fields) {
+        if (!field->is_nullable()) {
+            return false;
+        }
+    }
     for (const ColumnPtr& field : _fields) {
         if (!field->append_nulls(count)) {
-            LOG(WARNING) << "StructColumn append_nulls may not be atomic!";
+            DCHECK(false) << "StructColumn subfield append_nulls failed, that should not happened!";
             return false;
         }
     }
@@ -329,11 +336,11 @@ std::string StructColumn::debug_item(uint32_t idx) const {
     for (size_t i = 0; i < _fields.size(); i++) {
         const auto& field = _fields.at(i);
         ss << _field_names->get_slice(i).to_string();
-        ss << ':';
+        ss << ": ";
         ss << field->debug_item(idx);
         if (i < _fields.size() - 1) {
             // Add struct field separator, last field don't need ','.
-            ss << ',';
+            ss << ", ";
         }
     }
     ss << '}';
@@ -344,11 +351,10 @@ std::string StructColumn::debug_item(uint32_t idx) const {
 std::string StructColumn::debug_string() const {
     std::stringstream ss;
     for (size_t i = 0; i < size(); ++i) {
-        ss << debug_item(i);
-        if (i < _fields.size() - 1) {
-            // Add struct field separator, last field don't need ','.
-            ss << ',';
+        if (i > 0) {
+            ss << ", ";
         }
+        ss << debug_item(i);
     }
     return ss.str();
 }
@@ -380,7 +386,7 @@ void StructColumn::swap_column(Column& rhs) {
     for (size_t i = 0; i < _fields.size(); i++) {
         _fields.at(i)->swap_column(*struct_column.fields_column().at(i));
     }
-    _field_names->swap_column(*struct_column.field_names_column());
+    // _field_names dont need swap
 }
 
 bool StructColumn::capacity_limit_reached(std::string* msg) const {
@@ -403,6 +409,39 @@ void StructColumn::check_or_die() const {
         column->check_or_die();
     }
     _field_names->check_or_die();
+}
+
+void StructColumn::reset_column() {
+    Column::reset_column();
+    for (ColumnPtr& field : _fields) {
+        field->reset_column();
+    }
+}
+
+const Columns& StructColumn::fields() const {
+    return _fields;
+}
+
+Columns& StructColumn::fields_column() {
+    return _fields;
+}
+
+ColumnPtr StructColumn::field_column(std::string field_name) {
+    for (size_t i = 0; i < _field_names->size(); i++) {
+        if (field_name == _field_names->get_slice(i)) {
+            return _fields.at(i);
+        }
+    }
+    DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
+    return nullptr;
+}
+
+const BinaryColumn& StructColumn::field_names() const {
+    return *_field_names;
+}
+
+BinaryColumn::Ptr& StructColumn::field_names_column() {
+    return _field_names;
 }
 
 } // namespace starrocks::vectorized

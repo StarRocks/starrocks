@@ -136,24 +136,18 @@ public:
 
     void check_or_die() const override;
 
+    void reset_column() override;
+
     // Struct Column own functions
-    const Columns& fields() const { return _fields; }
+    const Columns& fields() const;
 
-    Columns& fields_column() { return _fields; }
+    Columns& fields_column();
 
-    ColumnPtr field_column(std::string field_name) {
-        for (size_t i = 0; i < _field_names->size(); i++) {
-            if (field_name == _field_names->get_slice(i)) {
-                return _fields.at(i);
-            }
-        }
-        DCHECK(false) << "Struct subfield name: " << field_name << " not found!";
-        return nullptr;
-    }
+    ColumnPtr field_column(std::string field_name);
 
-    const BinaryColumn& field_names() const { return *_field_names; }
+    const BinaryColumn& field_names() const;
 
-    BinaryColumn::Ptr& field_names_column() { return _field_names; }
+    BinaryColumn::Ptr& field_names_column();
 
 private:
     // A collection that contains StructType's subfield column.
