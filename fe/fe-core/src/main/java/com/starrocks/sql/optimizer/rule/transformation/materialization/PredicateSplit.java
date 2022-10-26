@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PredicateSplit {
@@ -33,5 +34,9 @@ public class PredicateSplit {
 
     public ScalarOperator getResidualPredicates() {
         return residualPredicates;
+    }
+
+    public ScalarOperator toScalarOperator() {
+        return Utils.compoundAnd(equalPredicates, rangePredicates, residualPredicates);
     }
 }

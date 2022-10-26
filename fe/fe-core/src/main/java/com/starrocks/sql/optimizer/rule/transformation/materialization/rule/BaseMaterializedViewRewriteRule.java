@@ -38,6 +38,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
         for (MaterializationContext mvContext : context.getCandidateMvs()) {
             mvContext.setQueryExpression(queryExpression);
             mvContext.setQueryRefFactory(context.getColumnRefFactory());
+            mvContext.setOptimizerContext(context);
             MaterializedViewRewriter rewriter = getMaterializedViewRewrite(mvContext);
             List<OptExpression> rewritten = rewriter.rewrite();
             if (rewritten != null) {

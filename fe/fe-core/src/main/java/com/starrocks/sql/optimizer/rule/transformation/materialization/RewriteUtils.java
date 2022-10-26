@@ -2,7 +2,6 @@
 
 package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Table;
@@ -18,24 +17,13 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
-import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
 import java.util.Iterator;
 import java.util.List;
-import java.util.SortedMap;
-import java.util.TreeMap;
-import java.util.stream.Collectors;
-
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.EQ;
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.GE;
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.GT;
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.LE;
-import static com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator.BinaryType.LT;
 
 public class RewriteUtils {
 
@@ -68,200 +56,11 @@ public class RewriteUtils {
         }
     }
     public static ScalarOperator canonizeNode(ScalarOperator predicate) {
+        if (predicate == null) {
+            return null;
+        }
         ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
         return rewrite.rewrite(predicate, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
-    }
-
-    // this function can be optimized
-    public static ScalarOperator canonizeNode2(ScalarOperator predicate) {
-        switch (predicate.getOpType()) {
-            case COMPOUND:
-                SortedMap<String, ScalarOperator> canonizedChildren = new TreeMap<>();
-                for (ScalarOperator child : predicate.getChildren()) {
-                    ScalarOperator canonizedChild = canonizeNode(child);
-                    canonizedChildren.put(canonizedChild.toString(), canonizedChild);
-                }
-                return new CompoundPredicateOperator(((CompoundPredicateOperator) predicate).getCompoundType(),
-                        ImmutableList.copyOf(canonizedChildren.values()));
-            case BINARY:
-                BinaryPredicateOperator binary = (BinaryPredicateOperator) predicate;
-                ScalarOperator left = canonizeNode(predicate.getChild(0));
-                ScalarOperator right = canonizeNode(predicate.getChild(1));
-                BinaryPredicateOperator canonizedPredicate = new BinaryPredicateOperator(binary.getBinaryType(), left, right);
-                // default logic
-                if (left.isConstant() && right instanceof ColumnRefOperator) {
-                    // if 3 >= col, return col <= 3
-                    canonizedPredicate = canonizedPredicate.commutative();
-                } else if (!(left instanceof ConstantOperator && right.isConstant())
-                        && left.toString().compareTo(right.toString()) > 0) {
-                    canonizedPredicate = canonizedPredicate.commutative();
-                }
-                switch (binary.getBinaryType()) {
-                    case LT:
-                        // convert col(int) < 3 to col(int) <= 2
-                        right = canonizedPredicate.getChild(1);
-                        if (right.isConstantRef() && right.getType().isIntegerType()) {
-                            ConstantOperator constantOperator = (ConstantOperator) right;
-                            if (constantOperator.isNull()) {
-                                break;
-                            }
-                            if (right.getType().isTinyint()) {
-                                byte value = ((ConstantOperator) right).getTinyInt();
-                                if (value == Byte.MIN_VALUE) {
-                                    if (left.getType().isTinyint()) {
-                                        // left < Byte.MIN_VALUE is always false, so just return false
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createTinyInt((byte) (value - 1));
-                                return new BinaryPredicateOperator(LE, canonizedPredicate.getChild(0), newRight);
-                            } else if (right.getType().isSmallint()) {
-                                short value = ((ConstantOperator) right).getSmallint();
-                                if (value == Short.MIN_VALUE) {
-                                    if (left.getType().isSmallint()) {
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createSmallInt((short) (value - 1));
-                                return new BinaryPredicateOperator(LE, canonizedPredicate.getChild(0), newRight);
-                            } else if (right.getType().isInt()) {
-                                int value = ((ConstantOperator) right).getInt();
-                                if (value == Integer.MIN_VALUE) {
-                                    if (left.getType().isInt()) {
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createInt(value - 1);
-                                return new BinaryPredicateOperator(LE, canonizedPredicate.getChild(0), newRight);
-                            } else {
-                                // for type BIGINT
-                                long value = ((ConstantOperator) right).getBigint();
-                                if (value == Long.MIN_VALUE) {
-                                    if (left.getType().isBigint()) {
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createBigint(value - 1);
-                                return new BinaryPredicateOperator(LE, canonizedPredicate.getChild(0), newRight);
-                            }
-                        }
-                        break;
-                    case GT:
-                        // convert col(int) > 3 to col(int) >= 4
-                        right = canonizedPredicate.getChild(1);
-                        if (right.isConstantRef() && right.getType().isIntegerType()) {
-                            ConstantOperator constantOperator = (ConstantOperator) right;
-                            if (constantOperator.isNull()) {
-                                break;
-                            }
-                            if (right.getType().isTinyint()) {
-                                byte value = ((ConstantOperator) right).getTinyInt();
-                                if (value == Byte.MAX_VALUE) {
-                                    if (left.getType().isTinyint()) {
-                                        // left > Byte.MAX_VALUE is always false, so just return false
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createTinyInt((byte) (value + 1));
-                                return new BinaryPredicateOperator(GE, canonizedPredicate.getChild(0), newRight);
-                            } else if (right.getType().isSmallint()) {
-                                short value = ((ConstantOperator) right).getSmallint();
-                                if (value == Short.MAX_VALUE) {
-                                    if (left.getType().isSmallint()) {
-                                        // left > Short.MAX_VALUE is always false, so just return false
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createSmallInt((short) (value + 1));
-                                return new BinaryPredicateOperator(GE, canonizedPredicate.getChild(0), newRight);
-                            } else if (right.getType().isInt()) {
-                                int value = ((ConstantOperator) right).getInt();
-                                if (value == Integer.MAX_VALUE) {
-                                    if (left.getType().isInt()) {
-                                        // left > Integer.MAX_VALUE is always false, so just return false
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createInt(value + 1);
-                                return new BinaryPredicateOperator(GE, canonizedPredicate.getChild(0), newRight);
-                            } else {
-                                // for type BIGINT
-                                long value = ((ConstantOperator) right).getBigint();
-                                if (value == Long.MAX_VALUE) {
-                                    if (left.getType().isBigint()) {
-                                        // left > Integer.MAX_VALUE is always false, so just return false
-                                        return ConstantOperator.createBoolean(false);
-                                    } else {
-                                        break;
-                                    }
-                                }
-                                ConstantOperator newRight = ConstantOperator.createBigint(value + 1);
-                                return new BinaryPredicateOperator(GE, canonizedPredicate.getChild(0), newRight);
-                            }
-                        }
-                        break;
-                    case EQ:
-                        // convert col = 3 to 3 <= col and col <= 3
-                        if (canonizedPredicate.getChild(0) instanceof ColumnRefOperator
-                                && canonizedPredicate.getChild(1) instanceof ConstantOperator) {
-                            ColumnRefOperator columnRef = (ColumnRefOperator) canonizedPredicate.getChild(0);
-                            ConstantOperator constant = (ConstantOperator) canonizedPredicate.getChild(1);
-
-                            BinaryPredicateOperator gePart = new BinaryPredicateOperator(GE, columnRef, constant);
-                            BinaryPredicateOperator lePart = new BinaryPredicateOperator(LE, columnRef, constant);
-                            return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, gePart, lePart);
-                        }
-                        break;
-                    case NE:
-                        // convert col != 3 to 4 <= col and col <= 2
-                        if (canonizedPredicate.getChild(0) instanceof ColumnRefOperator
-                                && canonizedPredicate.getChild(1) instanceof ConstantOperator) {
-                            ColumnRefOperator columnRef = (ColumnRefOperator) canonizedPredicate.getChild(0);
-                            ConstantOperator constant = (ConstantOperator) canonizedPredicate.getChild(1);
-                            BinaryPredicateOperator gePart = new BinaryPredicateOperator(GT, columnRef, constant);
-                            ScalarOperator canonizedGePart = canonizeNode(gePart);
-                            BinaryPredicateOperator lePart = new BinaryPredicateOperator(LT, columnRef, constant);
-                            ScalarOperator canonizedLePart = canonizeNode(lePart);
-                            return new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                                    canonizedGePart, canonizedLePart);
-                        }
-                        break;
-                    default:
-                        break;
-                }
-                return canonizedPredicate;
-            case IN:
-                InPredicateOperator inPredicateOperator = (InPredicateOperator) predicate;
-                if (!inPredicateOperator.isNotIn()) {
-                    return inPredicateOperator;
-                }
-                List<ScalarOperator> inList = inPredicateOperator.getChildren().stream().skip(1).collect(Collectors.toList());
-                ScalarOperator first = inPredicateOperator.getChild(0);
-                List<ScalarOperator> orItems = Lists.newArrayList();
-                for (ScalarOperator item : inList) {
-                    BinaryPredicateOperator equal = new BinaryPredicateOperator(EQ, first, item);
-                    orItems.add(equal);
-                }
-                CompoundPredicateOperator orPredicate =
-                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, orItems);
-                return orPredicate;
-            default:
-                return predicate;
-        }
     }
 
     public static boolean isLogicalSPJG(OptExpression root) {

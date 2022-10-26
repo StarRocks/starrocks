@@ -12,12 +12,16 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import org.apache.logging.log4j.LogManager;
@@ -63,7 +67,7 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    public OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
+    protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
         LogicalAggregationOperator mvAgg = (LogicalAggregationOperator) rewriteContext.getMvExpression().getOp();
         List<ScalarOperator> swappedMvKeys = Lists.newArrayList();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
@@ -184,6 +188,162 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
         }
     }
 
+    @Override
+    protected OptExpression queryBaseRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
+                                             OptExpression queryExpression) {
+        OptExpression aggExpr = queryExpression;
+        // add filter above input and put filter under aggExpr
+        OptExpression input = queryExpression.inputAt(0);
+
+        ScalarOperator equalPredicates = RewriteUtils.canonizeNode(compensationPredicates.getEqualPredicates());
+        ScalarOperator otherPredicates = RewriteUtils.canonizeNode(Utils.compoundAnd(
+                compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
+        if (!RewriteUtils.isAlwaysTrue(equalPredicates) || !RewriteUtils.isAlwaysTrue(otherPredicates)) {
+            Map<ColumnRefOperator, ScalarOperator> queryExprMap = getProjectionMap(null,
+                    queryExpression, rewriteContext.getQueryRefFactory());
+
+            if (!RewriteUtils.isAlwaysTrue(equalPredicates)) {
+                Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
+                        normalizeAndReverseProjection(queryExprMap, rewriteContext, false);
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(equalPredicates);
+                // swapped by query based view ec
+                List<ScalarOperator> swappedConjuncts = conjuncts.stream().map(conjunct -> {
+                    ColumnRewriter rewriter = new ColumnRewriter(rewriteContext);
+                    return rewriter.rewriteByViewEc(conjunct);
+                }).collect(Collectors.toList());
+                List<ScalarOperator> rewrittens = rewriteQueryScalarOpToTarget(swappedConjuncts, normalizedMap,
+                        null, null);
+                if (rewrittens == null) {
+                    return null;
+                }
+                // TODO: consider normalizing it
+                equalPredicates = Utils.compoundAnd(rewrittens);
+            }
+
+            if (!RewriteUtils.isAlwaysTrue(otherPredicates)) {
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(otherPredicates);
+                // swapped by query ec
+                List<ScalarOperator> swappedConjuncts = conjuncts.stream().map(conjunct -> {
+                    ColumnRewriter rewriter = new ColumnRewriter(rewriteContext);
+                    return rewriter.rewriteByQueryEc(conjunct);
+                }).collect(Collectors.toList());
+                Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
+                        normalizeAndReverseProjection(queryExprMap, rewriteContext, true);
+                List<ScalarOperator> rewrittens = rewriteQueryScalarOpToTarget(swappedConjuncts, normalizedMap,
+                        null, null);
+                if (rewrittens == null) {
+                    return null;
+                }
+                otherPredicates = Utils.compoundAnd(rewrittens);
+            }
+        }
+        ScalarOperator viewToQueryCompensationPredicate =
+                RewriteUtils.canonizeNode(Utils.compoundAnd(equalPredicates, otherPredicates));
+        // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
+        ScalarOperator queryCompensationPredicate = RewriteUtils.canonizeNode(
+                Utils.compoundAnd(
+                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
+                        CompoundPredicateOperator.not(viewToQueryCompensationPredicate)));
+        if (!RewriteUtils.isAlwaysTrue(queryCompensationPredicate)) {
+            // add filter operator
+            LogicalFilterOperator filter = new LogicalFilterOperator(queryCompensationPredicate);
+            OptExpression rewrittenExpression = OptExpression.create(filter, input);
+            deriveLogicalProperty(rewrittenExpression);
+            aggExpr.setChild(0, rewrittenExpression);
+            return aggExpr;
+        }
+        return null;
+    }
+
+    @Override
+    protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
+        Map<ColumnRefOperator, ColumnRefOperator> columnMapping = Maps.newHashMap();
+        List<ColumnRefOperator> unionOutputColumns = Lists.newArrayList();
+        List<ColumnRefOperator> queryOutputColumns = Lists.newArrayList();
+        LogicalAggregationOperator aggOp = (LogicalAggregationOperator) queryInput.getOp();
+        List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
+        for (ColumnRefOperator groupKey : groupKeys) {
+            ColumnRefOperator unionColumn = rewriteContext.getQueryRefFactory()
+                    .create(groupKey, groupKey.getType(), groupKey.isNullable());
+            columnMapping.put(groupKey, unionColumn);
+            unionOutputColumns.add(unionColumn);
+            queryOutputColumns.add(groupKey);
+        }
+
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggOp.getAggregations().entrySet()) {
+            ColumnRefOperator unionColumn = rewriteContext.getQueryRefFactory()
+                    .create(entry.getKey(), entry.getKey().getType(), entry.getKey().isNullable());
+            columnMapping.put(entry.getKey(), unionColumn);
+            unionOutputColumns.add(unionColumn);
+            queryOutputColumns.add(entry.getKey());
+        }
+        List<ColumnRefOperator> viewOutputColumns = queryOutputColumns;
+        LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
+                .setOutputColumnRefOp(unionOutputColumns)
+                .setChildOutputColumns(Lists.newArrayList(queryOutputColumns, viewOutputColumns))
+                .isUnionAll(true)
+                .build();
+        OptExpression unionExpr = OptExpression.create(unionOperator, queryInput, viewInput);
+
+        // construct Aggregate on union with rollup aggregate functions
+        // generate group keys against scan mv plan
+        LogicalAggregationOperator queryAgg = (LogicalAggregationOperator) rewriteContext.getQueryExpression().getOp();
+        List<ColumnRefOperator> originalGroupKeys = queryAgg.getGroupingKeys();
+        List<ColumnRefOperator> newGroupingKeys = Lists.newArrayList();
+        for (ColumnRefOperator groupKey : originalGroupKeys) {
+            newGroupingKeys.add(columnMapping.get(groupKey));
+        }
+
+        // generate new agg exprs(rollup functions)
+        Map<ColumnRefOperator, CallOperator> queryAggs = queryAgg.getAggregations();
+        Map<ColumnRefOperator, CallOperator> newAggregations = rewriteAggregatesForUnion(
+                queryAggs, columnMapping);
+        if (newAggregations == null) {
+            return null;
+        }
+
+        LogicalAggregationOperator.Builder aggBuilder = new LogicalAggregationOperator.Builder();
+        aggBuilder.withOperator(queryAgg);
+        aggBuilder.setGroupingKeys(newGroupingKeys);
+        // can not be distinct agg here, so partitionByColumns is the same as groupingKeys
+        aggBuilder.setPartitionByColumns(newGroupingKeys);
+        aggBuilder.setAggregations(newAggregations);
+        aggBuilder.setProjection(queryAgg.getProjection());
+        aggBuilder.setPredicate(queryAgg.getPredicate());
+
+        // TODO: maybe we should change the mapping key of queryInput and viewInput
+        // add projection for group keys
+        // aggregates are already mapped, so here just process group keys
+        Map<ColumnRefOperator, ScalarOperator> newProjection = Maps.newHashMap();
+        if (queryAgg.getProjection() == null) {
+            for (int i = 0; i < originalGroupKeys.size(); i++) {
+                newProjection.put(originalGroupKeys.get(i), newGroupingKeys.get(i));
+            }
+            newProjection.putAll(newAggregations);
+        } else {
+            Map<ColumnRefOperator, ScalarOperator> originalMap = queryAgg.getProjection().getColumnRefMap();
+            Map<ColumnRefOperator, ScalarOperator> groupKeyMap = Maps.newHashMap();
+            for (int i = 0; i < originalGroupKeys.size(); i++) {
+                groupKeyMap.put(originalGroupKeys.get(i), newGroupingKeys.get(i));
+            }
+            ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(groupKeyMap);
+            for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : originalMap.entrySet()) {
+                if (groupKeyMap.containsKey(entry.getValue())) {
+                    ScalarOperator rewritten = rewriter.rewrite(entry.getValue());
+                    newProjection.put(entry.getKey(), rewritten);
+                } else {
+                    // Aggregates map's keys are kept, so projection for aggregates remains the same
+                    newProjection.put(entry.getKey(), entry.getValue());
+                }
+            }
+        }
+        Projection projection = new Projection(newProjection);
+        aggBuilder.setProjection(projection);
+        LogicalAggregationOperator newAggOp = aggBuilder.build();
+        OptExpression aggExpr = OptExpression.create(newAggOp, unionExpr);
+        return aggExpr;
+    }
+
     private List<ColumnRefOperator> rewriteGroupKeys(List<ScalarOperator> groupKeys,
                                                      Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                                      Map<ColumnRefOperator, ColumnRefOperator> mapping,
@@ -216,6 +376,25 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             // Aggregate must be CallOperator
             Preconditions.checkState(targetColumn instanceof ColumnRefOperator);
             CallOperator newAggregate = getRollupAggregate(aggCall, (ColumnRefOperator) targetColumn);
+            if (newAggregate == null) {
+                return null;
+            }
+            rewrittens.put(entry.getKey(), newAggregate);
+        }
+
+        return rewrittens;
+    }
+
+    private Map<ColumnRefOperator, CallOperator> rewriteAggregatesForUnion(Map<ColumnRefOperator, CallOperator> aggregates,
+                                                                           Map<ColumnRefOperator, ColumnRefOperator> mapping) {
+        Map<ColumnRefOperator, CallOperator> rewrittens = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregates.entrySet()) {
+            Preconditions.checkState(entry.getValue() instanceof CallOperator);
+            CallOperator aggCall = entry.getValue();
+            ColumnRefOperator targetColumn = mapping.get(entry.getKey());
+            // Aggregate must be CallOperator
+            Preconditions.checkState(targetColumn instanceof ColumnRefOperator);
+            CallOperator newAggregate = getRollupAggregate(aggCall, targetColumn);
             if (newAggregate == null) {
                 return null;
             }

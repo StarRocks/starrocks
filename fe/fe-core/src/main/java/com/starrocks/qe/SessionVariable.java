@@ -286,6 +286,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
 
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
     public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
     public static final String ENABLE_COST_BASED_MATERIALIZED_VIEW_REWRITE = "enable_cost_based_materialized_view_rewrite";
 
@@ -690,6 +691,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
     private boolean enableMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
+    private boolean enableMaterializedViewUnionRewrite = true;
 
     @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
     private boolean enableRuleBasedMaterializedViewRewrite = true;
@@ -1292,6 +1296,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewRewrite(boolean enableMaterializedViewRewrite) {
         this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewUnionRewrite() {
+        return enableMaterializedViewUnionRewrite;
+    }
+
+    public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
+        this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
     }
 
     public boolean isEnableRuleBasedMaterializedViewRewrite() {

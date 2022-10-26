@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -34,6 +35,8 @@ public class MaterializationContext {
     private OptExpression queryExpression;
 
     private ColumnRefFactory queryRefFactory;
+
+    private OptimizerContext optimizerContext;
 
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
@@ -93,5 +96,13 @@ public class MaterializationContext {
 
     public void setQueryRefFactory(ColumnRefFactory queryRefFactory) {
         this.queryRefFactory = queryRefFactory;
+    }
+
+    public OptimizerContext getOptimizerContext() {
+        return optimizerContext;
+    }
+
+    public void setOptimizerContext(OptimizerContext optimizerContext) {
+        this.optimizerContext = optimizerContext;
     }
 }
