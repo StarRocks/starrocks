@@ -12,7 +12,6 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.MockTpchStatisticStorage;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -945,5 +944,44 @@ public class PlanFragmentWithCostTest extends PlanTestBase {
 
         connectContext.getSessionVariable().setCboCteReuse(false);
         connectContext.getSessionVariable().setEnablePipelineEngine(false);
+    }
+
+    @Test
+    public void testSubqueryLimit1() throws Exception {
+        String sql = "select sum(v2) from (select * from t0 limit 1) x where 1=1";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  2:SELECT\n" +
+                "  |  predicates: TRUE\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1"));
+    }
+
+    @Test
+    public void testSubqueryLimit2() throws Exception {
+        String sql = "select sum(v2) over (partition by v3) from (select * from t0 limit 1) x ";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  1:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 2"));
+    }
+
+    @Test
+    public void testSubqueryLimit3() throws Exception {
+        String sql = "select v2 from (select * from t0 limit 1) x where 1=1 limit 2";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+        Assert.assertTrue(plan.contains("  2:SELECT\n" +
+                "  |  predicates: TRUE\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:"));
     }
 }
