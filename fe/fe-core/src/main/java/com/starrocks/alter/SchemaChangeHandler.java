@@ -1407,7 +1407,7 @@ public class SchemaChangeHandler extends AlterHandler {
             OlapTable olapTable = (OlapTable) table;
             if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
                     && olapTable.getState() != OlapTableState.WAITING_STABLE) {
-                throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE.");
+                throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }
 
             // find from new alter jobs first
