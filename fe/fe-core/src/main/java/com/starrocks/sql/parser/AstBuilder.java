@@ -221,6 +221,7 @@ import com.starrocks.sql.ast.QualifiedName;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RangePartitionDesc;
+import com.starrocks.sql.ast.RealtimeRefreshSchemeDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
@@ -1110,6 +1111,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "CreateMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
             }
 
+        }
+        if (refreshSchemeDesc instanceof RealtimeRefreshSchemeDesc) {
+            throw new IllegalArgumentException("Realtime materialized view is not supported");
         }
         if (!Config.enable_experimental_mv) {
             throw new IllegalArgumentException("The experimental mv is disabled, " +
@@ -4915,6 +4919,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc();
+        } else if (context.REALTIME() != null) {
+            return new RealtimeRefreshSchemeDesc();
         }
         return null;
     }
