@@ -1405,7 +1405,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
             }
             OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE) {
+            if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.WAITING_STABLE) {
                 throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE.");
             }
 
