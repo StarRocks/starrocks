@@ -57,7 +57,7 @@ public class HeartbeatResponse implements Writable {
     @SerializedName(value = "hbTime")
     protected long hbTime;
 
-    @SerializedName(value = "as")
+    @SerializedName(value = "aliveStatus")
     public boolean aliveStatus;
 
     public HeartbeatResponse(Type type) {
