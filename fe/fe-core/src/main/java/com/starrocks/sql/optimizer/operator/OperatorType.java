@@ -74,6 +74,10 @@ public enum OperatorType {
     PHYSICAL_CTE_CONSUME,
     PHYSICAL_NO_CTE,
 
+    PHYSICAL_BINLOG_SOURCE,
+    PHYSICAL_STREAM_JOIN,
+    PHYSICAL_STREAM_AGG,
+
     /**
      * Scalar operator
      */

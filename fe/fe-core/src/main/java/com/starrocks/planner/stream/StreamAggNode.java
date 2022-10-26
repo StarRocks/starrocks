@@ -6,24 +6,21 @@ import com.starrocks.analysis.AggregateInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.sql.optimizer.operator.physical.stream.IMTInfo;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamAggregationNode;
-import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 import org.apache.commons.collections.CollectionUtils;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class StreamAggNode extends PlanNode {
     private final AggregateInfo aggInfo;
     private IMTInfo detailImt;
     private IMTInfo aggImt;
-
-    // Map from AggExpr and GroupingExpr Index to IMT column Index
-    private Map<Integer, Integer> aggExprImtMap;
-    private Map<Integer, Integer> groupExprImtMap;
 
     public StreamAggNode(PlanNodeId id, PlanNode input, AggregateInfo aggInfo) {
         super(id, aggInfo.getOutputTupleId().asList(), "STREAM_AGG");
@@ -35,10 +32,6 @@ public class StreamAggNode extends PlanNode {
     public void setDetailImt(IMTInfo imt) { this.detailImt = imt; }
 
     public void setAggImt(IMTInfo imt) { this.aggImt = imt; }
-
-    public void setGroupExprImtMap(Map<Integer, Integer> groupExprImtMap) { this.groupExprImtMap = groupExprImtMap; }
-
-    public void setAggExprImtMap(Map<Integer, Integer> aggExprImtMap) { this.aggExprImtMap = aggExprImtMap; }
 
     @Override
     protected String getNodeExplainString(String detailPrefix, TExplainLevel detailLevel) {
@@ -64,12 +57,6 @@ public class StreamAggNode extends PlanNode {
             }
             if (aggImt != null) {
                 output.append(detailPrefix).append("agg_imt: ").append(aggImt.toString()).append("\n");
-            }
-            if (groupExprImtMap != null) {
-                output.append(detailPrefix).append("group_expr_map: ").append(groupExprImtMap).append("\n");
-            }
-            if (aggExprImtMap != null) {
-                output.append(detailPrefix).append("agg_expr_map: ").append(aggExprImtMap).append("\n");
             }
         }
         return output.toString();
@@ -97,21 +84,6 @@ public class StreamAggNode extends PlanNode {
         String groupingStr = groupingExprs.stream().map(Expr::toSql).collect(Collectors.joining(", "));
         msg.stream_agg_node.setSql_grouping_keys(groupingStr);
 
-        if (aggExprImtMap != null) {
-            msg.stream_agg_node.setAgg_func_imt_map(aggExprImtMap);
-        }
-        if (groupExprImtMap != null) {
-            msg.stream_agg_node.setGrouping_expr_imt_map(groupExprImtMap);
-        }
-
-        // TODO: add more functionalities
-
-        if (this.detailImt != null) {
-            msg.stream_agg_node.setDetail_imt(detailImt.toThrift());
-        }
-        if (this.aggImt != null) {
-            msg.stream_agg_node.setAgg_result_imt(aggImt.toThrift());
-        }
         msg.stream_agg_node.setAgg_func_set_version(3);
     }
 

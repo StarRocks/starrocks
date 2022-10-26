@@ -1,31 +1,27 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.operator.physical;
+package com.starrocks.sql.optimizer.operator.physical.stream;
 
-import com.starrocks.planner.stream.IMTInfo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import java.util.HashMap;
+import org.apache.commons.collections.CollectionUtils;
+
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
-import org.apache.commons.collections.CollectionUtils;
 
 public class PhysicalStreamAggOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> groupBys;
     private final Map<ColumnRefOperator, CallOperator> aggregations;
-
-    // Map from AggExpr and GroupingExpr Index to IMT column Index
-    private Map<Integer, Integer> aggExprImtMap;
-    private Map<Integer, Integer> groupExprImtMap;
 
     // IMT information
     private IMTInfo aggImt;
@@ -34,35 +30,27 @@ public class PhysicalStreamAggOperator extends PhysicalOperator {
     private IMTInfo detailImt;
 
     public PhysicalStreamAggOperator(List<ColumnRefOperator> groupBys,
-            Map<ColumnRefOperator, CallOperator> aggregations, ScalarOperator predicate, Projection projection) {
+                                     Map<ColumnRefOperator, CallOperator> aggregations, ScalarOperator predicate,
+                                     Projection projection) {
         super(OperatorType.PHYSICAL_STREAM_AGG);
         this.aggregations = aggregations;
         this.groupBys = groupBys;
     }
 
-    public List<ColumnRefOperator> getGroupBys() { return groupBys; }
+    public List<ColumnRefOperator> getGroupBys() {
+        return groupBys;
+    }
 
-    public Map<ColumnRefOperator, CallOperator> getAggregations() { return aggregations; }
+    public Map<ColumnRefOperator, CallOperator> getAggregations() {
+        return aggregations;
+    }
 
-    public IMTInfo getAggImt() { return this.aggImt; }
-
-    public Map<Integer, Integer> getAggExprImtMap() { return this.aggExprImtMap; }
-
-    public Map<Integer, Integer> getGroupExprImtMap() { return this.groupExprImtMap; }
+    public IMTInfo getAggImt() {
+        return this.aggImt;
+    }
 
     public void setAggImt(IMTInfo imt) {
         this.aggImt = imt;
-
-        // TODO: assign it when creating IMT
-        this.aggExprImtMap = new HashMap<>();
-        this.groupExprImtMap = new HashMap<>();
-        int columnIdx = 0;
-        for (int i = 0; i < groupBys.size(); i++) {
-            this.groupExprImtMap.put(i, columnIdx++);
-        }
-        for (int i = 0; i < aggregations.size(); i++) {
-            this.aggExprImtMap.put(i, columnIdx++);
-        }
     }
 
     @Override
@@ -91,7 +79,7 @@ public class PhysicalStreamAggOperator extends PhysicalOperator {
             sb.append(" group by ");
             sb.append(groupBys.stream().map(ColumnRefOperator::getName).collect(Collectors.joining(", ")));
         }
-        return "PhysicalStreamAgg " + sb.toString();
+        return "PhysicalStreamAgg " + sb;
     }
 
     @Override

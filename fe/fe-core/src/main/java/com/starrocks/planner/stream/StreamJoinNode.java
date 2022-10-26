@@ -9,15 +9,17 @@ import com.starrocks.analysis.TableRef;
 import com.starrocks.planner.JoinNode;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.planner.PlanNodeId;
+import com.starrocks.sql.optimizer.operator.physical.stream.IMTInfo;
 import com.starrocks.thrift.TEqJoinCondition;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TStreamJoinNode;
-import java.util.List;
-import java.util.stream.Collectors;
 import javax.ws.rs.NotSupportedException;
 import org.apache.commons.collections4.CollectionUtils;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 public class StreamJoinNode extends JoinNode {
     // TODO: support bi-stream join
@@ -54,9 +56,6 @@ public class StreamJoinNode extends JoinNode {
             String sqlJoinPredicate = otherJoinConjuncts.stream().map(Expr::toSql).collect(Collectors.joining(","));
             msg.stream_join_node.setSql_join_predicates(sqlJoinPredicate);
         }
-        //        if (this.rightIMT != null) {
-        //            msg.stream_join_node.rhs_imt = rightIMT.toThrift();
-        //        }
     }
 
     // TODO support bi-stream join
