@@ -336,13 +336,13 @@ public class ReplayFromDumpTest {
     public void testTPCDS94() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds94"));
         // check ANTI JOIN cardinality is not 0
-        Assert.assertTrue(replayPair.second, replayPair.second.contains(" 21:HASH JOIN\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:HASH JOIN\n" +
                 "  |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
                 "  |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
                 "  |  build runtime filters:\n" +
                 "  |  - filter_id = 3, build_expr = (2: ws_order_number), remote = true\n" +
                 "  |  output columns: 2, 17, 29, 34\n" +
-                "  |  cardinality: 880438"));
+                "  |  cardinality: 26765"));
     }
 
     @Test

@@ -21,6 +21,10 @@ public class ConstantOperatorTest {
                 {"70-10-07", "1970-10-07T00:00", "1970-10-07T00:00"},
                 {"69-10-07", "2069-10-07T00:00", "2069-10-07T00:00"},
                 {"00-10-07", "2000-10-07T00:00", "2000-10-07T00:00"},
+                {"1997-1-07", "1997-01-07T00:00", "1997-01-07T00:00"},
+                {"1997-1-7", "1997-01-07T00:00", "1997-01-07T00:00"},
+                {"19971117", "1997-11-17T00:00", "1997-11-17T00:00"},
+
                 // YYYY-MM-dd HH:mm:ss or yy-MM-dd HH:mm:ss
                 {"1997-10-07 10:11:12", "1997-10-07T00:00", "1997-10-07T10:11:12"},
                 {"0097-10-07 10:11:12", "0097-10-07T00:00", "0097-10-07T10:11:12"},
@@ -54,12 +58,11 @@ public class ConstantOperatorTest {
                 "1-05-31 10:11:12",
                 "1-05-31 10:11:12.123",
                 // Invalid month.
-                "2019-5-31",
-                "2019-5-31 10:11:12",
-                "2019-5-31 10:11:12.123",
                 "2019-16-31",
                 "2019-16-31 10:11:12",
                 "2019-16-31 10:11:12.123",
+                "1997117",
+                "199711",
                 // Invalid day.
                 "2019-02-29",
                 "2019-02-29 10:11:12",
@@ -90,8 +93,8 @@ public class ConstantOperatorTest {
         };
         for (String c : testCases) {
             ConstantOperator in = ConstantOperator.createVarchar(c);
-            Assert.assertThrows(AnalysisException.class, () -> in.castTo(Type.DATE));
-            Assert.assertThrows(AnalysisException.class, () -> in.castTo(Type.DATETIME));
+            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATE));
+            Assert.assertThrows(in.getVarchar(), AnalysisException.class, () -> in.castTo(Type.DATETIME));
         }
     }
 }
