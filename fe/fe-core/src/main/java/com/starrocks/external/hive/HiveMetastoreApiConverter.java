@@ -4,6 +4,7 @@ package com.starrocks.external.hive;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
@@ -52,6 +53,24 @@ import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getTypeInfoFr
 public class HiveMetastoreApiConverter {
 
     public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = ConnectorTableId.createGenerator();
+    private static final String SPARK_SQL_SOURCE_PROVIDER = "spark.sql.sources.provider";
+
+    private static boolean isDeltaLakeTable(Map<String, String> tableParams) {
+        return tableParams.containsKey(SPARK_SQL_SOURCE_PROVIDER) &&
+                tableParams.get(SPARK_SQL_SOURCE_PROVIDER).equalsIgnoreCase("delta");
+    }
+
+    public static boolean isHudiTable(String inputFormat) {
+        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
+    }
+
+    public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
+        Optional<Map<String, String>> tableParamsOptional = Optional.ofNullable(tableParams);
+        if (isDeltaLakeTable(tableParamsOptional.orElse(ImmutableMap.of()))) {
+            return sd.getSerdeInfo().getParameters().get("path");
+        }
+        return sd.getLocation();
+    }
 
     public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
         if (database == null || database.getName() == null) {
@@ -77,7 +96,7 @@ public class HiveMetastoreApiConverter {
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
-                .setTableLocation(table.getSd().getLocation())
+                .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setCreateTime(table.getCreateTime());
         return tableBuilder.build();
     }
@@ -149,7 +168,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static List<FieldSchema> getAllFieldSchemas(Table table) {
-        ImmutableList.Builder<FieldSchema> allColumns =  ImmutableList.builder();
+        ImmutableList.Builder<FieldSchema> allColumns = ImmutableList.builder();
         List<FieldSchema> unHivePartColumns = table.getSd().getCols();
         List<FieldSchema> partHiveColumns = table.getPartitionKeys();
         return allColumns.addAll(unHivePartColumns).addAll(partHiveColumns).build();
@@ -215,7 +234,8 @@ public class HiveMetastoreApiConverter {
             Optional<FieldSchema> field = allFields.stream()
                     .filter(f -> f.getName().equals(hudiField.name().toLowerCase(Locale.ROOT))).findFirst();
             if (!field.isPresent()) {
-                throw new StarRocksConnectorException("Hudi column [" + hudiField.name() + "] not exists in hive metastore.");
+                throw new StarRocksConnectorException(
+                        "Hudi column [" + hudiField.name() + "] not exists in hive metastore.");
             }
 
             TypeInfo fieldInfo = getTypeInfoFromTypeString(field.get().getType());
@@ -230,7 +250,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static RemoteFileInputFormat toRemoteFileInputFormat(String inputFormat) {
-        if (!HudiTable.isHudiTable(inputFormat)) {
+        if (!isHudiTable(inputFormat)) {
             return RemoteFileInputFormat.fromHdfsInputFormatClass(inputFormat);
         } else {
             // Currently, we only support parquet on hudi format.
@@ -281,8 +301,8 @@ public class HiveMetastoreApiConverter {
             List<ColumnStatisticsObj> statisticsObjs,
             long partitionRowNum) {
         return statisticsObjs.stream().collect(Collectors.toMap(
-                        ColumnStatisticsObj::getColName,
-                        statisticsObj -> toHiveColumnStatistics(statisticsObj, partitionRowNum)));
+                ColumnStatisticsObj::getColName,
+                statisticsObj -> toHiveColumnStatistics(statisticsObj, partitionRowNum)));
     }
 
     public static HiveColumnStats toHiveColumnStatistics(ColumnStatisticsObj columnStatisticsObj, long rowNums) {
