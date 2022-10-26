@@ -1113,10 +1113,8 @@ public class GlobalStateMgr {
             // metastoreEventsProcessor.init();
             // metastoreEventsProcessor.start();
         }
-        if (!usingNewPrivilege) {
-            // domain resolver
-            domainResolver.start();
-        }
+        // domain resolver
+        domainResolver.start();
         if (Config.use_staros) {
             compactionManager.start();
         }
@@ -1317,6 +1315,7 @@ public class GlobalStateMgr {
         if (usingNewPrivilege) {
             this.authenticationManager = AuthenticationManager.load(dis);
             this.privilegeManager = PrivilegeManager.load(dis, this, null);
+            this.domainResolver = new DomainResolver(authenticationManager);
         }
     }
 

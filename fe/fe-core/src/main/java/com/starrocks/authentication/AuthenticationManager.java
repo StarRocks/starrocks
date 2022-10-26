@@ -311,11 +311,7 @@ public class AuthenticationManager {
         readLock();
         try {
             Set<String> ret = new HashSet<>();
-            Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> it =
-                    userToAuthenticationInfo.entrySet().iterator();
-            while (it.hasNext()) {
-                Map.Entry<UserIdentity, UserAuthenticationInfo> entry = it.next();
-                UserIdentity userIdentity = entry.getKey();
+            for (UserIdentity userIdentity : userToAuthenticationInfo.keySet()) {
                 if (userIdentity.isDomain()) {
                     ret.add(userIdentity.getHost());
                 }
