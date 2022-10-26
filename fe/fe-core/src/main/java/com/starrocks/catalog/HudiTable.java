@@ -164,10 +164,6 @@ public class HudiTable extends Table implements HiveMetaStoreTable {
         return Joiner.on(":").join(hiveTableName, createTime);
     }
 
-    public static boolean isHudiTable(String inputFormat) {
-        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
-    }
-
     public static HudiTableType fromInputFormat(String inputFormat) {
         switch (inputFormat) {
             case COW_INPUT_FORMAT:
