@@ -40,13 +40,14 @@ struct Collection {
 
     explicit Collection(uint32_t length) : data(nullptr), length(length), has_null(false), null_signs(nullptr) {}
 
-    Collection(void* data, size_t length) : data(data), length(length), has_null(false), null_signs(nullptr) {}
+    Collection(void* data, size_t length)
+            : data(data), length(static_cast<uint32_t>(length)), has_null(false), null_signs(nullptr) {}
 
     Collection(void* data, size_t length, uint8_t* null_signs)
-            : data(data), length(length), has_null(true), null_signs(null_signs) {}
+            : data(data), length(static_cast<uint32_t>(length)), has_null(true), null_signs(null_signs) {}
 
     Collection(void* data, size_t length, bool has_null, uint8_t* null_signs)
-            : data(data), length(length), has_null(has_null), null_signs(null_signs) {}
+            : data(data), length(static_cast<uint32_t>(length)), has_null(has_null), null_signs(null_signs) {}
 
     bool is_null_at(uint32_t index) const { return this->has_null && this->null_signs[index]; }
 
