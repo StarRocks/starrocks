@@ -289,7 +289,9 @@ public class SelectStmt extends QueryStmt {
                 if (inlineStmt.withClause_ == null) {
                     inlineStmt.withClause_ = this.withClause_;
                 } else {
-                    inlineStmt.withClause_.getViews().addAll(this.withClause_.getViews());
+                    if (this.withClause_ != null) {
+                        inlineStmt.withClause_.getViews().addAll(this.withClause_.getViews());
+                    }
                 }
 
                 inlineStmt.getDbs(context, dbs);
