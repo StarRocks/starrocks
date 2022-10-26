@@ -899,6 +899,56 @@ struct TConnectorScanNode {
   // 2: optional THdfsScanNode hdfs_scan_node
 }
 
+// TODO
+struct TBinlogSourceNode {
+}
+
+struct TStreamJoinNode {
+  1: required TJoinOp join_op
+
+  // anything from the ON, USING or WHERE clauses that's an equi-join predicate
+  2: required list<TEqJoinCondition> eq_join_conjuncts
+
+  // anything from the ON or USING clauses (but *not* the WHERE clause) that's not an
+  // equi-join predicate
+  3: optional list<Exprs.TExpr> other_join_conjuncts
+  4: optional bool is_push_down
+  
+  // for profiling
+  21: optional string sql_join_predicates
+  22: optional string sql_predicates
+
+  52: optional TJoinDistributionMode distribution_mode;
+  53: optional list<Exprs.TExpr> partition_exprs
+  54: optional list<Types.TSlotId> output_columns
+}
+
+struct TStreamAggregationNode {
+  1: optional list<Exprs.TExpr> grouping_exprs
+  // aggregate exprs. The root of each expr is the aggregate function. The
+  // other exprs are the inputs to the aggregate function.
+  2: required list<Exprs.TExpr> aggregate_functions
+
+  // Tuple id used for intermediate aggregations (with slots of agg intermediate types)
+  3: required Types.TTupleId intermediate_tuple_id
+
+  // Tupld id used for the aggregation output (with slots of agg output types)
+  // Equal to intermediate_tuple_id if intermediate type == output type for all
+  // aggregate functions.
+  4: required Types.TTupleId output_tuple_id
+
+  // IMT info
+  // 10: optional Descriptors.TIMTDescriptor detail_imt
+  // 11: optional Descriptors.TIMTDescriptor agg_result_imt
+  
+  // For profile attributes' printing: `Grouping Keys` `Aggregate Functions`
+  22: optional string sql_grouping_keys
+  23: optional string sql_aggregate_functions
+
+  24: optional i32 agg_func_set_version = 1
+}
+
+
 // This is essentially a union of all messages corresponding to subclasses
 // of PlanNode.
 struct TPlanNode {
@@ -967,6 +1017,12 @@ struct TPlanNode {
   63: optional TLakeScanNode lake_scan_node;
   
   64: optional TNestLoopJoinNode nestloop_join_node;
+
+  // 70 ~ 80 are reserved for stream operators
+  // Stream plan
+  70: optional TBinlogSourceNode binlog_source_node;
+  71: optional TStreamJoinNode stream_join_node;
+  72: optional TStreamAggregationNode stream_agg_node;
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first
