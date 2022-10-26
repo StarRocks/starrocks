@@ -50,6 +50,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
@@ -68,6 +69,7 @@ import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 
 import java.math.BigInteger;
+import java.time.format.DateTimeParseException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -705,6 +707,29 @@ public class ExpressionAnalyzer {
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(
                             FunctionSet.TIME_SLICE + " requires second parameter must be greater than 0");
+                }
+                if (node.getChild(0) instanceof StringLiteral) {
+                    String literal = ((StringLiteral) node.getChild(0)).getValue();
+
+                    boolean isDatetime = true;
+                    try {
+                        DateUtils.DATE_TIME_FORMATTER.parse(literal);
+                    } catch (DateTimeParseException e) {
+                        isDatetime = false;
+                    }
+                    if (isDatetime) {
+                        argumentTypes[0] = Type.DATETIME;
+                    } else {
+                        boolean isDate = true;
+                        try {
+                            DateUtils.DATE_FORMATTER.parse(literal);
+                        } catch (DateTimeParseException e) {
+                            isDate = false;
+                        }
+                        if (isDate) {
+                            argumentTypes[0] = Type.DATE;
+                        }
+                    }
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
