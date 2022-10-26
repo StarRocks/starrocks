@@ -211,12 +211,18 @@ public class TimeUtilsTest {
                     "timeSecond:1650545111 period:2 timeUnit:MILLISECONDS", e.getMessage());
         }
         try {
-            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond, 1000, TimeUnit.MILLISECONDS));
-            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond, 1, TimeUnit.SECONDS));
-            Assert.assertEquals(1650555136L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond, 5, TimeUnit.SECONDS));
-            Assert.assertEquals(1650555135L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond, 7, TimeUnit.SECONDS));
-            Assert.assertEquals(1650566711L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond, 3, TimeUnit.HOURS));
-            Assert.assertEquals(1652100311L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond, 9, TimeUnit.DAYS));
+            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    1000, TimeUnit.MILLISECONDS));
+            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    1, TimeUnit.SECONDS));
+            Assert.assertEquals(1650555136L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    5, TimeUnit.SECONDS));
+            Assert.assertEquals(1650555135L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    7, TimeUnit.SECONDS));
+            Assert.assertEquals(1650566711L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    3, TimeUnit.HOURS));
+            Assert.assertEquals(1652100311L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    9, TimeUnit.DAYS));
         } catch (DdlException e) {
             Assert.fail(e.getMessage());
         }

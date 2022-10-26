@@ -291,7 +291,8 @@ public class TimeUtils {
         }
     }
 
-    public static long getNextValidTimeSecond(long timeSecond,long targetTimeSecond, long period, TimeUnit timeUnit) throws DdlException {
+    public static long getNextValidTimeSecond(long timeSecond, long targetTimeSecond,
+                                              long period, TimeUnit timeUnit) throws DdlException {
         long interval = convertTimeUnitValueToSecond(period, timeUnit);
         if (interval < 1) {
             throw new DdlException("Can not get next valid time second," +
