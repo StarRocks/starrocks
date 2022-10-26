@@ -101,4 +101,68 @@ TEST_F(SubfieldExprTest, subfield_test) {
     }
 }
 
+TEST_F(SubfieldExprTest, subfield_null_test) {
+    TypeDescriptor struct_type;
+    struct_type.type = PrimitiveType::TYPE_STRUCT;
+    struct_type.children.push_back(TypeDescriptor(PrimitiveType::TYPE_INT));
+    struct_type.field_names.push_back("id");
+    struct_type.children.push_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
+    struct_type.field_names.push_back("name");
+    struct_type.selected_fields.push_back(true);
+    struct_type.selected_fields.push_back(true);
+    {
+        auto column = ColumnHelper::create_column(struct_type, false);
+
+        DatumStruct datum_struct_1;
+        datum_struct_1.push_back(1);
+        datum_struct_1.push_back("smith");
+        column->append_datum(datum_struct_1);
+
+        column->append_nulls(1);
+
+        DatumStruct datum_struct_3;
+        datum_struct_3.push_back(3);
+        datum_struct_3.push_back("cruise");
+        column->append_datum(datum_struct_3);
+
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(PrimitiveType::TYPE_INT), "id");
+        expr->add_child(new_fake_const_expr(column, struct_type));
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_nullable());
+        auto subfield_column = ColumnHelper::get_data_column(result.get());
+        EXPECT_TRUE(subfield_column->is_numeric());
+        EXPECT_EQ(3, subfield_column->size());
+        EXPECT_EQ("1", subfield_column->debug_item(0));
+        EXPECT_EQ("0", subfield_column->debug_item(1));
+        EXPECT_EQ("3", subfield_column->debug_item(2));
+    }
+
+    {
+        auto column = ColumnHelper::create_column(struct_type, true);
+
+        DatumStruct datum_struct_1;
+        datum_struct_1.push_back(1);
+        datum_struct_1.push_back("smith");
+        column->append_datum(datum_struct_1);
+
+        column->append_nulls(1);
+
+        DatumStruct datum_struct_3;
+        datum_struct_3.push_back(3);
+        datum_struct_3.push_back("cruise");
+        column->append_datum(datum_struct_3);
+
+        std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(PrimitiveType::TYPE_INT), "id");
+        expr->add_child(new_fake_const_expr(column, struct_type));
+        auto result = expr->evaluate(nullptr, nullptr);
+        EXPECT_TRUE(result->is_nullable());
+        auto subfield_column = ColumnHelper::get_data_column(result.get());
+        EXPECT_TRUE(subfield_column->is_numeric());
+        EXPECT_EQ(3, subfield_column->size());
+        EXPECT_EQ("1", subfield_column->debug_item(0));
+        EXPECT_EQ("0", subfield_column->debug_item(1));
+        EXPECT_EQ("3", subfield_column->debug_item(2));
+    }
+}
+
 } // namespace starrocks::vectorized
