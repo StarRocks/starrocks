@@ -213,6 +213,8 @@ public:
     void clearIORanges() override;
     void setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) override;
 
+    void set_enable_block_cache(bool v) { _buffer_stream.set_enable_block_cache(v); }
+
 private:
     void doRead(void* buf, uint64_t length, uint64_t offset, bool direct);
     bool canUseCacheBuffer(uint64_t offset, uint64_t length);

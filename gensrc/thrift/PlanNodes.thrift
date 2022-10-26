@@ -572,6 +572,9 @@ struct TAggregationNode {
   
   // used in query cache
   25: optional list<Exprs.TExpr> intermediate_aggr_exprs
+
+  // used in pipeline engine
+  26: optional bool interpolate_passthrough = false
 }
 
 struct TRepeatNode {

@@ -329,12 +329,19 @@ public class OlapTable extends Table implements GsonPostProcessable {
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType) {
         setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
-                null);
+                null, null);
     }
 
     public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
                              int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
                              OriginStatement origStmt) {
+        setIndexMeta(indexId, indexName, schema, schemaVersion, schemaHash, shortKeyColumnCount, storageType, keysType,
+                origStmt, null);
+    }
+
+    public void setIndexMeta(long indexId, String indexName, List<Column> schema, int schemaVersion,
+                             int schemaHash, short shortKeyColumnCount, TStorageType storageType, KeysType keysType,
+                             OriginStatement origStmt, List<Integer> sortColumns) {
         // Nullable when meta comes from schema change log replay.
         // The replay log only save the index id, so we need to get name by id.
         if (indexName == null) {
@@ -357,7 +364,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         }
 
         MaterializedIndexMeta indexMeta = new MaterializedIndexMeta(indexId, schema, schemaVersion,
-                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt);
+                schemaHash, shortKeyColumnCount, storageType, keysType, origStmt, sortColumns);
         indexIdToMeta.put(indexId, indexMeta);
         indexNameToId.put(indexName, indexId);
     }
@@ -561,7 +568,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         for (int i = 0; i < tabletNum; i++) {
             long newTabletId = globalStateMgr.getNextId();
             LocalTablet newTablet = new LocalTablet(newTabletId);
-            index.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+            index.addTablet(newTablet, null /* tablet meta */, false/* update inverted index*/);
 
             // replicas
             List<Long> beIds = GlobalStateMgr.getCurrentSystemInfo()
@@ -575,7 +582,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 long newReplicaId = globalStateMgr.getNextId();
                 Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                         version, schemaHash);
-                newTablet.addReplica(replica, true /* is restore */);
+                newTablet.addReplica(replica, false/* update inverted index*/);
             }
         }
         return Status.OK;

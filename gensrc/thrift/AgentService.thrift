@@ -39,6 +39,7 @@ struct TTabletSchema {
     7: optional list<Descriptors.TOlapTableIndex> indexes
     8: optional bool is_in_memory
     9: optional i64 id;
+    10: optional list<i32> sort_key_idxes
 }
 
 // this enum stands for different storage format in src_backends
@@ -224,6 +225,7 @@ struct TSnapshotRequest {
     // [range1_start, range1_end(inclusive), ... rangeN_start (implicit to INT64_MAX)]
     // size must be 2*N + 1
     10:optional list<Types.TVersion> missing_version_ranges
+    11:optional bool is_restore_task = false;
 }
 
 struct TReleaseSnapshotRequest {

@@ -662,9 +662,7 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     RETURN_IF_ERROR(_wait_all_prev_request());
 
     // 3. commit tablet infos
-    state->tablet_commit_infos().insert(state->tablet_commit_infos().end(),
-                                        std::make_move_iterator(_tablet_commit_infos.begin()),
-                                        std::make_move_iterator(_tablet_commit_infos.end()));
+    state->append_tablet_commit_infos(_tablet_commit_infos);
 
     return _err_st;
 }
@@ -1380,9 +1378,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_send_rpc_timer, actual_consume_ns);
 
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
-        int64_t num_rows_load_total =
-                _number_input_rows + state->num_rows_load_filtered() + state->num_rows_load_unselected();
-        state->set_num_rows_load_from_sink(num_rows_load_total);
+        state->update_num_rows_load_from_sink(state->num_rows_load_filtered() + state->num_rows_load_unselected());
         state->update_num_rows_load_filtered(_number_filtered_rows);
 
         // print log of add batch time of all node, for tracing load performance easily

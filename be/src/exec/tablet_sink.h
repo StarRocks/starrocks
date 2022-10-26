@@ -284,6 +284,8 @@ public:
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
 
+    ObjectPool* pool() { return _pool; }
+
 private:
     template <PrimitiveType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,

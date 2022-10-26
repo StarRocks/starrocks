@@ -94,37 +94,41 @@ Status DeltaWriter::_init() {
     TabletManager* tablet_mgr = _storage_engine->tablet_manager();
     _tablet = tablet_mgr->get_tablet(_opt.tablet_id, false);
     if (_tablet == nullptr) {
-        _set_state(kUninitialized);
         std::stringstream ss;
         ss << "Fail to get tablet. tablet_id=" << _opt.tablet_id;
         LOG(WARNING) << ss.str();
-        return Status::InternalError(ss.str());
+        Status st = Status::InternalError(ss.str());
+        _set_state(kUninitialized, st);
+        return st;
     }
     if (_tablet->updates() != nullptr) {
         auto tracker = _storage_engine->update_manager()->mem_tracker();
         if (tracker->limit_exceeded()) {
-            _set_state(kUninitialized);
             auto msg = strings::Substitute(
                     "Primary-key index exceeds the limit. tablet_id: $0, consumption: $1, limit: $2."
                     " Memory stats of top five tablets: $3",
                     _opt.tablet_id, tracker->consumption(), tracker->limit(),
                     _storage_engine->update_manager()->topn_memory_stats(5));
             LOG(WARNING) << msg;
-            return Status::MemoryLimitExceeded(msg);
+            Status st = Status::MemoryLimitExceeded(msg);
+            _set_state(kUninitialized, st);
+            return st;
         }
         if (_tablet->updates()->is_error()) {
-            _set_state(kUninitialized);
             auto msg = fmt::format("Tablet is in error state, tablet_id: {} {}", _tablet->tablet_id(),
                                    _tablet->updates()->get_error_msg());
-            return Status::ServiceUnavailable(msg);
+            Status st = Status::ServiceUnavailable(msg);
+            _set_state(kUninitialized, st);
+            return st;
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
-        _set_state(kUninitialized);
         auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}", _opt.tablet_id,
                                _tablet->version_count(), config::tablet_max_versions);
         LOG(ERROR) << msg;
-        return Status::ServiceUnavailable(msg);
+        Status st = Status::ServiceUnavailable(msg);
+        _set_state(kUninitialized, st);
+        return st;
     }
 
     // The tablet may have been migrated during delta writer init,
@@ -138,8 +142,9 @@ Status DeltaWriter::_init() {
             // maybe migration just finish, get the tablet again
             new_tablet = tablet_mgr->get_tablet(_opt.tablet_id);
             if (new_tablet == nullptr) {
-                _set_state(kAborted);
-                return Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
+                Status st = Status::NotFound(fmt::format("Not found tablet. tablet_id: {}", _opt.tablet_id));
+                _set_state(kAborted, st);
+                return st;
             }
             if (_tablet != new_tablet) {
                 _tablet = new_tablet;
@@ -150,7 +155,7 @@ Status DeltaWriter::_init() {
         std::lock_guard push_lock(_tablet->get_push_lock());
         auto st = _storage_engine->txn_manager()->prepare_txn(_opt.partition_id, _tablet, _opt.txn_id, _opt.load_id);
         if (!st.ok()) {
-            _set_state(kAborted);
+            _set_state(kAborted, st);
             return st;
         }
         break;
@@ -176,13 +181,21 @@ Status DeltaWriter::_init() {
             if (index < 0) {
                 auto msg = strings::Substitute("Invalid column name: $0", slot_col_name);
                 LOG(WARNING) << msg;
-                _set_state(kAborted);
-                return Status::InvalidArgument(msg);
+                Status st = Status::InvalidArgument(msg);
+                _set_state(kAborted, st);
+                return st;
             }
             writer_context.referenced_column_ids.push_back(index);
         }
         writer_context.partial_update_tablet_schema =
                 TabletSchema::create(_tablet->tablet_schema(), writer_context.referenced_column_ids);
+        auto sort_key_idxes = _tablet->tablet_schema().sort_key_idxes();
+        std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
+        if (!std::includes(writer_context.referenced_column_ids.begin(), writer_context.referenced_column_ids.end(),
+                           sort_key_idxes.begin(), sort_key_idxes.end())) {
+            LOG(WARNING) << "table with sort key do not support partial update";
+            return Status::NotSupported("table with sort key do not support partial update");
+        }
         writer_context.tablet_schema = writer_context.partial_update_tablet_schema.get();
     } else {
         writer_context.tablet_schema = &_tablet->tablet_schema();
@@ -201,11 +214,12 @@ Status DeltaWriter::_init() {
     writer_context.global_dicts = _opt.global_dicts;
     Status st = RowsetFactory::create_rowset_writer(writer_context, &_rowset_writer);
     if (!st.ok()) {
-        _set_state(kAborted);
         auto msg = strings::Substitute("Fail to create rowset writer. tablet_id: $0, error: $1", _opt.tablet_id,
                                        st.to_string());
         LOG(WARNING) << msg;
-        return Status::InternalError(msg);
+        st = Status::InternalError(msg);
+        _set_state(kAborted, st);
+        return st;
     }
     _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_rowset_writer.get());
     _tablet_schema = writer_context.tablet_schema;
@@ -213,12 +227,30 @@ Status DeltaWriter::_init() {
     if (_replica_state == Primary && _opt.replicas.size() > 1) {
         _replicate_token = _storage_engine->segment_replicate_executor()->create_replicate_token(&_opt);
     }
-    _set_state(kWriting);
+    _set_state(kWriting, Status::OK());
 
     VLOG(2) << "DeltaWriter [tablet_id=" << _opt.tablet_id << ", load_id=" << print_id(_opt.load_id)
             << ", replica_state=" << _replica_state_name(_replica_state) << "] open success.";
 
     return Status::OK();
+}
+
+State DeltaWriter::get_state() const {
+    std::lock_guard l(_state_lock);
+    return _state;
+}
+
+Status DeltaWriter::get_err_status() const {
+    std::lock_guard l(_state_lock);
+    return _err_status;
+}
+
+void DeltaWriter::_set_state(State state, Status st) {
+    std::lock_guard l(_state_lock);
+    _state = state;
+    if (!st.ok() && _err_status.ok()) {
+        _err_status = st;
+    }
 }
 
 Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size) {
@@ -230,8 +262,13 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
     }
     auto state = get_state();
     if (state != kWriting) {
-        return Status::InternalError(
-                fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+        auto err_st = get_err_status();
+        // no error just in wrong state
+        if (err_st.ok()) {
+            err_st = Status::InternalError(
+                    fmt::format("Fail to prepare. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+        }
+        return err_st;
     }
     if (_replica_state == Secondary) {
         return Status::InternalError(fmt::format("Fail to write chunk, tablet_id: {}, replica_state: {}",
@@ -252,7 +289,7 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
         _reset_mem_table();
     }
     if (!st.ok()) {
-        _set_state(kAborted);
+        _set_state(kAborted, st);
     }
     return st;
 }
@@ -260,8 +297,13 @@ Status DeltaWriter::write(const Chunk& chunk, const uint32_t* indexes, uint32_t 
 Status DeltaWriter::write_segment(const SegmentPB& segment_pb, butil::IOBuf& data) {
     auto state = get_state();
     if (state != kWriting) {
-        return Status::InternalError(fmt::format("Fail to write segment: {}, tablet_id: {}, state: {}",
-                                                 segment_pb.segment_id(), _opt.tablet_id, _state_name(state)));
+        auto err_st = get_err_status();
+        // no error just in wrong state
+        if (err_st.ok()) {
+            err_st = Status::InternalError(
+                    fmt::format("Fail to write segment. tablet_id: {}, state: {}", _opt.tablet_id, _state_name(state)));
+        }
+        return err_st;
     }
     if (_replica_state != Secondary) {
         return Status::InternalError(fmt::format("Fail to write segment: {}, tablet_id: {}, replica_state: {}",
@@ -276,8 +318,14 @@ Status DeltaWriter::close() {
     auto state = get_state();
     switch (state) {
     case kUninitialized:
+    case kAborted: {
+        auto err_st = get_err_status();
+        if (!err_st.ok()) {
+            return err_st;
+        }
+    }
+        // no error just in wrong state
     case kCommitted:
-    case kAborted:
         return Status::InternalError(fmt::format("Fail to close delta writer. tablet_id: {}, state: {}", _opt.tablet_id,
                                                  _state_name(state)));
     case kClosed:
@@ -285,7 +333,7 @@ Status DeltaWriter::close() {
     case kWriting:
         Status st = Status::OK();
         st = _flush_memtable_async(true);
-        _set_state(st.ok() ? kClosed : kAborted);
+        _set_state(st.ok() ? kClosed : kAborted, st);
         return st;
     }
     return Status::OK();
@@ -350,7 +398,13 @@ Status DeltaWriter::commit() {
     auto state = get_state();
     switch (state) {
     case kUninitialized:
-    case kAborted:
+    case kAborted: {
+        auto err_st = get_err_status();
+        if (!err_st.ok()) {
+            return err_st;
+        }
+    }
+        // no error just in wrong state
     case kWriting:
         return Status::InternalError(fmt::format("Fail to commit delta writer. tablet_id: {}, state: {}",
                                                  _opt.tablet_id, _state_name(state)));
@@ -362,7 +416,7 @@ Status DeltaWriter::commit() {
 
     if (auto st = _flush_token->wait(); UNLIKELY(!st.ok())) {
         LOG(WARNING) << st;
-        _set_state(kAborted);
+        _set_state(kAborted, st);
         return st;
     }
 
@@ -370,7 +424,7 @@ Status DeltaWriter::commit() {
         _cur_rowset = std::move(res).value();
     } else {
         LOG(WARNING) << res.status();
-        _set_state(kAborted);
+        _set_state(kAborted, res.status());
         return res.status();
     }
 
@@ -378,7 +432,7 @@ Status DeltaWriter::commit() {
     if (_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
         auto st = _storage_engine->update_manager()->on_rowset_finished(_tablet.get(), _cur_rowset.get());
         if (!st.ok()) {
-            _set_state(kAborted);
+            _set_state(kAborted, st);
             return st;
         }
     }
@@ -386,7 +440,7 @@ Status DeltaWriter::commit() {
     if (_replicate_token != nullptr) {
         if (auto st = _replicate_token->wait(); UNLIKELY(!st.ok())) {
             LOG(WARNING) << st;
-            _set_state(kAborted);
+            _set_state(kAborted, st);
             return st;
         }
     }
@@ -399,20 +453,24 @@ Status DeltaWriter::commit() {
     }
 
     if (!res.ok() && !res.is_already_exist()) {
-        _set_state(kAborted);
+        _set_state(kAborted, res);
         return res;
     }
-    State curr_state = kClosed;
-    if (!_state.compare_exchange_strong(curr_state, kCommitted, std::memory_order_acq_rel)) {
-        return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
-                                                 _opt.tablet_id, _state_name(state)));
+    {
+        std::lock_guard l(_state_lock);
+        if (_state == kClosed) {
+            _state = kCommitted;
+        } else {
+            return Status::InternalError(fmt::format("Delta writer has been aborted. tablet_id: {}, state: {}",
+                                                     _opt.tablet_id, _state_name(state)));
+        }
     }
     VLOG(1) << "Closed delta writer. tablet_id: " << _tablet->tablet_id() << ", stats: " << _flush_token->get_stats();
     return Status::OK();
 }
 
 void DeltaWriter::abort(bool with_log) {
-    _set_state(kAborted);
+    _set_state(kAborted, Status::Cancelled("aborted by others"));
     _with_rollback_log = with_log;
     if (_flush_token != nullptr) {
         // Wait until all background tasks finished/cancelled.

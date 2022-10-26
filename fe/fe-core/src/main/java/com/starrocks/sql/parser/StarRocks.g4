@@ -283,6 +283,7 @@ createTableStatement
           comment?
           partitionDesc?
           distributionDesc?
+          orderByDesc?
           rollupDesc?
           properties?
           extProperties?
@@ -316,6 +317,10 @@ charsetDesc
 
 keyDesc
     : (AGGREGATE | UNIQUE | PRIMARY | DUPLICATE) KEY identifierList
+    ;
+
+orderByDesc
+    : ORDER BY identifierList
     ;
 
 aggDesc

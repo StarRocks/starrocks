@@ -436,7 +436,7 @@ Status OlapScanNode::_start_scan(RuntimeState* state) {
     OlapScanConjunctsManager& cm = _conjuncts_manager;
     cm.conjunct_ctxs_ptr = &_conjunct_ctxs;
     cm.tuple_desc = _tuple_desc;
-    cm.obj_pool = &_obj_pool;
+    cm.obj_pool = _pool;
     cm.key_column_names = &_olap_scan_node.key_column_name;
     cm.runtime_filters = &_runtime_filter_collector;
     cm.runtime_state = state;
@@ -605,7 +605,7 @@ Status OlapScanNode::_start_scan_thread(RuntimeState* state) {
             scanner_params.skip_aggregation = _olap_scan_node.is_preaggregation;
             scanner_params.need_agg_finalize = true;
             scanner_params.unused_output_columns = &_unused_output_columns;
-            auto* scanner = _obj_pool.add(new TabletScanner(this));
+            auto* scanner = _pool->add(new TabletScanner(this));
             RETURN_IF_ERROR(scanner->init(state, scanner_params));
             // Assume all scanners have the same schema.
             _chunk_schema = &scanner->chunk_schema();

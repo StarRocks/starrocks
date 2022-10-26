@@ -53,8 +53,8 @@ public:
 private:
     void _merge();
 
-    void _sort(bool is_final);
-    void _sort_column_inc();
+    void _sort(bool is_final, bool by_sort_key = false);
+    void _sort_column_inc(bool by_sort_key = false);
     void _append_to_sorted_chunk(Chunk* src, Chunk* dest, bool is_final);
 
     void _init_aggregator_if_needed();

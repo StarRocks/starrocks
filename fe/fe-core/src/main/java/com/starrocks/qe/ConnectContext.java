@@ -166,6 +166,10 @@ public class ConnectContext {
 
     protected ResourceGroup resourceGroup;
 
+    public StmtExecutor getExecutor() {
+        return executor;
+    }
+
     public static ConnectContext get() {
         return threadLocalInfo.get();
     }

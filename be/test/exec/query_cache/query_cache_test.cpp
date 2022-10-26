@@ -78,14 +78,15 @@ TEST_F(CacheTest, testLaneArbiter) {
 }
 
 TEST_F(CacheTest, testCacheManager) {
-    auto cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
+    static constexpr size_t CACHE_CAPACITY = 10240;
+    auto cache_mgr = std::make_shared<query_cache::CacheManager>(CACHE_CAPACITY);
 
     auto create_cache_value = [](size_t byte_size) {
         auto chk = std::make_shared<Chunk>();
         auto col = Int8Column::create();
         col->resize(byte_size);
         chk->append_column(col, 0);
-        query_cache::CacheValue value{.result = {chk}};
+        query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
@@ -119,6 +120,22 @@ TEST_F(CacheTest, testCacheManager) {
         }
     }
     ASSERT_TRUE(exists);
+    ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
+    ASSERT_GE(cache_mgr->memory_usage(), 0);
+    ASSERT_GE(cache_mgr->lookup_count(), 0);
+    ASSERT_GE(cache_mgr->hit_count(), 0);
+
+    cache_mgr->invalidate_all();
+    ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
+    ASSERT_EQ(cache_mgr->memory_usage(), 0);
+    ASSERT_GE(cache_mgr->lookup_count(), 0);
+    ASSERT_GE(cache_mgr->hit_count(), 0);
+
+    for (auto i = 0; i < 10; ++i) {
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+    }
+    ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
+    ASSERT_GE(cache_mgr->memory_usage(), 0);
 }
 
 ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to, bool is_last_chunk) {

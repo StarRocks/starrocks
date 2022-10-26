@@ -609,7 +609,12 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
 
     std::string dest_tablet_dir = tablet->schema_hash_path();
     SnapshotLoader loader(exec_env, job_id, tablet_id);
-    Status status = loader.move(src, tablet, overwrite);
+    Status status;
+    if (tablet->updates() == nullptr) {
+        status = loader.move(src, tablet, overwrite);
+    } else {
+        status = loader.primary_key_move(src, tablet, overwrite);
+    }
 
     if (!status.ok()) {
         LOG(WARNING) << "Fail to move job id=" << job_id << ", " << status.get_error_msg();

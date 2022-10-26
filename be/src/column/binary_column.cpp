@@ -213,18 +213,44 @@ template <typename T>
 bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
     if (size == 0) return true;
     size_t bytes_size = _bytes.size();
+
+    // copy blob
     size_t data_size = size * fixed_length;
     const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
     const uint8_t* q = reinterpret_cast<const uint8_t*>(data + data_size);
     _bytes.insert(_bytes.end(), p, q);
 
-    _offsets.reserve(_offsets.size() + size);
-    for (int i = 0; i < size; i++) {
-        bytes_size += fixed_length;
-        _offsets.emplace_back(bytes_size);
+    // copy offsets
+    starrocks::raw::stl_vector_resize_uninitialized(&_offsets, _offsets.size() + size);
+    // _offsets.resize(_offsets.size() + size);
+    T* off_data = _offsets.data() + _offsets.size() - size;
+
+    int i = 0;
+
+#ifdef __AVX2__
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        if ((bytes_size + fixed_length * size) < std::numeric_limits<uint32_t>::max()) {
+            const int times = size / 8;
+
+#define FX(m) (m * fixed_length)
+#define BFX(m) (bytes_size + m * fixed_length)
+            __m256i base = _mm256_set_epi32(BFX(8), BFX(7), BFX(6), BFX(5), BFX(4), BFX(3), BFX(2), BFX(1));
+            __m256i delta = _mm256_set_epi32(FX(8), FX(8), FX(8), FX(8), FX(8), FX(8), FX(8), FX(8));
+            for (int t = 0; t < times; t++) {
+                _mm256_storeu_si256((__m256i*)off_data, base);
+                base = _mm256_add_epi32(base, delta);
+                off_data += 8;
+            }
+
+            i = times * 8;
+            bytes_size += fixed_length * i;
+        }
     }
-    DCHECK_EQ(_bytes.size(), bytes_size);
-    _slices_cache = false;
+#endif
+    for (; i < size; i++) {
+        bytes_size += fixed_length;
+        *(off_data++) = bytes_size;
+    }
     return true;
 }
 

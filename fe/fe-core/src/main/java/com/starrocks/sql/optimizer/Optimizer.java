@@ -163,11 +163,17 @@ public class Optimizer {
         deriveLogicalProperty(tree);
 
         ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
+        // @todo: resolve recursive optimization question:
+        //  MergeAgg -> PruneColumn -> PruneEmptyWindow -> MergeAgg/Project -> PruneColumn...
+        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
+        rootTaskContext.setRequiredColumns(requiredColumns.clone());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
+
+        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         //Limit push must be after the column prune,
         //otherwise the Node containing limit may be prune
         ruleRewriteIterative(tree, rootTaskContext, RuleSetType.MERGE_LIMIT);
-        ruleRewriteIterative(tree, rootTaskContext, new MergeTwoAggRule());
         ruleRewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
@@ -217,6 +223,7 @@ public class Optimizer {
             CTEUtils.collectCteOperators(tree, context);
         }
 
+        ruleRewriteIterative(tree, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
@@ -231,7 +238,7 @@ public class Optimizer {
         if (context.getSessionVariable().getCboPushDownAggregateMode() == -1) {
             return tree;
         }
-        
+
         tree = new PushDownAggregateRule().rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
 
@@ -328,6 +335,7 @@ public class Optimizer {
                 childPlans);
         // record inputProperties at optExpression, used for planFragment builder to determine join type
         expression.setRequiredProperties(inputProperties);
+        expression.setOutputProperty(groupExpression.getOutputProperty(requiredProperty));
         expression.setStatistics(groupExpression.getGroup().hasConfidenceStatistic(requiredProperty) ?
                 groupExpression.getGroup().getConfidenceStatistic(requiredProperty) :
                 groupExpression.getGroup().getStatistics());

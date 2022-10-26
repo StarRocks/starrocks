@@ -68,10 +68,10 @@ public:
         CHECK_EQ(size, rle_page_builder.count());
 
         //check first value and last value
-        CppType first_value;
+        CppType first_value = {};
         rle_page_builder.get_first_value(&first_value);
         CHECK_EQ(src[0], first_value);
-        CppType last_value;
+        CppType last_value = {};
         rle_page_builder.get_last_value(&last_value);
         CHECK_EQ(src[size - 1], last_value);
         return s;
