@@ -98,6 +98,8 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
                 HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
             if (hbResponse.aliveStatus != null) {
+                // The metadata before the upgrade does not contain hbResponse.aliveStatus,
+                // in which case the alive status needs to be handled according to the original logic
                 isAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
                 heartbeatRetryTimes = 0;
             }
