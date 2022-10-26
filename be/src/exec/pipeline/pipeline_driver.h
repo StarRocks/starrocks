@@ -31,6 +31,7 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
+using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -165,7 +166,9 @@ public:
     ~PipelineDriver();
 
     QueryContext* query_ctx() { return _query_ctx; }
+    const QueryContext* query_ctx() const { return _query_ctx; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
+    const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
