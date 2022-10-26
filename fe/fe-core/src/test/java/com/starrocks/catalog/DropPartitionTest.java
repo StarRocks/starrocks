@@ -73,7 +73,9 @@ public class DropPartitionTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(10001L, 10002L, 10003L),
                         Lists.newArrayList(10004L, 10005L, 10006L),
                         Lists.newArrayList(10007L, 10008L, 10009L));
