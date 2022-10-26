@@ -29,42 +29,6 @@ struct AggregateFuncMapHash {
     }
 };
 
-// Infer ResultType from ArgType
-template <template <PrimitiveType PT, typename = guard::Guard> class ResultTypeTrait>
-struct ResultTypeDispatcher {
-    template <PrimitiveType pt>
-    PrimitiveType operator()() {
-        return ResultTypeTrait<pt>::value;
-    }
-};
-
-// Build the aggregate function from the function template
-template <template <PrimitiveType arg_type, typename = guard::Guard> class ResultTrait,
-          template <class T> class StateTypeTrait,
-          template <PrimitiveType arg_type, typename T = RunTimeCppType<arg_type>,
-                    PrimitiveType res_type = PrimitiveType::TYPE_NULL, typename ResultType = RunTimeCppType<res_type>>
-          class FunImpl>
-struct AggFunctionDispatcher {
-    template <PrimitiveType pt>
-    AggregateFunctionPtr operator()(bool nullable, bool is_window) {
-        auto agg = std::make_shared<FunImpl<pt>>();
-        if (!nullable) {
-            return agg;
-        }
-
-        using ArgCppType = RunTimeCppType<pt>;
-        constexpr PrimitiveType res_type = ResultTrait<pt>::value;
-        using ResultCppType = RunTimeCppType<res_type>;
-        using StateType = StateTypeTrait<ResultCppType>;
-        if (is_window) {
-            return AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true>(agg);
-        } else {
-            return AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false>(agg);
-        }
-    }
-};
-
-// TODO(murphy) refactor the function creator
 class AggregateFuncResolver {
     DECLARE_SINGLETON(AggregateFuncResolver);
 
@@ -119,6 +83,19 @@ public:
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
             auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, true>(fun);
             _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), nullable_agg);
+        }
+    }
+
+    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType>
+    void add_aggregate_mapping_variadic(const std::string& name, bool is_window, AggregateFunctionPtr fun) {
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
+        auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun);
+        _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), variadic_agg);
+
+        if (is_window) {
+            _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, false), fun);
+            auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun);
+            _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, true, true), variadic_agg);
         }
     }
 
@@ -182,16 +159,12 @@ public:
     }
 
     template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
-    void add_object_mapping(std::string name) {
-        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false),
-                               create_object_function<ArgPT, ResultPT, false, false>(name));
-        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true),
-                               create_object_function<ArgPT, ResultPT, false, true>(name));
+    void add_object_mapping(std::string name, AggregateFunctionPtr func) {
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, false), func);
+        _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, false, true), func);
         if constexpr (AddWindowVersion) {
-            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, false),
-                                   create_object_function<ArgPT, ResultPT, true, false>(name));
-            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
-                                   create_object_function<ArgPT, ResultPT, true, true>(name));
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, false), func);
+            _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true), func);
         }
     }
 
@@ -215,18 +188,6 @@ public:
             _infos_mapping.emplace(std::make_tuple(name, ArgPT, ResultPT, true, true),
                                    create_decimal_function<ArgPT, ResultPT, true, true>(name));
         }
-    }
-
-    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool IsWindowFunc, bool IsNull>
-    AggregateFunctionPtr create_object_function(std::string name) {
-        //MakeNullableAggregateFunctionUnary only support deal with single parameter aggregation function,
-        //so here are the separate processing function percentile_approx
-        if (name == "percentile_approx") {
-            return AggregateFactory::MakePercentileApproxAggregateFunction();
-        } else if (name == "lead" || name == "lag") {
-            return AggregateFactory::MakeLeadLagWindowFunction<ArgPT>();
-        }
-        return nullptr;
     }
 
     template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool IsNull>
@@ -292,70 +253,16 @@ public:
         return nullptr;
     }
 
-    // TODO(kks): simplify create_function method
     template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool IsWindowFunc, bool IsNull>
-    std::enable_if_t<isArithmeticPT<ArgPT>, AggregateFunctionPtr> create_function(std::string& name) {
-        if constexpr (IsNull) {
-            if (name == "count") {
+    AggregateFunctionPtr create_function(std::string& name) {
+        if (name == "max_by") {
+            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
+        } else if (name == "count") {
+            if constexpr (IsNull) {
                 return AggregateFactory::MakeCountNullableAggregateFunction<IsWindowFunc>();
-            } else if (name == "sum") {
-                auto sum = AggregateFactory::MakeSumAggregateFunction<ArgPT>();
-                using ResultType = RunTimeCppType<SumResultPT<ArgPT>>;
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<SumAggregateState<ResultType>,
-                                                                            IsWindowFunc>(sum);
-            } else if (name == "group_concat") {
-                auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
-            } else if (name == "percentile_cont") {
-                auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
-                        percentile_cont);
-            }
-        } else {
-            if (name == "count") {
+            } else {
                 return AggregateFactory::MakeCountAggregateFunction<IsWindowFunc>();
-            } else if (name == "sum") {
-                return AggregateFactory::MakeSumAggregateFunction<ArgPT>();
-            } else if (name == "group_concat") {
-                return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
-            } else if (name == "percentile_cont") {
-                return AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
             }
-        }
-
-        if (name == "max_by") {
-            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
-        }
-        return nullptr;
-    }
-
-    template <PrimitiveType ArgPT, PrimitiveType ReturnPT, bool IsWindowFunc, bool IsNull>
-    std::enable_if_t<!isArithmeticPT<ArgPT> && !pt_is_json<ArgPT>, AggregateFunctionPtr> create_function(
-            std::string& name) {
-        using ArgType = RunTimeCppType<ArgPT>;
-        if constexpr (IsNull) {
-            if (name == "group_concat") {
-                auto group_count = AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<GroupConcatAggregateState>(group_count);
-            } else if (name == "any_value") {
-                auto any_value = AggregateFactory::MakeAnyValueAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionUnary<AnyValueAggregateData<ArgPT>, IsWindowFunc>(
-                        any_value);
-            } else if (name == "percentile_cont") {
-                auto percentile_cont = AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
-                return AggregateFactory::MakeNullableAggregateFunctionVariadic<PercentileContState<ArgPT>>(
-                        percentile_cont);
-            }
-        } else {
-            if (name == "group_concat") {
-                return AggregateFactory::MakeGroupConcatAggregateFunction<ArgPT>();
-            } else if (name == "percentile_cont") {
-                return AggregateFactory::MakePercentileContAggregateFunction<ArgPT>();
-            }
-        }
-
-        if (name == "max_by") {
-            return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
     }

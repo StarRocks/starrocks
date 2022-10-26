@@ -37,10 +37,12 @@ void AggregateFuncResolver::register_5() {
     AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("lead", true, FirstLastResult, LeadLagBuilder);
     AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("lag", true, FirstLastResult, LeadLagBuilder);
 
-    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lead");
-    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lead");
-    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lag");
-    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lag");
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lead",
+                                                       AggregateFactory::MakeLeadLagWindowFunction<TYPE_OBJECT>());
+    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lead", AggregateFactory::MakeLeadLagWindowFunction<TYPE_HLL>());
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, true>("lag",
+                                                       AggregateFactory::MakeLeadLagWindowFunction<TYPE_OBJECT>());
+    add_object_mapping<TYPE_HLL, TYPE_HLL, true>("lag", AggregateFactory::MakeLeadLagWindowFunction<TYPE_HLL>());
 
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("dense_rank", true,
                                                             AggregateFactory::MakeDenseRankWindowFunction());
@@ -52,9 +54,6 @@ void AggregateFuncResolver::register_5() {
             "exchange_bytes", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>(
             "exchange_speed", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>());
-
-    add_aggregate_mapping<TYPE_CHAR, TYPE_VARCHAR>("group_concat");
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR>("group_concat");
 
     AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("histogram", false, HistogramResult, HisBuilder);
 }
