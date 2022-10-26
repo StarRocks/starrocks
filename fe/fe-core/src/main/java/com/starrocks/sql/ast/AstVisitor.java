@@ -656,6 +656,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitSetRoleStatement(SetRoleStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // ------------------------------------------- Alter Clause --------------------------------------------------------
 
     //Alter system clause
