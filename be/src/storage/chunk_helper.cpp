@@ -477,6 +477,7 @@ void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
 }
 
 void ChunkPipelineAccumulator::reset() {
+    _finalized = false;
     _in_chunk.reset();
     _out_chunk.reset();
 }
