@@ -56,10 +56,22 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.iceberg.PartitionSpec;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,6 +138,7 @@ public class MaterializedViewAnalyzer {
             }
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             statement.setSimpleViewDef(ViewDefBuilder.buildSimple(queryStatement));
@@ -162,6 +175,8 @@ public class MaterializedViewAnalyzer {
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
 
+            planMVQuery(statement, queryStatement, context);
+
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
@@ -179,6 +194,51 @@ public class MaterializedViewAnalyzer {
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
             return null;
+        }
+
+        // TODO(murphy) implement
+        // Plan the query statement and store in memory
+        private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
+            if (!ctx.getSessionVariable().isEnableRealtimeRefreshMV()) {
+                return;
+            }
+            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.REALTIME)) {
+                return;
+            }
+            QueryRelation queryRelation = query.getQueryRelation();
+
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+            List<ColumnRefOperator> outputColumns = new ArrayList<>();
+            for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
+                ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
+                outputColumns.add(ref);
+                columnRefMap.put(ref, ref);
+            }
+
+            // Build logical plan for view query
+            OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
+            logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+            Optimizer optimizer = new Optimizer();
+            PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
+            ExecPlan execPlan;
+            try {
+                ctx.getSessionVariable().setMVPlanner(true);
+                OptExpression optimizedPlan = optimizer.optimize(
+                        ctx,
+                        logicalPlan.getRoot(),
+                        requiredPropertySet,
+                        new ColumnRefSet(logicalPlan.getOutputColumn()),
+                        columnRefFactory);
+
+                // TODO: infer key property
+                // TODO: infer retraction op
+                // TODO: infer state
+                // TODO: store the plan in create-mv statement and persist it at executor
+            } finally {
+                ctx.getSessionVariable().setMVPlanner(false);
+            }
         }
 
         private void checkNondeterministicFunction(Expr expr) {

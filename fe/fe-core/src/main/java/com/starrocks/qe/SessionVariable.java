@@ -153,6 +153,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
     public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
+    public static final String ENABLE_REALTIME_REFRESH_MV = "enable_realtime_mv";
 
     /**
      * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
@@ -316,6 +317,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MV_PLANNER)
     private boolean enableMVPlanner = false;
+    @VarAttr(name = ENABLE_REALTIME_REFRESH_MV)
+    private boolean enableRealtimeRefreshMV = false;
 
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
@@ -1091,6 +1094,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isMVPlanner() {
         return enableMVPlanner;
+    }
+
+    public void setMVPlanner(boolean enable) {
+        this.enableMVPlanner = enable;
+    }
+
+    public boolean isEnableRealtimeRefreshMV() {
+        return enableRealtimeRefreshMV;
+    }
+
+    public void setEnableRealtimeRefreshMv(boolean enable) {
+        this.enableRealtimeRefreshMV = enable;
     }
 
     public boolean isEnablePipelineEngine() {
