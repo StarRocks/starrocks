@@ -203,7 +203,7 @@ public abstract class AlterJobV2 implements Writable {
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
-        long unHealthyTabletId;
+        long unHealthyTabletId = -1L;
         db.readLock();
         try {
             tbl = (OlapTable) db.getTable(tableId);
