@@ -327,7 +327,7 @@ public:
     static void encode_ascending_datum(const Datum& value, size_t index_size, std::string* buf) {
         const Slice& slice = value.get_slice();
         buf->append(slice.data, slice.size);
-        int pad = index_size > slice.size ? index_size - slice.size : 0;
+        size_t pad = index_size > slice.size ? index_size - slice.size : 0;
         buf->append(pad, '\0');
     }
 

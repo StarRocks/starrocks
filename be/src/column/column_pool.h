@@ -220,8 +220,8 @@ public:
 
     // Destroy some objects in the *central* free list.
     // Returns the number of bytes freed to tcmalloc.
-    size_t release_free_columns(float free_ratio) {
-        free_ratio = std::min<float>(free_ratio, 1.0);
+    size_t release_free_columns(double free_ratio) {
+        free_ratio = std::min<double>(free_ratio, 1.0);
         int64_t now = butil::gettimeofday_s();
         std::vector<DynamicFreeBlock*> tmp;
         if (now - _first_push_time > 3) {
@@ -407,7 +407,7 @@ inline void release_large_columns(size_t limit) {
 }
 
 template <typename T>
-inline size_t release_free_columns(float ratio) {
+inline size_t release_free_columns(double ratio) {
     static_assert(InList<ColumnPool<T>, ColumnPoolList>::value, "Cannot use column pool");
     return ColumnPool<T>::singleton()->release_free_columns(ratio);
 }
