@@ -697,7 +697,7 @@ public class MaterializedViewTest {
                 .withNewMaterializedView("CREATE MATERIALIZED VIEW base_mv\n" +
                         "PARTITION BY k1\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "REFRESH async START('2122-12-31') EVERY(INTERVAL 1 DAY)\n" +
+                        "REFRESH async START('2122-12-31 20:45:11') EVERY(INTERVAL 1 DAY)\n" +
                         "as select k1,k2,v1 from base_table;");
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView baseMv = ((MaterializedView) testDb.getTable("base_mv"));
@@ -709,7 +709,7 @@ public class MaterializedViewTest {
         // assert context
         MaterializedView.AsyncRefreshContext asyncRefreshContext = baseMv.getRefreshScheme().getAsyncRefreshContext();
         // start time must equal 2022-12-31
-        Assert.assertEquals(4828089600L, asyncRefreshContext.getStartTime());
+        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
         Assert.assertEquals(2, asyncRefreshContext.getStep());
         Assert.assertEquals("DAY", asyncRefreshContext.getTimeUnit());
 
@@ -717,6 +717,6 @@ public class MaterializedViewTest {
         String mvTaskName = "mv-" + baseMv.getId();
         TaskSchedule schedule = connectContext.getGlobalStateMgr().getTaskManager().getTask(mvTaskName).getSchedule();
         // start time must equal 2022-12-31
-        Assert.assertEquals(4828089600L, asyncRefreshContext.getStartTime());
+        Assert.assertEquals(4828164311L, asyncRefreshContext.getStartTime());
     }
 }

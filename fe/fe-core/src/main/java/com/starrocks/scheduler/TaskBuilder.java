@@ -79,17 +79,20 @@ public class TaskBuilder {
                 if (intervalLiteral == null) {
                     task.setType(Constants.TaskType.EVENT_TRIGGERED);
                 } else {
-                    final IntLiteral step = (IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue();
+                    long period = ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getLongValue();
                     TimeUnit timeUnit = TimeUtils.convertUnitIdentifierToTimeUnit(
                             intervalLiteral.getUnitIdentifier().getDescription());
                     long startTime;
                     if (asyncRefreshSchemeDesc.isDefineStartTime()) {
                         startTime = Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime());
                     } else {
-                        MaterializedView.MvRefreshScheme refreshScheme = materializedView.getRefreshScheme();
-                        startTime = refreshScheme.getAsyncRefreshContext().getStartTime();
+                        MaterializedView.AsyncRefreshContext asyncRefreshContext = materializedView.getRefreshScheme()
+                                .getAsyncRefreshContext();
+                        long currentTimeSecond = System.currentTimeMillis() / 1000;
+                        startTime = TimeUtils.getNextValidTimeSecond(asyncRefreshContext.getStartTime(),
+                                currentTimeSecond, period, timeUnit);
                     }
-                    TaskSchedule taskSchedule = new TaskSchedule(startTime, step.getLongValue(), timeUnit);
+                    TaskSchedule taskSchedule = new TaskSchedule(startTime, period, timeUnit);
                     task.setSchedule(taskSchedule);
                     task.setType(Constants.TaskType.PERIODICAL);
                 }
