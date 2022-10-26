@@ -39,8 +39,6 @@ public class PushDownPredicateAggRule extends TransformationRule {
             List<ColumnRefOperator> columns = Utils.extractColumnRef(scalar);
 
             // push down predicate
-            // may be some problems. e.g. select count(*) from tbl having false return empty results.
-            // while select count(*) from (select * from tbl where false) t return one row with result of 0.
             if (groupColumns.containsAll(columns) && !columns.isEmpty()) {
                 // remove from filter
                 iter.remove();
