@@ -55,10 +55,6 @@ cd $TP_DIR
 # Download thirdparties.
 ${TP_DIR}/download-thirdparty.sh
 
-export C_INCLUDE_PATH=${TP_INCLUDE_DIR}:${C_INCLUDE_PATH}
-export CPLUS_INCLUDE_PATH=${TP_INCLUDE_DIR}:${CPLUS_INCLUDE_PATH}
-export LD_LIBRARY_PATH=$TP_DIR/installed/lib:$LD_LIBRARY_PATH
-
 # set COMPILER
 if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
     export CC=${STARROCKS_GCC_HOME}/bin/gcc
@@ -296,6 +292,7 @@ build_glog() {
     autoreconf -i
 
     LDFLAGS="-L${TP_LIB_DIR}" \
+    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
     make -j$PARALLEL 
     make install
