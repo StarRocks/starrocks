@@ -221,6 +221,7 @@ statement
     // Set Statement
     | setStatement
     | setUserPropertyStatement
+    | setRoleStatement
 
     //Unsupported Statement
     | unsupportedStatement
@@ -1208,11 +1209,13 @@ revokePrivilegeStatement
     ;
 
 grantRoleStatement
-    : GRANT identifierOrString TO user
+    : GRANT identifierOrString TO user                          #grantRoleToUser
+    | GRANT identifierOrString TO ROLE identifierOrString       #grantRoleToRole
     ;
 
 revokeRoleStatement
-    : REVOKE identifierOrString FROM user
+    : REVOKE identifierOrString FROM user                       #revokeRoleFromUser
+    | REVOKE identifierOrString FROM ROLE identifierOrString    #revokeRoleFromRole
     ;
 
 executeAsStatement
@@ -1408,6 +1411,15 @@ setExprOrDefault
 
 setUserPropertyStatement
     : SET PROPERTY (FOR string)? userPropertyList
+    ;
+
+roleList
+    : string (',' string)*
+    ;
+
+setRoleStatement
+    : SET ROLE roleList                #setRole
+    | SET ROLE ALL (EXCEPT roleList)?  #setRoleAll
     ;
 
 unsupportedStatement

@@ -4,11 +4,15 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.UserIdentity;
 
-// GRANT Role 'role' TO 'user'
+// GRANT rolex TO userx
+// GRANT role1 TO ROLE role2
 // share the same parameter and check logic with RevokeRoleStmt
 public class GrantRoleStmt extends BaseGrantRevokeRoleStmt {
 
-    public GrantRoleStmt(String role, UserIdentity userIdent) {
-        super(role, userIdent, "GRANT", "TO");
+    public GrantRoleStmt(String granteeRole, UserIdentity userIdent) {
+        super(granteeRole, userIdent, "GRANT", "TO");
+    }
+    public GrantRoleStmt(String granteeRole, String role) {
+        super(granteeRole, role, "GRANT", "TO");
     }
 }
