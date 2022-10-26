@@ -4,12 +4,7 @@
 
 #include <gtest/gtest.h>
 
-#include <cstdint>
-
-#include "column/array_column.h"
 #include "column/binary_column.h"
-#include "column/column_helper.h"
-#include "column/const_column.h"
 #include "column/fixed_length_column.h"
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
