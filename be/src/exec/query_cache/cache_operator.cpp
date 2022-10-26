@@ -95,11 +95,13 @@ struct PerLaneBuffer {
                 chunks[next_gc_chunk_idx++].reset();
             }
             ++next_gc_chunk_idx;
+            return std::move(chunks[next_chunk_idx++]);
+        } else {
+            // CRITICAL(by satanson): The method is invoked when cloning chunk, when query cache enabled, chunk
+            // may be accessed by multi-thread, so we must clone a chunk when pull chunk from cache operator.
+            ChunkPtr chunk = std::move(chunks[next_chunk_idx++]->clone_unique());
+            return chunk;
         }
-        // CRITICAL(by satanson): The method is invoked when cloning chunk, when query cache enabled, chunk
-        // may be accessed by multi-thread, so we must clone a chunk when pull chunk from cache operator.
-        ChunkPtr chunk = std::move(chunks[next_chunk_idx++]->clone_unique());
-        return chunk;
     }
 };
 
@@ -348,14 +350,14 @@ void CacheOperator::populate_cache(int64_t tablet_id) {
     const std::string cache_key = _cache_param.digest + cache_key_suffix_it->second;
     int64_t current = GetMonoTimeMicros();
     auto chunks = remap_chunks(buffer->chunks, _cache_param.slot_remapping);
-    CacheValue value{0, 0, current, buffer->required_version, std::move(chunks)};
+    CacheValue cache_value(current, buffer->required_version, std::move(chunks));
     // If the cache implementation is global, populate method must be asynchronous and try its best to
     // update the cache.
     _cache_populate_bytes_counter->update(buffer->num_bytes);
     _cache_populate_chunks_counter->update(buffer->chunks.size());
     _cache_populate_rows_counter->update(buffer->num_rows);
     _populate_tablets.insert(tablet_id);
-    _cache_mgr->populate(cache_key, value);
+    _cache_mgr->populate(cache_key, cache_value);
     buffer->state = PLBS_POPULATE;
 }
 
