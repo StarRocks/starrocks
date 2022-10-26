@@ -1475,7 +1475,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // check if all tablets are healthy, and no tablet is in tablet scheduler
         long unhealthyTabletId  = checkAndGetUnhealthyTablet(GlobalStateMgr.getCurrentSystemInfo(),
                 GlobalStateMgr.getCurrentState().getTabletScheduler());
-        if (unhealthyTabletId != -1L) {
+        if (unhealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
             throw new DdlException("Table [" + name + "] is not stable. "
                     + "Unhealthy (or doing balance) tablet id: " + unhealthyTabletId + ". "
                     + "Some tablets of this table may not be healthy or are being scheduled. "
@@ -1506,7 +1506,7 @@ public class OlapTable extends Table implements GsonPostProcessable {
                 }
             }
         }
-        return -1L;
+        return TabletInvertedIndex.NOT_EXIST_VALUE;
     }
 
     // arbitrarily choose a partition, and get the buckets backends sequence from base index.

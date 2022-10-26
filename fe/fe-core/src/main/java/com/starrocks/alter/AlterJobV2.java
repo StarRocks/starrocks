@@ -26,6 +26,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
+import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.TraceManager;
@@ -203,7 +204,7 @@ public abstract class AlterJobV2 implements Writable {
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {
         OlapTable tbl;
-        long unHealthyTabletId = -1L;
+        long unHealthyTabletId = TabletInvertedIndex.NOT_EXIST_VALUE;
         db.readLock();
         try {
             tbl = (OlapTable) db.getTable(tableId);
@@ -219,7 +220,7 @@ public abstract class AlterJobV2 implements Writable {
 
         db.writeLock();
         try {
-            if (unHealthyTabletId != -1L) {
+            if (unHealthyTabletId != TabletInvertedIndex.NOT_EXIST_VALUE) {
                 errMsg = "table is unstable, unhealthy (or doing balance) tablet id: " + unHealthyTabletId;
                 LOG.warn("wait table {} to be stable before doing {} job", tableId, type);
                 tbl.setState(OlapTableState.WAITING_STABLE);
