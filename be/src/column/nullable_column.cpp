@@ -165,6 +165,8 @@ Status NullableColumn::update_rows(const Column& src, const uint32_t* indexes) {
         const auto& c = down_cast<const NullableColumn&>(src);
         RETURN_IF_ERROR(_null_column->update_rows(*c._null_column, indexes));
         RETURN_IF_ERROR(_data_column->update_rows(*c._data_column, indexes));
+        // update rows may convert between null and not null, so we need count every times
+        _has_null = SIMD::count_nonzero(_null_column->get_data());
     } else {
         auto new_null_column = NullColumn::create();
         new_null_column->get_data().insert(new_null_column->get_data().end(), replace_num, 0);
