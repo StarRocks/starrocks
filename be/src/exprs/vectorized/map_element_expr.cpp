@@ -56,7 +56,8 @@ public:
             bool matched = false;
             selection[i] = idx;
             for (size_t j = offsets[i]; j < offsets[i + 1]; j++) {
-                if ((!map_keys->is_null(j)) & (map_keys->get(j).convert2DatumKey() == arg1->get(i).convert2DatumKey())) {
+                if ((!map_keys->is_null(j)) &
+                    (map_keys->get(j).convert2DatumKey() == arg1->get(i).convert2DatumKey())) {
                     matched = true;
                     selection[i] = j;
                     idx = j;
