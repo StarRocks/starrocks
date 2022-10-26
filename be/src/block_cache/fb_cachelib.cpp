@@ -45,7 +45,7 @@ Status FbCacheLib::write_cache(const std::string& key, const char* value, size_t
     return Status::OK();
 }
 
-StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value) {
+StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value, size_t off, size_t size) {
     // TODO:
     // 1. check chain item
     // 2. replace with async methods
@@ -53,21 +53,11 @@ StatusOr<size_t> FbCacheLib::read_cache(const std::string& key, char* value) {
     if (!handle) {
         return Status::NotFound("not found cachelib item");
     }
-    size_t size = handle->getSize();
-    std::memcpy(value, handle->getMemory(), size);
+    DCHECK((off + size) <= handle->getSize());
+    std::memcpy(value, (char*)handle->getMemory() + off, size);
     if (handle->hasChainedItem()) {
     }
     return size;
-}
-
-Status FbCacheLib::read_cache_zero_copy(const std::string& key, const char** buf) {
-    auto handle = _cache->find(key);
-    if (handle) {
-        *buf = (const char*)(handle->getMemory());
-        return Status::OK();
-    } else {
-        return Status::NotFound("not found cachelib item");
-    }
 }
 
 Status FbCacheLib::remove_cache(const std::string& key) {
