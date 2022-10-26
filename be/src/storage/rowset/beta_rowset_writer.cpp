@@ -105,8 +105,13 @@ Status BetaRowsetWriter::init() {
     return Status::OK();
 }
 
+<<<<<<< HEAD:be/src/storage/rowset/beta_rowset_writer.cpp
 StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
     if (_num_rows_written > 0) {
+=======
+StatusOr<RowsetSharedPtr> RowsetWriter::build() {
+    if (_num_rows_written > 0 || (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _num_delfile > 0)) {
+>>>>>>> 5c2fe98dc ([Enhancement] Fix sync issue (#12343)):be/src/storage/rowset/rowset_writer.cpp
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta_pb->set_num_rows(_num_rows_written);
