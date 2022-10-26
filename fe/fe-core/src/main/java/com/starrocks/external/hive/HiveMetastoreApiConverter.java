@@ -16,7 +16,6 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.connector.ConnectorTableId;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.ColumnTypeConverter;
-import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
@@ -61,6 +60,18 @@ public class HiveMetastoreApiConverter {
                 tableParams.get(SPARK_SQL_SOURCE_PROVIDER).equalsIgnoreCase("delta");
     }
 
+    public static boolean isHudiTable(String inputFormat) {
+        return HudiTable.fromInputFormat(inputFormat) != HudiTable.HudiTableType.UNKNOWN;
+    }
+
+    public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
+        Optional<Map<String, String>> tableParamsOptional = Optional.of(tableParams);
+        if (isDeltaLakeTable(tableParamsOptional.orElse(ImmutableMap.of()))) {
+            return sd.getSerdeInfo().getParameters().get("path");
+        }
+        return sd.getLocation();
+    }
+
     public static Database toDatabase(org.apache.hadoop.hive.metastore.api.Database database) {
         if (database == null || database.getName() == null) {
             throw new StarRocksConnectorException("Hive database [%s] doesn't exist");
@@ -85,19 +96,13 @@ public class HiveMetastoreApiConverter {
                         .map(FieldSchema::getName)
                         .collect(Collectors.toList()))
                 .setFullSchema(toFullSchemasForHiveTable(table))
-                .setTableLocation(table.getSd().getLocation())
+                .setTableLocation(toTableLocation(table.getSd(), table.getParameters()))
                 .setCreateTime(table.getCreateTime());
-
-        Map<String, String> tableParams = table.getParameters() == null ? ImmutableMap.of() : table.getParameters();
-        if (isDeltaLakeTable(tableParams)) {
-            tableBuilder.setTableLocation(ObjectStorageUtils.formatObjectStoragePath(
-                    table.getSd().getSerdeInfo().getParameters().get("path")));
-        }
         return tableBuilder.build();
     }
 
     public static HudiTable toHudiTable(Table table, String catalogName) {
-        String hudiBasePath = ObjectStorageUtils.formatObjectStoragePath(table.getSd().getLocation());
+        String hudiBasePath = table.getSd().getLocation();
         Configuration conf = new Configuration();
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
@@ -199,7 +204,7 @@ public class HiveMetastoreApiConverter {
                                                        Schema tableSchema) {
         Map<String, String> hudiProperties = Maps.newHashMap();
 
-        String hudiBasePath = ObjectStorageUtils.formatObjectStoragePath(metastoreTable.getSd().getLocation());
+        String hudiBasePath = metastoreTable.getSd().getLocation();
         if (!Strings.isNullOrEmpty(hudiBasePath)) {
             hudiProperties.put(HUDI_BASE_PATH, hudiBasePath);
         }
@@ -245,7 +250,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static RemoteFileInputFormat toRemoteFileInputFormat(String inputFormat) {
-        if (!HudiTable.isHudiTable(inputFormat)) {
+        if (!isHudiTable(inputFormat)) {
             return RemoteFileInputFormat.fromHdfsInputFormatClass(inputFormat);
         } else {
             // Currently, we only support parquet on hudi format.

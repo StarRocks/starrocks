@@ -73,7 +73,7 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
                 }
-                String fileName = PartitionUtil.getSuffixName(path, locatedFileStatus.getPath().toString());
+                String fileName = PartitionUtil.getSuffixName(pathKey.getPath(), locatedFileStatus.getPath().toString());
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
                 fileDescs.add(new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),
