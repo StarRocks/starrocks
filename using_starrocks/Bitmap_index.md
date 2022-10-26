@@ -38,7 +38,7 @@ Bitmap 索引是一种特殊的数据库索引技术，其使用 bitmap 进行�
     | ----------- | -------- | ------------------------------------------------------------ |
     | index_name  | 是       | bitmap 索引名称。                                            |
     | column_name | 是       | 创建 bitmap 索引的列名，您可以指定多个列名，即在建表时可同时为多个列创建 bitmap 索引。 |
-    | COMMENT ''  | 否       | 索引备注。                                                   |
+    | COMMENT     | 否       | 索引备注。                                                   |
 
     关于建表的其他参数说明，参见 [CREATE TABLE](/sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
 
