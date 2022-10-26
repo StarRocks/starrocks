@@ -31,7 +31,7 @@ struct LeadLagBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeLeadLagWindowFunction<pt>(); }
 };
 
-void AggregateFuncResolver::register_5() {
+void AggregateFuncResolver::register_window() {
     AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("first_value", true, FirstLastResult, FirstValueBuilder);
     AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("last_value", true, FirstLastResult, FirstValueBuilder);
     AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("lead", true, FirstLastResult, LeadLagBuilder);
@@ -50,12 +50,6 @@ void AggregateFuncResolver::register_5() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("row_number", true,
                                                             AggregateFactory::MakeRowNumberWindowFunction());
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>("ntile", true, AggregateFactory::MakeNtileWindowFunction());
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_BIGINT>(
-            "exchange_bytes", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::BYTES>());
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>(
-            "exchange_speed", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>());
-
-    AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("histogram", false, HistogramResult, HisBuilder);
 }
 
 } // namespace starrocks::vectorized

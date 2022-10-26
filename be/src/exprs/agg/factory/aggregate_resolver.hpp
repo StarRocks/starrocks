@@ -33,13 +33,16 @@ class AggregateFuncResolver {
     DECLARE_SINGLETON(AggregateFuncResolver);
 
 public:
-    void register_1();
-    void register_2();
-    void register_3();
-    void register_4();
-    void register_5();
-    void register_6();
-    void register_7();
+    void register_avg();
+    void register_bitmap();
+    void register_minmaxany();
+    void register_sumcount();
+    void register_distinct();
+    void register_variance();
+    void register_window();
+    void register_utility();
+    void register_approx();
+    void register_others();
 
     const AggregateFunction* get_aggregate_info(const std::string& name, const PrimitiveType arg_type,
                                                 const PrimitiveType return_type, const bool is_window_function,

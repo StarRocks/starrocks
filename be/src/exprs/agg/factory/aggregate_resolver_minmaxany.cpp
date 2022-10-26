@@ -4,10 +4,12 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
+#include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/maxmin.h"
 #include "runtime/primitive_type.h"
+#include "types/bitmap_value.h"
 
 namespace starrocks::vectorized {
 
@@ -37,7 +39,7 @@ struct MaybyBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeMaxByAggregateFunction<pt>(); }
 };
 
-void AggregateFuncResolver::register_2() {
+void AggregateFuncResolver::register_bitmap() {
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT, BitmapValue>(
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_TINYINT>());
     add_aggregate_mapping<TYPE_SMALLINT, TYPE_BIGINT, BitmapValue>(
@@ -46,9 +48,15 @@ void AggregateFuncResolver::register_2() {
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_INT>());
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, BitmapValue>(
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, false, BitmapValue>(
+            "bitmap_union", AggregateFactory::MakeBitmapUnionAggregateFunction());
+    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, false, BitmapValuePacked>(
+            "bitmap_intersect", AggregateFactory::MakeBitmapIntersectAggregateFunction());
+    add_object_mapping<TYPE_OBJECT, TYPE_BIGINT, true, BitmapValue>(
+            "bitmap_union_count", AggregateFactory::MakeBitmapUnionCountAggregateFunction());
+}
 
-    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("count");
-
+void AggregateFuncResolver::register_minmaxany() {
     ADD_ALL_TYPE1("max_by", TYPE_BOOLEAN);
     ADD_ALL_TYPE1("max_by", TYPE_TINYINT);
     ADD_ALL_TYPE1("max_by", TYPE_SMALLINT);

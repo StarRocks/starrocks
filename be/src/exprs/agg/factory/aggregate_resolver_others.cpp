@@ -10,20 +10,7 @@
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType pt>
-struct HLLRawBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeHllRawAggregateFunction<pt>(); }
-};
-
-template <PrimitiveType pt>
-using HLLStateTrait = HyperLogLog;
-
-template <PrimitiveType pt>
-inline constexpr PrimitiveType HLLResult = TYPE_HLL;
-
-void AggregateFuncResolver::register_7() {
-    AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT("hll_raw", false, HLLResult, HLLStateTrait, HLLRawBuilder);
-
+void AggregateFuncResolver::register_others() {
     add_object_mapping<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx",
                                                  AggregateFactory::MakePercentileApproxAggregateFunction());
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx",
@@ -57,6 +44,7 @@ void AggregateFuncResolver::register_7() {
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
+
     // This first type is the 4th type input of windowfunnel.
     // And the 1st type is BigInt, 2nd is datetime, 3rd is mode(default 0).
     add_array_mapping<TYPE_INT, TYPE_INT>("window_funnel");

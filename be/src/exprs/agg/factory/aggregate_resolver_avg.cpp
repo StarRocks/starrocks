@@ -24,7 +24,7 @@ struct ArrayAvgBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeArrayAggAggregateFunction<pt>(); }
 };
 
-void AggregateFuncResolver::register_1() {
+void AggregateFuncResolver::register_avg() {
     AGGREGATE_ALL_TYPE_FROM_TRAIT("avg", true, AvgResultPT, AvgStateTrait, AvgBuilder);
     AGGREGATE_ALL_TYPE_FROM_TRAIT("array_avg", true, ArrayAvgResultTrait, AvgStateTrait, ArrayAvgBuilder);
 

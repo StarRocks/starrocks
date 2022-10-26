@@ -43,7 +43,16 @@ struct SumBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeSumAggregateFunction<pt>(); }
 };
 
-void AggregateFuncResolver::register_3() {
+void AggregateFuncResolver::register_sumcount() {
+    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("sum", true, SumResultPT, SumStateTrait, SumBuilder);
+    add_aggregate_mapping<TYPE_DECIMAL32, SumResultPT<TYPE_DECIMAL32>, SumStateTrait, SumBuilder>("sum", true);
+    add_aggregate_mapping<TYPE_DECIMAL64, SumResultPT<TYPE_DECIMAL64>, SumStateTrait, SumBuilder>("sum", true);
+    add_aggregate_mapping<TYPE_DECIMAL128, SumResultPT<TYPE_DECIMAL128>, SumStateTrait, SumBuilder>("sum", true);
+
+    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("count");
+}
+
+void AggregateFuncResolver::register_distinct() {
     AGGREGATE_ALL_TYPE_FROM_TRAIT("multi_distinct_count", false, CountResult, DistinctStateTrait, DistinctBuilder);
     add_aggregate_mapping<TYPE_CHAR, TYPE_BIGINT, DistinctStateTrait, DistinctBuilder>("multi_distinct_count", false);
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_BIGINT, DistinctStateTrait, DistinctBuilder>("multi_distinct_count",
@@ -64,10 +73,5 @@ void AggregateFuncResolver::register_3() {
     add_aggregate_mapping<TYPE_CHAR, TYPE_CHAR, DistinctState2Trait, DistinctSumBuilder2>("multi_distinct_sum2", false);
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, DistinctState2Trait, DistinctSumBuilder2>("multi_distinct_sum2",
                                                                                                 false);
-
-    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("sum", true, SumResultPT, SumStateTrait, SumBuilder);
-    add_aggregate_mapping<TYPE_DECIMAL32, SumResultPT<TYPE_DECIMAL32>, SumStateTrait, SumBuilder>("sum", true);
-    add_aggregate_mapping<TYPE_DECIMAL64, SumResultPT<TYPE_DECIMAL64>, SumStateTrait, SumBuilder>("sum", true);
-    add_aggregate_mapping<TYPE_DECIMAL128, SumResultPT<TYPE_DECIMAL128>, SumStateTrait, SumBuilder>("sum", true);
 }
 } // namespace starrocks::vectorized

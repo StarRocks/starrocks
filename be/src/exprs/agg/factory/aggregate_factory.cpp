@@ -17,13 +17,16 @@
 namespace starrocks::vectorized {
 
 AggregateFuncResolver::AggregateFuncResolver() {
-    register_1();
-    register_2();
-    register_3();
-    register_4();
-    register_5();
-    register_6();
-    register_7();
+    register_avg();
+    register_minmaxany();
+    register_bitmap();
+    register_sumcount();
+    register_distinct();
+    register_variance();
+    register_window();
+    register_utility();
+    register_approx();
+    register_others();
 }
 
 AggregateFuncResolver::~AggregateFuncResolver() {}

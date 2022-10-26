@@ -28,7 +28,7 @@ struct StdSampBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeStddevAggregateFunction<pt, true>(); }
 };
 
-void AggregateFuncResolver::register_4() {
+void AggregateFuncResolver::register_variance() {
     for (auto var_name : std::vector<std::string>{"variance", "variance_pop", "var_pop"}) {
         AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, VarBuilder);
     }
