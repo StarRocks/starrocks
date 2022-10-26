@@ -179,7 +179,6 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
         std::vector<std::shared_ptr<pipeline::OperatorFactory>>& ops_with_sink,
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
     // create aggregator factory
     // shared by sink operator and source operator
     auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
@@ -198,6 +197,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
         auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
+
     auto operators = operators_generator(false);
     auto sink_operator = std::move(std::get<0>(operators));
     auto source_operator = std::move(std::get<1>(operators));
@@ -229,14 +229,13 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
 std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::decompose_to_pipeline(
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-
     context->has_aggregation = true;
-    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
-
     auto& agg_node = _tnode.agg_node;
-    bool need_local_shuffle = context->need_local_shuffle(ops_with_sink) && agg_node.__isset.grouping_exprs &&
-                              !_tnode.agg_node.grouping_exprs.empty();
+
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
+    bool need_local_shuffle = context->need_local_shuffle(ops_with_sink) && has_group_by_keys;
 
     auto try_interpolate_local_shuffle = [this, context](auto& ops) {
         std::vector<ExprContext*> group_by_expr_ctxs;
@@ -246,17 +245,18 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::d
         return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
     };
 
-    if (_tnode.agg_node.need_finalize && !sorted_streaming_aggregate) {
+    if (agg_node.need_finalize && !sorted_streaming_aggregate) {
         // If finalize aggregate with group by clause, then it can be parallelized
-        if (need_local_shuffle) {
-            ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+        if (has_group_by_keys) {
+            if (need_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
         } else {
             ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
         }
     }
 
     OpFactories ops_with_source;
-
     if (sorted_streaming_aggregate) {
         ops_with_source =
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
