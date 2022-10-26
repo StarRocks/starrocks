@@ -9,7 +9,7 @@
 namespace starrocks::vectorized {
 
 template <PrimitiveType pt>
-using AvgStateTrait = AvgAggregateState<AvgResultTrait<pt>>;
+using AvgStateTrait = AvgAggregateState<RunTimeCppType<ImmediateAvgResultPT<pt>>>;
 
 template <PrimitiveType pt>
 inline constexpr PrimitiveType ArrayAvgResultTrait = TYPE_ARRAY;
