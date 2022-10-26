@@ -33,7 +33,7 @@ eval set -- "$OPTS"
 RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
-ENABLE_DEBUGGER=
+ENABLE_DEBUGGER=0
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
