@@ -142,11 +142,16 @@ public class AuthenticationManager {
         }
         if (isDomain) {
             // check for resolved ips
-            Set<String> ipSet = hostnameToIpSet.get(info.getOrigHost());
-            if (ipSet == null) {
-                return false;
+            this.hostnameToIpLock.readLock().lock();
+            try {
+                Set<String> ipSet = hostnameToIpSet.get(info.getOrigHost());
+                if (ipSet == null) {
+                    return false;
+                }
+                return ipSet.contains(remoteHost);
+            } finally {
+                this.hostnameToIpLock.readLock().unlock();
             }
-            return ipSet.contains(remoteHost);
         } else {
             return info.matchHost(remoteHost);
         }
