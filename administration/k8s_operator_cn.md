@@ -1,4 +1,4 @@
-# 使用 StarRocks Operator 在 Kubernetes 部署和管理 CN
+# 使用 StarRocks Operator 在 Kubernetes 部署和管理 CN 【公测中】
 
 自 2.4 版本起，StarRocks 在 FE 、BE 节点基础上，提供了一种新的计算节点（Compute Node，以下简称 CN）。CN 是一种无状态的计算服务，自身不维护数据，可以承担部分 SQL 计算。并且支持基于 Kubernetes 的容器化部署，实现弹性伸缩，支撑数据湖分析等消耗大量计算资源的分析场景。
 
