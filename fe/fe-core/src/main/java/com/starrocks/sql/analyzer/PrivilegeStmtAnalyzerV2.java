@@ -144,6 +144,9 @@ public class PrivilegeStmtAnalyzerV2 {
                 analyseUser(stmt.getUserIdentity(), true);
             } else {
                 validRoleName(stmt.getRole(), "Can not grant/revoke to role", true);
+                if (stmt.isWithGrantOption()) {
+                    throw new SemanticException("cannot grant/revoke to role with grant option!");
+                }
             }
 
             try {

@@ -65,8 +65,6 @@ public class AuthenticationManager {
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
 
         // default user
-        UserIdentity rootUser = new UserIdentity(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        rootUser.setIsAnalyzed();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         try {
             info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
@@ -75,8 +73,8 @@ public class AuthenticationManager {
         }
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
         info.setPassword(new byte[0]);
-        userToAuthenticationInfo.put(rootUser, info);
-        userNameToProperty.put(rootUser.getQualifiedUser(), new UserProperty());
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
     }
 
     public boolean doesUserExist(UserIdentity userIdentity) {
@@ -136,7 +134,7 @@ public class AuthenticationManager {
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
-        } catch (AuthenticationException e) {
+        } catch (AuthenticationException | PrivilegeException e) {
             throw new DdlException("failed to create user " + userIdentity, e);
         } finally {
             writeUnlock();

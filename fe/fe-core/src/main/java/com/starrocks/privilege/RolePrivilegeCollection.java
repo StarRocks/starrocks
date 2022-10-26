@@ -21,8 +21,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
 
     enum RoleFlags {
         MUTABLE(1),
-        REMOVABLE(2),
-        DEFAULT(3);
+        REMOVABLE(2);
 
         private long mask;
         RoleFlags(int m) {
@@ -38,13 +37,6 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         this.subRoleIds = new HashSet<>();
     }
 
-    public RolePrivilegeCollection(String name) {
-        this.name = name;
-        this.mask = 0;
-        this.parentRoleIds = new HashSet<>();
-        this.subRoleIds = new HashSet<>();
-    }
-
     public RolePrivilegeCollection(String name, RoleFlags... flags) {
         this.name = name;
         for (RoleFlags flag : flags) {
@@ -52,10 +44,6 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         }
         this.parentRoleIds = new HashSet<>();
         this.subRoleIds = new HashSet<>();
-    }
-
-    public boolean isDefault() {
-        return checkFlag(RoleFlags.DEFAULT);
     }
 
     public boolean isMutable() {

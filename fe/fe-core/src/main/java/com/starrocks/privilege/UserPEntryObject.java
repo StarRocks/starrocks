@@ -6,11 +6,12 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.List;
 import java.util.Objects;
 
 public class UserPEntryObject implements PEntryObject {
     @SerializedName(value = "u")
-    private UserIdentity userIdentity;
+    private UserIdentity userIdentity;  // can be null, means all users
     protected UserPEntryObject(UserIdentity userIdentity) {
         this.userIdentity = userIdentity;
     }
@@ -22,10 +23,22 @@ public class UserPEntryObject implements PEntryObject {
         return new UserPEntryObject(user);
     }
 
+    public static UserPEntryObject generate(
+            List<String> allTypes, String restrictType, String restrictName) throws PrivilegeException {
+        // only support ON ALL USERS
+        if (allTypes.size() != 1 || restrictType != null || restrictName != null) {
+            throw new PrivilegeException("invalid ALL statement for user! only support ON ALL USERS");
+        }
+        return new UserPEntryObject(null);
+    }
+
     @Override
     public boolean match(Object obj) {
         if (!(obj instanceof UserPEntryObject)) {
             return false;
+        }
+        if (userIdentity == null) {
+            return true; // this object is all
         }
         UserPEntryObject other = (UserPEntryObject) obj;
         return userIdentity.equals(other.userIdentity);
@@ -33,7 +46,7 @@ public class UserPEntryObject implements PEntryObject {
 
     @Override
     public boolean isFuzzyMatching() {
-        return false; // no fuzzy matching for user
+        return userIdentity == null; // no fuzzy matching for user
     }
 
     /**
@@ -53,6 +66,16 @@ public class UserPEntryObject implements PEntryObject {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
         UserPEntryObject o = (UserPEntryObject) obj;
+        if (o.userIdentity == userIdentity) {
+            return 0;
+        }
+        // other > all
+        if (userIdentity == null) {
+            return 1;
+        }
+        if (o.userIdentity == null) {
+            return -1;
+        }
         return userIdentity.toString().compareTo(o.userIdentity.toString());
     }
 

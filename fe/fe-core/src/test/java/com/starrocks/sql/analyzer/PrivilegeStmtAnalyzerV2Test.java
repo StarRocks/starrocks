@@ -38,6 +38,7 @@ public class PrivilegeStmtAnalyzerV2Test {
         for (int i = 0; i < 2; ++ i) {
             starRocksAssert.withTable("create table db1.tbl" + i + createTblStmtStr);
         }
+        ctx.getGlobalStateMgr().getPrivilegeManager().initBuiltinRolesAndUsers();
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         ctx.getGlobalStateMgr().getAuthenticationManager().createUser(createUserStmt);

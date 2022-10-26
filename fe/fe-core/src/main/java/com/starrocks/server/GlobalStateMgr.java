@@ -1238,6 +1238,7 @@ public class GlobalStateMgr {
 
         if (usingNewPrivilege) {
             auth = null;
+            privilegeManager.initBuiltinRolesAndUsers();
         }
 
         long loadImageEndTime = System.currentTimeMillis();
