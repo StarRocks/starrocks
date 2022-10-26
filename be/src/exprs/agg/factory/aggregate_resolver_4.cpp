@@ -29,64 +29,19 @@ struct StdSampBuilder {
 };
 
 void AggregateFuncResolver::register_4() {
-    constexpr bool is_window = false;
-    {
-        std::vector<std::string> names = {"variance", "variance_pop", "var_pop"};
-        for (auto var_name : names) {
-            add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_TINYINT, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_SMALLINT, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_INT, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_LARGEINT, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2, VarStateTrait, VarBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, VarStateTrait, VarBuilder>(var_name, is_window);
-        }
-    }
-    {
-        std::vector<std::string> names = {"variance_samp", "var_samp"};
-        for (auto var_name : names) {
-            add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_TINYINT, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_SMALLINT, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_INT, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_LARGEINT, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2, VarStateTrait, VarSampBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, VarStateTrait, VarSampBuilder>(var_name, is_window);
-        }
-    }
-    {
-        std::vector<std::string> names = {"stddev", "std", "stddev_pop"};
-        for (auto var_name : names) {
-            add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_TINYINT, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_SMALLINT, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_INT, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_LARGEINT, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2, VarStateTrait, StdBuilder>(var_name, is_window);
-            add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, VarStateTrait, StdBuilder>(var_name, is_window);
-        }
+    for (auto var_name : std::vector<std::string>{"variance", "variance_pop", "var_pop"}) {
+        AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, VarBuilder);
     }
 
-    std::string var_name = "stddev_samp";
-    add_aggregate_mapping<TYPE_BOOLEAN, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_TINYINT, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_SMALLINT, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_INT, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_LARGEINT, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_FLOAT, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_DOUBLE, TYPE_DOUBLE, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_DECIMALV2, TYPE_DECIMALV2, VarStateTrait, StdSampBuilder>(var_name, is_window);
-    add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, VarStateTrait, StdSampBuilder>(var_name, is_window);
+    for (auto var_name : std::vector<std::string>{"variance_samp", "var_samp"}) {
+        AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, VarSampBuilder);
+    }
+
+    for (auto var_name : std::vector<std::string>{"stddev", "std", "stddev_pop"}) {
+        AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, StdBuilder);
+    }
+
+    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("stddev_samp", false, DevFromAveResultPT, VarStateTrait, StdSampBuilder);
 }
 
 } // namespace starrocks::vectorized

@@ -169,12 +169,16 @@ public:
         }
     }
 
-    template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false,
-              template <PrimitiveType> class FuncBuilder, template <PrimitiveType> class StateTrait>
-    void add_object_mapping(std::string name) {
+    template <PrimitiveType ArgPT, PrimitiveType ResultPT, template <PrimitiveType> class StateTrait,
+              template <PrimitiveType> class FuncBuilder>
+    void add_object_mapping(std::string name, bool is_window) {
         auto func = FuncBuilder<ArgPT>()();
         using StateType = StateTrait<ArgPT>;
-        add_object_mapping<ArgPT, ResultPT, AddWindowVersion, StateType>(name, func);
+        if (is_window) {
+            add_object_mapping<ArgPT, ResultPT, true, StateType>(name, func);
+        } else {
+            add_object_mapping<ArgPT, ResultPT, false, StateType>(name, func);
+        }
     }
 
     template <PrimitiveType ArgPT, PrimitiveType ResultPT, bool AddWindowVersion = false>
@@ -319,13 +323,7 @@ public:
             }
         }
 
-        if (name == "lead" || name == "lag") {
-            return AggregateFactory::MakeLeadLagWindowFunction<ArgPT>();
-        } else if (name == "first_value") {
-            return AggregateFactory::MakeFirstValueWindowFunction<ArgPT>();
-        } else if (name == "last_value") {
-            return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
-        } else if (name == "max_by") {
+        if (name == "max_by") {
             return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
@@ -356,13 +354,7 @@ public:
             }
         }
 
-        if (name == "lead" || name == "lag") {
-            return AggregateFactory::MakeLeadLagWindowFunction<ArgPT>();
-        } else if (name == "first_value") {
-            return AggregateFactory::MakeFirstValueWindowFunction<ArgPT>();
-        } else if (name == "last_value") {
-            return AggregateFactory::MakeLastValueWindowFunction<ArgPT>();
-        } else if (name == "max_by") {
+        if (name == "max_by") {
             return AggregateFactory::MakeMaxByAggregateFunction<ArgPT>();
         }
         return nullptr;
@@ -374,6 +366,7 @@ private:
     const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
 };
 
+// TODO(murphy) refactor it into a type dispatch
 #define ADD_ALL_TYPE(FUNCTIONNAME, ADD_WINDOW_VERSION)                                       \
     add_aggregate_mapping<TYPE_BOOLEAN, TYPE_BOOLEAN, ADD_WINDOW_VERSION>(FUNCTIONNAME);     \
     add_aggregate_mapping<TYPE_TINYINT, TYPE_TINYINT, ADD_WINDOW_VERSION>(FUNCTIONNAME);     \
@@ -392,6 +385,86 @@ private:
     add_aggregate_mapping<TYPE_DECIMAL64, TYPE_DECIMAL64, ADD_WINDOW_VERSION>(FUNCTIONNAME); \
     add_aggregate_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, ADD_WINDOW_VERSION>(FUNCTIONNAME);
 
+// TODO(murphy) refactor it into a type dispatch
+#define AGGREGATE_ALL_TYPE_FROM_TRAIT(FUNCTIONNAME, WINDOW, RESULT_TRAIT, STATE_TRAIT, FUNC_BUILDER)                  \
+    add_aggregate_mapping<TYPE_BOOLEAN, RESULT_TRAIT<TYPE_BOOLEAN>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping<TYPE_TINYINT, RESULT_TRAIT<TYPE_TINYINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping<TYPE_SMALLINT, RESULT_TRAIT<TYPE_SMALLINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,        \
+                                                                                                 WINDOW);             \
+    add_aggregate_mapping<TYPE_INT, RESULT_TRAIT<TYPE_INT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);         \
+    add_aggregate_mapping<TYPE_BIGINT, RESULT_TRAIT<TYPE_BIGINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping<TYPE_LARGEINT, RESULT_TRAIT<TYPE_LARGEINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,        \
+                                                                                                 WINDOW);             \
+    add_aggregate_mapping<TYPE_FLOAT, RESULT_TRAIT<TYPE_FLOAT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_aggregate_mapping<TYPE_DOUBLE, RESULT_TRAIT<TYPE_DOUBLE>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping<TYPE_DECIMALV2, RESULT_TRAIT<TYPE_DECIMALV2>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,      \
+                                                                                                   WINDOW);           \
+    add_aggregate_mapping<TYPE_DATETIME, RESULT_TRAIT<TYPE_DATETIME>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,        \
+                                                                                                 WINDOW);             \
+    add_aggregate_mapping<TYPE_DATE, RESULT_TRAIT<TYPE_DATE>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);       \
+    add_aggregate_mapping<TYPE_DECIMAL32, RESULT_TRAIT<TYPE_DECIMAL32>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,      \
+                                                                                                   WINDOW);           \
+    add_aggregate_mapping<TYPE_DECIMAL64, RESULT_TRAIT<TYPE_DECIMAL64>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,      \
+                                                                                                   WINDOW);           \
+    add_aggregate_mapping<TYPE_DECIMAL128, RESULT_TRAIT<TYPE_DECIMAL128>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,    \
+                                                                                                     WINDOW);
+
+// TODO(murphy) refactor it into a type dispatch
+#define AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT(FUNCTIONNAME, WINDOW, RESULT_TRAIT, STATE_TRAIT, FUNC_BUILDER)            \
+    add_object_mapping<TYPE_BOOLEAN, RESULT_TRAIT<TYPE_BOOLEAN>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_object_mapping<TYPE_TINYINT, RESULT_TRAIT<TYPE_TINYINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_object_mapping<TYPE_SMALLINT, RESULT_TRAIT<TYPE_SMALLINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_object_mapping<TYPE_INT, RESULT_TRAIT<TYPE_INT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);             \
+    add_object_mapping<TYPE_BIGINT, RESULT_TRAIT<TYPE_BIGINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);       \
+    add_object_mapping<TYPE_LARGEINT, RESULT_TRAIT<TYPE_LARGEINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_object_mapping<TYPE_FLOAT, RESULT_TRAIT<TYPE_FLOAT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);         \
+    add_object_mapping<TYPE_DOUBLE, RESULT_TRAIT<TYPE_DOUBLE>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);       \
+    add_object_mapping<TYPE_CHAR, RESULT_TRAIT<TYPE_CHAR>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);           \
+    add_object_mapping<TYPE_VARCHAR, RESULT_TRAIT<TYPE_VARCHAR>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_object_mapping<TYPE_DECIMALV2, RESULT_TRAIT<TYPE_DECIMALV2>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_object_mapping<TYPE_DATETIME, RESULT_TRAIT<TYPE_DATETIME>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_object_mapping<TYPE_DATE, RESULT_TRAIT<TYPE_DATE>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);           \
+    add_object_mapping<TYPE_DECIMAL32, RESULT_TRAIT<TYPE_DECIMAL32>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_object_mapping<TYPE_DECIMAL64, RESULT_TRAIT<TYPE_DECIMAL64>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_object_mapping<TYPE_DECIMAL128, RESULT_TRAIT<TYPE_DECIMAL128>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);
+
+// TODO(murphy) refactor it into a type dispatch
+#define AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT(FUNCTIONNAME, WINDOW, RESULT_TRAIT, FUNC_BUILDER)                      \
+    add_aggregate_mapping_notnull<TYPE_BOOLEAN, RESULT_TRAIT<TYPE_BOOLEAN>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_aggregate_mapping_notnull<TYPE_TINYINT, RESULT_TRAIT<TYPE_TINYINT>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_aggregate_mapping_notnull<TYPE_SMALLINT, RESULT_TRAIT<TYPE_SMALLINT>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping_notnull<TYPE_INT, RESULT_TRAIT<TYPE_INT>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);             \
+    add_aggregate_mapping_notnull<TYPE_BIGINT, RESULT_TRAIT<TYPE_BIGINT>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);       \
+    add_aggregate_mapping_notnull<TYPE_LARGEINT, RESULT_TRAIT<TYPE_LARGEINT>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping_notnull<TYPE_FLOAT, RESULT_TRAIT<TYPE_FLOAT>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);         \
+    add_aggregate_mapping_notnull<TYPE_DOUBLE, RESULT_TRAIT<TYPE_DOUBLE>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);       \
+    add_aggregate_mapping_notnull<TYPE_DATETIME, RESULT_TRAIT<TYPE_DATETIME>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping_notnull<TYPE_DATE, RESULT_TRAIT<TYPE_DATE>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);           \
+    add_aggregate_mapping_notnull<TYPE_CHAR, RESULT_TRAIT<TYPE_CHAR>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);           \
+    add_aggregate_mapping_notnull<TYPE_VARCHAR, RESULT_TRAIT<TYPE_VARCHAR>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_aggregate_mapping_notnull<TYPE_DECIMALV2, RESULT_TRAIT<TYPE_DECIMALV2>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping_notnull<TYPE_DECIMAL32, RESULT_TRAIT<TYPE_DECIMAL32>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping_notnull<TYPE_DECIMAL64, RESULT_TRAIT<TYPE_DECIMAL64>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping_notnull<TYPE_DECIMAL128, RESULT_TRAIT<TYPE_DECIMAL128>, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);
+
+// TODO(murphy) refactor it into a type dispatch
+#define AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(FUNCTIONNAME, WINDOW, RESULT_TRAIT, STATE_TRAIT, FUNC_BUILDER)             \
+    add_aggregate_mapping<TYPE_BOOLEAN, RESULT_TRAIT<TYPE_BOOLEAN>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping<TYPE_TINYINT, RESULT_TRAIT<TYPE_TINYINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW); \
+    add_aggregate_mapping<TYPE_SMALLINT, RESULT_TRAIT<TYPE_SMALLINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,        \
+                                                                                                 WINDOW);             \
+    add_aggregate_mapping<TYPE_INT, RESULT_TRAIT<TYPE_INT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);         \
+    add_aggregate_mapping<TYPE_BIGINT, RESULT_TRAIT<TYPE_BIGINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping<TYPE_LARGEINT, RESULT_TRAIT<TYPE_LARGEINT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,        \
+                                                                                                 WINDOW);             \
+    add_aggregate_mapping<TYPE_FLOAT, RESULT_TRAIT<TYPE_FLOAT>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);     \
+    add_aggregate_mapping<TYPE_DOUBLE, RESULT_TRAIT<TYPE_DOUBLE>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME, WINDOW);   \
+    add_aggregate_mapping<TYPE_DECIMALV2, RESULT_TRAIT<TYPE_DECIMALV2>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,      \
+                                                                                                   WINDOW);           \
+    add_aggregate_mapping<TYPE_DECIMAL128, RESULT_TRAIT<TYPE_DECIMAL128>, STATE_TRAIT, FUNC_BUILDER>(FUNCTIONNAME,    \
+                                                                                                     WINDOW);
+
+// TODO(murphy) refactor it into a type dispatch
 #define ADD_ALL_TYPE1(FUNCTIONNAME, RET_TYPE)                            \
     add_aggregate_mapping<TYPE_BOOLEAN, RET_TYPE, true>(FUNCTIONNAME);   \
     add_aggregate_mapping<TYPE_TINYINT, RET_TYPE, true>(FUNCTIONNAME);   \

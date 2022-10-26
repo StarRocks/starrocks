@@ -18,12 +18,14 @@ struct NDVBuilder {
 
 template <PrimitiveType pt>
 using NDVStateTrait = HyperLogLog;
+template <PrimitiveType pt>
+inline constexpr PrimitiveType CountResult = TYPE_BIGINT;
 
 template <PrimitiveType pt>
 using IntersectCountStateTrait = BitmapIntersectAggregateState<BitmapRuntimeCppType<pt>>;
 
 template <PrimitiveType pt>
-struct IntesectCountBuilder {
+struct IntersectCountBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeIntersectCountAggregateFunction<pt>(); }
 };
 
@@ -42,49 +44,11 @@ void AggregateFuncResolver::register_6() {
     add_object_mapping<TYPE_OBJECT, TYPE_BIGINT, true, BitmapValue>(
             "bitmap_union_count", AggregateFactory::MakeBitmapUnionCountAggregateFunction());
 
-    // This first type is the second type input of intersect_count.
-    // And the first type is Bitmap.
-    add_object_mapping<TYPE_TINYINT, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_SMALLINT, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_INT, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>("intersect_count");
-    add_object_mapping<TYPE_BIGINT, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_LARGEINT, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_FLOAT, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_DOUBLE, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_DATE, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_DATETIME, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_DECIMALV2, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_CHAR, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
-    add_object_mapping<TYPE_VARCHAR, TYPE_BIGINT, false, IntesectCountBuilder, IntersectCountStateTrait>(
-            "intersect_count");
+    AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT("intersect_count", false, CountResult, IntersectCountStateTrait,
+                                         IntersectCountBuilder);
 
     for (auto func_name : std::vector<std::string>{"ndv", "approx_count_distinct"}) {
-        add_object_mapping<TYPE_BOOLEAN, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_TINYINT, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_SMALLINT, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_INT, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_BIGINT, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_LARGEINT, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_FLOAT, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DOUBLE, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_CHAR, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_VARCHAR, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DECIMALV2, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DATETIME, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DATE, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DECIMAL32, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DECIMAL64, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
-        add_object_mapping<TYPE_DECIMAL128, TYPE_BIGINT, false, NDVBuilder, NDVStateTrait>(func_name);
+        AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT(func_name, false, CountResult, NDVStateTrait, NDVBuilder);
     }
 }
 

@@ -3,6 +3,7 @@
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "runtime/primitive_type.h"
 #include "util/percentile_value.h"
 
 namespace starrocks::vectorized {
@@ -15,23 +16,11 @@ struct HLLRawBuilder {
 template <PrimitiveType pt>
 using HLLStateTrait = HyperLogLog;
 
+template <PrimitiveType pt>
+inline constexpr PrimitiveType HLLResult = TYPE_HLL;
+
 void AggregateFuncResolver::register_7() {
-    add_object_mapping<TYPE_BOOLEAN, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_TINYINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_SMALLINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_INT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_BIGINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_LARGEINT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_FLOAT, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DOUBLE, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_CHAR, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_VARCHAR, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DECIMALV2, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DATETIME, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DATE, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DECIMAL32, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DECIMAL64, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
-    add_object_mapping<TYPE_DECIMAL128, TYPE_HLL, false, HLLRawBuilder, HLLStateTrait>("hll_raw");
+    AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT("hll_raw", false, HLLResult, HLLStateTrait, HLLRawBuilder);
 
     add_object_mapping<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx");
     add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx");
