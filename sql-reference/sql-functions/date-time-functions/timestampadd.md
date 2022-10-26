@@ -4,9 +4,9 @@
 
 将整数表达式间隔添加到日期或日期时间表达式`datetime_expr`中。
 
-`interval`的单位由unit参数给出，应该是下列值之一:
+`interval`的单位由`unit`参数给出，应该是下列值之一:
 
-SECOND，MINUTE，HOUR，DAY，WEEK，MONTH，YEAR
+SECOND，MINUTE，HOUR，DAY，WEEK，MONTH，YEAR。
 
 ## 语法
 
