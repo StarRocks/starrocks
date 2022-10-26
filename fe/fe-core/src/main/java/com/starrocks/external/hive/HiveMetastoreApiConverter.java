@@ -65,7 +65,7 @@ public class HiveMetastoreApiConverter {
     }
 
     public static String toTableLocation(StorageDescriptor sd, Map<String, String> tableParams) {
-        Optional<Map<String, String>> tableParamsOptional = Optional.of(tableParams);
+        Optional<Map<String, String>> tableParamsOptional = Optional.ofNullable(tableParams);
         if (isDeltaLakeTable(tableParamsOptional.orElse(ImmutableMap.of()))) {
             return sd.getSerdeInfo().getParameters().get("path");
         }
