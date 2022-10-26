@@ -158,10 +158,13 @@ public class Frontend implements Writable {
             isChanged = true;
         }
         if (!isReplay) {
-            hbResponse.aliveStatus = isAlive;
+            hbResponse.aliveStatus = isAlive ?
+                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
-            isAlive = hbResponse.aliveStatus;
-            heartbeatRetryTimes = 0;
+            if (hbResponse.aliveStatus != null) {
+                isAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
+                heartbeatRetryTimes = 0;
+            }
         }
         return isChanged;
     }

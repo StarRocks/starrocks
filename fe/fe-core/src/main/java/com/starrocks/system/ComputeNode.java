@@ -432,10 +432,13 @@ public class ComputeNode implements IComputable, Writable {
             isChanged = true;
         }
         if (!isReplay) {
-            hbResponse.aliveStatus = isAlive.get();
+            hbResponse.aliveStatus = isAlive.get() ?
+                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
-            isAlive.getAndSet(hbResponse.aliveStatus);
-            heartbeatRetryTimes = 0;
+            if (hbResponse.aliveStatus != null) {
+                isAlive.getAndSet(hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE);
+                heartbeatRetryTimes = 0;
+            }
         }
         return isChanged;
     }

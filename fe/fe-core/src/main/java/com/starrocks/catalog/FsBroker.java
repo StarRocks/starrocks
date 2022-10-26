@@ -29,6 +29,7 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BrokerHbResponse;
+import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
 import java.io.DataInput;
@@ -93,10 +94,13 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
             isChanged = true;
         }
         if (!isReplay) {
-            hbResponse.aliveStatus = isAlive;
+            hbResponse.aliveStatus = isAlive ?
+                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
         } else {
-            isAlive = hbResponse.aliveStatus;
-            heartbeatRetryTimes = 0;
+            if (hbResponse.aliveStatus != null) {
+                isAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
+                heartbeatRetryTimes = 0;
+            }
         }
         return isChanged;
     }
