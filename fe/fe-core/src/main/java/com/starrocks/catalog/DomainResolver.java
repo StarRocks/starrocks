@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.mysql.privilege.Auth;
 import org.apache.logging.log4j.LogManager;
@@ -48,18 +49,31 @@ public class DomainResolver extends LeaderDaemon {
     private static final String BNS_RESOLVER_TOOLS_PATH = "/usr/bin/get_instance_by_service";
 
     private Auth auth;
+    private AuthenticationManager authenticationManager;
 
     public DomainResolver(Auth auth) {
-        super("domain resolver", 10 * 1000);
+        super("domain resolver", 10L * 1000);
         this.auth = auth;
+        this.authenticationManager = null;
+    }
+
+    public DomainResolver(AuthenticationManager authenticationManager) {
+        super("domain resolver", 10L * 1000);
+        this.auth = null;
+        this.authenticationManager = authenticationManager;
     }
 
     // 'public' for test
     @Override
     public void runAfterCatalogReady() {
         // domain names
-        Set<String> allDomains = Sets.newHashSet();
-        auth.getAllDomains(allDomains);
+        Set<String> allDomains;
+        if (auth != null) {
+            allDomains = Sets.newHashSet();
+            auth.getAllDomains(allDomains);
+        } else {
+            allDomains = authenticationManager.getAllHostnames();
+        }
 
         // resolve domain name
         Map<String, Set<String>> resolvedIPsMap = Maps.newHashMap();
@@ -75,7 +89,11 @@ public class DomainResolver extends LeaderDaemon {
         }
 
         // refresh user priv table by resolved IPs
-        auth.refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
+        if (auth != null) {
+            auth.refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
+        } else {
+            authenticationManager.setHostnameToIpSet(resolvedIPsMap);
+        }
     }
 
     /**

@@ -21,6 +21,14 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 public class AuthenticationManagerTest {
     static ConnectContext ctx;
@@ -281,5 +289,93 @@ public class AuthenticationManagerTest {
         AuthenticationManager finalManager = AuthenticationManager.load(finalImage.getDataInputStream());
         Assert.assertFalse(finalManager.doesUserExist(testUser));
         Assert.assertTrue(finalManager.doesUserExist(UserIdentity.ROOT));
+    }
+
+    @Test
+    public void testUserWithHost() throws Exception {
+        UserIdentity testUserWithHost = UserIdentity.createAnalyzedUserIdentWithDomain("user_with_host", "host01");
+        byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
+        byte[] scramble = MysqlPassword.scramble(seed, "abc");
+        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        Assert.assertFalse(manager.doesUserExist(testUserWithHost));
+
+        // create a user with host name
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user user_with_host@['host01'] identified by 'abc'", ctx), ctx);
+        Assert.assertTrue(manager.doesUserExist(testUserWithHost));
+        Assert.assertEquals(new HashSet<String>(Arrays.asList("host01")), manager.getAllHostnames());
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.1", scramble, seed));
+
+        // update host -> ip list
+        Map<String, Set<String>> hostToIpList = new HashMap<>();
+        hostToIpList.put("host01", new HashSet<>(Arrays.asList("10.1.1.2")));
+        manager.setHostnameToIpSet(hostToIpList);
+
+        // check login
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.1", scramble, seed));
+        Assert.assertEquals(testUserWithHost, manager.checkPassword("user_with_host", "10.1.1.2", scramble, seed));
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.3", scramble, seed));
+
+        // update host -> ip list
+        hostToIpList = new HashMap<>();
+        hostToIpList.put("host01", new HashSet<>(Arrays.asList("10.1.1.1", "10.1.1.2")));
+        hostToIpList.put("host02", new HashSet<>(Arrays.asList("10.1.1.1")));
+        manager.setHostnameToIpSet(hostToIpList);
+
+        // check login
+        Assert.assertEquals(testUserWithHost, manager.checkPassword("user_with_host", "10.1.1.1", scramble, seed));
+        Assert.assertEquals(testUserWithHost, manager.checkPassword("user_with_host", "10.1.1.2", scramble, seed));
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.3", scramble, seed));
+
+        // create a user with ip
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user user_with_host@'10.1.1.1' identified by 'abc'", ctx), ctx);
+        UserIdentity testUserWithIp = UserIdentity.createAnalyzedUserIdentWithIp("user_with_host", "10.1.1.1");
+        Assert.assertTrue(manager.doesUserExist(testUserWithHost));
+        Assert.assertTrue(manager.doesUserExist(testUserWithIp));
+
+        // login matches ip
+        Assert.assertEquals(testUserWithIp, manager.checkPassword("user_with_host", "10.1.1.1", scramble, seed));
+
+        // create a user with %
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user user_with_host@'%' identified by 'def'", ctx), ctx);
+        UserIdentity testUserWithAll = UserIdentity.createAnalyzedUserIdentWithIp("user_with_host", "%");
+        byte[] scramble2 = MysqlPassword.scramble(seed, "def");
+        Assert.assertTrue(manager.doesUserExist(testUserWithHost));
+        Assert.assertTrue(manager.doesUserExist(testUserWithIp));
+        Assert.assertTrue(manager.doesUserExist(testUserWithAll));
+
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.1", scramble2, seed));
+        Assert.assertNull(manager.checkPassword("user_with_host", "10.1.1.2", scramble2, seed));
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "alter user user_with_host@'%' identified by 'abc'", ctx), ctx);
+        Assert.assertEquals(testUserWithIp, manager.checkPassword("user_with_host", "10.1.1.1", scramble, seed));
+        Assert.assertEquals(testUserWithHost, manager.checkPassword("user_with_host", "10.1.1.2", scramble, seed));
+    }
+
+    @Test
+    public void testSortUserIdentity() throws Exception {
+        AuthenticationManager manager = ctx.getGlobalStateMgr().getAuthenticationManager();
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user sort_user@['host01'] identified by 'abc'", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user sort_user@'10.1.1.2' identified by 'abc'", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user sort_user@'10.1.1.1' identified by 'abc'", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user sort_user@'%' identified by 'abc'", ctx), ctx);
+        List<String> l = new ArrayList<>();
+        Iterator<Map.Entry<UserIdentity, UserAuthenticationInfo>> it = manager.userToAuthenticationInfo.entrySet().iterator();
+        while (it.hasNext()) {
+            Map.Entry<UserIdentity, UserAuthenticationInfo> entry = it.next();
+            UserIdentity userIdentity = entry.getKey();
+            if (userIdentity.getQualifiedUser().equals("sort_user")) {
+                l.add(userIdentity.toString());
+            }
+        }
+        Assert.assertEquals(Arrays.asList(
+                    "'sort_user'@'10.1.1.1'", "'sort_user'@'10.1.1.2'", "'sort_user'@['host01']", "'sort_user'@'%'"), l);
     }
 }
