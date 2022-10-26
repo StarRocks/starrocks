@@ -63,7 +63,11 @@ enum TPlanNodeType {
   DECODE_NODE,
   JDBC_SCAN_NODE,
   LAKE_SCAN_NODE,
-  NESTLOOP_JOIN_NODE
+  NESTLOOP_JOIN_NODE,
+  
+  BINLOG_SOURCE_NODE,
+  STREAM_JOIN_NODE,
+  STREAM_AGG_NODE,
 }
 
 // phases of an execution node
