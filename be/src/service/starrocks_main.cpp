@@ -172,7 +172,7 @@ int main(int argc, char** argv) {
         starrocks::BlockCache* cache = starrocks::BlockCache::instance();
         starrocks::CacheOptions cache_options;
         cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-        if (starrocks::config::block_cache_disk_enable) {
+        if (starrocks::config::block_cache_disk_size > 0) {
             std::vector<starrocks::StorePath> paths;
             auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
             if (!parse_res.ok()) {
