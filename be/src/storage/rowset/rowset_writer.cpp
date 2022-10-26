@@ -123,7 +123,7 @@ Status RowsetWriter::init() {
 }
 
 StatusOr<RowsetSharedPtr> RowsetWriter::build() {
-    if (_num_rows_written > 0) {
+    if (_num_rows_written > 0 || (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _num_delfile > 0)) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta_pb->set_num_rows(_num_rows_written);
