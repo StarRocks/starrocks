@@ -65,9 +65,9 @@ void AggregateFuncResolver::register_3() {
     add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, DistinctState2Trait, DistinctSumBuilder2>("multi_distinct_sum2",
                                                                                                 false);
 
-    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("sum", false, SumResultPT, SumStateTrait, SumBuilder);
-    add_aggregate_mapping<TYPE_DECIMAL32, SumResultPT<TYPE_DECIMAL32>, SumStateTrait, SumBuilder>("sum", false);
-    add_aggregate_mapping<TYPE_DECIMAL64, SumResultPT<TYPE_DECIMAL64>, SumStateTrait, SumBuilder>("sum", false);
-    add_aggregate_mapping<TYPE_DECIMAL128, SumResultPT<TYPE_DECIMAL128>, SumStateTrait, SumBuilder>("sum", false);
+    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("sum", true, SumResultPT, SumStateTrait, SumBuilder);
+    add_aggregate_mapping<TYPE_DECIMAL32, SumResultPT<TYPE_DECIMAL32>, SumStateTrait, SumBuilder>("sum", true);
+    add_aggregate_mapping<TYPE_DECIMAL64, SumResultPT<TYPE_DECIMAL64>, SumStateTrait, SumBuilder>("sum", true);
+    add_aggregate_mapping<TYPE_DECIMAL128, SumResultPT<TYPE_DECIMAL128>, SumStateTrait, SumBuilder>("sum", true);
 }
 } // namespace starrocks::vectorized
