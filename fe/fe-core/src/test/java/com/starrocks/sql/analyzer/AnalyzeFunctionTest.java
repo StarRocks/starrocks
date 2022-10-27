@@ -103,6 +103,10 @@ public class AnalyzeFunctionTest {
 
         analyzeFail("select time_slice(th, interval 1 second, FCEILK) from tall",
                 "time_slice must use FLOOR/CEIL as third parameter");
+
+        analyzeSuccess("select time_slice('2022-04-26 19:01:03', interval 5 day)");
+        analyzeSuccess("select time_slice('2022-04-26', interval 5 day)");
+        analyzeSuccess("select time_slice('2022-04-', interval 5 day)");
     }
 
     @Test
