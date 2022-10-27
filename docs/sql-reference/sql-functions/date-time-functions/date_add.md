@@ -10,7 +10,13 @@ INT DATE_ADD(DATETIME date,INTERVAL expr type)
 
 Add a specified time interval to the date.
 
+<<<<<<< HEAD
 The date parameter is a valid data expression. .
+=======
+- `date`: It must be a valid date expression.
+- `expr`: the time interval you want to add. It must be of the INT type.
+- `type`: It can only be set to any of the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
+>>>>>>> 50060d4cf ([Doc] add date functions and update other docs (#12589))
 
 The expr parameter is the time interval you want to add.
 

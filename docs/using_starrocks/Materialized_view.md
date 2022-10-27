@@ -306,9 +306,13 @@ Now the query will read data directly from the newly created mv_1 materialized v
 
 ## Note
 
+<<<<<<< HEAD
 1. The aggregation function of materialized views only supports a single column as an argument, for example: `sum(a+b)` is not supported.
 2. If the condition column of a delete statement does not exist in the materialized view, the delete operation cannot be performed. If you must delete the data, you need to delete the materialized view first .
 3. Too many materialized views on a single table affects import efficiency. When importing data, the materialized view and the base table data are updated simultaneously. Therefore,  if there are more than 10 materialized views on a table, the import speed may be slow (it’s like importing 10 tables at the same time).
 4. Same column with different aggregation functions can not appear in a materialized view at the same time, for example: `select sum(a), min(a) from table` is not supported.
 5. The creation statement of materialized views currently does not support `JOIN`, `WHERE`, or the `HAVING` clause of GROUP BY`.
 6. You cannot create more than one materialized view at the same time. You can only  create a new materialized view  after the previous creation  is complete
+=======
+- The query statement does not support random functions, including rand((), random(), uuid()), and sleep().
+>>>>>>> 50060d4cf ([Doc] add date functions and update other docs (#12589))
