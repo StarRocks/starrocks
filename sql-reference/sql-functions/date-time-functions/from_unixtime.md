@@ -20,20 +20,20 @@
 ## 语法
 
 ```Haskell
-DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
 ```
 
 ## 参数说明
 
-`unix_timestamp`: 要转化的 UNIX 时间戳，INT 类型。如果给定的时间戳小于 0 或大于 253402271999，则返回 NULL。即时间戳范围是：
+`unix_timestamp`: 要转化的 UNIX 时间戳，INT 类型。如果给定的时间戳小于 0 或大于 2147483647，则返回 NULL。即时间戳范围是：
 
-1970-01-01 00:00:00 ~ 9999-12-31 23:59:59。
+1970-01-01 00:00:00 ~ 2038-01-19 11:14:07。
 
 `string_format`: 可选，指定的时间格式。
 
 ## 返回值说明
 
-返回 DATETIME 类型的值。如果 `string_format` 指定的是 DATE 格式，则返回 DATE 类型的值。
+返回 DATETIME 或 DATE 类型的值。如果 `string_format` 指定的是 DATE 格式，则返回 DATE 类型的值。
 
 如果输入的时间戳超过范围，返回 NULL。如果 `string_format` 指定的格式非法，则返回 NULL。
 
