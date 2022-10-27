@@ -66,12 +66,13 @@ public class UserPEntryObject implements PEntryObject {
             throw new ClassCastException("cannot cast " + obj.getClass().toString() + " to " + this.getClass());
         }
         UserPEntryObject o = (UserPEntryObject) obj;
-        if (o.userIdentity == userIdentity) {
-            return 0;
-        }
         // other > all
         if (userIdentity == null) {
-            return 1;
+            if (o.userIdentity == null) {
+                return 0;
+            } else {
+                return 1;
+            }
         }
         if (o.userIdentity == null) {
             return -1;
@@ -84,10 +85,16 @@ public class UserPEntryObject implements PEntryObject {
         if (this == o) {
             return true;
         }
-        if (o == null || getClass() != o.getClass()) {
+        if (getClass() != o.getClass()) {
             return false;
         }
         UserPEntryObject that = (UserPEntryObject) o;
+        if (userIdentity == null) {
+            return that.userIdentity == null;
+        }
+        if (that.userIdentity == null) {
+            return false;
+        }
         return userIdentity.equals(that.userIdentity);
     }
 

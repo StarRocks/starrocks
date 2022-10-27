@@ -314,6 +314,8 @@ public class PrivilegeStmtAnalyzerV2Test {
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         sql = "revoke create_table on ALL databases from test_user";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
+        sql = "grant impersonate on ALL users to test_user";
+        Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
         sql = "grant create_table on ALL database to test_user";
         try {
@@ -353,6 +355,14 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("invalid ALL statement for databases! only support ON ALL DATABASES"));
+        }
+
+        sql = "grant impersonate on ALL users in all databases to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for user! only support ON ALL USERS"));
         }
 
     }

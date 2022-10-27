@@ -39,7 +39,7 @@ import java.util.stream.Collectors;
 public class PrivilegeManager {
     private static final Logger LOG = LogManager.getLogger(PrivilegeManager.class);
     private static final String ALL_ACTIONS = "ALL";
-    // default roles and users
+    // builtin roles and users
     private static final String ROOT_ROLE_NAME = "root";
 
     @SerializedName(value = "t")
@@ -101,17 +101,17 @@ public class PrivilegeManager {
 
     public void initBuiltinRolesAndUsers() {
         try {
-            // 1. default root role
-            RolePrivilegeCollection rolePrivilegeCollection = new RolePrivilegeCollection(ROOT_ROLE_NAME);
+            // 1. builtin root role
+            RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(ROOT_ROLE_NAME);
             // GRANT ALL ON ALL
             for (String typeStr : typeStringToId.keySet()) {
                 PrivilegeTypes t = PrivilegeTypes.valueOf(typeStr);
                 initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
             }
-            initDefaultRoleUnlocked(rolePrivilegeCollection);
+            rolePrivilegeCollection.disableMutable();  // not mutable
 
-            // 2. default db_admin role
-            rolePrivilegeCollection = new RolePrivilegeCollection("db_admin");
+            // 2. builtin db_admin role
+            rolePrivilegeCollection = initBuiltinRoleUnlocked("db_admin");
             PrivilegeTypes systemTypes = PrivilegeTypes.SYSTEM;
             // ALL system but GRANT AND NODE
             List<String> actionWithoutNodeGrant = systemTypes.getValidActions().stream().filter(
@@ -120,10 +120,10 @@ public class PrivilegeManager {
             for (PrivilegeTypes t : Arrays.asList(PrivilegeTypes.DATABASE, PrivilegeTypes.TABLE)) {
                 initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
             }
-            initDefaultRoleUnlocked(rolePrivilegeCollection);
+            rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 3. cluster_admin
-            rolePrivilegeCollection = new RolePrivilegeCollection("cluster_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked("cluster_admin");
             // GRANT NODE ON SYSTEM
             initPrivilegeCollections(
                     rolePrivilegeCollection,
@@ -131,10 +131,10 @@ public class PrivilegeManager {
                     Arrays.asList(PrivilegeTypes.SystemActions.NODE.name()),
                     null,
                     false);
-            initDefaultRoleUnlocked(rolePrivilegeCollection);
+            rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 4. user_admin
-            rolePrivilegeCollection = new RolePrivilegeCollection("user_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked("user_admin");
             // GRANT GRANT ON SYSTEM
             initPrivilegeCollections(
                     rolePrivilegeCollection,
@@ -142,12 +142,11 @@ public class PrivilegeManager {
                     Arrays.asList(PrivilegeTypes.SystemActions.GRANT.name()),
                     null,
                     false);
-            initDefaultRoleUnlocked(rolePrivilegeCollection);
+            rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 5. public
             publicRoleName = "public";
-            rolePrivilegeCollection = new RolePrivilegeCollection(
-                    publicRoleName, RolePrivilegeCollection.RoleFlags.MUTABLE);
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(publicRoleName);
             // GRANT SELECT ON ALL TABLES IN infomation_schema
             String tableTypeStr = PrivilegeTypes.TABLE.name();
             List<PEntryObject> object = Arrays.asList(provider.generateObject(
@@ -159,9 +158,8 @@ public class PrivilegeManager {
             ActionSet selectAction = analyzeActionSet(
                     tableTypeStr, tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
             rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
-            initDefaultRoleUnlocked(rolePrivilegeCollection);
 
-            // 6. default user root
+            // 6. builtin user root
             UserPrivilegeCollection userPrivilegeCollection = new UserPrivilegeCollection();
             userPrivilegeCollection.grantRole(getRoleIdByNameNoLock(ROOT_ROLE_NAME));
             userToPrivilegeCollection.put(UserIdentity.ROOT, userPrivilegeCollection);
@@ -245,12 +243,16 @@ public class PrivilegeManager {
     }
 
     // called by initBuiltinRolesAndUsers()
-    private void initDefaultRoleUnlocked(RolePrivilegeCollection collection) {
-        if (! roleNameToId.containsKey(collection.getName())) {
+    private RolePrivilegeCollection initBuiltinRoleUnlocked(String name) {
+        if (! roleNameToId.containsKey(name)) {
             long roleId = globalStateMgr.getNextId();
+            RolePrivilegeCollection collection = new RolePrivilegeCollection(
+                    name, RolePrivilegeCollection.RoleFlags.MUTABLE);
             roleIdToPrivilegeCollection.put(roleId, collection);
-            roleNameToId.put(collection.getName(), roleId);
+            roleNameToId.put(name, roleId);
+            return collection;
         }
+        return roleIdToPrivilegeCollection.get(roleNameToId.get(name));
     }
 
     private void userReadLock() {
@@ -303,7 +305,7 @@ public class PrivilegeManager {
                         stmt.getUserIdentity());
             }
         } catch (PrivilegeException e) {
-            throw new DdlException("grant failed: " + stmt.getOrigStmt(), e);
+            throw new DdlException("failed to grant: " + e.getMessage(), e);
         }
     }
 
@@ -334,9 +336,6 @@ public class PrivilegeManager {
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-            if (! collection.isMutable()) {
-                throw new PrivilegeException("role " + roleName + " is not mutable!");
-            }
             collection.grant(type, actionSet, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     roleId, collection, provider.getPluginId(), provider.getPluginVersion());
@@ -363,7 +362,7 @@ public class PrivilegeManager {
                         stmt.getUserIdentity());
             }
         } catch (PrivilegeException e) {
-            throw new DdlException("revoke failed: " + stmt.getOrigStmt(), e);
+            throw new DdlException("failed to revoke: " + e.getMessage(), e);
         }
     }
 
@@ -394,9 +393,6 @@ public class PrivilegeManager {
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-            if (! collection.isMutable()) {
-                throw new PrivilegeException("role " + roleName + " is not mutable!");
-            }
             collection.revoke(type, actionSet, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
                     roleId, collection, provider.getPluginId(), provider.getPluginVersion());
@@ -461,10 +457,6 @@ public class PrivilegeManager {
             RolePrivilegeCollection parentCollection = getRolePrivilegeCollectionUnlocked(parentRoleId, true);
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-
-            if (! collection.isMutable()) {
-                throw new PrivilegeException("role " + roleName + " is not mutable!");
-            }
 
             // to avoid circle, verify roleName is not predecessor role of parentRoleName
             Set<Long> parentRolePredecessors = getAllPredecessorsUnlocked(parentRoleId);
@@ -547,10 +539,6 @@ public class PrivilegeManager {
             RolePrivilegeCollection parentCollection = getRolePrivilegeCollectionUnlocked(parentRoleId, true);
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
-
-            if (! collection.isMutable()) {
-                throw new PrivilegeException("role " + roleName + " is not mutable!");
-            }
 
             parentCollection.removeSubRole(roleId);
             collection.removeParentRole(parentRoleId);
@@ -712,7 +700,7 @@ public class PrivilegeManager {
     }
 
     /**
-     * init all default privilege when a user is created, called by AuthenticationManager
+     * init all builtin privilege when a user is created, called by AuthenticationManager
      */
     public UserPrivilegeCollection onCreateUser(UserIdentity user) throws PrivilegeException {
         userWriteLock();

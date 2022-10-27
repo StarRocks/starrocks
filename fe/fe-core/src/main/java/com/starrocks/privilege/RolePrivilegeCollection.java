@@ -5,6 +5,7 @@ package com.starrocks.privilege;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 public class RolePrivilegeCollection extends PrivilegeCollection {
@@ -46,8 +47,14 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         this.subRoleIds = new HashSet<>();
     }
 
-    public boolean isMutable() {
-        return checkFlag(RoleFlags.MUTABLE);
+    private void assertMutable() throws PrivilegeException {
+        if (! checkFlag(RoleFlags.MUTABLE)) {
+            throw new PrivilegeException("role " + name + " is not mutable!");
+        }
+    }
+
+    public void disableMutable() {
+        this.mask &= ~RoleFlags.MUTABLE.mask;
     }
 
     public boolean isRemovable() {
@@ -73,15 +80,31 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
         return parentRoleIds;
     }
 
-    public void addSubRole(long subRoleId) {
+    public void addSubRole(long subRoleId) throws PrivilegeException {
+        assertMutable();
         subRoleIds.add(subRoleId);
     }
 
-    public void removeSubRole(long subRoleId) {
+    public void removeSubRole(long subRoleId) throws PrivilegeException {
+        assertMutable();
         subRoleIds.remove(subRoleId);
     }
 
     public Set<Long> getSubRoleIds() {
         return subRoleIds;
+    }
+
+    @Override
+    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+            throws PrivilegeException {
+        assertMutable();
+        super.grant(type, actionSet, objects, isGrant);
+    }
+
+    @Override
+    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+            throws PrivilegeException {
+        assertMutable();
+        super.revoke(type, actionSet, objects, isGrant);
     }
 }

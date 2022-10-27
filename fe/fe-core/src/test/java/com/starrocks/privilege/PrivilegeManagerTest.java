@@ -44,7 +44,7 @@ public class PrivilegeManagerTest {
     private static final String TABLE_NAME_0 = "tbl0";
     private static final String TABLE_NAME_1 = "tbl1";
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");
-    private long defaultRoleId;
+    private long publicRoleId;
 
     @Before
     public void setUp() throws Exception {
@@ -69,7 +69,7 @@ public class PrivilegeManagerTest {
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
         globalStateMgr.getAuthenticationManager().createUser(createUserStmt);
-        defaultRoleId = globalStateMgr.getPrivilegeManager().getRoleIdByNameNoLock("public");
+        publicRoleId = globalStateMgr.getPrivilegeManager().getRoleIdByNameNoLock("public");
     }
 
     @After
@@ -545,6 +545,7 @@ public class PrivilegeManagerTest {
                     ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
         }
 
+        // on all databases
         Assert.assertFalse(PrivilegeManager.checkDbAction(
                 ctx, DB_NAME, PrivilegeTypes.DbActions.CREATE_TABLE));
 
@@ -565,6 +566,26 @@ public class PrivilegeManagerTest {
         ctx.setCurrentUserIdentity(testUser);
         Assert.assertFalse(PrivilegeManager.checkDbAction(
                 ctx, DB_NAME, PrivilegeTypes.DbActions.CREATE_TABLE));
+
+        // on all users
+        PrivilegeManager privilegeManager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        Assert.assertFalse(privilegeManager.canExecuteAs(ctx, UserIdentity.ROOT));
+
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        grantStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "GRANT IMPERSONATE ON ALL USERS TO test_user", ctx);
+        manager.grant(grantStmt);
+
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertTrue(privilegeManager.canExecuteAs(ctx, UserIdentity.ROOT));
+
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        revokeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
+                "REVOKE IMPERSONATE ON ALL USERS FROM test_user", ctx);
+        manager.revoke(revokeStmt);
+
+        ctx.setCurrentUserIdentity(testUser);
+        Assert.assertFalse(privilegeManager.canExecuteAs(ctx, UserIdentity.ROOT));
     }
 
     @Test
@@ -863,11 +884,11 @@ public class PrivilegeManagerTest {
         UserPrivilegeCollection collection = manager.getUserPrivilegeCollectionUnlocked(user);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role1 to user_test_role_inheritance", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[1], roleIds[3])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(collection));
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role0 to user_test_role_inheritance", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[1], roleIds[3])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(collection));
         // exception:
         try {
@@ -876,14 +897,14 @@ public class PrivilegeManagerTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("'user_test_role_inheritance'@'%' has total 6 predecessor roles > 5"));
         }
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[1], roleIds[3])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(collection));
         // normal grant
         Config.privilege_max_total_roles_per_user = oldValue;
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant role4 to user_test_role_inheritance", ctx), ctx);
         Assert.assertEquals(new HashSet<>(Arrays.asList(
-                defaultRoleId, roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
+                        publicRoleId, roleIds[0], roleIds[1], roleIds[2], roleIds[3], roleIds[4])),
                 manager.getAllPredecessorsUnlocked(collection));
 
 
@@ -958,14 +979,14 @@ public class PrivilegeManagerTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "grant test_drop_role_3 to user_test_drop_role_inheritance", ctx), ctx);
 
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[1], roleIds[3])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[1], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(collection));
         assertTableSelectOnTest(user, true, true, false, true);
 
         // role0 -> role1[user] -> role2
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_3;", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[1])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[1])),
                 manager.getAllPredecessorsUnlocked(collection));
         Assert.assertEquals(2, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
@@ -974,7 +995,7 @@ public class PrivilegeManagerTest {
         // role0 -> role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_2;", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[1])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[1])),
                 manager.getAllPredecessorsUnlocked(collection));
         Assert.assertEquals(1, manager.getMaxRoleInheritanceDepthInner(0, roleIds[0]));
         Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
@@ -983,7 +1004,7 @@ public class PrivilegeManagerTest {
         // role1[user]
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "drop role test_drop_role_0;", ctx), ctx);
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[1])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[1])),
                 manager.getAllPredecessorsUnlocked(collection));
         Assert.assertEquals(0, manager.getMaxRoleInheritanceDepthInner(0, roleIds[1]));
         assertTableSelectOnTest(user, false, true, false, false);
@@ -999,7 +1020,7 @@ public class PrivilegeManagerTest {
         Assert.assertEquals(role1NumSubs - 1,
                 manager.roleIdToPrivilegeCollection.get(roleIds[1]).getSubRoleIds().size());
 
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[1])),
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[1])),
                 manager.getAllPredecessorsUnlocked(collection));
         assertTableSelectOnTest(user, false, true, false, false);
     }
@@ -1082,13 +1103,13 @@ public class PrivilegeManagerTest {
         ctx.setCurrentUserIdentity(user);
         new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
                 String.format("set role all"), ctx)).execute();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0], roleIds[2])), ctx.getCurrentRoleIds());
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0], roleIds[2])), ctx.getCurrentRoleIds());
         assertTableSelectOnTest(user, true, false, true, false);
 
         ctx.setCurrentUserIdentity(user);
         new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
                 String.format("set role all except 'test_set_role_2'"), ctx)).execute();
-        Assert.assertEquals(new HashSet<>(Arrays.asList(defaultRoleId, roleIds[0])), ctx.getCurrentRoleIds());
+        Assert.assertEquals(new HashSet<>(Arrays.asList(publicRoleId, roleIds[0])), ctx.getCurrentRoleIds());
         assertTableSelectOnTest(user, true, false, false, false);
 
         // predecessors
@@ -1165,5 +1186,31 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeTypes.SystemActions.NODE));
         Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeTypes.DbActions.DROP));
         Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DROP));
+
+        // grant to imutable role
+        List<String> modifyImutableRoleSqls = Arrays.asList(
+                "GRANT select on db.tbl0 TO ROLE root",
+                "REVOKE select on db.tbl0 FROM ROLE root",
+                "GRANT user_admin TO ROLE cluster_admin",
+                "REVOKE db_admin FROM ROLE user_admin"
+        );
+        for (String sql : modifyImutableRoleSqls) {
+            try {
+                DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
+                System.err.println(sql);
+                Assert.fail();
+            } catch (DdlException e) {
+                System.err.println(e.getMessage());
+                Assert.assertTrue(e.getMessage().contains("is not mutable"));
+            }
+        }
+
+        // drop builtin role
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role public", ctx), ctx);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));
+        }
     }
 }
