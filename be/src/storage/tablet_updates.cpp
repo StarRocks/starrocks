@@ -1334,9 +1334,12 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
     _erase_expired_versions(expire_time, &expired_edit_version_infos);
 
     if (!expired_edit_version_infos.empty()) {
-        std::unique_lock wrlock(_tablet.get_header_lock());
-        _tablet.save_meta();
-
+        int64_t tablet_id = 0;
+        {
+            std::unique_lock wrlock(_tablet.get_header_lock());
+            _tablet.save_meta();
+            tablet_id = _tablet.tablet_id();
+        }
         std::set<uint32_t> unused_rid;
         std::set<uint32_t> active_rid = _active_rowsets();
         for (const auto& expired_edit_version_info : expired_edit_version_infos) {
@@ -1363,7 +1366,6 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         /// Remove useless delete vectors.
         auto max_expired_version = expired_edit_version_infos.back()->version.major();
         auto meta_store = _tablet.data_dir()->get_meta();
-        auto tablet_id = _tablet.tablet_id();
 
         size_t n_delvec_range = 0;
         auto res = TabletMetaManager::list_del_vector(meta_store, tablet_id, max_expired_version + 1);
