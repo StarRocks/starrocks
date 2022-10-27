@@ -467,19 +467,11 @@ build_brpc() {
     check_if_source_exist $BRPC_SOURCE
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
-    mkdir -p $BUILD_DIR
-    cd $BUILD_DIR
-    rm -rf CMakeCache.txt CMakeFiles/
-    LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" \
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DBUILD_SHARED_LIBS=0 -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
-    -DBRPC_WITH_GLOG=ON -DWITH_GLOG=ON -DCMAKE_INCLUDE_PATH="$TP_INSTALL_DIR/include" \
-    -DCMAKE_LIBRARY_PATH="$TP_INSTALL_DIR/lib;$TP_INSTALL_DIR/lib64" \
-    -DProtobuf_PROTOC_EXECUTABLE=$TP_INSTALL_DIR/bin/protoc ..
+    ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog
     ${BUILD_SYSTEM} -j$PARALLEL
-    ${BUILD_SYSTEM} install
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib64 
-        cp $TP_INSTALL_DIR/lib/libbrpc.a $TP_INSTALL_DIR/lib64/libbrpc.a
+        cp $TP_SOURCE_DIR/$BRPC_SOURCE/output/lib/libbrpc.a $TP_INSTALL_DIR/lib64/
     fi
 }
 
