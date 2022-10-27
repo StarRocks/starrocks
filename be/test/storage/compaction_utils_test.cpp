@@ -70,16 +70,14 @@ TEST(CompactionUtilsTest, test_get_segment_max_rows) {
 
 TEST(CompactionUtilsTest, test_split_column_into_groups) {
     size_t num_columns = 17;
-    size_t num_key_columns = 1;
     int64_t max_columns_per_group = 5;
     std::vector<std::vector<uint32_t>> column_groups;
-    CompactionUtils::split_column_into_groups(num_columns, num_key_columns, max_columns_per_group, &column_groups);
-    ASSERT_EQ(5, column_groups.size());
-    ASSERT_EQ(1, column_groups[0].size());
+    CompactionUtils::split_column_into_groups(num_columns, {1, 2, 5}, max_columns_per_group, &column_groups);
+    ASSERT_EQ(4, column_groups.size());
+    ASSERT_EQ(3, column_groups[0].size());
     ASSERT_EQ(5, column_groups[1].size());
     ASSERT_EQ(5, column_groups[2].size());
-    ASSERT_EQ(5, column_groups[3].size());
-    ASSERT_EQ(1, column_groups[4].size());
+    ASSERT_EQ(4, column_groups[3].size());
 }
 
 TEST(CompactionUtilsTest, test_choose_compaction_algorithm) {

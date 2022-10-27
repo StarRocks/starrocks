@@ -72,7 +72,7 @@ public class LakeTableSchemaChangeJobTest {
     public void before() throws Exception {
         new MockUp<LakeTableAlterJobV2Builder>() {
             @Mock
-            public List<Long> createShards(int shardCount, ShardStorageInfo storageInfo) throws DdlException {
+            public List<Long> createShards(int shardCount, ShardStorageInfo storageInfo, long groupId) throws DdlException {
                 for (int i = 0; i < shardCount; i++) {
                     shadowTabletIds.add(GlobalStateMgr.getCurrentState().getNextId());
                 }

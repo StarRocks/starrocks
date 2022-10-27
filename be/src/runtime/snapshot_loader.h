@@ -71,6 +71,8 @@ public:
 
     Status move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite);
 
+    Status primary_key_move(const std::string& snapshot_path, const TabletSharedPtr& tablet, bool overwrite);
+
 private:
     Status _get_tablet_id_and_schema_hash_from_file_path(const std::string& src_path, int64_t* tablet_id,
                                                          int32_t* schema_hash);

@@ -15,14 +15,10 @@ import com.starrocks.external.hive.HiveMetastore;
 import com.starrocks.external.hive.HiveRemoteFileIO;
 import com.starrocks.external.hive.IHiveMetastore;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 
 public class HiveConnectorInternalMgr {
     private final String catalogName;
@@ -68,7 +64,7 @@ public class HiveConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = createHiveMetaClient();
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
@@ -108,14 +104,6 @@ public class HiveConnectorInternalMgr {
         }
 
         return baseRemoteFileIO;
-    }
-
-    public HiveMetaClient createHiveMetaClient() {
-        HiveConf conf = new HiveConf();
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
-        return new HiveMetaClient(conf);
     }
 
     public ExecutorService getPullRemoteFileExecutor() {

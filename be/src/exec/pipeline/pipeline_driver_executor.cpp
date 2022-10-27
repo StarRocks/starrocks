@@ -119,7 +119,12 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             }
-            auto maybe_state = driver->process(runtime_state, worker_id);
+            StatusOr<DriverState> maybe_state;
+#ifdef NDEBUG
+            TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
+#else
+            maybe_state = driver->process(runtime_state, worker_id);
+#endif
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 
@@ -218,6 +223,10 @@ void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, cons
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
+}
+
+void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
+    _blocked_driver_poller->iterate_immutable_driver(call);
 }
 
 void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ctx, bool done) {

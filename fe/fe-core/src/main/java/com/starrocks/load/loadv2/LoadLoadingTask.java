@@ -108,6 +108,7 @@ public class LoadLoadingTask extends LoadTask {
         if (!Config.enable_pipeline_load) {
             planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
                     strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables);
+            planner.setConnectContext(context);
             planner.plan(loadId, fileStatusList, fileNum);
         } else {
             loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,

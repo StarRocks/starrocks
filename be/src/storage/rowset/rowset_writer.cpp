@@ -123,7 +123,7 @@ Status RowsetWriter::init() {
 }
 
 StatusOr<RowsetSharedPtr> RowsetWriter::build() {
-    if (_num_rows_written > 0) {
+    if (_num_rows_written > 0 || (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _num_delfile > 0)) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta_pb->set_num_rows(_num_rows_written);
@@ -530,7 +530,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                                                      segments.size()) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
         CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
-                                                  _context.tablet_schema->num_key_columns(),
+                                                  _context.tablet_schema->sort_key_idxes(),
                                                   config::vertical_compaction_max_columns_per_group, &column_groups);
 
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);

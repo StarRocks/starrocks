@@ -1,14 +1,14 @@
 # StarRocks version 2.4
 
-## 2.4.0 RC
+## 2.4.0
 
-Release date: September 17th, 2022
+Release date: October 20th, 2022
 
 ### New Features
 
 - Supports creating asynchronous materialized views based on multiple base tables to accelerate queries with JOIN operations. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md). For more information, see [Materialized View](../using_starrocks/Materialized_view.md).
 
-- Supports overwriting data via the INSERT OVERWRITE statement. For more information, see [Load data using INSERT](../loading/InsertInto.md).
+- Supports overwriting data via INSERT OVERWRITE. For more information, see [Load data using INSERT](../loading/InsertInto.md).
 
 - [Preview] Provides stateless Compute Nodes (CN) that can be horizontally scaled. You can use StarRocks Operator to deploy CN into your Kubernetes (K8s) cluster to achieve automatic horizontal scaling. For more information, see [Deploy and manage CN on Kubernetes with StarRocks Operator](../administration/k8s_operator_cn.md).
 
@@ -18,9 +18,9 @@ Release date: September 17th, 2022
 
 - Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](../using_starrocks/External_table.md).
 
-- Supports viewing the schema of external data via the DESC statement. For more information, see [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md).
+- Supports viewing the schema of external data via DESC. For more information, see [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md).
 
-- Supports granting a specific role or IMPERSONATE permission to a user via the GRANT statement and revoking them via the REVOKE statement, and supports executing an SQL statement with IMPERSONATE permission via the EXECUTE AS statement. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md).
+- Supports granting a specific role or IMPERSONATE permission to a user via GRANT and revoking them via REVOKE, and supports executing an SQL statement with IMPERSONATE permission via  EXECUTE AS. For more information, see [GRANT](../sql-reference/sql-statements/account-management/GRANT.md), [REVOKE](../sql-reference/sql-statements/account-management/REVOKE.md), and [EXECUTE AS](../sql-reference/sql-statements/account-management/EXECUTE%20AS.md).
 
 - Supports FDQN access: now you can use domain name or the combination of hostname and port as the unique identification of a BE or an FE node. This prevents access failures caused by changing IP addresses. For more information, see [Enable FQDN Access](../administration/enable_fqdn.md).
 
@@ -52,6 +52,10 @@ Release date: September 17th, 2022
 
 - Adjusted the mechanisms of default PageCache size calculation and memory consistency check to avoid OOM issues during multi-instance deployments.
 
+- Improved the performance of large-size batch load on PRIMARY KEY model up to two times by removing final_merge operations.
+
+- Supports a Stream Load transaction interface to implement two-phase commit (2PC) for transactions that are run to load data from external systems such as Apache Flink® and Apache Kafka®, improving the performance of highly concurrent stream loads.
+
 - Functions:
 
   - You can use multiple COUNT(DISTINCT) in one statement. For more information, see [count](../sql-reference/sql-functions/aggregate-functions/count.md).
@@ -75,9 +79,8 @@ The following bugs are fixed:
 - Data Lake analytics-related issues:
 
   - Queries on Parquet data in Hive external tables fail. [#7413](https://github.com/StarRocks/starrocks/pull/7413) [#7482](https://github.com/StarRocks/starrocks/pull/7482) [#7624](https://github.com/StarRocks/starrocks/pull/7624)
-  - Incorrect results are returned for queries with the `limit` clause on Elasticsearch external tables. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
-
-- An unknown error occurs during queries on an Apache Iceberg table with a complex data type. [#11298](https://github.com/StarRocks/starrocks/pull/11298)
+  - Incorrect results are returned for queries with `limit` clause on Elasticsearch external table. [#9226](https://github.com/StarRocks/starrocks/pull/9226)
+  - An unknown error is raised during queries on an Apache Iceberg table with a complex data type. [#11298](https://github.com/StarRocks/starrocks/pull/11298)
 
 - Metadata is inconsistent between the Leader FE and Follower FE nodes. [#11215](https://github.com/StarRocks/starrocks/pull/11215)
 
@@ -89,5 +92,5 @@ Page Cache is enabled by default. The default cache size is 20% of the system me
 
 ### Others
 
-- Announcing the general availability of Resource Group.
-- Announcing the general availability of the JSON data type and its related functions.
+- Announcing stable release of Resource Group.
+- Announcing stable release of JSON data type and its related functions.

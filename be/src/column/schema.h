@@ -22,7 +22,7 @@ public:
     explicit Schema(Fields fields);
 #endif
 
-    explicit Schema(Fields fields, KeysType keys_type);
+    explicit Schema(Fields fields, KeysType keys_type, const std::vector<ColumnId>& sort_key_idxes);
 
     // if we use this constructor and share the name_to_index with another schema,
     // we must make sure another shema is read only!!!
@@ -41,6 +41,8 @@ public:
     size_t num_fields() const { return _fields.size(); }
 
     size_t num_key_fields() const { return _num_keys; }
+
+    const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
 
     void reserve(size_t size) { _fields.reserve(size); }
 
@@ -75,6 +77,7 @@ private:
 
     Fields _fields;
     size_t _num_keys = 0;
+    std::vector<ColumnId> _sort_key_idxes;
     std::shared_ptr<std::unordered_map<std::string_view, size_t>> _name_to_index;
 
     // If we share the same _name_to_index with another vectorized schema,

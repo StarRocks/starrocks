@@ -25,6 +25,7 @@ OPTS=$(getopt \
   -l 'daemon' \
   -l 'helper:' \
   -l 'host_type:' \
+  -l 'debug' \
   -- "$@")
 
 eval set -- "$OPTS"
@@ -32,11 +33,13 @@ eval set -- "$OPTS"
 RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
+ENABLE_DEBUGGER=0
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
         --host_type) HOST_TYPE=$2 ; shift 2 ;;
+        --debug) ENABLE_DEBUGGER=1 ; shift ;;
         --) shift ;  break ;;
         *) echo "Internal error" ; exit 1 ;;
     esac
@@ -81,6 +84,14 @@ if [[ "$JAVA_VERSION" -gt 8 ]]; then
     fi 
     final_java_opt=$JAVA_OPTS_FOR_JDK_9
 fi
+
+if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
+    # Allow attaching debuggers to the FE process:
+    # https://www.jetbrains.com/help/idea/attaching-to-local-process.html
+    final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
+    echo $final_java_opt
+fi
+echo $final_java_opt
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR

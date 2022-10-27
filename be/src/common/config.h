@@ -754,6 +754,7 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -825,7 +826,16 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
+// the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
+// the minimum number of idle connections that connection pool tries to maintain.
+// if the idle connections dip below this value and the total connections in the pool are less than jdbc_connection_pool_size,
+// the connection pool will make a best effort to add additional connections quickly.
+CONF_Int16(jdbc_minimum_idle_connections, "1");
+// the maximum amount of time that a connection is allowed to sit idle in the pool.
+// this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
+// The minimum allowed value is 10000(10 seconds).
+CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
@@ -852,10 +862,9 @@ CONF_Int64(max_length_for_to_base64, "200000");
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 CONF_Bool(block_cache_enable, "false");
+CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
-//CONF_Int64(block_cache_block_size, "4194304");    // 4MB
-CONF_Int64(block_cache_block_size, "1048576");
+CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 
 CONF_mInt64(l0_l1_merge_ratio, "10");

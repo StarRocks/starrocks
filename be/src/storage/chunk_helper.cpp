@@ -98,7 +98,7 @@ vectorized::Schema ChunkHelper::convert_schema(const starrocks::TabletSchema& sc
         auto f = convert_field(cid, schema.column(cid));
         fields.emplace_back(std::make_shared<starrocks::vectorized::Field>(std::move(f)));
     }
-    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type());
+    return starrocks::vectorized::Schema(std::move(fields), schema.keys_type(), schema.sort_key_idxes());
 }
 
 starrocks::vectorized::Field ChunkHelper::convert_field_to_format_v2(ColumnId id, const TabletColumn& c) {
@@ -148,8 +148,9 @@ starrocks::vectorized::Schema ChunkHelper::convert_schema_to_format_v2(const sta
 
 starrocks::vectorized::Schema ChunkHelper::get_short_key_schema_with_format_v2(const starrocks::TabletSchema& schema) {
     std::vector<ColumnId> short_key_cids;
-    for (ColumnId cid = 0; cid < schema.num_short_key_columns(); ++cid) {
-        short_key_cids.push_back(cid);
+    const auto& sort_key_idxes = schema.sort_key_idxes();
+    for (auto i = 0; i < schema.num_short_key_columns(); ++i) {
+        short_key_cids.push_back(sort_key_idxes[i]);
     }
     return starrocks::vectorized::Schema(schema.schema(), short_key_cids);
 }
@@ -456,6 +457,52 @@ void ChunkAccumulator::finalize() {
     if (_tmp_chunk) {
         _output.emplace_back(std::move(_tmp_chunk));
     }
+}
+
+void ChunkPipelineAccumulator::push(const vectorized::ChunkPtr& chunk) {
+    DCHECK(_out_chunk == nullptr);
+    if (_in_chunk == nullptr) {
+        _in_chunk = chunk;
+    } else if (_in_chunk->num_rows() + chunk->num_rows() > _max_size) {
+        _out_chunk = std::move(_in_chunk);
+        _in_chunk = chunk;
+    } else {
+        _in_chunk->append(*chunk);
+    }
+
+    if (_out_chunk == nullptr && (_in_chunk->num_rows() >= _max_size * LOW_WATERMARK_ROWS_RATE ||
+                                  _in_chunk->memory_usage() >= LOW_WATERMARK_BYTES)) {
+        _out_chunk = std::move(_in_chunk);
+    }
+}
+
+void ChunkPipelineAccumulator::reset() {
+    _finalized = false;
+    _in_chunk.reset();
+    _out_chunk.reset();
+}
+
+void ChunkPipelineAccumulator::finalize() {
+    _finalized = true;
+}
+
+vectorized::ChunkPtr& ChunkPipelineAccumulator::pull() {
+    if (_finalized && _out_chunk == nullptr) {
+        return _in_chunk;
+    }
+    return _out_chunk;
+}
+
+bool ChunkPipelineAccumulator::has_output() const {
+    return _out_chunk != nullptr || (_finalized && _in_chunk != nullptr);
+}
+
+bool ChunkPipelineAccumulator::need_input() const {
+    return !_finalized && _out_chunk == nullptr;
+}
+
+bool ChunkPipelineAccumulator::is_finished() const {
+    return _finalized && _out_chunk == nullptr && _in_chunk == nullptr;
 }
 
 } // namespace starrocks

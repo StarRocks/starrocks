@@ -55,10 +55,6 @@ cd $TP_DIR
 # Download thirdparties.
 ${TP_DIR}/download-thirdparty.sh
 
-export C_INCLUDE_PATH=${TP_INCLUDE_DIR}:${C_INCLUDE_PATH}
-export CPLUS_INCLUDE_PATH=${TP_INCLUDE_DIR}:${CPLUS_INCLUDE_PATH}
-export LD_LIBRARY_PATH=$TP_DIR/installed/lib:$LD_LIBRARY_PATH
-
 # set COMPILER
 if [[ ! -z ${STARROCKS_GCC_HOME} ]]; then
     export CC=${STARROCKS_GCC_HOME}/bin/gcc
@@ -211,7 +207,7 @@ build_thrift() {
     fi
 
     echo ${TP_LIB_DIR}
-    ./configure LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lcrypto -ldl -lssl" \
+    ./configure LDFLAGS="-L${TP_LIB_DIR} -static-libstdc++ -static-libgcc" LIBS="-lssl -lcrypto -ldl" \
     --prefix=$TP_INSTALL_DIR --docdir=$TP_INSTALL_DIR/doc --enable-static --disable-shared --disable-tests \
     --disable-tutorial --without-qt4 --without-qt5 --without-csharp --without-erlang --without-nodejs \
     --without-lua --without-perl --without-php --without-php_extension --without-dart --without-ruby \
@@ -296,6 +292,7 @@ build_glog() {
     autoreconf -i
 
     LDFLAGS="-L${TP_LIB_DIR}" \
+    CPPFLAGS="-I${TP_INCLUDE_DIR}" \
     ./configure --prefix=$TP_INSTALL_DIR --enable-frame-pointers --disable-shared --enable-static
     make -j$PARALLEL 
     make install
@@ -428,7 +425,7 @@ build_curl() {
     check_if_source_exist $CURL_SOURCE
     cd $TP_SOURCE_DIR/$CURL_SOURCE
 
-    LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lcrypto -lssl -ldl" \
+    LDFLAGS="-L${TP_LIB_DIR}" LIBS="-lssl -lcrypto -ldl" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static \
     --without-librtmp --with-ssl=${TP_INSTALL_DIR} --without-libidn2 --without-libgsasl --disable-ldap --enable-ipv6
     make -j$PARALLEL
@@ -449,7 +446,8 @@ build_boost() {
     check_if_source_exist $BOOST_SOURCE
     cd $TP_SOURCE_DIR/$BOOST_SOURCE
 
-    ./bootstrap.sh --prefix=$TP_INSTALL_DIR
+    # to generate static linked b2
+    CXXFLAGS="-static-libstdc++ -static-libgcc" ./bootstrap.sh --prefix=$TP_INSTALL_DIR
     ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
@@ -737,7 +735,7 @@ build_fmt() {
     mkdir -p build
     cd build
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} ../ \
-            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}"
+            -DCMAKE_INSTALL_LIBDIR=lib64 -G "${CMAKE_GENERATOR}" -DFMT_TEST=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -788,6 +786,8 @@ build_jdk() {
 build_ragel() {
     check_if_source_exist $RAGEL_SOURCE
     cd $TP_SOURCE_DIR/$RAGEL_SOURCE
+    # generage a static linked ragel, hyperscan will depend on it
+    LDFLAGS=" -static-libstdc++ -static-libgcc" \
     ./configure --prefix=$TP_INSTALL_DIR --disable-shared --enable-static
     make -j$PARALLEL
     make install
@@ -799,7 +799,8 @@ build_hyperscan() {
     cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
     export PATH=$TP_INSTALL_DIR/bin:$PATH
     $CMAKE_CMD -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=${TP_INSTALL_DIR} -DBOOST_ROOT=$STARROCKS_THIRDPARTY/installed/include \
-          -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib
+          -DCMAKE_CXX_COMPILER=$STARROCKS_GCC_HOME/bin/g++ -DCMAKE_C_COMPILER=$STARROCKS_GCC_HOME/bin/gcc  -DCMAKE_INSTALL_LIBDIR=lib \
+          -DBUILD_EXAMPLES=OFF -DBUILD_UNIT=OFF
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
 }
@@ -952,10 +953,26 @@ build_cachelib() {
     mv $TP_SOURCE_DIR/$CACHELIB_SOURCE $STARROCKS_THIRDPARTY/installed/
 }
 
-export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g -I${TP_INCLUDE_DIR}"
-export CPPFLAGS=$CXXFLAGS
+# streamvbyte
+build_streamvbyte() {
+    check_if_source_exist $STREAMVBYTE_SOURCE
+
+    cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE/
+
+    mkdir -p $BUILD_DIR
+    cd $BUILD_DIR
+    rm -rf CMakeCache.txt CMakeFiles/
+
+    $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
+
+    make -j$PARALLEL
+    make install
+}
+
+export CXXFLAGS="-O3 -fno-omit-frame-pointer -Wno-class-memaccess -fPIC -g"
+export CPPFLAGS="-I ${TP_INCLUDE_DIR}"
 # https://stackoverflow.com/questions/42597685/storage-size-of-timespec-isnt-known
-export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L -I${TP_INCLUDE_DIR}"
+export CFLAGS="-O3 -fno-omit-frame-pointer -std=c99 -fPIC -g -D_POSIX_C_SOURCE=199309L"
 
 build_libevent
 build_zlib
@@ -1000,6 +1017,7 @@ build_jemalloc
 build_benchmark
 build_fast_float
 build_cachelib
+build_streamvbyte
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

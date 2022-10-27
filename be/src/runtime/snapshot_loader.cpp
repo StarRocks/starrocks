@@ -23,6 +23,7 @@
 
 #include <cstdint>
 #include <filesystem>
+#include <set>
 
 #include "agent/master_info.h"
 #include "common/logging.h"
@@ -40,6 +41,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet.h"
 #include "storage/tablet_manager.h"
+#include "storage/tablet_updates.h"
 #include "util/thrift_rpc_helper.h"
 
 namespace starrocks {
@@ -357,7 +359,11 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
             }
             // remove file which will be downloaded now.
             // this file will be added to local_files if it be downloaded successfully.
-            local_files.erase(find);
+            // The Restore process of Primary key tablet may get a empty local_files at the begining.
+            // Because we just generate the download path but not any other file.
+            if (!local_files.empty()) {
+                local_files.erase(find);
+            }
 
             // 3. open local file for write
             WritableFileOptions opts{.sync_on_close = false, .mode = FileSystem::CREATE_OR_OPEN_WITH_TRUNCATE};
@@ -415,6 +421,126 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
 
     LOG(INFO) << "finished to download snapshots. job: " << _job_id << ", task id: " << _task_id;
     return status;
+}
+
+Status SnapshotLoader::primary_key_move(const std::string& snapshot_path, const TabletSharedPtr& tablet,
+                                        bool overwrite) {
+    CHECK(tablet->updates() != nullptr);
+    std::string tablet_path = tablet->schema_hash_path();
+    std::string store_path = tablet->data_dir()->path();
+    LOG(INFO) << "begin to move snapshot files. from: " << snapshot_path << ", to: " << tablet_path
+              << ", store: " << store_path << ", job: " << _job_id << ", task id: " << _task_id;
+
+    Status status = Status::OK();
+
+    // validate snapshot_path and schema_hash_path
+    int64_t snapshot_tablet_id = 0;
+    int32_t snapshot_schema_hash = 0;
+    RETURN_IF_ERROR(
+            _get_tablet_id_and_schema_hash_from_file_path(snapshot_path, &snapshot_tablet_id, &snapshot_schema_hash));
+
+    int64_t tablet_id = 0;
+    int32_t schema_hash = 0;
+    RETURN_IF_ERROR(_get_tablet_id_and_schema_hash_from_file_path(tablet_path, &tablet_id, &schema_hash));
+
+    if (tablet_id != snapshot_tablet_id || schema_hash != snapshot_schema_hash) {
+        std::stringstream ss;
+        ss << "path does not match. snapshot: " << snapshot_path << ", tablet path: " << tablet_path;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    DataDir* store = StorageEngine::instance()->get_store(store_path);
+    if (store == nullptr) {
+        std::stringstream ss;
+        ss << "failed to get store by path: " << store_path;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    std::filesystem::path tablet_dir(tablet_path);
+    std::filesystem::path snapshot_dir(snapshot_path);
+    if (!std::filesystem::exists(tablet_dir)) {
+        std::stringstream ss;
+        ss << "tablet path does not exist: " << tablet_path;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    if (!std::filesystem::exists(snapshot_dir)) {
+        std::stringstream ss;
+        ss << "snapshot path does not exist: " << snapshot_path;
+        LOG(WARNING) << ss.str();
+        return Status::InternalError(ss.str());
+    }
+
+    auto meta_file = strings::Substitute("$0/meta", snapshot_path);
+    auto res = SnapshotManager::instance()->parse_snapshot_meta(meta_file);
+    if (!res.ok()) {
+        return res.status();
+    }
+    auto snapshot_meta = std::move(res).value();
+
+    for (auto& rowset_meta : snapshot_meta.rowset_metas()) {
+        rowset_meta.set_tablet_id(tablet_id);
+    }
+    snapshot_meta.tablet_meta().set_tablet_id(tablet_id);
+
+    RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&snapshot_meta, snapshot_path));
+
+    if (overwrite) {
+        // check all files in /clone and /tablet
+        std::set<std::string> snapshot_files;
+        RETURN_IF_ERROR(fs::list_dirs_files(snapshot_path, nullptr, &snapshot_files));
+        snapshot_files.erase("meta");
+
+        // 1. simply delete the old dir and replace it with the snapshot dir
+        try {
+            // This remove seems saft enough, because we already get
+            // tablet id and schema hash from this path, which
+            // means this path is a valid path.
+            std::filesystem::remove_all(tablet_dir);
+            VLOG(2) << "remove dir: " << tablet_dir;
+            std::filesystem::create_directory(tablet_dir);
+            VLOG(2) << "re-create dir: " << tablet_dir;
+        } catch (const std::filesystem::filesystem_error& e) {
+            std::stringstream ss;
+            ss << "failed to move tablet path: " << tablet_path << ". err: " << e.what();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
+        // link files one by one
+        // files in snapshot dir will be moved in snapshot clean process
+        std::vector<std::string> linked_files;
+        for (const std::string& file : snapshot_files) {
+            std::string full_src_path = snapshot_path + "/" + file;
+            std::string full_dest_path = tablet_path + "/" + file;
+            if (link(full_src_path.c_str(), full_dest_path.c_str()) != 0) {
+                LOG(WARNING) << "failed to link file from " << full_src_path << " to " << full_dest_path
+                             << ", err: " << std::strerror(errno);
+
+                // clean the already linked files
+                for (auto& linked_file : linked_files) {
+                    remove(linked_file.c_str());
+                }
+
+                return Status::InternalError("move tablet failed");
+            }
+            linked_files.push_back(full_dest_path);
+            VLOG(2) << "link file from " << full_src_path << " to " << full_dest_path;
+        }
+
+    } else {
+        LOG(FATAL) << "only support overwrite now";
+    }
+
+    RETURN_IF_ERROR(tablet->updates()->load_snapshot(snapshot_meta, true));
+    tablet->updates()->remove_expired_versions(time(nullptr));
+    LOG(INFO) << "Loaded snapshot of tablet " << tablet->tablet_id() << ", removing directory " << snapshot_path;
+    auto st = fs::remove_all(snapshot_path);
+    LOG_IF(WARNING, !st.ok()) << "Fail to remove clone directory " << snapshot_path << ": " << st;
+    return Status::OK();
 }
 
 // move the snapshot files in snapshot_path
@@ -787,7 +913,8 @@ Status SnapshotLoader::_replace_tablet_id(const std::string& file_name, int64_t 
         ss << tablet_id << ".hdr";
         *new_file_name = ss.str();
         return Status::OK();
-    } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat")) {
+    } else if (_end_with(file_name, ".idx") || _end_with(file_name, ".dat") || _end_with(file_name, "meta") ||
+               _end_with(file_name, ".del")) {
         *new_file_name = file_name;
         return Status::OK();
     } else {

@@ -242,6 +242,7 @@ import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetTransaction;
 import com.starrocks.sql.ast.SetType;
@@ -496,7 +497,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties.put(property.getKey(), property.getValue());
             }
         }
-
         return new CreateTableStmt(
                 context.IF() != null,
                 context.EXTERNAL() != null,
@@ -514,7 +514,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 extProperties,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue(),
                 context.rollupDesc() == null ?
-                        null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()));
+                        null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
+                context.orderByDesc() == null ? null :
+                visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                        .stream().map(Identifier::getValue).collect(toList()));
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
@@ -2629,6 +2632,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return new SetTransaction();
     }
 
+    @Override
+    public ParseNode visitSetRole(StarRocksParser.SetRoleContext context) {
+        List<String> roles = context.roleList().string().stream().map(
+                x -> ((StringLiteral) visit(x)).getStringValue()).collect(toList());
+        return new SetRoleStmt(roles, false);
+    }
+
+    @Override
+    public ParseNode visitSetRoleAll(StarRocksParser.SetRoleAllContext context) {
+        List<String> roles = null;
+        if (context.EXCEPT() != null) {
+            roles = context.roleList().string().stream().map(
+                    x -> ((StringLiteral) visit(x)).getStringValue()).collect(toList());
+        }
+        return new SetRoleStmt(roles, true);
+    }
+
     // ----------------------------------------------- Unsupported Statement -----------------------------------------------------
 
     @Override
@@ -3651,17 +3671,31 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitGrantRoleStatement(StarRocksParser.GrantRoleStatementContext context) {
+    public ParseNode visitGrantRoleToUser(StarRocksParser.GrantRoleToUserContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new GrantRoleStmt(identifier.getValue(), user.getUserIdentity());
     }
 
     @Override
-    public ParseNode visitRevokeRoleStatement(StarRocksParser.RevokeRoleStatementContext context) {
+    public ParseNode visitGrantRoleToRole(StarRocksParser.GrantRoleToRoleContext context) {
+        return new GrantRoleStmt(
+                ((Identifier) visit(context.identifierOrString(0))).getValue(),
+                ((Identifier) visit(context.identifierOrString(1))).getValue());
+    }
+
+    @Override
+    public ParseNode visitRevokeRoleFromUser(StarRocksParser.RevokeRoleFromUserContext context) {
         UserIdentifier user = (UserIdentifier) visit(context.user());
         Identifier identifier = (Identifier) visit(context.identifierOrString());
         return new RevokeRoleStmt(identifier.getValue(), user.getUserIdentity());
+    }
+
+    @Override
+    public ParseNode visitRevokeRoleFromRole(StarRocksParser.RevokeRoleFromRoleContext context) {
+        return new RevokeRoleStmt(
+                ((Identifier) visit(context.identifierOrString(0))).getValue(),
+                ((Identifier) visit(context.identifierOrString(1))).getValue());
     }
 
     @Override

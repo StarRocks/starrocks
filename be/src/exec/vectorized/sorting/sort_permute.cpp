@@ -51,7 +51,7 @@ bool TieIterator::next() {
     return true;
 }
 
-// Append permutation to column, implements `append_by_permutation` function
+// Append permutation to column, implements `materialize_by_permutation` function
 class ColumnAppendPermutation final : public ColumnVisitorMutableAdapter<ColumnAppendPermutation> {
 public:
     explicit ColumnAppendPermutation(const Columns& columns, const Permutation& perm)
@@ -70,14 +70,14 @@ public:
             data_columns.push_back(src_column->data_column());
         }
         if (_columns[0]->is_nullable()) {
-            append_by_permutation(dst->null_column().get(), null_columns, _perm);
-            append_by_permutation(dst->data_column().get(), data_columns, _perm);
+            materialize_column_by_permutation(dst->null_column().get(), null_columns, _perm);
+            materialize_column_by_permutation(dst->data_column().get(), data_columns, _perm);
             if (!dst->has_null()) {
                 dst->set_has_null(SIMD::count_nonzero(&dst->null_column()->get_data()[orig_size], _perm.size()));
             }
         } else {
             dst->null_column()->resize(orig_size + _perm.size());
-            append_by_permutation(dst->data_column().get(), data_columns, _perm);
+            materialize_column_by_permutation(dst->data_column().get(), data_columns, _perm);
         }
         DCHECK_EQ(dst->null_column()->size(), dst->data_column()->size());
 
@@ -213,10 +213,30 @@ private:
     const Permutation& _perm;
 };
 
-void append_by_permutation(Column* dst, const Columns& columns, const Permutation& perm) {
+void materialize_column_by_permutation(Column* dst, const Columns& columns, const Permutation& perm) {
     ColumnAppendPermutation visitor(columns, perm);
     Status st = dst->accept_mutable(&visitor);
     CHECK(st.ok());
 }
 
+void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks, const Permutation& perm) {
+    if (chunks.empty() || perm.empty()) {
+        return;
+    }
+
+    DCHECK_LT(std::max_element(perm.begin(), perm.end(),
+                               [](auto& lhs, auto& rhs) { return lhs.chunk_index < rhs.chunk_index; })
+                      ->chunk_index,
+              chunks.size());
+    DCHECK_EQ(dst->num_columns(), chunks[0]->columns().size());
+
+    for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
+        Columns tmp_columns;
+        tmp_columns.reserve(chunks.size());
+        for (auto chunk : chunks) {
+            tmp_columns.push_back(chunk->get_column_by_index(col_index));
+        }
+        materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);
+    }
+}
 } // namespace starrocks::vectorized

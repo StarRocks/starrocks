@@ -574,9 +574,9 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             disk.__set_root_path(root_path_info.path);
             disk.__set_path_hash(root_path_info.path_hash);
             disk.__set_storage_medium(root_path_info.storage_medium);
-            disk.__set_disk_total_capacity(static_cast<double>(root_path_info.disk_capacity));
-            disk.__set_data_used_capacity(static_cast<double>(root_path_info.data_used_capacity));
-            disk.__set_disk_available_capacity(static_cast<double>(root_path_info.available));
+            disk.__set_disk_total_capacity(root_path_info.disk_capacity);
+            disk.__set_data_used_capacity(root_path_info.data_used_capacity);
+            disk.__set_disk_available_capacity(root_path_info.available);
             disk.__set_used(root_path_info.is_used);
             disks[root_path_info.path] = disk;
 

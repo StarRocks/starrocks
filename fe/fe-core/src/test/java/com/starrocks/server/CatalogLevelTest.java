@@ -75,7 +75,7 @@ public class CatalogLevelTest {
 
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
         com.starrocks.catalog.Table icebergTable = IcebergUtil.convertHiveCatalogToSRTable(tbl, "thrift://127.0.0.1:9083",
-                "iceberg_db", "iceberg_table");
+                "iceberg_catalog", "iceberg_db", "iceberg_table");
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {

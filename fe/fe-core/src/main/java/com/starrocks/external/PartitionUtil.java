@@ -13,13 +13,15 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HivePartitionKey;
 import com.starrocks.catalog.HudiPartitionKey;
-import com.starrocks.catalog.HudiTable;
+import com.starrocks.catalog.IcebergPartitionKey;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.NullablePartitionKey;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 
@@ -35,15 +37,29 @@ import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns) throws AnalysisException {
-        return createPartitionKey(values, columns, false);
+        return createPartitionKey(values, columns, Table.TableType.HIVE);
     }
 
     public static PartitionKey createPartitionKey(List<String> values, List<Column> columns,
-                                                  boolean isHudiTable) throws AnalysisException {
+                                                  Table.TableType tableType) throws AnalysisException {
         Preconditions.checkState(values.size() == columns.size(),
                 String.format("columns size is %d, but values size is %d", columns.size(), values.size()));
 
-        PartitionKey partitionKey = isHudiTable ? new HudiPartitionKey() : new HivePartitionKey();
+        PartitionKey partitionKey = null;
+        switch (tableType) {
+            case HIVE:
+                partitionKey = new HivePartitionKey();
+                break;
+            case HUDI:
+                partitionKey = new HudiPartitionKey();
+                break;
+            case ICEBERG:
+                partitionKey = new IcebergPartitionKey();
+                break;
+            default:
+                Preconditions.checkState(false, "Do not support create partition key for " +
+                        "table type %s", tableType);
+        }
 
         // change string value to LiteralExpr,
         for (int i = 0; i < values.size(); i++) {
@@ -99,6 +115,27 @@ public class PartitionUtil {
         return values;
     }
 
+    public static Pair<List<String>, List<Column>> getPartitionNamesAndColumns(Table table) {
+        List<String> partitionNames = null;
+        List<Column> partitionColumns = null;
+        if (table.isHiveTable() || table.isHudiTable()) {
+            HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
+            partitionColumns = hmsTable.getPartitionColumns();
+            return new Pair<>(partitionNames, partitionColumns);
+        } else if (table.isIcebergTable()) {
+            IcebergTable icebergTable = (IcebergTable) table;
+            partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
+                    icebergTable.getCatalog(), icebergTable.getDb(), icebergTable.getTable());
+            partitionColumns = icebergTable.getPartitionColumns();
+        } else {
+            Preconditions.checkState(false, "Do not support get partition names and columns for" +
+                    "table type %s", table.getType());
+        }
+        return Pair.create(partitionNames, partitionColumns);
+    }
+
     // Map partition values to partition ranges, eg
     // [NULL,1992-01-01,1992-01-02,1992-01-03]
     //               ||
@@ -107,16 +144,14 @@ public class PartitionUtil {
     public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws AnalysisException {
         Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
-        HiveMetaStoreTable hmsTable = (HiveMetaStoreTable) table;
-        List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr()
-                .listPartitionNames(hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
-
-        List<Column> partitionColumns = hmsTable.getPartitionColumns();
+        Pair<List<String>, List<Column>> partitionPair = getPartitionNamesAndColumns(table);
+        List<String> partitionNames = partitionPair.first;
+        List<Column> partitionColumns = partitionPair.second;
 
         List<PartitionKey> partitionKeys = new ArrayList<>();
         for (String partitionName : partitionNames) {
             PartitionKey partitionKey = createPartitionKey(toPartitionValues(partitionName),
-                    partitionColumns, table instanceof HudiTable);
+                    partitionColumns, table.getType());
             partitionKeys.add(partitionKey);
         }
 

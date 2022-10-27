@@ -79,7 +79,8 @@ public:
                                                const std::vector<int64_t>& delta_versions, int64_t timeout_s);
 
     // On success, return the absolute path of the root directory of snapshot.
-    StatusOr<std::string> snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version, int64_t timeout_s);
+    StatusOr<std::string> snapshot_full(const TabletSharedPtr& tablet, int64_t snapshot_version, int64_t timeout_s,
+                                        bool ignore = false);
 
     // On success, return the absolute path of the root directory of snapshot.
     StatusOr<std::string> snapshot_primary(const TabletSharedPtr& tablet,

@@ -106,6 +106,6 @@ public class ResultSink extends DataSink {
     }
 
     public static boolean canUsePipeLine(TResultSinkType sinkType) {
-        return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC || sinkType == TResultSinkType.FILE;
+        return sinkType == TResultSinkType.MYSQL_PROTOCAL || sinkType == TResultSinkType.STATISTIC || sinkType == TResultSinkType.FILE || sinkType == TResultSinkType.VARIABLE;
     }
 }

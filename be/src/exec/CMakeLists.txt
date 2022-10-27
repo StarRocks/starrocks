@@ -150,6 +150,9 @@ set(EXEC_FILES
     pipeline/scan/olap_scan_prepare_operator.cpp
     pipeline/scan/olap_scan_context.cpp
     pipeline/scan/connector_scan_operator.cpp
+    pipeline/scan/olap_meta_chunk_source.cpp
+    pipeline/scan/olap_meta_scan_operator.cpp
+    pipeline/scan/olap_meta_scan_prepare_operator.cpp
     pipeline/scan/olap_schema_chunk_source.cpp
     pipeline/scan/olap_schema_scan_operator.cpp
     pipeline/scan/olap_schema_scan_context.cpp
@@ -157,6 +160,7 @@ set(EXEC_FILES
     pipeline/scan/chunk_buffer_limiter.cpp
     pipeline/sink/file_sink_operator.cpp
     pipeline/sink/export_sink_operator.cpp
+    pipeline/sink/mysql_table_sink_operator.cpp
     pipeline/select_operator.cpp
     pipeline/nljoin/nljoin_context.cpp
     pipeline/nljoin/nljoin_build_operator.cpp

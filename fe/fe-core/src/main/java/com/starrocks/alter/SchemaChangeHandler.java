@@ -42,6 +42,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -177,7 +178,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         /*
          * PRIMARY:
-         *      Can not drop any key column.
+         *      Can not drop any key/sort column.
          * UNIQUE:
          *      Can not drop any key column.
          * AGGREGATION:
@@ -189,6 +190,14 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in primary data model table");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(dropColName)) {
+                        throw new DdlException("Can not drop sort column in primary data model table");
+                    }
+                }
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
@@ -252,6 +261,12 @@ public class SchemaChangeHandler extends AlterHandler {
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
+                    throw new DdlException("Can not drop sort column in primary data model table");
+                }
             }
             if (modColumn.getAggregationType() != null) {
                 throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +

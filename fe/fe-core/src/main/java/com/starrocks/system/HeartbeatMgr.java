@@ -321,7 +321,8 @@ public class HeartbeatMgr extends LeaderDaemon {
                                     : result.getStatus().getError_msgs().get(0));
                 }
             } catch (Exception e) {
-                LOG.warn("backend heartbeat got exception", e);
+                LOG.warn("backend heartbeat got exception, addr: {}:{}",
+                        computeNode.getHost(), computeNode.getHeartbeatPort(), e);
                 return new BackendHbResponse(computeNodeId,
                         Strings.isNullOrEmpty(e.getMessage()) ? "got exception" : e.getMessage());
             } finally {

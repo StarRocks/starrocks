@@ -68,6 +68,10 @@ public class DateUtils {
     }
 
     public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern) {
+        return unixDatetimeFormatBuilder(pattern, true);
+    }
+
+    public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern, boolean padMs) {
         DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
         boolean escaped = false;
         for (int i = 0; i < pattern.length(); i++) {
@@ -127,7 +131,10 @@ public class DateUtils {
                                 .parseDefaulting(ChronoField.ERA, 1);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
-                        builder.padNext(6, '0').appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
+                        if (padMs) {
+                            builder.padNext(6, '0');
+                        }
+                        builder.appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
                         break;
                     case 'u': // %u Week (00..53), where Monday is the first day of the week
                         builder.appendValueReduced(ChronoField.ALIGNED_WEEK_OF_YEAR, 2, 2, 0);

@@ -146,10 +146,12 @@ Status SharedBufferedInputStream::get_bytes(const uint8_t** buffer, size_t offse
     if ((sb.offset > offset) || (sb.offset + sb.size) < (offset + *nbytes)) {
         return Status::RuntimeError("bad construction of shared buffer");
     }
+
     if (sb.buffer.capacity() == 0) {
         sb.buffer.reserve(sb.size);
         RETURN_IF_ERROR(_file->read_at_fully(sb.offset, sb.buffer.data(), sb.size));
     }
+
     *buffer = sb.buffer.data() + offset - sb.offset;
     return Status::OK();
 }
