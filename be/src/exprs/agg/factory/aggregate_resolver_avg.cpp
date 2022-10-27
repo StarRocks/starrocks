@@ -2,6 +2,7 @@
 
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
+#include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
@@ -12,7 +13,7 @@ template <PrimitiveType pt>
 using AvgStateTrait = AvgAggregateState<RunTimeCppType<ImmediateAvgResultPT<pt>>>;
 
 template <PrimitiveType pt>
-inline constexpr PrimitiveType ArrayAvgResultTrait = TYPE_ARRAY;
+inline constexpr PrimitiveType ArrayResult = TYPE_ARRAY;
 
 template <PrimitiveType pt>
 struct AvgBuilder {
@@ -20,16 +21,19 @@ struct AvgBuilder {
 };
 
 template <PrimitiveType pt>
-struct ArrayAvgBuilder {
+using ArrayAggStateTrait = ArrayAggAggregateState<pt>;
+
+template <PrimitiveType pt>
+struct ArrayAggBuilder {
     AggregateFunctionPtr operator()() { return AggregateFactory::MakeArrayAggAggregateFunction<pt>(); }
 };
 
 void AggregateFuncResolver::register_avg() {
     AGGREGATE_ALL_TYPE_FROM_TRAIT("avg", true, AvgResultPT, AvgStateTrait, AvgBuilder);
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("array_avg", true, ArrayAvgResultTrait, AvgStateTrait, ArrayAvgBuilder);
 
-    add_aggregate_mapping<TYPE_CHAR, TYPE_ARRAY, AvgStateTrait, ArrayAvgBuilder>("array_avg", true);
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_ARRAY, AvgStateTrait, ArrayAvgBuilder>("array_avg", true);
+    AGGREGATE_ALL_TYPE_FROM_TRAIT("array_agg", false, ArrayResult, ArrayAggStateTrait, ArrayAggBuilder);
+    add_aggregate_mapping<TYPE_CHAR, TYPE_ARRAY, ArrayAggStateTrait, ArrayAggBuilder>("array_agg", false);
+    add_aggregate_mapping<TYPE_VARCHAR, TYPE_ARRAY, ArrayAggStateTrait, ArrayAggBuilder>("array_agg", false);
 }
 
 } // namespace starrocks::vectorized
