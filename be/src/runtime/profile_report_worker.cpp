@@ -8,11 +8,11 @@
 namespace starrocks {
 
 Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "register_non_pipeline_load fragment_instance_id" << fragment_instance_id;
+    LOG(INFO) << "register_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     if (_non_pipeline_report_tasks.find(fragment_instance_id) != _non_pipeline_report_tasks.end()) {
         std::stringstream msg;
-        msg << "Fragment instance " << fragment_instance_id << " has been registered";
+        msg << "Fragment instance " << print_id(fragment_instance_id) << " has been registered";
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
@@ -21,19 +21,21 @@ Status ProfileReportWorker::register_non_pipeline_load(const TUniqueId& fragment
 }
 
 Status ProfileReportWorker::unregister_non_pipeline_load(const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_non_pipeline_load fragment_instance_id" << fragment_instance_id;
+    LOG(INFO) << "unregister_non_pipeline_load fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_non_pipeline_report_mutex);
     _non_pipeline_report_tasks.erase(fragment_instance_id);
     return Status::OK();
 }
 
 Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "register_pipeline_load query_id" << query_id << ", fragment_instance_id" << fragment_instance_id;
+    LOG(INFO) << "register_pipeline_load query_id=" << print_id(query_id)
+              << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     PipeLineReportTaskKey key(query_id, fragment_instance_id);
     if (_pipeline_report_tasks.find(key) != _pipeline_report_tasks.end()) {
         std::stringstream msg;
-        msg << "Query id " << query_id << ", Fragment instance " << fragment_instance_id << " has been registered";
+        msg << "Query id " << print_id(query_id) << ", Fragment instance " << print_id(fragment_instance_id)
+            << " has been registered";
         LOG(WARNING) << msg.str();
         return Status::InternalError(msg.str());
     }
@@ -42,7 +44,8 @@ Status ProfileReportWorker::register_pipeline_load(const TUniqueId& query_id, co
 }
 
 Status ProfileReportWorker::unregister_pipeline_load(const TUniqueId& query_id, const TUniqueId& fragment_instance_id) {
-    LOG(INFO) << "unregister_pipeline_load query_id" << query_id << ",fragment_instance_id" << fragment_instance_id;
+    LOG(INFO) << "unregister_pipeline_load query_id=" << print_id(query_id)
+              << ", fragment_instance_id=" << print_id(fragment_instance_id);
     std::lock_guard lg(_pipeline_report_mutex);
     _pipeline_report_tasks.erase(PipeLineReportTaskKey(query_id, fragment_instance_id));
     return Status::OK();

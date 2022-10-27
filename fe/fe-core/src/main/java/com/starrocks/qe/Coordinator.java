@@ -604,7 +604,9 @@ public class Coordinator {
         prepare();
 
         // prepare workgroup
-        this.resourceGroup = prepareResourceGroup(connectContext);
+        this.resourceGroup = prepareResourceGroup(connectContext,
+                queryOptions.getQuery_type() == TQueryType.LOAD ? ResourceGroupClassifier.QueryType.INSERT
+                        : ResourceGroupClassifier.QueryType.SELECT);
 
         // compute Fragment Instance
         computeScanRangeAssignment();
@@ -634,7 +636,8 @@ public class Coordinator {
         deliverExecFragments();
     }
 
-    public static ResourceGroup prepareResourceGroup(ConnectContext connect) {
+    public static ResourceGroup prepareResourceGroup(ConnectContext connect,
+            ResourceGroupClassifier.QueryType queryType) {
         ResourceGroup resourceGroup = null;
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
             return resourceGroup;
@@ -658,7 +661,7 @@ public class Coordinator {
         if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
             resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
-                    connect, ResourceGroupClassifier.QueryType.SELECT, dbIds);
+                    connect, queryType, dbIds);
         }
 
         if (resourceGroup != null) {

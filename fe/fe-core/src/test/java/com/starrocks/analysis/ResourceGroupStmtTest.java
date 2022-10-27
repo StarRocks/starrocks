@@ -113,6 +113,15 @@ public class ResourceGroupStmtTest {
             "    'concurrency_limit' = '10',\n" +
             "    'type' = 'normal'\n" +
             ");";
+    private String createRg6Sql = "create resource group rg6\n" +
+            "to\n" +
+            "    (query_type in ('insert'), source_ip='192.168.6.1/24')\n" +
+            "with (\n" +
+            "    'cpu_core_limit' = '32',\n" +
+            "    'mem_limit' = '80%',\n" +
+            "    'concurrency_limit' = '10',\n" +
+            "    'type' = 'normal'\n" +
+            ");";
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -146,14 +155,14 @@ public class ResourceGroupStmtTest {
     }
 
     private void createResourceGroups() throws Exception {
-        String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql, createRg5Sql};
+        String[] sqls = new String[] {createRg1Sql, createRg2Sql, createRg3Sql, createRg4Sql, createRg5Sql, createRg6Sql};
         for (String sql : sqls) {
             starRocksAssert.executeResourceGroupDdlSql(sql);
         }
     }
 
     private void dropResourceGroups() throws Exception {
-        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5"};
+        String[] rgNames = new String[] {"rg1", "rg2", "rg3", "rg4", "rg5", "rg6"};
         for (String name : rgNames) {
             starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP " + name);
         }
@@ -182,7 +191,8 @@ public class ResourceGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|10|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|25|80.0%|1024|1024|1024|10|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
@@ -287,12 +297,12 @@ public class ResourceGroupStmtTest {
     @Test
     public void testQueryType() throws Exception {
         String sql1 = "create resource group rg_insert\n" +
-                "to (user='rg_user3', query_type in ('insert')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
+                "to (user='rg_user3', query_type in ('mv')) with ('cpu_core_limit' = '10', 'mem_limit' = '20%')";
         try {
             starRocksAssert.executeResourceGroupDdlSql(sql1);
             Assert.fail("should throw error");
         } catch (Exception e) {
-            Assert.assertEquals("Unsupported query_type: 'insert'", e.getMessage());
+            Assert.assertEquals("Unsupported query_type: 'mv'", e.getMessage());
         }
 
     }
@@ -418,6 +428,22 @@ public class ResourceGroupStmtTest {
     }
 
     @Test
+    public void testChooseInsertResourceGroup() throws Exception {
+        createResourceGroups();
+        String qualifiedUser = "rg1_user1";
+        String remoteIp = "192.168.6.4";
+        starRocksAssert.getCtx().setQualifiedUser(qualifiedUser);
+        starRocksAssert.getCtx().setCurrentUserIdentity(new UserIdentity(qualifiedUser, "%"));
+        starRocksAssert.getCtx().setRemoteIP(remoteIp);
+        ResourceGroup wg = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
+                starRocksAssert.getCtx(),
+                ResourceGroupClassifier.QueryType.INSERT,
+                null);
+        Assert.assertEquals(wg.getName(), "rg6");
+        dropResourceGroups();
+    }
+
+    @Test
     public void testChooseResourceGroupWithDb() throws Exception {
         createResourceGroups();
         String qualifiedUser = "rg1_user1";
@@ -524,7 +550,8 @@ public class ResourceGroupStmtTest {
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=2.459375, query_type in (SELECT), source_ip=192.168.6.1/24)\n" +
                 "rg3|32|80.0%|0|0|0|23|NORMAL|(weight=1.1, query_type in (SELECT))\n" +
                 "rg4|13|41.0%|1024|1024|1024|23|NORMAL|(weight=1.359375, source_ip=192.168.7.1/24)\n" +
-                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')";
+                "rg5|25|80.0%|0|0|0|10|NORMAL|(weight=10.0, db='db1')\n" +
+                "rg6|32|80.0%|0|0|0|10|NORMAL|(weight=2.459375, query_type in (INSERT), source_ip=192.168.6.1/24)";
         Assert.assertEquals(result, expect);
         dropResourceGroups();
     }
