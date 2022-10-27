@@ -29,8 +29,6 @@ import java.util.stream.Collectors;
 
 public class StatementPlanner {
     public ExecPlan plan(StatementBase stmt, ConnectContext session) throws AnalysisException {
-
-
         if (stmt instanceof QueryStmt) {
             QueryStmt queryStmt = (QueryStmt) stmt;
 
@@ -70,6 +68,10 @@ public class StatementPlanner {
             } finally {
                 unLock(dbs);
             }
+        } else {
+            com.starrocks.sql.analyzer.Analyzer analyzer =
+                    new com.starrocks.sql.analyzer.Analyzer(session.getCatalog(), session);
+            analyzer.analyze(stmt);
         }
         return null;
     }
