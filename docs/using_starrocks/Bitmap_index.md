@@ -132,7 +132,7 @@ After you execute the preceding two statements, the bitmap indexes are generated
 
 ![figure](../assets/3.6.1-3.png)
 
-StarRocks builds a dictionary for the `Gender` and `Income_level` columns and then generates bitmaps for the distinct values in these two columns.
+StarRocks respectively builds a dictionary for the `Gender` and `Income_level` columns and then generates bitmaps for the distinct values in these two columns.
 
 - `Gender`: The bitmap of `female` is `1110` and the bitmap of `male` is `0001`.
 - `Producer`: The bitmap of `level_1` is `1010`, the bitmap of `level_2` is `0100`, and the bitmap of `level_3` is `0001`.
