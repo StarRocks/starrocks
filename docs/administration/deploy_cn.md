@@ -18,7 +18,7 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 
 > Caution
 >
-> Replace the file name in the command with the actual name of file you downloaded.
+> Replace the file name in the command with the actual name of the file you downloaded.
 
 ## Configure a CN node
 
@@ -30,7 +30,7 @@ cd StarRocks-x.x.x/be
 
 > Caution
 >
-> Replace the file name in the command with the actual name of file you downloaded.
+> Replace the file name in the command with the actual name of the file you downloaded.
 
 Modify the CN configuration file **conf/cn.conf**. Because the default configuration can be used directly to start the cluster, the following example does not change any configuration item. If you need to change a configuration item in the production environment, see [BE configuration items](../administration/Configuration.md#be-configuration-items) for instructions, because most of CN's parameters are inherited from BEs.
 
