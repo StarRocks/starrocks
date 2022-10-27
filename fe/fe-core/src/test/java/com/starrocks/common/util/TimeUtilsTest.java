@@ -219,8 +219,16 @@ public class TimeUtilsTest {
                     5, TimeUnit.SECONDS));
             Assert.assertEquals(1650555135L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
                     7, TimeUnit.SECONDS));
+            Assert.assertEquals(1650555132L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    11, TimeUnit.SECONDS));
+            Assert.assertEquals(1650555211L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    101, TimeUnit.SECONDS));
+            Assert.assertEquals(1650556100L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    999, TimeUnit.SECONDS));
             Assert.assertEquals(1650566711L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
                     3, TimeUnit.HOURS));
+            Assert.assertEquals(1650595511L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
+                    7, TimeUnit.HOURS));
             Assert.assertEquals(1652100311L, TimeUtils.getNextValidTimeSecond(1650545111L, currentTimeSecond,
                     9, TimeUnit.DAYS));
         } catch (DdlException e) {
