@@ -7,7 +7,7 @@ Converts a UNIX timestamp into the required time format. The default format is `
 ## Syntax
 
 ```Haskell
-DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
+DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
 ```
 
 ## Parameters
@@ -28,7 +28,7 @@ Currently, `string_format` supports the following formats:
 
 Other formats are invalid and NULL will be returned.
 
-If the specified timstamp is less than 0 or greater than 253402271999, NULL will be returned. The range for timestamp is `1970-01-01 00:00:00` to `9999-12-31 23:59:59`.
+If the specified timestamp is less than 0 or greater than 253402271999, NULL will be returned. The range for timestamp is `1970-01-01 00:00:00` to `9999-12-31 23:59:59`.
 
 ## Examples
 
