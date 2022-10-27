@@ -8,11 +8,11 @@ If no parameter is specified, this function converts the current time into a UNI
 
 The `date` parameter must be of the DATE or DATETIME type.
 
-For time before 1970-01-01 00:00:00 or after 2038-01-19 03:14:07, this function returns 0.
+For time before 1970-01-01 00:00:00 or after 2038-01-19 11:14:07, this function returns 0.
 
 For more information about the date format, see [date_format](./date_format.md).
 
-This function may return different results for different time zones.
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../using_starrocks/timezone.md).
 
 ## Syntax
 
