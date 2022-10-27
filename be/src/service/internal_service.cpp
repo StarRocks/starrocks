@@ -249,7 +249,8 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     if (is_pipeline) {
         return _exec_plan_fragment_by_pipeline(t_request, t_request);
     } else {
-        return _exec_plan_fragment_by_non_pipeline(t_request);
+        return Status::InternalError("unexpected error, plan fragment is not in pipeline engine");
+        // return _exec_plan_fragment_by_non_pipeline(t_request);
     }
 }
 
