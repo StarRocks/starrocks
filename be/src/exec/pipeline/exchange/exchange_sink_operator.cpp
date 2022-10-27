@@ -388,11 +388,15 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     }
     _unique_metrics->add_info_string("DestID", std::to_string(_dest_node_id));
     _unique_metrics->add_info_string("DestFragments", instances);
-    _unique_metrics->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
+    _unique_metrics->add_info_string("PartType", to_string(_part_type));
+    _unique_metrics->add_info_string("ChannelNum", std::to_string(_channels.size()));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
+        _unique_metrics->add_info_string("ShuffleNumPerChannel", std::to_string(_num_shuffles_per_channel));
+        _unique_metrics->add_info_string("TotalShuffleNum", std::to_string(_num_shuffles));
+        _unique_metrics->add_info_string("PipelineLevelShuffle", _is_pipeline_level_shuffle ? "Yes" : "No");
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.

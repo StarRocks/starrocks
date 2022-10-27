@@ -62,7 +62,7 @@ Status PartitionExchanger::Partitioner::partition_chunk(const vectorized::ChunkP
 PartitionExchanger::PartitionExchanger(const std::shared_ptr<LocalExchangeMemoryManager>& memory_manager,
                                        LocalExchangeSourceOperatorFactory* source, const TPartitionType::type part_type,
                                        const std::vector<ExprContext*>& partition_expr_ctxs, const size_t num_sinks)
-        : LocalExchanger("Partition", memory_manager, source) {
+        : LocalExchanger(strings::Substitute("Partition($0)", to_string(part_type)), memory_manager, source) {
     _partitioners.reserve(num_sinks);
     for (size_t i = 0; i < num_sinks; i++) {
         _partitioners.emplace_back(source, part_type, partition_expr_ctxs);

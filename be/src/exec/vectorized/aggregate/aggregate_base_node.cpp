@@ -38,6 +38,7 @@ Status AggregateBaseNode::close(RuntimeState* state) {
         return Status::OK();
     }
     if (_aggregator != nullptr) {
+        _num_rows_returned = _aggregator->num_rows_returned();
         _aggregator->close(state);
         _aggregator.reset();
     }
