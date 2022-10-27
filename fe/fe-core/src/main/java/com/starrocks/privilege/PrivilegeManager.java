@@ -104,63 +104,73 @@ public class PrivilegeManager {
             long builtinRoleId = -1;
             // 1. builtin root role
             RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, ROOT_ROLE_NAME);
-            // GRANT ALL ON ALL
-            for (String typeStr : typeStringToId.keySet()) {
-                PrivilegeTypes t = PrivilegeTypes.valueOf(typeStr);
-                initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+            if (rolePrivilegeCollection != null) {
+                // GRANT ALL ON ALL
+                for (String typeStr : typeStringToId.keySet()) {
+                    PrivilegeTypes t = PrivilegeTypes.valueOf(typeStr);
+                    initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+                }
+                rolePrivilegeCollection.disableMutable();  // not mutable
             }
-            rolePrivilegeCollection.disableMutable();  // not mutable
 
             // 2. builtin db_admin role
             rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "db_admin");
             PrivilegeTypes systemTypes = PrivilegeTypes.SYSTEM;
-            // ALL system but GRANT AND NODE
-            List<String> actionWithoutNodeGrant = systemTypes.getValidActions().stream().filter(
-                    x -> !x.equals("GRANT") && !x.equals("NODE")).collect(Collectors.toList());
-            initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null, false);
-            for (PrivilegeTypes t : Arrays.asList(PrivilegeTypes.DATABASE, PrivilegeTypes.TABLE)) {
-                initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+            if (rolePrivilegeCollection != null) {
+                // ALL system but GRANT AND NODE
+                List<String> actionWithoutNodeGrant = systemTypes.getValidActions().stream().filter(
+                        x -> !x.equals("GRANT") && !x.equals("NODE")).collect(Collectors.toList());
+                initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null, false);
+                for (PrivilegeTypes t : Arrays.asList(PrivilegeTypes.DATABASE, PrivilegeTypes.TABLE)) {
+                    initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+                }
+                rolePrivilegeCollection.disableMutable(); // not mutable
             }
-            rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 3. cluster_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "cluster_admin");
-            // GRANT NODE ON SYSTEM
-            initPrivilegeCollections(
-                    rolePrivilegeCollection,
-                    systemTypes.name(),
-                    Arrays.asList(PrivilegeTypes.SystemActions.NODE.name()),
-                    null,
-                    false);
-            rolePrivilegeCollection.disableMutable(); // not mutable
+            if (rolePrivilegeCollection != null) {
+                // GRANT NODE ON SYSTEM
+                initPrivilegeCollections(
+                        rolePrivilegeCollection,
+                        systemTypes.name(),
+                        Arrays.asList(PrivilegeTypes.SystemActions.NODE.name()),
+                        null,
+                        false);
+                rolePrivilegeCollection.disableMutable(); // not mutable
+            }
 
             // 4. user_admin
             rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "user_admin");
-            // GRANT GRANT ON SYSTEM
-            initPrivilegeCollections(
-                    rolePrivilegeCollection,
-                    systemTypes.name(),
-                    Arrays.asList(PrivilegeTypes.SystemActions.GRANT.name()),
-                    null,
-                    false);
-            PrivilegeTypes t = PrivilegeTypes.USER;
-            initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
-            rolePrivilegeCollection.disableMutable(); // not mutable
+            if (rolePrivilegeCollection != null) {
+                // GRANT GRANT ON SYSTEM
+                initPrivilegeCollections(
+                        rolePrivilegeCollection,
+                        systemTypes.name(),
+                        Arrays.asList(PrivilegeTypes.SystemActions.GRANT.name()),
+                        null,
+                        false);
+                PrivilegeTypes t = PrivilegeTypes.USER;
+                initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+                rolePrivilegeCollection.disableMutable(); // not mutable
+            }
 
             // 5. public
             publicRoleName = "public";
             rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, publicRoleName);
-            // GRANT SELECT ON ALL TABLES IN infomation_schema
-            String tableTypeStr = PrivilegeTypes.TABLE.name();
-            List<PEntryObject> object = Arrays.asList(provider.generateObject(
-                    tableTypeStr,
-                    Arrays.asList(PrivilegeTypes.TABLE.getPlural()),
-                    PrivilegeTypes.DATABASE.name(),
-                    "information_schema",
-                    globalStateMgr));
-            ActionSet selectAction = analyzeActionSet(
-                    tableTypeStr, tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
-            rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
+            if (rolePrivilegeCollection != null) {
+                // GRANT SELECT ON ALL TABLES IN infomation_schema
+                String tableTypeStr = PrivilegeTypes.TABLE.name();
+                List<PEntryObject> object = Arrays.asList(provider.generateObject(
+                            tableTypeStr,
+                            Arrays.asList(PrivilegeTypes.TABLE.getPlural()),
+                            PrivilegeTypes.DATABASE.name(),
+                            "information_schema",
+                            globalStateMgr));
+                ActionSet selectAction = analyzeActionSet(
+                        tableTypeStr, tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
+                rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
+            }
 
             // 6. builtin user root
             UserPrivilegeCollection rootCollection = new UserPrivilegeCollection();
@@ -256,7 +266,7 @@ public class PrivilegeManager {
             return collection;
         }
         // public roles may be changed and persisted in image before restarted
-        return roleIdToPrivilegeCollection.get(roleNameToId.get(name));
+        return null;
     }
 
     private void userReadLock() {
