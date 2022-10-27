@@ -303,24 +303,8 @@ public class TimeUtils {
         if (timeSecond > targetTimeSecond) {
             return timeSecond;
         }
-        // use exponential improve adding interval performance
-        // e.g. timeSecond is 100, currentTimeSecond is 151, period is 2, timeUnit is second
-        // next valid time second is 152
-        // if use simple for loop, it will run 26 times
-        // if use exponential loop, only run 7 times
-        int intervalExp = 1;
         long difference = targetTimeSecond - timeSecond;
-        while (difference > interval << intervalExp) {
-            intervalExp++;
-        }
-        long intervalExpValue =  interval << intervalExp;
-        intervalExp = intervalExp - 2;
-        while (intervalExp >= 0) {
-            if (intervalExpValue - difference > interval << intervalExp) {
-                intervalExpValue -= interval << intervalExp;
-            }
-            intervalExp--;
-        }
-        return timeSecond + intervalExpValue;
+        long step = difference / interval + 1;
+        return timeSecond + step * interval;
     }
 }
