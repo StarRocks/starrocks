@@ -56,8 +56,18 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     DCHECK(_state == DriverState::NOT_READY);
 
-    source_operator()->add_morsel_queue(_morsel_queue);
-
+    auto* source_op = source_operator();
+    // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    if (dynamic_cast<ScanOperator*>(source_op) != nullptr) {
+        auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
+        if (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr && _fragment_ctx->enable_cache()) {
+            auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
+            split_morsel_queue->set_ticket_checker(scan_op->ticket_checker());
+        } else {
+            scan_op->ticket_checker().reset();
+        }
+    }
+    source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
