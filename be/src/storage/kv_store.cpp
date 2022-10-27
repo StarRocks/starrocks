@@ -75,9 +75,12 @@ Status KVStore::init(bool read_only) {
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
     cf_descs[0].name = DEFAULT_COLUMN_FAMILY;
+    cf_descs[0].options.compression = rocksdb::kSnappyCompression;
     cf_descs[1].name = STARROCKS_COLUMN_FAMILY;
+    cf_descs[1].options.compression = rocksdb::kSnappyCompression;
     cf_descs[2].name = META_COLUMN_FAMILY;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
+    cf_descs[2].options.compression = rocksdb::kSnappyCompression;
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;
