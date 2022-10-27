@@ -24,11 +24,11 @@ This topic describes how to use StarRocks operator to deploy a CN cluster on Kub
 
     [Pod](https://kubernetes.io/docs/concepts/workloads/pods/) is the smallest deployable units of computing that you can create and manage in Kubernetes. A Pod (as in a pod of whales or pea pod) is a group of one or more [containers](https://kubernetes.io/docs/concepts/containers/), with shared storage and network resources, and a specification for how to run the containers.
 
-    When a StarRocks Operator is in work, FEs detect compute services through Direct Connect. But  StarRocks does not allow nodes in one cluster to share the same IP. So StarRocks Operator only supports a Pod containing a CN and scheduled to run on one Node.
+    When a StarRocks Operator is in work, FEs detect compute services through Direct Connect. But StarRocks does not allow nodes in one cluster to share the same IP. So StarRocks Operator only supports a Pod containing a CN and scheduled to run on one Node.
 
 - **CN**
 
-    CN is a stateless compute node and is reponsible for carrying out part of the execution plan. It doesn't  store data. Multiple CNs consist of a CN cluster. It can be containerized, and be deployed and maintained on Kubernetes.  StarRocks operator senses a CN cluster's resource load and deploys more or less CNs accordingly to achieve autoscaling.
+    CN is a stateless compute node and is responsible for carrying out part of the execution plan. It doesn't store data. Multiple CNs consist of a CN cluster. It can be containerized, and be deployed and maintained on Kubernetes. StarRocks operator senses a CN cluster's resource load and deploys more or less CNs accordingly to achieve autoscaling.
 
 ## Principle
 
@@ -94,7 +94,7 @@ You need to build Docker images, including StarRocks Operator, CN, and CN Group 
     >
     > - `dockerImageId`: StarRocks Operator image ID. To see images ID, execute the `docker images` command.
     >
-    > - `account/repo:tag`: StarRocks Operator image tag, e.g. `starrocks/sr-cn-test:operator`. `account` is your Docker Hub account, `repo` is the Docker  repository in Docker Hub, and `tag` is the tag you determined for StarRocks Operator image.
+    > - `account/repo:tag`: StarRocks Operator image tag, e.g. `starrocks/sr-cn-test:operator`. `account` is your Docker Hub account, `repo` is the Docker repository in Docker Hub, and `tag` is the tag you determined for StarRocks Operator image.
 
 ### Prepare a CN image
 
@@ -134,9 +134,9 @@ You need to build Docker images, including StarRocks Operator, CN, and CN Group 
 2. Create a CN Group image and push it to the remote Docker repository.
 
     ```Bash
-    # build image
+    # Build a image.
     make docker IMG="computenodegroup:v1.0"
-    # push image to docker hub
+    # Push the image to docker hub.
     make push IMG="computenodegroup:v1.0"
     ```
 
@@ -164,7 +164,7 @@ You need to build Docker images, including StarRocks Operator, CN, and CN Group 
     kubectl apply -f manager.yaml 
     ```
 
-4. Check the pod status by executing `kubectl get pod -n starrocks`. Check whether the `STATUS` is  `Running`.
+4. Check the pod status by executing `kubectl get pod -n starrocks`. Check whether `STATUS` is `Running`.
 
     ```Bash
     kubectl get pod -n starrocks
@@ -183,12 +183,12 @@ You need to build Docker images, including StarRocks Operator, CN, and CN Group 
 2. Configure **cn.yaml**.
    1. `cnImage`: CN image tag in the remote repository. For example, `starrocks/sr-cn-test:v3`.
    2. `componentsImage` : CN Group image tag in the remote repository. For example, `starrocks/computenodegroup:v1.0`.
-   3. `<fe_ip>:<fe_query_port>`: any FE's IP address and `query_port` port  (default value `9030`).
+   3. `<fe_ip>:<fe_query_port>`: any FE's IP address and `query_port` port (defaults to `9030`).
 
         ```Bash
             feInfo:
-                accountSecret: test-secret # secret to configure   FE   account
-                addresses: #   FE   addresses
+                accountSecret: test-secret # Secret of the FE account
+                addresses: # FE addresses
                 - <fe_ip>:<fe_query_port>
         ```
 
@@ -223,13 +223,13 @@ After the CN cluster is running successfully, StarRocks Operator uses the FE IP 
 1. If you want to configure [policy for horizontal pod autoscaling](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/#scaling-policies), you can edit the **cn.yaml** file `$your_code_path/starrocks-kubernetes-operator/examples/cn/cn.yaml`.
 
     ```Bash
-    autoScalingPolicy: # auto-scaling policy of CN cluster
-        maxReplicas: 10 # the maximum of CNs
-        minReplicas: 1 # the minimum of CNs
+    autoScalingPolicy: # Auto-scaling policy of CN cluster
+        maxReplicas: 10 # Maximum number of CNs
+        minReplicas: 1 # Minimum number of CNs
         hpaPolicy:
-            metrics: # resource metrics and scaling threshold. More information, please see metricspec.
+            metrics: # The metrics and scaling threshold. For more information, see metricspec.
             - type: Resource
-                resource: # 
+                resource:
                 name: memory
                 target:
                     averageUtilization: 30
@@ -240,7 +240,7 @@ After the CN cluster is running successfully, StarRocks Operator uses the FE IP 
                 target:
                     averageUtilization: 30
                     type: Utilization
-            behavior: # scaling behavior  
+            behavior: # Scaling behavior
             scaleUp:
                 policies:
                 - type: Pods
@@ -257,9 +257,9 @@ After the CN cluster is running successfully, StarRocks Operator uses the FE IP 
     - Set the maximum and minimum numbers of CNs for horizontal scaling.
 
         ```Bash
-        # The maximum number of CNs. The upper limit value is 10.
+        # The maximum number of CNs. The upper limit is 10.
         maxReplicas: 10 
-        # The minimum number of CNs. The lower limit value is 1.
+        # The minimum number of CNs. The lower limit is 1.
         minReplicas: 1
         ```
 
@@ -308,4 +308,4 @@ Execute `Kubectl get po -A` to check the status of pods.
     Warning  BackOff    41s (x27 over 5m46s)   kubelet            Back-off restarting failed container
     ```
 
-- **Solution:** Refre to [Deploy a CN cluster](#deploy-cn) and check the path of **start_cn.shell** in **cn.yaml**.
+- **Solution:** Refer to [Deploy a CN cluster](#deploy-cn) and check the path of **start_cn.shell** in **cn.yaml**.
