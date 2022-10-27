@@ -4,12 +4,14 @@
 
 #include <optional>
 
+#include "exec/query_cache/ticket_checker.h"
 #include "gen_cpp/InternalService_types.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
 #include "storage/rowset/segment_group.h"
 #include "storage/seek_range.h"
+#include "storage/tablet.h"
 #include "storage/tablet_reader_params.h"
 #include "storage/tuple.h"
 
@@ -40,6 +42,7 @@ class Range;
 namespace pipeline {
 
 class Morsel;
+class EOSMorsel;
 using MorselPtr = std::unique_ptr<Morsel>;
 using Morsels = std::vector<MorselPtr>;
 class MorselQueue;
@@ -52,7 +55,7 @@ using MorselQueueFactoryMap = std::unordered_map<int32_t, MorselQueueFactoryPtr>
 /// Morsel.
 class Morsel {
 public:
-    Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
+    explicit Morsel(int32_t plan_node_id) : _plan_node_id(plan_node_id) {}
     virtual ~Morsel() = default;
 
     int32_t get_plan_node_id() const { return _plan_node_id; }
@@ -70,6 +73,8 @@ public:
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
 
+    virtual bool is_eos() const { return false; }
+
 private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
@@ -78,7 +83,13 @@ private:
 class ScanMorsel : public Morsel {
 public:
     ScanMorsel(int32_t plan_node_id, const TScanRange& scan_range)
-            : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {}
+            : Morsel(plan_node_id), _scan_range(std::make_unique<TScanRange>(scan_range)) {
+        if (_scan_range->__isset.internal_scan_range) {
+            _tablet_id = _scan_range->internal_scan_range.tablet_id;
+            auto str_version = _scan_range->internal_scan_range.version;
+            _version = strtol(str_version.c_str(), nullptr, 10);
+        }
+    }
 
     ScanMorsel(int32_t plan_node_id, const TScanRangeParams& scan_range)
             : ScanMorsel(plan_node_id, scan_range.scan_range) {}
@@ -88,18 +99,19 @@ public:
     TInternalScanRange* get_olap_scan_range() { return &(_scan_range->internal_scan_range); }
 
     std::tuple<int64_t, int64_t> get_lane_owner_and_version() const override {
-        if (_scan_range->__isset.internal_scan_range) {
-            auto tablet_id = _scan_range->internal_scan_range.tablet_id;
-            auto str_version = _scan_range->internal_scan_range.version;
-            auto version = strtol(str_version.c_str(), nullptr, 10);
-            return std::tuple<int64_t, int64_t>{tablet_id, version};
-        } else {
-            return std::tuple<int64_t, int64_t>{0L, 0L};
-        }
+        return std::tuple<int64_t, int64_t>{_tablet_id, _version};
     }
 
 private:
     std::unique_ptr<TScanRange> _scan_range;
+    int64_t _tablet_id = 0;
+    int64_t _version = 0;
+};
+
+class EOSMorsel final : public ScanMorsel {
+public:
+    using ScanMorsel::ScanMorsel;
+    bool is_eos() const override { return true; }
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
@@ -223,19 +235,76 @@ private:
     std::atomic<size_t> _pop_index;
 };
 
-class PhysicalSplitMorselQueue final : public MorselQueue {
+class SplitMorselQueue : public MorselQueue {
 public:
-    explicit PhysicalSplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
+    SplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
             : _morsels(std::move(morsels)),
               _num_original_morsels(_morsels.size()),
               _degree_of_parallelism(degree_of_parallelism),
               _splitted_scan_rows(splitted_scan_rows) {}
+    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
+
+    void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
+
+protected:
+    template <typename T>
+    auto _use_ticket_checker(std::function<T(query_cache::TicketCheckerPtr& ticket_checker, int64_t)> func,
+                             T default_value) {
+        if (_ticket_checker == nullptr) {
+            return default_value;
+        } else {
+            DCHECK(0 <= _tablet_idx && _tablet_idx < _tablets.size());
+            auto tablet_id = _tablets[_tablet_idx]->tablet_id();
+            return func(_ticket_checker, tablet_id);
+        }
+    }
+
+    int _inc_num_splits_unlocked() {
+        return _use_ticket_checker<int>(
+                [](query_cache::TicketCheckerPtr& ticket_checker, int64_t tablet_id) {
+                    ticket_checker->enter(tablet_id, false);
+                    return 0;
+                },
+                0);
+    }
+
+    MorselPtr _emit_eos_morsel(int32_t plan_node_id, const TScanRange& scan_range) {
+        return _use_ticket_checker<MorselPtr>(
+                [&](query_cache::TicketCheckerPtr& ticket_checker, int64_t tablet_id) {
+                    ticket_checker->enter(tablet_id, true);
+                    return std::make_unique<EOSMorsel>(plan_node_id, scan_range);
+                },
+                nullptr);
+    }
+
+    bool _has_emitted_eos_morsel() {
+        return _use_ticket_checker<bool>([](query_cache::TicketCheckerPtr& ticket_checker,
+                                            int64_t tablet_id) { return ticket_checker->are_all_ready(tablet_id); },
+                                         true);
+    }
+
+    ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
+
+    const Morsels _morsels;
+    // The number of the morsels before split them to pieces.
+    const size_t _num_original_morsels;
+    const int64_t _degree_of_parallelism;
+    // The minimum number of rows picked up from a segment at one time.
+    const int64_t _splitted_scan_rows;
+
+    std::vector<TabletSharedPtr> _tablets;
+    std::atomic<size_t> _tablet_idx = 0;
+    query_cache::TicketCheckerPtr _ticket_checker;
+};
+
+class PhysicalSplitMorselQueue final : public SplitMorselQueue {
+public:
+    using SplitMorselQueue::SplitMorselQueue;
     ~PhysicalSplitMorselQueue() override = default;
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
 
     void set_key_ranges(const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges) override;
-    void set_tablets(const std::vector<TabletSharedPtr>& tablets) override { _tablets = tablets; }
     void set_tablet_rowsets(const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets) override {
         _tablet_rowsets = tablet_rowsets;
     }
@@ -251,7 +320,6 @@ private:
     rowid_t _lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) const;
     rowid_t _upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower, rowid_t end) const;
 
-    ScanMorsel* _cur_scan_morsel();
     Rowset* _cur_rowset();
     // Return nullptr, when _segment_idx exceeds the segments of the current rowset.
     Segment* _cur_segment();
@@ -265,13 +333,6 @@ private:
 private:
     std::mutex _mutex;
 
-    const Morsels _morsels;
-    // The number of the morsels before split them to pieces.
-    const size_t _num_original_morsels;
-    const int64_t _degree_of_parallelism;
-    // The minimum number of rows picked up from a segment at one time.
-    const int64_t _splitted_scan_rows;
-
     /// Key ranges passed to the storage layer.
     vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
             vectorized::TabletReaderParams::RangeStartOperation::GT;
@@ -281,11 +342,11 @@ private:
     std::vector<OlapTuple> _range_end_key;
 
     // _tablets[i] and _tablet_rowsets[i] represent the i-th tablet and its rowsets.
-    std::vector<TabletSharedPtr> _tablets;
+
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _has_init_any_segment = false;
-    std::atomic<size_t> _tablet_idx = 0;
+
     size_t _rowset_idx = 0;
     size_t _segment_idx = 0;
     std::vector<vectorized::SeekRange> _tablet_seek_ranges;
@@ -297,13 +358,9 @@ private:
     MemPool _mempool;
 };
 
-class LogicalSplitMorselQueue final : public MorselQueue {
+class LogicalSplitMorselQueue final : public SplitMorselQueue {
 public:
-    explicit LogicalSplitMorselQueue(Morsels&& morsels, int64_t degree_of_parallelism, int64_t splitted_scan_rows)
-            : _morsels(std::move(morsels)),
-              _num_original_morsels(_morsels.size()),
-              _degree_of_parallelism(degree_of_parallelism),
-              _splitted_scan_rows(splitted_scan_rows) {}
+    using SplitMorselQueue::SplitMorselQueue;
     ~LogicalSplitMorselQueue() override = default;
 
     std::vector<TInternalScanRange*> olap_scan_ranges() const override;
@@ -340,13 +397,6 @@ private:
 private:
     std::mutex _mutex;
 
-    Morsels _morsels;
-    // The number of the morsels before split them to pieces.
-    const size_t _num_original_morsels;
-    const int64_t _degree_of_parallelism;
-    // The minimum number of rows picked up from a segment at one time.
-    const int64_t _splitted_scan_rows;
-
     /// Key ranges passed to the storage layer.
     vectorized::TabletReaderParams::RangeStartOperation _range_start_op =
             vectorized::TabletReaderParams::RangeStartOperation::GT;
@@ -356,11 +406,9 @@ private:
     std::vector<OlapTuple> _range_end_key;
 
     // _tablets[i] and _tablet_rowsets[i] represent the i-th tablet and its rowsets.
-    std::vector<TabletSharedPtr> _tablets;
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
 
     bool _has_init_any_tablet = false;
-    std::atomic<size_t> _tablet_idx = 0;
 
     // Used to allocate memory for _tablet_seek_ranges.
     MemPool _mempool;
