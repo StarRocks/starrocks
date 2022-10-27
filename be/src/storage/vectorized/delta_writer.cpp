@@ -243,6 +243,10 @@ Status DeltaWriter::close() {
 }
 
 Status DeltaWriter::_flush_memtable_async() {
+    // _mem_table is nullptr means write() has not been called
+    if (_mem_table == nullptr) {
+        return Status::OK();
+    }
     RETURN_IF_ERROR(_mem_table->finalize());
     return _flush_token->submit(std::move(_mem_table));
 }
