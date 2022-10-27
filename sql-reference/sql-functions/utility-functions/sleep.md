@@ -2,12 +2,12 @@
 
 ## 功能
 
-使数据库休眠 `x` 秒。
+将当前正在执行的线程休眠 `x` 秒。返回 BOOLEAN 类型的值，`1` 表示正常休眠，`0` 表示休眠失败。
 
 ## 语法
 
 ```Haskell
-sleep(x);
+BOOLEAN sleep(INT x);
 ```
 
 ## 参数说明
@@ -16,16 +16,24 @@ sleep(x);
 
 ## 返回值说明
 
-返回值的数据类型为 BOOLEAN。
+返回 BOOLEAN 类型的值。
 
 ## 示例
 
 ```Plain Text
-mysql> select sleep(3);
+select sleep(3);
 +----------+
 | sleep(3) |
 +----------+
 |        1 |
 +----------+
 1 row in set (3.00 sec)
+
+select sleep(NULL);
++-------------+
+| sleep(NULL) |
++-------------+
+|        NULL |
++-------------+
+1 row in set (0.00 sec)
 ```
