@@ -85,7 +85,9 @@ public class IcebergTable extends Table {
         catalog = properties.get(ICEBERG_CATALOG);
         db = properties.get(ICEBERG_DB);
         table = properties.get(ICEBERG_TABLE);
-        if (properties.get(ICEBERG_CATALOG_TYPE).equals("GLUE_CATALOG")) {
+
+        String catalogType = properties.get(ICEBERG_CATALOG_TYPE);
+        if (catalogType != null && catalogType.equals("GLUE_CATALOG")) {
             setGlueCatalogProperties();
             return;
         }
