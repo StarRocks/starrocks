@@ -2,7 +2,9 @@
 
 ## 功能
 
-返回当前 UTC 日期和时间的 "YYYY-MM-DD HH:MM:SS" 或 "YYYYMMDDHHMMSS" 格式的值。
+返回当前 UTC 日期时间。
+
+如果该函数用在字符串上下文时，返回值的格式为 `YYYY-MM-DD hh:mm:ss`。如果用在数字上下文中，返回值的格式为 `YYYYMMDDhhmmss`。
 
 ## 语法
 
@@ -21,6 +23,4 @@ select utc_timestamp(),utc_timestamp() + 1;
 +---------------------+---------------------+
 ```
 
-## keyword
-
-UTC_TIMESTAMP,UTC,TIMESTAMP
+`UTC_TIMESTAMP() + N` 表示在当前时间加上 N 秒。

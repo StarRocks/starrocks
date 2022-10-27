@@ -13,8 +13,12 @@ INT DATE_SUB(DATETIME date,INTERVAL expr type)
 ## 参数说明
 
 * `date`：合法的日期表达式。
-* `expr`：要减去的时间间隔。
+* `expr`：要减去的时间间隔，支持的数据类型为 INT。
 * `type`：取值可以是 YEAR，MONTH，DAY，HOUR，MINUTE，或 SECOND。
+
+## 返回值说明
+
+返回 DATETIME 类型的值。如果输入值为空或者不存在，返回 NULL。
 
 ## 示例
 
