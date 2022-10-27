@@ -1337,7 +1337,7 @@ public class LocalMetastore implements ConnectorMetadata {
             // check again
             if (!db.writeLockAndCheckExist()) {
                 throw new DdlException("db " + db.getFullName()
-                        + "(" +db.getId() + ") has been dropped");
+                        + "(" + db.getId() + ") has been dropped");
             }
             Set<String> existPartitionNameSet = Sets.newHashSet();
             try {
