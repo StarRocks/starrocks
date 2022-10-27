@@ -266,7 +266,7 @@ public class SchemaChangeHandler extends AlterHandler {
             if (indexMeta.getSortKeyIdxes() != null) {
                 for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
                     if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
-                        throw new DdlException("Can not drop sort column in primary data model table");
+                        throw new DdlException("Can not modify sort column in primary data model table");
                     }
                 }
             }
