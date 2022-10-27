@@ -33,7 +33,7 @@ eval set -- "$OPTS"
 RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
-ENABLE_DEBUGGER=
+ENABLE_DEBUGGER=0
 while true; do
     case "$1" in
         --daemon) RUN_DAEMON=1 ; shift ;;
@@ -44,8 +44,6 @@ while true; do
         *) echo "Internal error" ; exit 1 ;;
     esac
 done
-
-echo $ENABLE_DEBUGGER
 
 export STARROCKS_HOME=`cd "$curdir/.."; pwd`
 

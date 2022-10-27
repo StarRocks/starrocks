@@ -147,7 +147,6 @@ private:
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
-    ObjectPool _obj_pool;
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;

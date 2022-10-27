@@ -172,16 +172,19 @@ int main(int argc, char** argv) {
         starrocks::BlockCache* cache = starrocks::BlockCache::instance();
         starrocks::CacheOptions cache_options;
         cache_options.mem_space_size = starrocks::config::block_cache_mem_size;
-        std::vector<starrocks::StorePath> paths;
-        auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
-        if (!parse_res.ok()) {
-            LOG(FATAL) << "parse config block cache disk path failed, path="
-                       << starrocks::config::block_cache_disk_path;
-            exit(-1);
-        }
-        for (auto& p : paths) {
-            cache_options.disk_spaces.push_back(
-                    {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+        if (starrocks::config::block_cache_disk_size > 0) {
+            std::vector<starrocks::StorePath> paths;
+            auto parse_res = starrocks::parse_conf_store_paths(starrocks::config::block_cache_disk_path, &paths);
+            if (!parse_res.ok()) {
+                LOG(FATAL) << "parse config block cache disk path failed, path="
+                           << starrocks::config::block_cache_disk_path;
+                exit(-1);
+            }
+
+            for (auto& p : paths) {
+                cache_options.disk_spaces.push_back(
+                        {.path = p.path, .size = static_cast<size_t>(starrocks::config::block_cache_disk_size)});
+            }
         }
         cache_options.block_size = starrocks::config::block_cache_block_size;
         cache->init(cache_options);

@@ -326,6 +326,20 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
         }
+
+        std::filesystem::path schema_hash_path(new_tablet->schema_hash_path());
+        std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
+        st = fs::sync_dir(tablet_id_path.string());
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to sync " << tablet_id_path.string() << ": " << st.to_string();
+            continue;
+        }
+        std::filesystem::path shard_id_path = tablet_id_path.parent_path();
+        st = fs::sync_dir(shard_id_path.string());
+        if (!st.ok()) {
+            LOG(WARNING) << "Fail to sync " << shard_id_path.string() << ": " << st.to_string();
+            continue;
+        }
         return new_tablet;
     }
     return nullptr;

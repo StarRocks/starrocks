@@ -3,17 +3,24 @@
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.external.RemoteFileIO;
 import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
+    public static final String HIVE_METASTORE_TYPE = "hive.metastore.type";
+    public static final String DUMMY_THRIFT_URI = "thrift://127.0.0.1:9083";
+    public static final List<String> SUPPORTED_METASTORE_TYPE = Lists.newArrayList("glue", "dlf");
+
     private final Map<String, String> properties;
     private final String catalogName;
     private final HiveConnectorInternalMgr internalMgr;
@@ -29,6 +36,12 @@ public class HiveConnector implements Connector {
     }
 
     public void validate() {
+        if (properties.containsKey(HIVE_METASTORE_TYPE)) {
+            String hiveMetastoreType = properties.get(HIVE_METASTORE_TYPE).toLowerCase();
+            if (!SUPPORTED_METASTORE_TYPE.contains(hiveMetastoreType)) {
+                throw new SemanticException("hive metastore type [%s] is not supported", hiveMetastoreType);
+            }
+        }
         String hiveMetastoreUris = Preconditions.checkNotNull(properties.get(HIVE_METASTORE_URIS),
                 "%s must be set in properties when creating hive catalog", HIVE_METASTORE_URIS);
         Util.validateMetastoreUris(hiveMetastoreUris);

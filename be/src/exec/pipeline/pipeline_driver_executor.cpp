@@ -225,6 +225,10 @@ void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, cons
     this->_exec_state_reporter->submit(std::move(report_task));
 }
 
+void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
+    _blocked_driver_poller->iterate_immutable_driver(call);
+}
+
 void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ctx, bool done) {
     if (!done) {
         return;

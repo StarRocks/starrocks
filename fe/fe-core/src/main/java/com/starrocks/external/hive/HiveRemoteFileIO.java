@@ -9,7 +9,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.ObjectStorageUtils;
-import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.RemoteFileBlockDesc;
 import com.starrocks.external.RemoteFileDesc;
 import com.starrocks.external.RemoteFileIO;
@@ -73,7 +72,8 @@ public class HiveRemoteFileIO implements RemoteFileIO {
                 if (!isValidDataFile(locatedFileStatus)) {
                     continue;
                 }
-                String fileName = PartitionUtil.getSuffixName(pathKey.getPath(), locatedFileStatus.getPath().toString());
+                String fileName = locatedFileStatus.getPath().getName();
+
                 BlockLocation[] blockLocations = locatedFileStatus.getBlockLocations();
                 List<RemoteFileBlockDesc> fileBlockDescs = getRemoteFileBlockDesc(blockLocations);
                 fileDescs.add(new RemoteFileDesc(fileName, "", locatedFileStatus.getLen(),

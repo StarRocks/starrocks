@@ -1,0 +1,24 @@
+diff -rupN hyperscan-5.4.0.orig/CMakeLists.txt hyperscan-5.4.0/CMakeLists.txt
+--- hyperscan-5.4.0.orig/CMakeLists.txt 2022-10-26 16:40:46.498384371 +0000
++++ hyperscan-5.4.0/CMakeLists.txt      2022-10-26 16:44:28.947137907 +0000
+@@ -482,7 +482,11 @@ if (CORRECT_PCRE_VERSION AND PCRE_BUILD_
+     set(BUILD_CHIMERA TRUE)
+ endif()
+
+-add_subdirectory(unit)
++option(BUILD_UNIT "Build Hyperscan unit test (default TRUE)" TRUE)
++if (BUILD_UNIT)
++    add_subdirectory(unit)
++endif()
++
+ if (EXISTS ${CMAKE_SOURCE_DIR}/tools/CMakeLists.txt)
+     add_subdirectory(tools)
+ endif()
+@@ -534,7 +538,6 @@ if (CORRECT_PCRE_VERSION AND PCRE_BUILD_
+     set(BUILD_CHIMERA TRUE)
+ endif()
+
+-add_subdirectory(unit)
+ if (EXISTS ${CMAKE_SOURCE_DIR}/tools/CMakeLists.txt)
+     add_subdirectory(tools)
+ endif()

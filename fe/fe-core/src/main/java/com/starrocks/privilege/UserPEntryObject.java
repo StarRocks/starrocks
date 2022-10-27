@@ -36,9 +36,15 @@ public class UserPEntryObject implements PEntryObject {
         return false; // no fuzzy matching for user
     }
 
+    /**
+     * normally we check if a user exists by AuthenticationManager, but here we checked by PrivilegeManager to avoid deadlock.
+     * lock order should always be:
+     * AuthenticationManager.lock -> PrivilegeManager.userLock -> PrivilegeManager.roleLock
+     * All validation are made in com.starrocks.privilege.PrivilegeManager#removeInvalidObject()
+     */
     @Override
     public boolean validate(GlobalStateMgr globalStateMgr) {
-        return globalStateMgr.getAuthenticationManager().doesUserExist(userIdentity);
+        return globalStateMgr.getPrivilegeManager().getUserPrivilegeCollectionUnlockedAllowNull(userIdentity) != null;
     }
 
     @Override

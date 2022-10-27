@@ -32,7 +32,6 @@ public:
     Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
 private:
-    bool _is_finished = false;
     ChunkPipelineAccumulator _acc;
 };
 

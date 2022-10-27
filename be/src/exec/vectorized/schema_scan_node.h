@@ -40,10 +40,16 @@ public:
     // this is no use in this class
     Status set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) override;
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
+    bool accept_empty_scan_ranges() const override { return false; }
+
 private:
     // Write debug string of this into out.
     void debug_string(int indentation_level, std::stringstream* out) const override;
 
+    const TPlanNode _tnode;
     bool _is_init;
     bool _is_finished = false;
     const std::string _table_name;
