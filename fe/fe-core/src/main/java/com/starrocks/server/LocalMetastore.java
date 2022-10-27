@@ -32,7 +32,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FilePathInfo;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.KeysDesc;
@@ -2061,8 +2061,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 }
 
                 // get service shard storage info from StarMgr
-                ShardStorageInfo shardStorageInfo = stateMgr.getStarOSAgent().getServiceShardStorageInfo();
-                ((LakeTable) olapTable).setStorageInfo(shardStorageInfo, enableStorageCache,
+                FilePathInfo pathInfo = stateMgr.getStarOSAgent().allocateFilePath(tableId);
+                ((LakeTable) olapTable).setStorageInfo(pathInfo, enableStorageCache,
                         storageCacheTtlS, allowAsyncWriteBack);
 
             } else {
@@ -2646,7 +2646,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         int bucketNum = distributionInfo.getBucketNum();
         List<Long> shardIds = stateMgr.getStarOSAgent().createShards(bucketNum,
-                table.getPartitionShardStorageInfo(partitionId), partitionId);
+                table.getPartitionFilePathInfo(partitionId), table.getPartitionFileCacheInfo(partitionId), partitionId);
         for (long shardId : shardIds) {
             Tablet tablet = new LakeTablet(shardId);
             index.addTablet(tablet, tabletMeta);

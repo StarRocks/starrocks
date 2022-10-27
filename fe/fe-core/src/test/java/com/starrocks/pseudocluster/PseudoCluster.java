@@ -6,9 +6,12 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
-import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -139,14 +142,23 @@ public class PseudoCluster {
         private final List<ShardInfo> shardInfos = new ArrayList<>();
 
         @Override
-        public ShardStorageInfo getServiceShardStorageInfo() throws DdlException {
-            ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder()
-                    .setObjectUri("s3://bucket")
-                    .setAccessKey("testaccesskey")
-                    .setAccessKeySecret("testaccesskeysecret")
-                    .setEndpoint("http://127.0.0.1")
-                    .build();
-            return ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        public FilePathInfo allocateFilePath(long tableId) throws DdlException {
+            FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+            FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+            S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+            s3FsBuilder.setBucket("test-bucket");
+            s3FsBuilder.setRegion("test-region");
+            S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+            fsBuilder.setFsType(FileStoreType.S3);
+            fsBuilder.setFsKey("test-bucket");
+            fsBuilder.setS3FsInfo(s3FsInfo);
+            FileStoreInfo fsInfo = fsBuilder.build();
+
+            builder.setFsInfo(fsInfo);
+            builder.setFullPath("s3://test-bucket/1/");
+            return builder.build();
         }
 
         @Override
@@ -170,12 +182,16 @@ public class PseudoCluster {
         }
 
         @Override
-        public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo, long groupId) throws DdlException {
+        public List<Long> createShards(int numShards, FilePathInfo pathInfo, FileCacheInfo cacheInfo, long groupId)
+            throws DdlException {
             List<Long> shardIds = new ArrayList<>();
             for (int i = 0; i < numShards; i++) {
                 long id = nextId++;
                 shardIds.add(id);
-                ShardInfo shardInfo = ShardInfo.newBuilder().setShardStorageInfo(shardStorageInfo).setShardId(id).build();
+                ShardInfo shardInfo = ShardInfo.newBuilder().setFileCache(cacheInfo)
+                                               .setFilePath(pathInfo)
+                                               .setShardId(id)
+                                               .build();
                 shardInfos.add(shardInfo);
             }
             return shardIds;

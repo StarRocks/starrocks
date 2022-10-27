@@ -4,8 +4,11 @@ package com.starrocks.lake;
 
 
 import com.google.common.collect.Lists;
-import com.staros.proto.ObjectStorageInfo;
-import com.staros.proto.ShardStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreInfo;
+import com.staros.proto.FileStoreType;
+import com.staros.proto.S3FileStoreInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -68,18 +71,34 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTable(@Mocked StarOSAgent agent) throws UserException {
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
 
-        new Expectations() {
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
+
+        new Expectations(agent) {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
+                agent.createShardGroup(anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
@@ -116,18 +135,34 @@ public class CreateLakeTableTest {
 
     @Test
     public void testCreateLakeTableWithStorageCache(@Mocked StarOSAgent agent) throws UserException {
-        ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build();
-        ShardStorageInfo shardStorageInfo =
-                ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        FilePathInfo.Builder builder = FilePathInfo.newBuilder();
+        FileStoreInfo.Builder fsBuilder = builder.getFsInfoBuilder();
+
+        S3FileStoreInfo.Builder s3FsBuilder = fsBuilder.getS3FsInfoBuilder();
+        s3FsBuilder.setBucket("test-bucket");
+        s3FsBuilder.setRegion("test-region");
+        S3FileStoreInfo s3FsInfo = s3FsBuilder.build();
+
+        fsBuilder.setFsType(FileStoreType.S3);
+        fsBuilder.setFsKey("test-bucket");
+        fsBuilder.setS3FsInfo(s3FsInfo);
+        FileStoreInfo fsInfo = fsBuilder.build();
+
+        builder.setFsInfo(fsInfo);
+        builder.setFullPath("s3://test-bucket/1/");
+        FilePathInfo pathInfo = builder.build();
 
         new Expectations() {
             {
-                agent.getServiceShardStorageInfo();
-                result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
+                agent.allocateFilePath(anyLong);
+                result = pathInfo;
+                agent.createShardGroup(anyLong);
+                agent.createShards(anyInt, (FilePathInfo) any, (FileCacheInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L), Lists.newArrayList(20006L, 20007L),
                         Lists.newArrayList(20008L), Lists.newArrayList(20009L));
+                agent.getPrimaryBackendIdByShard(anyLong);
+                result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
                 agent.getPrimaryBackendIdByShard(anyLong);
                 result = GlobalStateMgr.getCurrentSystemInfo().getBackendIds(true).get(0);
             }
