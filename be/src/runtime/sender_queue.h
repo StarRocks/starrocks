@@ -1,6 +1,9 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
+
+#include <condition_variable>
+
 #include "column/vectorized_fwd.h"
 #include "runtime/data_stream_recvr.h"
 #include "serde/protobuf_serde.h"
