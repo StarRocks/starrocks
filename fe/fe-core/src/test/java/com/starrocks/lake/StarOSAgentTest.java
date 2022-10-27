@@ -7,15 +7,15 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.staros.client.StarClient;
 import com.staros.client.StarClientException;
-import com.staros.proto.AllocateStorageInfo;
 import com.staros.proto.CreateShardGroupInfo;
 import com.staros.proto.CreateShardInfo;
-import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.FileCacheInfo;
+import com.staros.proto.FilePathInfo;
+import com.staros.proto.FileStoreType;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
-import com.staros.proto.ShardStorageInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.WorkerInfo;
 import com.staros.proto.WorkerState;
@@ -129,19 +129,16 @@ public class StarOSAgentTest {
     }
 
     @Test
-    public void testGetServiceStorageUri() throws StarClientException, DdlException {
+    public void testAllocateFilePath() throws StarClientException, DdlException {
         new Expectations() {
             {
-                client.allocateStorage("1", (AllocateStorageInfo) any);
+                FilePathInfo pathInfo = client.allocateFilePath("1", FileStoreType.S3, "123");
+                result = pathInfo;
                 minTimes = 0;
-                result = ShardStorageInfo.newBuilder().setObjectStorageInfo(
-                        ObjectStorageInfo.newBuilder().setObjectUri("s3://bucket/1/").build()).build();
             }
         };
 
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        Assert.assertEquals("s3://bucket/1/",
-                starosAgent.getServiceShardStorageInfo().getObjectStorageInfo().getObjectUri());
     }
 
     @Test
@@ -266,7 +263,9 @@ public class StarOSAgentTest {
         // test create shard group
         ExceptionChecker.expectThrowsNoException(() -> starosAgent.createShardGroup(groupId));
         // test create shards
-        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, null, groupId));
+        FilePathInfo pathInfo = FilePathInfo.newBuilder().build();
+        FileCacheInfo cacheInfo = FileCacheInfo.newBuilder().build();
+        Assert.assertEquals(Lists.newArrayList(10L, 11L), starosAgent.createShards(2, pathInfo, cacheInfo, 1));
     }
 
 
