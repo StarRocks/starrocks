@@ -23,11 +23,25 @@
 %s：秒。例：59，01
 ```
 
-其余 `string_format` 格式是非法的，返回NULL
+该函数受时区影响，具体参见 [设置时区](../../../using_starrocks/timezone.md)。
+
+## 语法
+
+```Haskell
+DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
+```
+
+## 参数说明
+
+`unix_timestamp`: 要转化的 UNIX 时间戳，INT 类型。如果给定的时间戳小于 0 或大于 2147483647，则返回 NULL。即时间戳范围是：
+
+1970-01-01 00:00:00 ~ 2038-01-19 11:14:07。
+
+`string_format`: 可选，指定的时间格式。
 
 如果给定的时间戳小于 0 或大于 253402271999，则返回 NULL。即时间戳范围是：
 
-1970-01-01 00:00:00 ~ 9999-12-31 23:59:59
+返回 DATETIME 或 DATE 类型的值。如果 `string_format` 指定的是 DATE 格式，则返回 DATE 类型的值。
 
 ## example
 
