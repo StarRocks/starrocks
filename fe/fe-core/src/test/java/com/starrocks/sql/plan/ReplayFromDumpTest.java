@@ -584,13 +584,6 @@ public class ReplayFromDumpTest {
     }
 
     @Test
-    public void testIntersectCardinality() throws Exception {
-        Pair<QueryDumpInfo, String> replayPair =
-                getPlanFragment(getDumpInfoFromFile("query_dump/intersect_cardinality"), null, TExplainLevel.COSTS);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("cardinality: 152160"));
-    }
-
-    @Test
     public void testCorrelatedSubqueryWithEqualsExpressions() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/correlated_subquery_with_equals_expression"), null,
