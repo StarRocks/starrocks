@@ -446,8 +446,9 @@ build_boost() {
     check_if_source_exist $BOOST_SOURCE
     cd $TP_SOURCE_DIR/$BOOST_SOURCE
 
-    # to generate static linked b2
-    CXXFLAGS="-static-libstdc++ -static-libgcc" ./bootstrap.sh --prefix=$TP_INSTALL_DIR
+    # It is difficult to generate static linked b2, so we use LD_LIBRARY_PATH instead
+    ./bootstrap.sh --prefix=$TP_INSTALL_DIR
+    LD_LIBRARY_PATH=${STARROCKS_GCC_HOME}/lib:${STARROCKS_GCC_HOME}/lib64:${LD_LIBRARY_PATH} \
     ./b2 link=static runtime-link=static -j $PARALLEL --without-mpi --without-graph --without-graph_parallel --without-python cxxflags="-std=c++11 -g -fPIC -I$TP_INCLUDE_DIR -L$TP_LIB_DIR" install
 }
 
