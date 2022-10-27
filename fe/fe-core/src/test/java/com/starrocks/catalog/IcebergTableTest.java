@@ -145,6 +145,14 @@ public class IcebergTableTest {
         Assert.assertEquals(db, table.getDb());
     }
 
+    @Test
+    public void testWithGlueMetaStore() throws DdlException {
+        this.properties.put("iceberg.catalog.type", "glue");
+        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+        Assert.assertEquals(tableName, table.getTable());
+        Assert.assertEquals(db, table.getDb());
+    }
+
     @Test(expected = DdlException.class)
     public void testNoDb() throws DdlException {
         properties.remove("database");
