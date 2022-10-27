@@ -4,7 +4,7 @@ This topic describes how to create and manage a bitmap index, along with usage c
 
 A bitmap index is a special database index that uses bitmaps, which are an array of bits. A bit is always in one of two values: 0 and 1. Each bit in the bitmap corresponds to a single row in the table. The value of each bit depends upon the value of the corresponding row.
 
-A bitmap index can help improve the query performance on a given column. If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](../using_starrocks/Bloomfilter_index.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key, you can create a bitmap index for the column.
+A bitmap index can help improve the query performance on a given column. If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](../table_design/Sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key, you can create a bitmap index for the column.
 
 ## Benefits
 
@@ -48,7 +48,7 @@ There are two ways to create a bitmap index for a column.
     | ------------- | ------------ | ------------------------------------------------------------ |
     | index_name    | Yes          | The name of the bitmap index.                                |
     | column_name   | Yes          | The name of the column on which a bitmap index is created. You can create the index for multiple columns at a time by specifying these column names. |
-    | COMMENT ''    | No           | The comment of the bitmap index.                             |
+    | COMMENT       | No           | The comment of the bitmap index.                             |
 
     For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
