@@ -23,11 +23,11 @@ sleep(x);
 ```Plain Text
 mysql> select sleep(3);
 +----------+
-| sleep(1) |
+| sleep(3) |
 +----------+
 |        1 |
 +----------+
-1 row in set (1.00 sec)
+1 row in set (3.00 sec)
 ```
 
 ## 关键词
