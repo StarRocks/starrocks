@@ -14,9 +14,12 @@
 + 表设计
   + [理解表设计](/table_design/StarRocks_table_design.md)
   + [数据模型](/table_design/Data_model.md)
-  + [数据分布](/table_design/Data_distribution.md)
+  + 数据分布
+    + [数据分布](/table_design/Data_distribution.md)
+    + [动态分区](/table_design/dynamic_partition.md)
+    + [临时分区](/table_design/Temporary_partition.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
-+ 数据导入
++ 导入数据
   + [导入总览](/loading/Loading_intro.md)
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
@@ -30,32 +33,26 @@
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
-+ 数据导出
-  + [导出总览](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
-+ 使用StarRocks
-  + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
-  + [物化视图](/using_starrocks/Materialized_view.md)
-  + [外部表](/using_starrocks/External_table.md)
++ 查询数据源
   + Catalog
-    + [概述](/using_starrocks/catalog/catalog_overview.md)
+    + [概述](/data_source/catalog/catalog_overview.md)
     + [Default catalog](/using_starrocks/catalog/default_catalog.md)
     + [Hive catalog](/using_starrocks/catalog/hive_catalog.md)
     + [Iceberg catalog](/using_starrocks/catalog/iceberg_catalog.md)
     + [Hudi catalog](/using_starrocks/catalog/hudi_catalog.md)
     + [查询外部数据](/using_starrocks/catalog/query_external_data.md)
+  + [外部表](/data_source/External_table.md)
++ 查询加速
+  + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
+  + [物化视图](/using_starrocks/Materialized_view.md)
   + [Colocate Join](/using_starrocks/Colocate_join.md)
+  + 索引
+    + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
+    + [Bloomfilter 索引](/using_starrocks/Bloomfilter_index.md)
+  + 数据去重
+    + [使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
+    + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
   + [Lateral Join](/using_starrocks/Lateral_join.md)
-  + [窗口函数](/using_starrocks/Window_function.md)
-  + [Java UDF](/using_starrocks/JAVA_UDF.md)
-  + [Bitmap 索引](/using_starrocks/Bitmap_index.md)
-  + [Bloomfilter 索引](/using_starrocks/Bloomfilter_index.md)
-  + [使用 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
-  + [使用 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
-  + [时区](/using_starrocks/timezone.md)
-  + [临时分区](/using_starrocks/Temporary_partition.md)
-  + [文件管理器](/using_starrocks/filemanager.md)
 + 管理手册
   + 部署集群
     + [通过 StarGo 部署](/administration/stargo.md)
@@ -75,6 +72,7 @@
     + [启用 FQDN 访问](/administration/enable_fqdn.md)
     + [升级 DorisDB 到 StarRocks](/administration/update_from_dorisdb.md)
     + [升级 Apache Doris 到 StarRocks](/administration/update_from_doris.md)
+    + [时区](/administration/timezone.md)
     + 管理资源
       + [资源隔离](/administration/Resource_Group.md)
       + [查询管理](/administration/Query_management.md)
@@ -82,6 +80,7 @@
       + [负载均衡](/administration/Load_balance.md)
       + [副本管理](/administration/Replica.md)
       + [黑名单管理](/administration/Blacklist.md)
+      + [文件管理器](/administration/filemanager.md)
   + 恢复数据
     + [数据恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)
@@ -245,6 +244,8 @@
     + 辅助命令
       + [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + 函数参考
+    + [Java UDF](/sql-reference/sql-functions/JAVA_UDF.md)
+    + [窗口函数](/sql-reference/sql-functions/Window_function.md)
     + 日期函数
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](/sql-reference/sql-functions/date-time-functions/curdate.md)
