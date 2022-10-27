@@ -93,16 +93,17 @@ public class PrivilegeManager {
         roleNameToId = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
-        // init typeStringToId  && typeToActionMap
-        initIdNameMaps();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
     }
 
     public void initBuiltinRolesAndUsers() {
+        initIdNameMaps();
         try {
+            // built-in role ids are hard-coded negative numbers because globalStateMgr.getNextId() cannot be called by a follower
+            long builtinRoleId = -1;
             // 1. builtin root role
-            RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(ROOT_ROLE_NAME);
+            RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, ROOT_ROLE_NAME);
             // GRANT ALL ON ALL
             for (String typeStr : typeStringToId.keySet()) {
                 PrivilegeTypes t = PrivilegeTypes.valueOf(typeStr);
@@ -111,7 +112,7 @@ public class PrivilegeManager {
             rolePrivilegeCollection.disableMutable();  // not mutable
 
             // 2. builtin db_admin role
-            rolePrivilegeCollection = initBuiltinRoleUnlocked("db_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "db_admin");
             PrivilegeTypes systemTypes = PrivilegeTypes.SYSTEM;
             // ALL system but GRANT AND NODE
             List<String> actionWithoutNodeGrant = systemTypes.getValidActions().stream().filter(
@@ -123,7 +124,7 @@ public class PrivilegeManager {
             rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 3. cluster_admin
-            rolePrivilegeCollection = initBuiltinRoleUnlocked("cluster_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "cluster_admin");
             // GRANT NODE ON SYSTEM
             initPrivilegeCollections(
                     rolePrivilegeCollection,
@@ -134,7 +135,7 @@ public class PrivilegeManager {
             rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 4. user_admin
-            rolePrivilegeCollection = initBuiltinRoleUnlocked("user_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "user_admin");
             // GRANT GRANT ON SYSTEM
             initPrivilegeCollections(
                     rolePrivilegeCollection,
@@ -142,11 +143,13 @@ public class PrivilegeManager {
                     Arrays.asList(PrivilegeTypes.SystemActions.GRANT.name()),
                     null,
                     false);
+            PrivilegeTypes t = PrivilegeTypes.USER;
+            initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
             rolePrivilegeCollection.disableMutable(); // not mutable
 
             // 5. public
             publicRoleName = "public";
-            rolePrivilegeCollection = initBuiltinRoleUnlocked(publicRoleName);
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, publicRoleName);
             // GRANT SELECT ON ALL TABLES IN infomation_schema
             String tableTypeStr = PrivilegeTypes.TABLE.name();
             List<PEntryObject> object = Arrays.asList(provider.generateObject(
@@ -160,9 +163,9 @@ public class PrivilegeManager {
             rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
 
             // 6. builtin user root
-            UserPrivilegeCollection userPrivilegeCollection = new UserPrivilegeCollection();
-            userPrivilegeCollection.grantRole(getRoleIdByNameNoLock(ROOT_ROLE_NAME));
-            userToPrivilegeCollection.put(UserIdentity.ROOT, userPrivilegeCollection);
+            UserPrivilegeCollection rootCollection = new UserPrivilegeCollection();
+            rootCollection.grantRole(getRoleIdByNameNoLock(ROOT_ROLE_NAME));
+            userToPrivilegeCollection.put(UserIdentity.createAnalyzedUserIdentWithIp("root", "%"), rootCollection);
         } catch (PrivilegeException e) {
             // all initial privileges are supposed to be legal
             throw new RuntimeException("should not happened!", e);
@@ -243,15 +246,16 @@ public class PrivilegeManager {
     }
 
     // called by initBuiltinRolesAndUsers()
-    private RolePrivilegeCollection initBuiltinRoleUnlocked(String name) {
+    private RolePrivilegeCollection initBuiltinRoleUnlocked(long roleId, String name) {
         if (! roleNameToId.containsKey(name)) {
-            long roleId = globalStateMgr.getNextId();
             RolePrivilegeCollection collection = new RolePrivilegeCollection(
                     name, RolePrivilegeCollection.RoleFlags.MUTABLE);
             roleIdToPrivilegeCollection.put(roleId, collection);
             roleNameToId.put(name, roleId);
+            LOG.info("create built-in role {}[{}]", name, roleId);
             return collection;
         }
+        // public roles may be changed and persisted in image before restarted
         return roleIdToPrivilegeCollection.get(roleNameToId.get(name));
     }
 

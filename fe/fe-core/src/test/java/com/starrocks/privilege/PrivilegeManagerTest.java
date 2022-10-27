@@ -1120,6 +1120,7 @@ public class PrivilegeManagerTest {
 
     @Test
     public void testBuiltinRoles() throws Exception {
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         // create user
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
@@ -1141,6 +1142,7 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeTypes.SystemActions.NODE));
         Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeTypes.DbActions.DROP));
         Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DROP));
+        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE root FROM user_test_builtin_role"), ctx), ctx);
@@ -1177,6 +1179,7 @@ public class PrivilegeManagerTest {
         Assert.assertFalse(PrivilegeManager.checkSystemAction(ctx, PrivilegeTypes.SystemActions.NODE));
         Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeTypes.DbActions.DROP));
         Assert.assertFalse(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DROP));
+        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 String.format("REVOKE user_admin FROM user_test_builtin_role"), ctx), ctx);
@@ -1186,6 +1189,7 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeTypes.SystemActions.NODE));
         Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, DB_NAME, PrivilegeTypes.DbActions.DROP));
         Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.DROP));
+        Assert.assertTrue(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
 
         // grant to imutable role
         List<String> modifyImutableRoleSqls = Arrays.asList(
@@ -1212,5 +1216,30 @@ public class PrivilegeManagerTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));
         }
+    }
+
+    @Test
+    public void testGrantRoleSame() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user grant_same_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("grant_same_user", "%");
+        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
+        long[] roleIds = new long[3];
+        for (int i = 0; i != 3; ++ i) {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    String.format("create role grant_same_role_%d;", i), ctx), ctx);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    String.format("grant all on all users to role grant_same_role_%d;", i), ctx), ctx);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    String.format("grant select on all tables in all databases to role grant_same_role_%d;", i), ctx), ctx);
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    String.format("grant grant_same_role_%d to grant_same_user;", i), ctx), ctx);
+
+            roleIds[i] = manager.getRoleIdByNameNoLock("grant_same_role_" + i);
+        }
+
+        ctx.setCurrentUserIdentity(user);
+        Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
+        Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeTypes.TableActions.SELECT));
     }
 }
