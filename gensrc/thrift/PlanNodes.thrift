@@ -241,6 +241,8 @@ struct TBrokerScanRangeParams {
     21: optional string table_name
     22: optional string label
     23: optional i64 txn_id
+    // number of lines at the start of the file to skip
+    24: optional i64 skip_header
 }
 
 // Broker scan range

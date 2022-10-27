@@ -70,6 +70,11 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     } else {
         _record_delimiter = scan_range.params.row_delimiter;
     }
+    if (scan_range.params.__isset.skip_header) {
+        _skip_header = scan_range.params.skip_header;
+    } else {
+        _skip_header = 0;
+    }
 }
 
 void CSVScanner::close() {
@@ -168,6 +173,12 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 }
                 CSVReader::Record dummy;
                 RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+            }
+            // TODO(yangzaorang): what if skip header beyond the _scan_range.ranges[_curr_file_index].size
+            if (_skip_header) {
+                for (int64_t i = 0; i<_skip_header; i++) {
+                    RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
+                }
             }
         } else if (_curr_reader == nullptr) {
             return Status::EndOfFile("CSVScanner");

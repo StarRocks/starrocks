@@ -36,8 +36,9 @@ protected:
 
     std::unique_ptr<CSVScanner> create_csv_scanner(const std::vector<TypeDescriptor>& types,
                                                    const std::vector<TBrokerRangeDesc>& ranges,
-                                                   const std::string& multi_row_delimiter = "\n",
-                                                   const std::string& multi_column_separator = "|") {
+                                                   const string& multi_row_delimiter = "\n",
+                                                   const string& multi_column_separator = "|",
+                                                   const int64_t skip_header = 0) {
         /// Init DescriptorTable
         TDescriptorTableBuilder desc_tbl_builder;
         TTupleDescriptorBuilder tuple_desc_builder;
@@ -65,6 +66,7 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
+        params->skip_header = skip_header;
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
@@ -514,6 +516,35 @@ TEST_F(CSVScannerTest, test_start_offset) {
 
     EXPECT_EQ(6, chunk->get(0)[1].get_int32());
     EXPECT_EQ(8, chunk->get(1)[1].get_int32());
+}
+
+TEST_F(CSVScannerTest, test_skip_header) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(2);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file15");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 4);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+
+    EXPECT_EQ(2, chunk->get(0)[1].get_int32());
+    EXPECT_EQ(4, chunk->get(1)[1].get_int32());
+    EXPECT_EQ(6, chunk->get(2)[1].get_int32());
+    EXPECT_EQ(8, chunk->get(3)[1].get_int32());
+    EXPECT_EQ(0, chunk->get(4)[1].get_int32());
 }
 
 TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {

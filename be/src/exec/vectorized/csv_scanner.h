@@ -76,6 +76,7 @@ private:
     int _curr_file_index = -1;
     CSVReaderPtr _curr_reader;
     std::vector<ConverterPtr> _converters;
+    int64_t _skip_header;
 };
 
 } // namespace starrocks::vectorized
