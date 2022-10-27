@@ -1,17 +1,15 @@
 # convert_tz
 
-## Syntax
+## 功能
 
-`DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)`
+将给定的时间转化为另一个时区的时间。
 
-## Description
+该函数受时区影响，具体参见 [设置时区](../../../using_starrocks/timezone.md)。
 
-转换datetime值dt，从 from_tz 由给定转到 to_tz 时区给出的时区，并返回的结果值。 如果参数无效该函数返回NULL。
-
-## Example
+## 语法
 
 ```Haskell
-DATETIME CONVERT_TZ(DATE|DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
+DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)
 ```
 
 ## 参数说明

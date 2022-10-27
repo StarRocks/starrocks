@@ -1,18 +1,10 @@
 # from_unixtime
 
-## description
+## 功能
 
-### Syntax
+将 UNIX 时间戳转化为对应的时间格式。返回的时间格式由 `string_format` 指定，默认为 `yyyy-MM-dd HH:mm:ss`，也支持 [date_format](./date_format.md) 中的格式。
 
-`DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
-
-将 unix 时间戳转化为对应的 time 格式，返回的格式由 `string_format` 指定
-
-默认为 yyyy-MM-dd HH:mm:ss ,也支持date_format中的format格式
-
-传入的是整形，返回的是字符串类型
-
-目前 `string_format` 支持格式：
+目前 `string_format` 支持如下格式，其余 `string_format` 格式非法，返回 NULL。
 
 ```plain text
 %Y：年。例：2014，1900
@@ -23,17 +15,27 @@
 %s：秒。例：59，01
 ```
 
-其余 `string_format` 格式是非法的，返回NULL
-
-如果给定的时间戳小于 0 或大于 253402271999，则返回 NULL。即时间戳范围是：
-
-1970-01-01 00:00:00 ~ 9999-12-31 23:59:59
+该函数受时区影响，具体参见 [设置时区](../../../using_starrocks/timezone.md)。
 
 ## 语法
 
 ```Haskell
 DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
 ```
+
+## 参数说明
+
+`unix_timestamp`: 要转化的 UNIX 时间戳，INT 类型。如果给定的时间戳小于 0 或大于 253402271999，则返回 NULL。即时间戳范围是：
+
+1970-01-01 00:00:00 ~ 9999-12-31 23:59:59。
+
+`string_format`: 可选，指定的时间格式。
+
+## 返回值说明
+
+返回 DATETIME 类型的值。如果 `string_format` 指定的是 DATE 格式，则返回 DATE 类型的值。
+
+如果输入的时间戳超过范围，返回 NULL。如果 `string_format` 指定的格式非法，则返回 NULL。
 
 ## 示例
 

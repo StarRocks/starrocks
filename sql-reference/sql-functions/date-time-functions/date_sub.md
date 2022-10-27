@@ -1,20 +1,22 @@
 # date_sub
 
-## description
+## 功能
 
-### Syntax
+从日期减去指定的时间间隔。
+
+## 语法
 
 ```Haskell
 INT DATE_SUB(DATETIME date,INTERVAL expr type)
 ```
 
-从日期减去指定的时间间隔
+## 参数说明
 
-* date 参数是合法的日期表达式。
-* expr 参数是您希望添加的时间间隔。
-* type 参数可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND
+* `date`：合法的日期表达式。
+* `expr`：要减去的时间间隔。
+* `type`：取值可以是 YEAR，MONTH，DAY，HOUR，MINUTE，或 SECOND。
 
-## example
+## 示例
 
 ```Plain Text
 select date_sub('2010-11-30 23:59:59', INTERVAL 2 DAY);

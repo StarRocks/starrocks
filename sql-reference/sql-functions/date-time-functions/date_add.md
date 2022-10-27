@@ -14,7 +14,7 @@ date 参数是合法的日期表达式。
 
 expr 参数是您希望添加的时间间隔。
 
-type 参数可以是下列值：YEAR, MONTH, DAY, HOUR, MINUTE, SECOND
+`type`：取值可以是 YEAR，MONTH，DAY，HOUR，MINUTE，或 SECOND。
 
 ## example
 
