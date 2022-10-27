@@ -62,6 +62,10 @@ Status FileUtils::create_dir(const std::string& dir_path) {
     return create_dir(dir_path, Env::Default());
 }
 
+Status FileUtils::sync_dir(const std::string& path, Env* env) {
+    return env->sync_dir(path);
+}
+
 Status FileUtils::remove_all(const std::string& file_path) {
     std::error_code ec;
     std::filesystem::remove_all(file_path, ec);
