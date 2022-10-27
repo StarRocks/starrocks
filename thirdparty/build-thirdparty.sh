@@ -930,6 +930,7 @@ build_benchmark() {
     cmake -DBENCHMARK_DOWNLOAD_DEPENDENCIES=off \
           -DBENCHMARK_ENABLE_GTEST_TESTS=off \
           -DCMAKE_INSTALL_PREFIX=$TP_INSTALL_DIR \
+          -DCMAKE_INSTALL_LIBDIR=lib64 \
           -DCMAKE_BUILD_TYPE=Release ../
     ${BUILD_SYSTEM} -j$PARALLEL
     ${BUILD_SYSTEM} install
