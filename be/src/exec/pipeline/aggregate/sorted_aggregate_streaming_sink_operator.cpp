@@ -2,8 +2,6 @@
 
 #include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
 
-#include <string>
-
 #include "exec/vectorized/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 
@@ -44,13 +42,6 @@ StatusOr<vectorized::ChunkPtr> SortedAggregateStreamingSinkOperator::pull_chunk(
 
 Status SortedAggregateStreamingSinkOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     size_t chunk_size = chunk->num_rows();
-    if (chunk_size > 0) {
-        std::string log = "sorted_id_" + std::to_string(_driver_sequence) + ":";
-        for (size_t i = 0; i < chunk_size; ++i) {
-            log += chunk->debug_row(i) + "\n";
-        }
-        LOG(WARNING) << print_id(tls_thread_status.query_id()) << log;
-    }
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
