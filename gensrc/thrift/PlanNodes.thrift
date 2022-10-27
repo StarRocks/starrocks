@@ -847,6 +847,8 @@ struct THdfsScanNode {
     10: optional string min_max_sql_predicates;
     11: optional string partition_sql_predicates;
 
+    // Flag to indicate wheather the column names are case sensitive
+    12: optional bool case_sensitive;
 }
 
 struct TProjectNode {

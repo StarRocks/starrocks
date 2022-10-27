@@ -1032,7 +1032,7 @@ Status OrcChunkReader::init(std::unique_ptr<orc::InputStream> input_stream) {
 
 void OrcChunkReader::build_column_name_to_id_mapping(std::unordered_map<std::string, int>* mapping,
                                                      const std::vector<std::string>* hive_column_names,
-                                                     const orc::Type& root_type) {
+                                                     const orc::Type& root_type, bool case_sensitive) {
     mapping->clear();
     if (hive_column_names != nullptr) {
         // build hive column names index.
@@ -1041,35 +1041,35 @@ void OrcChunkReader::build_column_name_to_id_mapping(std::unordered_map<std::str
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
             const auto& sub_type = root_type.getSubtype(i);
-            const std::string& name = hive_column_names->at(i);
-            mapping->insert(make_pair(name, static_cast<int>(sub_type->getColumnId())));
+            std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
+            mapping->insert(make_pair(col_name, static_cast<int>(sub_type->getColumnId())));
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
-            const std::string& name = root_type.getFieldName(i);
             const auto& sub_type = root_type.getSubtype(i);
-            mapping->insert(make_pair(name, static_cast<int>(sub_type->getColumnId())));
+            std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
+            mapping->insert(make_pair(col_name, static_cast<int>(sub_type->getColumnId())));
         }
     }
 }
 
 void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name_set,
                                            const std::vector<std::string>* hive_column_names,
-                                           const orc::Type& root_type) {
+                                           const orc::Type& root_type, bool case_sensitive) {
     name_set->clear();
     if (hive_column_names != nullptr && hive_column_names->size() > 0) {
         // build hive column names index.
         int size = std::min(hive_column_names->size(), root_type.getSubtypeCount());
         for (int i = 0; i < size; i++) {
-            const std::string& name = hive_column_names->at(i);
-            name_set->insert(name);
+            std::string col_name = format_column_name(hive_column_names->at(i), case_sensitive);
+            name_set->insert(col_name);
         }
     } else {
         // build orc column names index.
         for (int i = 0; i < root_type.getSubtypeCount(); i++) {
-            const std::string& name = root_type.getFieldName(i);
-            name_set->insert(name);
+            std::string col_name = format_column_name(root_type.getFieldName(i), case_sensitive);
+            name_set->insert(col_name);
         }
     }
 }
@@ -1077,7 +1077,8 @@ void OrcChunkReader::build_column_name_set(std::unordered_set<std::string>* name
 Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
                                                 const std::unordered_map<int, std::string>& column_id_to_orc_name,
                                                 std::string* orc_column_name) {
-    auto it = _name_to_column_id.find(desc->col_name());
+    auto col_name = format_column_name(desc->col_name(), _case_sensitive);
+    auto it = _name_to_column_id.find(col_name);
     if (it == _name_to_column_id.end()) {
         auto s = strings::Substitute("OrcChunkReader::init_include_columns. col name = $0 not found, file = $1",
                                      desc->col_name(), _current_file_name);
@@ -1094,7 +1095,7 @@ Status OrcChunkReader::_slot_to_orc_column_name(const SlotDescriptor* desc,
 }
 
 Status OrcChunkReader::_init_include_columns() {
-    build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType());
+    build_column_name_to_id_mapping(&_name_to_column_id, _hive_column_names, _reader->getType(), _case_sensitive);
     std::unordered_map<int, std::string> column_id_to_orc_name;
     std::list<std::string> orc_column_names;
 
