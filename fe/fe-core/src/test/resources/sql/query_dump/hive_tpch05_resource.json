@@ -1,5 +1,5 @@
 {
-  "statement": "select\n    o_year,\n    sum(case\n            when nation = 'IRAN' then volume\n            else 0\n        end) / sum(volume) as mkt_share\nfrom\n    (\n        select\n            extract(year from o_orderdate) as o_year,\n            l_extendedprice * (1 - l_discount) as volume,\n            n2.n_name as nation\n        from\n            part,\n            supplier,\n            lineitem,\n            orders,\n            customer,\n            nation n1,\n            nation n2,\n            region\n        where\n                p_partkey = l_partkey\n          and s_suppkey = l_suppkey\n          and l_orderkey = o_orderkey\n          and o_custkey = c_custkey\n          and c_nationkey = n1.n_nationkey\n          and n1.n_regionkey = r_regionkey\n          and r_name = 'MIDDLE EAST'\n          and s_nationkey = n2.n_nationkey\n          and o_orderdate between date '1995-01-01' and date '1996-12-31'\n          and p_type = 'ECONOMY ANODIZED STEEL'\n    ) as all_nations\ngroup by\n    o_year\norder by\n    o_year ;\n",
+  "statement": "select\n    n_name,\n    sum(l_extendedprice * (1 - l_discount)) as revenue\nfrom\n    customer,\n    orders,\n    lineitem,\n    supplier,\n    nation,\n    region\nwhere\n        c_custkey = o_custkey\n  and l_orderkey = o_orderkey\n  and l_suppkey = s_suppkey\n  and c_nationkey = s_nationkey\n  and s_nationkey = n_nationkey\n  and n_regionkey = r_regionkey\n  and r_name = 'AFRICA'\n  and o_orderdate >= date '1995-01-01'\n  and o_orderdate < date '1996-01-01'\ngroup by\n    n_name\norder by\n    revenue desc ;\n",
   "resources": {
     "emr_test": "{\"clazz\":\"HiveResource\",\"metastoreURIs\":\"thrift://172.26.194.238:9083\",\"properties\":{\"type\":\"hive\",\"hive.metastore.uris\":\"thrift://172.26.194.238:9083\"},\"name\":\"emr_test\",\"type\":\"HIVE\"}"
   },
@@ -8,7 +8,6 @@
     "tpch_100g_parquet_zlib.lineitem": "CREATE EXTERNAL TABLE `lineitem` (\n  `l_orderkey` int(11) NULL COMMENT \"\",\n  `l_partkey` int(11) NULL COMMENT \"\",\n  `l_suppkey` int(11) NULL COMMENT \"\",\n  `l_linenumber` int(11) NULL COMMENT \"\",\n  `l_quantity` decimal64(15, 2) NULL COMMENT \"\",\n  `l_extendedprice` decimal64(15, 2) NULL COMMENT \"\",\n  `l_discount` decimal64(15, 2) NULL COMMENT \"\",\n  `l_tax` decimal64(15, 2) NULL COMMENT \"\",\n  `l_returnflag` varchar(65533) NULL COMMENT \"\",\n  `l_linestatus` varchar(65533) NULL COMMENT \"\",\n  `l_shipdate` date NULL COMMENT \"\",\n  `l_commitdate` date NULL COMMENT \"\",\n  `l_receiptdate` date NULL COMMENT \"\",\n  `l_shipinstruct` varchar(65533) NULL COMMENT \"\",\n  `l_shipmode` varchar(65533) NULL COMMENT \"\",\n  `l_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"lineitem\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
     "tpch_100g_parquet_zlib.nation": "CREATE EXTERNAL TABLE `nation` (\n  `n_nationkey` int(11) NULL COMMENT \"\",\n  `n_name` varchar(65533) NULL COMMENT \"\",\n  `n_regionkey` int(11) NULL COMMENT \"\",\n  `n_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"nation\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
     "tpch_100g_parquet_zlib.orders": "CREATE EXTERNAL TABLE `orders` (\n  `o_orderkey` int(11) NULL COMMENT \"\",\n  `o_custkey` int(11) NULL COMMENT \"\",\n  `o_orderstatus` varchar(65533) NULL COMMENT \"\",\n  `o_totalprice` decimal64(15, 2) NULL COMMENT \"\",\n  `o_orderdate` date NULL COMMENT \"\",\n  `o_orderpriority` varchar(65533) NULL COMMENT \"\",\n  `o_clerk` varchar(65533) NULL COMMENT \"\",\n  `o_shippriority` int(11) NULL COMMENT \"\",\n  `o_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"orders\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
-    "tpch_100g_parquet_zlib.part": "CREATE EXTERNAL TABLE `part` (\n  `p_partkey` int(11) NULL COMMENT \"\",\n  `p_name` varchar(65533) NULL COMMENT \"\",\n  `p_mfgr` varchar(65533) NULL COMMENT \"\",\n  `p_brand` varchar(65533) NULL COMMENT \"\",\n  `p_type` varchar(65533) NULL COMMENT \"\",\n  `p_size` int(11) NULL COMMENT \"\",\n  `p_container` varchar(65533) NULL COMMENT \"\",\n  `p_retailprice` decimal64(15, 2) NULL COMMENT \"\",\n  `p_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"part\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
     "tpch_100g_parquet_zlib.region": "CREATE EXTERNAL TABLE `region` (\n  `r_regionkey` int(11) NULL COMMENT \"\",\n  `r_name` varchar(65533) NULL COMMENT \"\",\n  `r_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"region\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);",
     "tpch_100g_parquet_zlib.supplier": "CREATE EXTERNAL TABLE `supplier` (\n  `s_suppkey` int(11) NULL COMMENT \"\",\n  `s_name` varchar(65533) NULL COMMENT \"\",\n  `s_address` varchar(65533) NULL COMMENT \"\",\n  `s_nationkey` int(11) NULL COMMENT \"\",\n  `s_phone` varchar(65533) NULL COMMENT \"\",\n  `s_acctbal` decimal64(15, 2) NULL COMMENT \"\",\n  `s_comment` varchar(65533) NULL COMMENT \"\"\n) ENGINE=HIVE \nCOMMENT \"PARTITION BY ()\"\nPROPERTIES (\n\"database\" = \"tpch_100g_parquet_zlib\",\n\"table\" = \"supplier\",\n\"resource\" = \"emr_test\",\n\"hive.metastore.uris\"  =  \"thrift://172.26.194.238:9083\"\n);"
   },
@@ -24,12 +23,6 @@
         "type": "hive"
       },
       "{\"OutputRowCount\":\"25.0\",\"PartitionColumns\":[],\"DataColumns\":[\"n_nationkey\",\"n_name\",\"n_regionkey\",\"n_comment\"],\"PartitionNames\":[]}"
-    ],
-    "emr_test%tpch_100g_parquet_zlib%part": [
-      {
-        "type": "hive"
-      },
-      "{\"OutputRowCount\":\"2.0E7\",\"PartitionColumns\":[],\"DataColumns\":[\"p_partkey\",\"p_name\",\"p_mfgr\",\"p_brand\",\"p_type\",\"p_size\",\"p_container\",\"p_retailprice\",\"p_comment\"],\"PartitionNames\":[]}"
     ],
     "emr_test%tpch_100g_parquet_zlib%supplier": [
       {
@@ -68,10 +61,6 @@
       "n_regionkey": "[0.0, 4.0, 0.0, 4.0, 5.0] ESTIMATE",
       "n_name": "[0.0, 0.0, 0.0, 7.08, 24.0] ESTIMATE"
     },
-    "tpch_100g_parquet_zlib.part": {
-      "p_partkey": "[1.0, 2.0E7, 0.0, 4.0, 2.0E7] ESTIMATE",
-      "p_type": "[0.0, 0.0, 0.0, 20.6, 165.0] ESTIMATE"
-    },
     "tpch_100g_parquet_zlib.orders": {
       "o_orderdate": "[6.94224E8, 9.02016E8, 0.0, 4.0, 2427.0] ESTIMATE",
       "o_custkey": "[1.0, 1.4999999E7, 0.0, 4.0, 1.084486E7] ESTIMATE",
@@ -86,7 +75,6 @@
       "r_name": "[0.0, 0.0, 0.0, 6.8, 5.0] ESTIMATE"
     },
     "tpch_100g_parquet_zlib.lineitem": {
-      "l_partkey": "[1.0, 2.0E7, 0.0, 4.0, 3.3450122E7] ESTIMATE",
       "l_orderkey": "[1.0, 6.0E8, 0.0, 4.0, 1.03174281E8] ESTIMATE",
       "l_suppkey": "[1.0, 1000000.0, 0.0, 4.0, 1190394.0] ESTIMATE",
       "l_extendedprice": "[900.05, 104948.5, 0.0, 8.0, 4366385.0] ESTIMATE",
