@@ -69,7 +69,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         // if not found, read from stream and write back to cache.
         int64_t load_size = std::min(BLOCK_SIZE, _size - block_offset);
         RETURN_IF_ERROR(_stream->read_at_fully(block_offset, src, load_size));
-        {
+
+        if (_enable_populate_cache) {
             SCOPED_RAW_TIMER(&_stats.write_cache_ns);
             Status r = cache->write_cache(_cache_key, block_offset, load_size, src);
             if (r.ok()) {
