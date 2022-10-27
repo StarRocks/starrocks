@@ -6,7 +6,7 @@ Converts a UNIX timestamp into the required time format. The default format is `
 
 ## Syntax
 
-```sql
+```Haskell
 DATETIME FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])`
 ```
 
