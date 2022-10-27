@@ -826,20 +826,26 @@ public class ColocateTableBalancerTest {
         LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
         tablet.getImmutableReplicas().get(0).setBad(true);
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
-        Config.tablet_sched_repair_delay_factor_second = -1;
-        // the created pseudo min cluster can only have backend on the same host, so we can only create table with
-        // single replica, we need to open this test switch to test the behavior of bad replica balance
-        ColocateTableBalancer.ignoreSingleReplicaCheck = true;
-        // call twice to trigger the real balance action
-        colocateTableBalancer.runAfterCatalogReady();
-        colocateTableBalancer.runAfterCatalogReady();
+        long oldVal = Config.tablet_sched_repair_delay_factor_second;
+        try {
+            Config.tablet_sched_repair_delay_factor_second = -1;
+            // the created pseudo min cluster can only have backend on the same host, so we can only create table with
+            // single replica, we need to open this test switch to test the behavior of bad replica balance
+            ColocateTableBalancer.ignoreSingleReplicaCheck = true;
+            // call twice to trigger the real balance action
+            colocateTableBalancer.runAfterCatalogReady();
+            colocateTableBalancer.runAfterCatalogReady();
 
-        // get backend list after set bad
-        List<List<Long>> backendListAfter =
-                colocateTableIndex.getBackendsPerBucketSeq(colocateTableIndex.getGroup(table.getId()));
-        System.out.println(backendListAfter);
-        // backend set changed because of bad replica
-        Assert.assertFalse(backendListBefore.equals(backendListAfter));
+            // get backend list after set bad
+            List<List<Long>> backendListAfter =
+                    colocateTableIndex.getBackendsPerBucketSeq(colocateTableIndex.getGroup(table.getId()));
+            System.out.println(backendListAfter);
+            // backend set changed because of bad replica
+            Assert.assertNotEquals(backendListBefore, backendListAfter);
+        } finally {
+            Config.tablet_sched_repair_delay_factor_second = oldVal;
+        }
+
     }
 
     @Test
