@@ -3,6 +3,8 @@
 #include "aggregator.h"
 
 #include <algorithm>
+#include <type_traits>
+#include <variant>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -346,13 +348,7 @@ Status Aggregator::_reset_state(RuntimeState* state) {
             _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
         }
     } else if (!_is_only_group_by_columns) {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                     \
-    else if (_hash_map_variant.type == vectorized::AggHashMapVariant::Type::NAME) \
-            _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        _hash_map_variant.visit([this](auto& hash_map_with_key) { _release_agg_memory(hash_map_with_key.get()); });
     }
     _mem_pool->free_all();
 
@@ -392,13 +388,7 @@ void Aggregator::close(RuntimeState* state) {
                     _agg_functions[i]->destroy(_agg_fn_ctxs[0], _single_agg_state + _agg_states_offsets[i]);
                 }
             } else if (!_is_only_group_by_columns) {
-                if (false) {
-                }
-#define HASH_MAP_METHOD(NAME)                                                     \
-    else if (_hash_map_variant.type == vectorized::AggHashMapVariant::Type::NAME) \
-            _release_agg_memory<decltype(_hash_map_variant.NAME)::element_type>(_hash_map_variant.NAME.get());
-                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+                _hash_map_variant.visit([&](auto& hash_map_with_key) { _release_agg_memory(hash_map_with_key.get()); });
             }
 
             _mem_pool->free_all();
@@ -655,39 +645,17 @@ void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* 
     output_chunk_by_streaming(chunk);
 }
 
-#define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                             \
-    if (_hash_map_variant.type == vectorized::AggHashMapVariant::Type::SRC) {                                          \
-        _hash_map_variant.DST = std::make_unique<decltype(_hash_map_variant.DST)::element_type>(_state->chunk_size()); \
-        _hash_map_variant.DST->hash_map.reserve(_hash_map_variant.SRC->hash_map.capacity());                           \
-        _hash_map_variant.DST->hash_map.insert(_hash_map_variant.SRC->hash_map.begin(),                                \
-                                               _hash_map_variant.SRC->hash_map.end());                                 \
-        _hash_map_variant.type = vectorized::AggHashMapVariant::Type::DST;                                             \
-        _hash_map_variant.SRC.reset();                                                                                 \
-        return;                                                                                                        \
-    }
-
-#define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                             \
-    if (_hash_set_variant.type == vectorized::AggHashSetVariant::Type::SRC) {                                          \
-        _hash_set_variant.DST = std::make_unique<decltype(_hash_set_variant.DST)::element_type>(_state->chunk_size()); \
-        _hash_set_variant.DST->hash_set.reserve(_hash_set_variant.SRC->hash_set.capacity());                           \
-        _hash_set_variant.DST->hash_set.insert(_hash_set_variant.SRC->hash_set.begin(),                                \
-                                               _hash_set_variant.SRC->hash_set.end());                                 \
-        _hash_set_variant.type = vectorized::AggHashSetVariant::Type::DST;                                             \
-        _hash_set_variant.SRC.reset();                                                                                 \
-        return;                                                                                                        \
-    }
-
 void Aggregator::try_convert_to_two_level_map() {
     if (_mem_tracker->consumption() > two_level_memory_threshold) {
-        CONVERT_TO_TWO_LEVEL_MAP(phase1_slice_two_level, phase1_slice);
-        CONVERT_TO_TWO_LEVEL_MAP(phase2_slice_two_level, phase2_slice);
+        _hash_map_variant.convert_to_two_level(_state);
     }
 }
 
 void Aggregator::try_convert_to_two_level_set() {
     if (_mem_tracker->consumption() > two_level_memory_threshold) {
-        CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
-        CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
+        _hash_set_variant.convert_to_two_level(_state);
+        // CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
+        // CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
     }
 }
 
@@ -979,18 +947,11 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
     hash_variant.init(_state, type);
 
-#define SET_FIXED_SLICE_HASH_MAP_FIELD(TYPE)                  \
-    if (type == HashVariantType::Type::TYPE) {                \
-        hash_variant.TYPE->has_null_column = has_null_column; \
-        hash_variant.TYPE->fixed_byte_size = fixed_byte_size; \
-    }
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx4);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx8);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase1_slice_fx16);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx4);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx8);
-    SET_FIXED_SLICE_HASH_MAP_FIELD(phase2_slice_fx16);
-#undef SET_FIXED_SLICE_HASH_MAP_FIELD
-
-} // namespace starrocks
+    hash_variant.visit([&](auto& variant) {
+        if constexpr (vectorized::is_combined_fixed_size_key<std::decay_t<decltype(*variant)>>) {
+            variant->has_null_column = has_null_column;
+            variant->fixed_byte_size = fixed_byte_size;
+        }
+    });
+}
 } // namespace starrocks

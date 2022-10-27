@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 
+#include <variant>
+
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
@@ -64,25 +66,18 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
                 RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
+                TRY_CATCH_ALLOC_SCOPE_START()
 
-                if (false) {
-                }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
-    }
-                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-                else {
-                    DCHECK(false);
-                }
+                _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
+                    _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
+                });
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
                 _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+                _aggregator->try_convert_to_two_level_set();
 
+                TRY_CATCH_ALLOC_SCOPE_END()
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -98,41 +93,26 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
-                    if (false) {
-                    }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
-    }
-                    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-                    else {
-                        DCHECK(false);
-                    }
+                    TRY_CATCH_ALLOC_SCOPE_START()
+                    _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
+                        _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
+                    });
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-
                     _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
+                    _aggregator->try_convert_to_two_level_set();
+                    TRY_CATCH_ALLOC_SCOPE_END()
 
                     continue;
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        if (false) {
-                        }
-#define HASH_MAP_METHOD(NAME)                                                             \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {     \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<typename decltype( \
-                                    _aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                \
-    }
-                        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-                        else {
-                            DCHECK(false);
-                        }
+                        TRY_CATCH_ALLOC_SCOPE_START()
+                        _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
+                            _aggregator->build_hash_set_with_selection(*hash_set_with_key, input_chunk_size);
+                        });
+                        TRY_CATCH_ALLOC_SCOPE_END()
                     }
 
                     {
@@ -181,30 +161,14 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
 void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->hash_set_variant().NAME->hash_set.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
+        _aggregator->hash_set_variant().visit(
+                [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME)                               \
-            _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, runtime_state()->chunk_size(), chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, runtime_state()->chunk_size(), chunk);
+    });
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::decompose_to_pipeline(

@@ -30,7 +30,7 @@ using AggDataPtr = uint8_t*;
 // =====================
 // one level agg hash map
 template <PhmapSeed seed>
-using Int8AggHashMap = SmallFixedSizeHashMap<int8_t, AggDataPtr>;
+using Int8AggHashMap = SmallFixedSizeHashMap<int8_t, AggDataPtr, seed>;
 template <PhmapSeed seed>
 using Int16AggHashMap = phmap::flat_hash_map<int16_t, AggDataPtr, StdHashWithSeed<int16_t, seed>>;
 template <PhmapSeed seed>
@@ -73,34 +73,39 @@ using SliceAggTwoLevelHashMap =
 static constexpr size_t AGG_HASH_MAP_DEFAULT_PREFETCH_DIST = 16;
 
 static_assert(sizeof(AggDataPtr) == sizeof(size_t));
-#define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)        \
-    size_t const column_size = column->size();                            \
-    size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());  \
-    {                                                                     \
-        const auto& container_data = column->get_data();                  \
-        for (size_t i = 0; i < column_size; i++) {                        \
-            size_t hashval = hash_map.hash_function()(container_data[i]); \
-            hash_values[i] = hashval;                                     \
-        }                                                                 \
-    }                                                                     \
+#define AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, prefetch_dist)              \
+    size_t const column_size = column->size();                                  \
+    size_t* hash_values = reinterpret_cast<size_t*>(agg_states->data());        \
+    {                                                                           \
+        const auto& container_data = column->get_data();                        \
+        for (size_t i = 0; i < column_size; i++) {                              \
+            size_t hashval = this->hash_map.hash_function()(container_data[i]); \
+            hash_values[i] = hashval;                                           \
+        }                                                                       \
+    }                                                                           \
     size_t __prefetch_index = prefetch_dist;
 
-#define AGG_HASH_MAP_PREFETCH_HASH_VALUE()                       \
-    if (__prefetch_index < column_size) {                        \
-        hash_map.prefetch_hash(hash_values[__prefetch_index++]); \
+#define AGG_HASH_MAP_PREFETCH_HASH_VALUE()                             \
+    if (__prefetch_index < column_size) {                              \
+        this->hash_map.prefetch_hash(hash_values[__prefetch_index++]); \
     }
+
+template <typename HashMap>
+struct AggHashMapWithKey {
+    using HashMapType = HashMap;
+    HashMap hash_map;
+};
 
 // ==============================================================
 // TODO(kks): Remove redundant code for compute_agg_states method
 // handle one number hash key
 template <PrimitiveType primitive_type, typename HashMap>
-struct AggHashMapWithOneNumberKey {
+struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
-    HashMap hash_map;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
@@ -109,15 +114,14 @@ struct AggHashMapWithOneNumberKey {
     AggDataPtr get_null_key_data() { return nullptr; }
 
     // prefetch branch better performance in case with larger hash tables
-    template <typename THashMap, typename Func>
-    static void compute_agg_prefetch(THashMap& hash_map, ColumnType* column, Buffer<AggDataPtr>* agg_states,
-                                     Func&& allocate_func) {
+    template <typename Func>
+    void compute_agg_prefetch(ColumnType* column, Buffer<AggDataPtr>* agg_states, Func&& allocate_func) {
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
 
             FieldType key = column->get_data()[i];
-            auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
+            auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                 AggDataPtr pv = allocate_func(key);
                 ctor(key, pv);
             });
@@ -126,13 +130,12 @@ struct AggHashMapWithOneNumberKey {
     }
 
     // prefetch branch better performance in case with small hash tables
-    template <typename THashMap, typename Func>
-    static void compute_agg_noprefetch(THashMap& hash_map, ColumnType* column, Buffer<AggDataPtr>* agg_states,
-                                       Func&& allocate_func) {
+    template <typename Func>
+    void compute_agg_noprefetch(ColumnType* column, Buffer<AggDataPtr>* agg_states, Func&& allocate_func) {
         size_t num_rows = column->size();
         for (size_t i = 0; i < num_rows; i++) {
             FieldType key = column->get_data()[i];
-            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) { ctor(key, allocate_func(key)); });
+            auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) { ctor(key, allocate_func(key)); });
             (*agg_states)[i] = iter->second;
         }
     }
@@ -143,12 +146,12 @@ struct AggHashMapWithOneNumberKey {
         DCHECK(!key_columns[0]->is_nullable());
         auto column = down_cast<ColumnType*>(key_columns[0].get());
 
-        size_t bucket_count = hash_map.bucket_count();
+        size_t bucket_count = this->hash_map.bucket_count();
 
         if (bucket_count < prefetch_threhold) {
-            compute_agg_noprefetch(hash_map, column, agg_states, allocate_func);
+            compute_agg_noprefetch(column, agg_states, allocate_func);
         } else {
-            compute_agg_prefetch(hash_map, column, agg_states, allocate_func);
+            compute_agg_prefetch(column, agg_states, allocate_func);
         }
     }
 
@@ -164,7 +167,7 @@ struct AggHashMapWithOneNumberKey {
 
         for (size_t i = 0; i < chunk_size; i++) {
             FieldType key = column->get_data()[i];
-            if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+            if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
                 (*agg_states)[i] = iter->second;
             } else {
                 (*not_founds)[i] = 1;
@@ -183,17 +186,17 @@ struct AggHashMapWithOneNumberKey {
 };
 
 template <PrimitiveType primitive_type, typename HashMap>
-struct AggHashMapWithOneNullableNumberKey {
+struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<primitive_type, HashMap> {
+    using Base = AggHashMapWithOneNumberKey<primitive_type, HashMap>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
     using ResultVector = typename ColumnType::Container;
     using FieldType = RunTimeCppType<primitive_type>;
-    HashMap hash_map;
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
-    AggHashMapWithOneNullableNumberKey(int32_t chunk_size) {}
+    AggHashMapWithOneNullableNumberKey(int32_t chunk_size) : Base(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
@@ -214,12 +217,10 @@ struct AggHashMapWithOneNullableNumberKey {
             const auto& null_data = nullable_column->null_column_data();
 
             if (!nullable_column->has_null()) {
-                if (hash_map.bucket_count() < prefetch_threhold) {
-                    AggHashMapWithOneNumberKey<primitive_type, HashMap>::compute_agg_noprefetch(
-                            hash_map, data_column, agg_states, allocate_func);
+                if (this->hash_map.bucket_count() < prefetch_threhold) {
+                    Base::compute_agg_noprefetch(data_column, agg_states, allocate_func);
                 } else {
-                    AggHashMapWithOneNumberKey<primitive_type, HashMap>::compute_agg_prefetch(
-                            hash_map, data_column, agg_states, allocate_func);
+                    Base::compute_agg_prefetch(data_column, agg_states, allocate_func);
                 }
                 return;
             }
@@ -285,7 +286,7 @@ struct AggHashMapWithOneNullableNumberKey {
     void _handle_data_key_column(ColumnType* data_column, size_t row, Func&& allocate_func,
                                  Buffer<AggDataPtr>* agg_states) {
         auto key = data_column->get_data()[row];
-        auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+        auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             AggDataPtr pv = allocate_func(key);
             ctor(key, pv);
         });
@@ -295,7 +296,7 @@ struct AggHashMapWithOneNullableNumberKey {
     void _handle_data_key_column(ColumnType* data_column, size_t row, Buffer<AggDataPtr>* agg_states,
                                  std::vector<uint8_t>* not_founds) {
         auto key = data_column->get_data()[row];
-        if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+        if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
             (*agg_states)[row] = iter->second;
         } else {
             (*not_founds)[row] = 1;
@@ -315,24 +316,23 @@ struct AggHashMapWithOneNullableNumberKey {
 };
 
 template <typename HashMap>
-struct AggHashMapWithOneStringKey {
+struct AggHashMapWithOneStringKey : public AggHashMapWithKey<HashMap> {
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
-    HashMap hash_map;
 
     AggHashMapWithOneStringKey(int32_t chunk_size) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
 
-    template <typename THashMap, typename Func>
-    static void compute_agg_prefetch(THashMap& hash_map, BinaryColumn* column, Buffer<AggDataPtr>* agg_states,
-                                     MemPool* pool, Func&& allocate_func) {
+    template <typename Func>
+    void compute_agg_prefetch(BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool,
+                              Func&& allocate_func) {
         AGG_HASH_MAP_PRECOMPUTE_HASH_VALUES(column, AGG_HASH_MAP_DEFAULT_PREFETCH_DIST);
         for (size_t i = 0; i < column_size; i++) {
             AGG_HASH_MAP_PREFETCH_HASH_VALUE();
             auto key = column->get_slice(i);
-            auto iter = hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
+            auto iter = this->hash_map.lazy_emplace_with_hash(key, hash_values[i], [&](const auto& ctor) {
                 uint8_t* pos = pool->allocate(key.size);
                 strings::memcpy_inlined(pos, key.data, key.size);
                 Slice pk{pos, key.size};
@@ -343,13 +343,13 @@ struct AggHashMapWithOneStringKey {
         }
     }
 
-    template <typename THashMap, typename Func>
-    static void compute_agg_noprefetch(THashMap& hash_map, BinaryColumn* column, Buffer<AggDataPtr>* agg_states,
-                                       MemPool* pool, Func&& allocate_func) {
+    template <typename Func>
+    void compute_agg_noprefetch(BinaryColumn* column, Buffer<AggDataPtr>* agg_states, MemPool* pool,
+                                Func&& allocate_func) {
         size_t num_rows = column->size();
         for (size_t i = 0; i < num_rows; i++) {
             auto key = column->get_slice(i);
-            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+            auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
                 uint8_t* pos = pool->allocate(key.size);
                 strings::memcpy_inlined(pos, key.data, key.size);
                 Slice pk{pos, key.size};
@@ -366,10 +366,10 @@ struct AggHashMapWithOneStringKey {
         DCHECK(key_columns[0]->is_binary());
         auto column = down_cast<BinaryColumn*>(key_columns[0].get());
 
-        if (hash_map.bucket_count() < prefetch_threhold) {
-            compute_agg_noprefetch(hash_map, column, agg_states, pool, allocate_func);
+        if (this->hash_map.bucket_count() < prefetch_threhold) {
+            compute_agg_noprefetch(column, agg_states, pool, allocate_func);
         } else {
-            compute_agg_prefetch(hash_map, column, agg_states, pool, allocate_func);
+            compute_agg_prefetch(column, agg_states, pool, allocate_func);
         }
     }
 
@@ -385,7 +385,7 @@ struct AggHashMapWithOneStringKey {
 
         for (size_t i = 0; i < chunk_size; i++) {
             auto key = column->get_slice(i);
-            if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+            if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
                 (*agg_states)[i] = iter->second;
             } else {
                 (*not_founds)[i] = 1;
@@ -404,13 +404,13 @@ struct AggHashMapWithOneStringKey {
 };
 
 template <typename HashMap>
-struct AggHashMapWithOneNullableStringKey {
+struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<HashMap> {
+    using Base = AggHashMapWithOneStringKey<HashMap>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
-    HashMap hash_map;
 
-    AggHashMapWithOneNullableStringKey(int32_t chunk_size) {}
+    AggHashMapWithOneNullableStringKey(int32_t chunk_size) : Base(chunk_size) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
@@ -432,12 +432,10 @@ struct AggHashMapWithOneNullableStringKey {
             DCHECK(data_column->is_binary());
 
             if (!nullable_column->has_null()) {
-                if (hash_map.bucket_count() < prefetch_threhold) {
-                    AggHashMapWithOneStringKey<HashMap>::compute_agg_noprefetch(hash_map, data_column, agg_states, pool,
-                                                                                allocate_func);
+                if (this->hash_map.bucket_count() < prefetch_threhold) {
+                    Base::compute_agg_noprefetch(data_column, agg_states, pool, allocate_func);
                 } else {
-                    AggHashMapWithOneStringKey<HashMap>::compute_agg_prefetch(hash_map, data_column, agg_states, pool,
-                                                                              allocate_func);
+                    Base::compute_agg_prefetch(data_column, agg_states, pool, allocate_func);
                 }
                 return;
             }
@@ -500,7 +498,7 @@ struct AggHashMapWithOneNullableStringKey {
     void _handle_data_key_column(BinaryColumn* data_column, size_t row, MemPool* pool, Func&& allocate_func,
                                  Buffer<AggDataPtr>* agg_states) {
         auto key = data_column->get_slice(row);
-        auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+        auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
             uint8_t* pos = pool->allocate(key.size);
             strings::memcpy_inlined(pos, key.data, key.size);
             Slice pk{pos, key.size};
@@ -513,7 +511,7 @@ struct AggHashMapWithOneNullableStringKey {
     void _handle_data_key_column(BinaryColumn* data_column, size_t row, Buffer<AggDataPtr>* agg_states,
                                  std::vector<uint8_t>* not_founds) {
         auto key = data_column->get_slice(row);
-        if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+        if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
             (*agg_states)[row] = iter->second;
         } else {
             (*not_founds)[row] = 1;
@@ -535,11 +533,10 @@ struct AggHashMapWithOneNullableStringKey {
 };
 
 template <typename HashMap>
-struct AggHashMapWithSerializedKey {
+struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
-    HashMap hash_map;
 
     AggHashMapWithSerializedKey(int32_t chunk_size)
             : mem_pool(std::make_unique<MemPool>()),
@@ -568,7 +565,7 @@ struct AggHashMapWithSerializedKey {
 
         for (size_t i = 0; i < chunk_size; ++i) {
             Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
-            auto iter = hash_map.lazy_emplace(key, [&](const auto& ctor) {
+            auto iter = this->hash_map.lazy_emplace(key, [&](const auto& ctor) {
                 // we must persist the slice before insert
                 uint8_t* pos = pool->allocate(key.size);
                 strings::memcpy_inlined(pos, key.data, key.size);
@@ -602,7 +599,7 @@ struct AggHashMapWithSerializedKey {
         not_founds->assign(chunk_size, 0);
         for (size_t i = 0; i < chunk_size; ++i) {
             Slice key = {buffer + i * max_one_row_size, slice_sizes[i]};
-            if (auto iter = hash_map.find(key); iter != hash_map.end()) {
+            if (auto iter = this->hash_map.find(key); iter != this->hash_map.end()) {
                 (*agg_states)[i] = iter->second;
             } else {
                 (*not_founds)[i] = 1;
@@ -652,12 +649,11 @@ struct AggHashMapWithSerializedKey {
 };
 
 template <typename HashMap>
-struct AggHashMapWithSerializedKeyFixedSize {
+struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> {
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
     using ResultVector = typename std::vector<FixedSizeSliceKey>;
-    HashMap hash_map;
 
     // TODO: make has_null_column as a constexpr
     bool has_null_column = false;
@@ -693,17 +689,17 @@ struct AggHashMapWithSerializedKeyFixedSize {
             }
         }
         for (size_t i = 0; i < chunk_size; i++) {
-            caches[i].hashval = hash_map.hash_function()(caches[i].key);
+            caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
         }
 
         size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if (__prefetch_index < chunk_size) {
-                hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
+                this->hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
             }
             FixedSizeSliceKey& key = caches[i].key;
-            auto iter = hash_map.lazy_emplace_with_hash(key, caches[i].hashval, [&](const auto& ctor) {
+            auto iter = this->hash_map.lazy_emplace_with_hash(key, caches[i].hashval, [&](const auto& ctor) {
                 AggDataPtr pv = allocate_func(key);
                 ctor(key, pv);
             });
@@ -726,7 +722,8 @@ struct AggHashMapWithSerializedKeyFixedSize {
             }
         }
         for (size_t i = 0; i < chunk_size; ++i) {
-            auto iter = hash_map.lazy_emplace(key[i], [&](const auto& ctor) { ctor(key[i], allocate_func(key[i])); });
+            auto iter =
+                    this->hash_map.lazy_emplace(key[i], [&](const auto& ctor) { ctor(key[i], allocate_func(key[i])); });
             (*agg_states)[i] = iter->second;
         }
     }
@@ -742,7 +739,7 @@ struct AggHashMapWithSerializedKeyFixedSize {
             memset(buffer, 0x0, max_fixed_size * chunk_size);
         }
 
-        if (hash_map.bucket_count() < prefetch_threhold) {
+        if (this->hash_map.bucket_count() < prefetch_threhold) {
             compute_agg_noprefetch(chunk_size, key_columns, agg_states, allocate_func);
         } else {
             compute_agg_prefetch(chunk_size, key_columns, agg_states, allocate_func);
@@ -775,17 +772,17 @@ struct AggHashMapWithSerializedKeyFixedSize {
             }
         }
         for (size_t i = 0; i < chunk_size; i++) {
-            caches[i].hashval = hash_map.hash_function()(caches[i].key);
+            caches[i].hashval = this->hash_map.hash_function()(caches[i].key);
         }
 
         size_t __prefetch_index = AGG_HASH_MAP_DEFAULT_PREFETCH_DIST;
 
         for (size_t i = 0; i < chunk_size; ++i) {
             if (__prefetch_index < chunk_size) {
-                hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
+                this->hash_map.prefetch_hash(caches[__prefetch_index++].hashval);
             }
             FixedSizeSliceKey& key = caches[i].key;
-            if (auto iter = hash_map.find(key, caches[i].hashval); iter != hash_map.end()) {
+            if (auto iter = this->hash_map.find(key, caches[i].hashval); iter != this->hash_map.end()) {
                 (*agg_states)[i] = iter->second;
             } else {
                 (*not_founds)[i] = 1;

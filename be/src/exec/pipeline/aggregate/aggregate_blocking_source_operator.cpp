@@ -2,6 +2,8 @@
 
 #include "aggregate_blocking_source_operator.h"
 
+#include <variant>
+
 #include "exec/exec_node.h"
 
 namespace starrocks::pipeline {
@@ -33,14 +35,9 @@ StatusOr<vectorized::ChunkPtr> AggregateBlockingSourceOperator::pull_chunk(Runti
         SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(&chunk);
     } else {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME)                   \
-            _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk_size, &chunk);
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, &chunk);
+        });
     }
 
     size_t old_size = chunk->num_rows();

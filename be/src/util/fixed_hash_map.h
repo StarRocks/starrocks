@@ -12,6 +12,7 @@
 #include <type_traits>
 #include <utility>
 
+#include "column/column_hash.h"
 #include "glog/logging.h"
 namespace starrocks::vectorized {
 
@@ -19,7 +20,7 @@ namespace starrocks::vectorized {
 // Key: KeyType integer type eg: uint8 uint16
 // value shouldn't be nullptr
 
-template <typename KeyType, typename ValueType>
+template <typename KeyType, typename ValueType, PhmapSeed seed>
 class SmallFixedSizeHashMap {
 public:
     static_assert(std::is_integral_v<KeyType>);
@@ -123,7 +124,7 @@ private:
     ValueType _hash_table[hash_table_size + 1];
 };
 
-template <typename KeyType>
+template <typename KeyType, PhmapSeed seed>
 class SmallFixedSizeHashSet {
 public:
     static_assert(std::is_integral_v<KeyType>);

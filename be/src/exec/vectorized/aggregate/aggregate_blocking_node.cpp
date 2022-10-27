@@ -3,6 +3,7 @@
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
 #include <type_traits>
+#include <variant>
 
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
@@ -66,18 +67,14 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
-                if (false) {
-                }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit));                          \
-    }
-                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
+                TRY_CATCH_ALLOC_SCOPE_START()
+                _aggregator->hash_map_variant().visit([&](auto& hash_table_with_key) {
+                    _aggregator->build_hash_map(*hash_table_with_key, chunk_size, agg_group_by_with_limit);
+                });
                 _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
-                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+
+                _aggregator->try_convert_to_two_level_map();
+                TRY_CATCH_ALLOC_SCOPE_END()
             }
             if (_aggregator->is_none_group_by_exprs()) {
                 _aggregator->compute_single_agg_state(chunk_size);
@@ -107,14 +104,8 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->_state_allocator.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        _aggregator->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,
         // In update phase, we directly return empty chunk.
@@ -148,14 +139,9 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
         SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(chunk);
     } else {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME)                               \
-            _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk_size, chunk);
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, chunk);
+        });
     }
 
     size_t old_size = (*chunk)->num_rows();
