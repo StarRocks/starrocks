@@ -85,7 +85,7 @@ public class UserPEntryObject implements PEntryObject {
         if (this == o) {
             return true;
         }
-        if (getClass() != o.getClass()) {
+        if (o == null || getClass() != o.getClass()) {
             return false;
         }
         UserPEntryObject that = (UserPEntryObject) o;
