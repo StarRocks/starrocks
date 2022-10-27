@@ -13,7 +13,7 @@ DATETIME DATE_SUB(DATETIME date,INTERVAL expr type)
 ## Parameters
 
 - `date`: It must be a valid date expression.
-- `expr`: the time interval you want to subtract.
+- `expr`: the time interval you want to subtract. It must be of the INT type.
 - `type`: It can only be set to any of the following values: YEAR, MONTH, DAY, HOUR, MINUTE, SECOND.
 
 ## Return value
