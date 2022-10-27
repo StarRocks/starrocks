@@ -541,6 +541,8 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalOlapScan(OptExpression optExpr, ExecPlan context) {
+            // for debug
+            LOG.info("enter PlanFragment#visitPhysicalOlapScan");
             PhysicalOlapScanOperator node = (PhysicalOlapScanOperator) optExpr.getOp();
 
             OlapTable referenceTable = (OlapTable) node.getTable();
