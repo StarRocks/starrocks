@@ -1,5 +1,63 @@
 # StarRocks version 2.2
 
+## 2.2.8
+
+Release date: October 17, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- BEs may crash if an expression encounters an error in the initial stage. [#11395](https://github.com/StarRocks/starrocks/pull/11395)
+
+- BEs may crash if invalid JSON data is loaded. [#10804](https://github.com/StarRocks/starrocks/issues/10804)
+
+- Parallel writing encounters an error when the pipeline engine is enabled. [#11451](https://github.com/StarRocks/starrocks/issues/11451)
+
+- BEs crash when the ORDER BY NULL LIMIT clause is used. [#11648](https://github.com/StarRocks/starrocks/issues/11648)
+
+- BEs crash if the column type defined in the external table is different from the column type in the source Parquet file. [#11839](https://github.com/StarRocks/starrocks/issues/11839)
+
+## 2.2.7
+
+Release date: September 23, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- Data may be lost when users load JSON data into StarRocks. [#11054](https://github.com/StarRocks/starrocks/issues/11054)
+
+- The output from SHOW FULL TABLES is incorrect. [#11126](https://github.com/StarRocks/starrocks/issues/11126)
+
+- In previous versions, to access data in a view, users must have permissions on both the base tables and the view. In the current version, users are only required to have permissions on the view. [#11290](https://github.com/StarRocks/starrocks/pull/11290)
+
+- The result from a complex query that is nested with EXISTS or IN is incorrect. [#11415](https://github.com/StarRocks/starrocks/pull/11415)
+
+- REFRESH EXTERNAL TABLE fails if the schema of the corresponding Hive table is changed. [#11406](https://github.com/StarRocks/starrocks/pull/11406)
+
+- An error may occur when a non-leader FE replays the bitmap index creation operation. [#11261](
+
+## 2.2.6
+
+Release date: September 14, 2022
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The result of `order by... limit...offset` is incorrect when the subquery contains LIMIT. [#9698](https://github.com/StarRocks/starrocks/issues/9698)
+
+- The BE crashes if partial update is performed on a table with large data volume. [#9809](https://github.com/StarRocks/starrocks/issues/9809)
+
+- Compaction causes BEs to crash if the size of BITMAP data to compact exceeds 2 GB. [#11159](https://github.com/StarRocks/starrocks/pull/11159)
+
+- The like() and regexp() functions do not work if the pattern length exceeds 16 KB. [#10364](https://github.com/StarRocks/starrocks/issues/10364)
+
+### Behavior Change
+
+The format used to represent JSON values in an array in the output is modified. Escape characters are no longer used in the returned JSON values. [#10790](https://github.com/StarRocks/starrocks/issues/10790)
+
 ## 2.2.5
 
 Release date: August 18, 2022
