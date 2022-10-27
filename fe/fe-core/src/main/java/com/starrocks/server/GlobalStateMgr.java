@@ -542,6 +542,7 @@ public class GlobalStateMgr {
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
+        this.metastoreEventsProcessor = new MetastoreEventsProcessor();
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -1113,10 +1114,7 @@ public class GlobalStateMgr {
         starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
-            // TODO(stephen): refactor auto sync hive metadata cache
-            // load hive table to event processor and start to process hms events.
-            // metastoreEventsProcessor.init();
-            // metastoreEventsProcessor.start();
+            metastoreEventsProcessor.start();
         }
         // domain resolver
         domainResolver.start();

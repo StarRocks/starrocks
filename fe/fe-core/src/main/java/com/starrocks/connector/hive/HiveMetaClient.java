@@ -4,8 +4,8 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -304,11 +304,11 @@ public class HiveMetaClient {
     public NotificationEventResponse getNextNotification(long lastEventId,
                                                          int maxEvents,
                                                          IMetaStoreClient.NotificationFilter filter)
-            throws DdlException {
+            throws MetastoreNotificationFetchException {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getNextNotification(lastEventId, maxEvents, filter);
         } catch (Exception e) {
-            throw new DdlException("Failed to get next notification. msg: " + e.getMessage());
+            throw new MetastoreNotificationFetchException("Failed to get next notification. msg: " + e.getMessage());
         }
     }
 

@@ -24,7 +24,7 @@ public class BatchEvent<T extends MetastoreTableEvent> extends MetastoreTableEve
     private final List<T> batchedEvents = Lists.newArrayList();
 
     protected BatchEvent(T baseEvent) {
-        super(baseEvent.event, baseEvent.cache);
+        super(baseEvent.event, baseEvent.cache, baseEvent.catalogName);
         this.hmsTbl = baseEvent.hmsTbl;
         this.baseEvent = baseEvent;
         batchedEvents.add(baseEvent);

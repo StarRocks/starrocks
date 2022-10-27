@@ -13,8 +13,12 @@ import com.google.common.collect.Streams;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreEventType;
+import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -348,5 +352,107 @@ public class CachingHiveMetastore implements IHiveMetastore {
         partitionCache.invalidateAll();
         tableStatsCache.invalidateAll();
         partitionStatsCache.invalidateAll();
+    }
+
+    public boolean existInCache(MetastoreEventType eventType, Object key) {
+        switch (eventType) {
+            case ALTER_TABLE:
+            case DROP_TABLE:
+                return existInCache(tableCache, key);
+            case ALTER_PARTITION:
+                return existInCache(partitionCache, key);
+            default:
+                return false;
+        }
+    }
+
+    public void refreshCacheByEvent(MetastoreEventType eventType, HiveTableName hiveTableName,
+                                    HivePartitionName hivePartitionName, HiveCommonStats commonStats,
+                                    Partition partition, HiveTable updatedHiveTable) {
+        switch (eventType) {
+            case ALTER_TABLE:
+                refreshTableByEvent(hiveTableName, hivePartitionName, commonStats, partition, updatedHiveTable);
+                break;
+            case DROP_TABLE:
+                clearCache(hiveTableName);
+                break;
+            case ALTER_PARTITION:
+                refreshPartitionByEvent(hivePartitionName, commonStats, partition);
+                break;
+            case DROP_PARTITION:
+                dropPartitionKeyByEvent(hivePartitionName);
+                break;
+            case INSERT:
+                if (updatedHiveTable.isUnPartitioned()) {
+                    refreshTableByEvent(hiveTableName, hivePartitionName, commonStats, partition, updatedHiveTable);
+                } else {
+                    refreshPartitionByEvent(hivePartitionName, commonStats, partition);
+                }
+                break;
+            default:
+                return;
+        }
+    }
+
+    private void refreshTableByEvent(HiveTableName hiveTableName, HivePartitionName hivePartitionName,
+                                     HiveCommonStats commonStats, Partition partition, HiveTable updatedHiveTable) {
+        tableCache.put(hiveTableName, updatedHiveTable);
+        if (updatedHiveTable.isUnPartitioned()) {
+            HivePartitionStats partitionStats =
+                    getPartitionStatus(commonStats, get(tableStatsCache, hiveTableName).getColumnStats());
+            tableStatsCache.put(hiveTableName, partitionStats);
+            partitionCache.put(hivePartitionName, partition);
+        } else {
+            partitionCache.invalidate(hivePartitionName);
+            partitionStatsCache.invalidate(hivePartitionName);
+        }
+    }
+
+    private HivePartitionStats getPartitionStatus(HiveCommonStats commonStats, Map<String, HiveColumnStats> columnStats) {
+        long totalRowNums = commonStats.getRowNums();
+        if (totalRowNums == -1) {
+            return HivePartitionStats.empty();
+        }
+        return new HivePartitionStats(commonStats, columnStats);
+    }
+
+    private void refreshPartitionByEvent(HivePartitionName hivePartitionName,
+                                         HiveCommonStats commonStats, Partition partition) {
+        HivePartitionStats partitionStats = getPartitionStatus(
+                commonStats, get(partitionStatsCache, hivePartitionName).getColumnStats());
+        partitionStatsCache.put(hivePartitionName, partitionStats);
+        partitionCache.put(hivePartitionName, partition);
+    }
+
+    private void dropPartitionKeyByEvent(HivePartitionName hivePartitionName) {
+        partitionCache.invalidate(hivePartitionName);
+        partitionStatsCache.invalidate(hivePartitionName);
+    }
+
+    private void clearCache(HiveTableName hiveTableName) {
+        tableCache.invalidate(hiveTableName);
+        tableStatsCache.invalidate(hiveTableName);
+        List<String> partitionNames = partitionKeysCache.getIfPresent(hiveTableName);
+        partitionKeysCache.invalidate(hiveTableName);
+        partitionNames.stream().forEach(partitionName -> {
+            HivePartitionName hivePartitionName = HivePartitionName.of(
+                    hiveTableName.getDatabaseName(), hiveTableName.getTableName(), partitionName);
+            partitionCache.invalidate(hivePartitionName);
+            partitionStatsCache.invalidate(hivePartitionName);
+        });
+    }
+
+    private  <K, V> boolean existInCache(LoadingCache<K, V> cache, Object key) {
+        return cache.getIfPresent(key) != null;
+    }
+
+    public long getCurrentEventId() {
+        return metastore.getCurrentEventId();
+    }
+
+    public NotificationEventResponse getNextEventResponse(long lastSyncedEventId, String catalogName,
+                                                          final boolean getAllEvents)
+            throws MetastoreNotificationFetchException {
+        return ((HiveMetastore) metastore).getNextEventResponse(lastSyncedEventId, catalogName, getAllEvents);
     }
 }

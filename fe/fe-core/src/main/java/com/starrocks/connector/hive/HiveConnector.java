@@ -9,10 +9,12 @@ import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
@@ -67,11 +69,20 @@ public class HiveConnector implements Connector {
     }
 
     public void onCreate() {
+        if (!internalMgr.isEnableHmsEventsIncrementalSync()) {
+            return;
+        }
+        Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+        if (updateProcessor.isPresent()) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .registerCatalogCache(catalogName, updateProcessor.get());
+        }
     }
 
     @Override
     public void shutdown() {
         internalMgr.shutdown();
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCatalogCache(catalogName);
     }
 }

@@ -6,12 +6,17 @@ import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveColumnStats;
+import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HivePartitionName;
+import com.starrocks.connector.hive.HivePartitionStats;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
 
 import java.util.List;
 import java.util.Map;
+
+import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
 
 /**
  * Base class for all the table events
@@ -24,15 +29,15 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     protected Table hmsTbl;
 
     // HivePartitionKeys of each event to process. for unpartition table, the partition values are empty.
-    protected List<HivePartitionName> hivePartitionKeys = Lists.newArrayList();
+    protected List<HivePartitionName> hivePartitionNames = Lists.newArrayList();
 
-    protected MetastoreTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
-        super(event, metaCache);
+    protected MetastoreTableEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+        super(event, cacheProcessor, catalogName);
         Preconditions.checkNotNull(dbName, "Database name cannot be null");
         tblName = Preconditions.checkNotNull(event.getTableName());
 
         HivePartitionName hivePartitionKey = new HivePartitionName(dbName, tblName, Lists.newArrayList());
-        hivePartitionKeys.add(hivePartitionKey);
+        hivePartitionNames.add(hivePartitionKey);
     }
 
     /**
@@ -62,14 +67,14 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     }
 
     protected List<HivePartitionName> getHivePartitionKeys() {
-        return hivePartitionKeys;
+        return hivePartitionNames;
     }
 
     /**
      * According to the current processing method, each event only needs to process one {@link HivePartitionName}.
      */
     protected HivePartitionName getHivePartitionKey() {
-        return hivePartitionKeys.get(0);
+        return hivePartitionNames.get(0);
     }
 
     /**
@@ -77,5 +82,14 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
      */
     protected String getFullyQualifiedTblName() {
         return dbName + "." + tblName;
+    }
+
+    private <K, V> HivePartitionStats getPartitionStats(Map<String, String> params, Map<String, HiveColumnStats> columnStats) {
+        HiveCommonStats commonStats = toHiveCommonStats(params);
+        long totalRowNums = commonStats.getRowNums();
+        if (totalRowNums == -1) {
+            return HivePartitionStats.empty();
+        }
+        return new HivePartitionStats(commonStats, columnStats);
     }
 }
