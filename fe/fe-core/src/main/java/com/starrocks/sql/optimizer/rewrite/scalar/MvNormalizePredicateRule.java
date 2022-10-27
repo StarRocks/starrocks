@@ -104,6 +104,9 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             if (Lists.newArrayList(after).equals(before)) {
                 return predicate;
             }
+        } else {
+            // for not
+            return predicate;
         }
         return Utils.compoundAnd(Lists.newArrayList(after));
     }

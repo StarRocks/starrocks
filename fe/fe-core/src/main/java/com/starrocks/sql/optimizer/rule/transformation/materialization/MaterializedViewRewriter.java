@@ -18,6 +18,8 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -273,7 +275,7 @@ public class MaterializedViewRewriter {
                 || !RewriteUtils.isAlwaysTrue(compensationPredicates.getRangePredicates())
                 || !RewriteUtils.isAlwaysTrue(compensationPredicates.getResidualPredicates()));
 
-        OptExpression queryInput = queryBaseRewrite(rewriteContext,
+        OptExpression queryInput = queryBasedRewrite(rewriteContext,
                 compensationPredicates, materializationContext.getQueryExpression());
         if (queryInput == null) {
             return null;
@@ -287,18 +289,16 @@ public class MaterializedViewRewriter {
     }
 
     protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
-        /*
         List<ColumnRefOperator> queryOutputColumns = queryInput.getOutputColumns().getStream()
                 .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id)).collect(Collectors.toList());
 
         List<ColumnRefOperator> viewOutputColumns = viewInput.getOutputColumns().getStream()
                 .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id)).collect(Collectors.toList());
-
-         */
+        /*
         Map<ColumnRefOperator, ColumnRefOperator> columnMapping = Maps.newHashMap();
         List<ColumnRefOperator> unionOutputColumns = Lists.newArrayList();
         List<ColumnRefOperator> queryOutputColumns = Lists.newArrayList();
-        LogicalAggregationOperator aggOp = (LogicalAggregationOperator) queryInput.getOp();
+        LogicalAggregationOperator aggOp = (LogicalAggregationOperator) materializationContext.getQueryExpression().getOp();
         List<ColumnRefOperator> groupKeys = aggOp.getGroupingKeys();
         for (ColumnRefOperator groupKey : groupKeys) {
             ColumnRefOperator unionColumn = rewriteContext.getQueryRefFactory()
@@ -316,10 +316,11 @@ public class MaterializedViewRewriter {
             queryOutputColumns.add(entry.getKey());
         }
 
+         */
+
 
         // TODO: type cast?
         // TODO: sequence is wrong?
-        /*
         List<ColumnRefOperator> unionOutputColumns = queryOutputColumns.stream()
                 .map(c -> rewriteContext.getQueryRefFactory().create(c, c.getType(), c.isNullable()))
                 .collect(Collectors.toList());
@@ -329,9 +330,7 @@ public class MaterializedViewRewriter {
             }
         }
 
-         */
-
-        List<ColumnRefOperator> viewOutputColumns = queryOutputColumns;
+        // List<ColumnRefOperator> viewOutputColumns = queryOutputColumns;
         LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
                 .setOutputColumnRefOp(unionOutputColumns)
                 .setChildOutputColumns(Lists.newArrayList(queryOutputColumns, viewOutputColumns))
@@ -341,8 +340,8 @@ public class MaterializedViewRewriter {
         return unionExpr;
     }
 
-    protected OptExpression queryBaseRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
-                                           OptExpression queryExpression) {
+    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
+                                              OptExpression queryExpression) {
         ScalarOperator equalPredicates = RewriteUtils.canonizeNode(compensationPredicates.getEqualPredicates());
         ScalarOperator otherPredicates = RewriteUtils.canonizeNode(Utils.compoundAnd(
                 compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
@@ -393,11 +392,14 @@ public class MaterializedViewRewriter {
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
                         CompoundPredicateOperator.not(viewToQueryCompensationPredicate)));
         if (!RewriteUtils.isAlwaysTrue(queryCompensationPredicate)) {
-            // add filter operator
-            LogicalFilterOperator filter = new LogicalFilterOperator(queryCompensationPredicate);
-            OptExpression rewrittenExpression = OptExpression.create(filter, queryExpression);
-            deriveLogicalProperty(rewrittenExpression);
-            return rewrittenExpression;
+            // add filter
+            Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
+            builder.withOperator(queryExpression.getOp());
+            builder.setPredicate(queryCompensationPredicate);
+            Operator newQueryOp = builder.build();
+            OptExpression newQueryExpr = OptExpression.create(newQueryOp, queryExpression.getInputs());
+            deriveLogicalProperty(newQueryExpr);
+            return newQueryExpr;
         }
         return null;
     }
@@ -511,6 +513,7 @@ public class MaterializedViewRewriter {
         }
         LogicalProjectOperator projectOperator = new LogicalProjectOperator(newQueryProjection);
         OptExpression projection = OptExpression.create(projectOperator, targetExpr);
+        deriveLogicalProperty(projection);
         return projection;
     }
 

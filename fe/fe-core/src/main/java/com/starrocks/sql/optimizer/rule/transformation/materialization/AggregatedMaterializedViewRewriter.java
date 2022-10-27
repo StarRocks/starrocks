@@ -15,9 +15,9 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -189,8 +189,8 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
     }
 
     @Override
-    protected OptExpression queryBaseRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
-                                             OptExpression queryExpression) {
+    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
+                                              OptExpression queryExpression) {
         OptExpression aggExpr = queryExpression;
         // add filter above input and put filter under aggExpr
         OptExpression input = queryExpression.inputAt(0);
@@ -245,11 +245,14 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
                         rewriteContext.getQueryPredicateSplit().toScalarOperator(),
                         CompoundPredicateOperator.not(viewToQueryCompensationPredicate)));
         if (!RewriteUtils.isAlwaysTrue(queryCompensationPredicate)) {
-            // add filter operator
-            LogicalFilterOperator filter = new LogicalFilterOperator(queryCompensationPredicate);
-            OptExpression rewrittenExpression = OptExpression.create(filter, input);
-            deriveLogicalProperty(rewrittenExpression);
-            aggExpr.setChild(0, rewrittenExpression);
+            // add filter
+            Operator.Builder builder = OperatorBuilderFactory.build(input.getOp());
+            builder.withOperator(input.getOp());
+            builder.setPredicate(queryCompensationPredicate);
+            Operator newInputOp = builder.build();
+            OptExpression newInputExpr = OptExpression.create(newInputOp, input.getInputs());
+            aggExpr.setChild(0, newInputExpr);
+            deriveLogicalProperty(aggExpr);
             return aggExpr;
         }
         return null;

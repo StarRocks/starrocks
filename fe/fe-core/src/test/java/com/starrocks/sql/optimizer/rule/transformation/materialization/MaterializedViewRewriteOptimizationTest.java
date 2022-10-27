@@ -24,15 +24,11 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
          */
 
-
-        /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_2" +
                 " distributed by hash(LO_ORDERKEY) " +
                 " as " +
                 " select LO_ORDERDATE, LO_ORDERKEY, LO_REVENUE from lineorder_flat_for_mv" +
                 " where LO_REVENUE < 100000;");
-
-         */
 
         /*
         starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW lo_mv_3" +
@@ -63,27 +59,24 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
          */
 
-        /*
         starRocksAssert.withNewMaterializedView("create materialized view join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
                 " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
                 " from t0 join test_all_type" +
                 " on t0.v1 = test_all_type.t1d" +
-                " where t0.v1 = 1");
+                " where t0.v1 < 100");
 
-         */
 
-        /*
         starRocksAssert.withNewMaterializedView("create materialized view agg_mv_1" +
                 " distributed by hash(LO_ORDERKEY)" +
                 " as " +
                 " SELECT LO_ORDERKEY, LO_ORDERDATE, sum(LO_REVENUE) as total_revenue, count(LO_REVENUE) as total_num" +
                 " from lineorder_flat_for_mv" +
+                " where LO_ORDERKEY < 100" +
                 " group by LO_ORDERKEY, LO_ORDERDATE");
 
-         */
-
+        /*
         starRocksAssert.withNewMaterializedView("create materialized view agg_join_mv_1" +
                 " distributed by hash(v1)" +
                 " as " +
@@ -93,6 +86,8 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 " on t0.v1 = test_all_type.t1d" +
                 " where t0.v1 < 100" +
                 " group by v1, test_all_type.t1d");
+
+         */
     }
 
     @Test
@@ -124,6 +119,18 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
                 "     partitions=0/1\n" +
                 "     rollup: lo_mv_2");
         */
+
+        String query8 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv where LO_REVENUE < 150000 ;";
+        String plan8 = getFragmentPlan(query8);
+        assertContains(plan8, "1:Project\n" +
+                "  |  <slot 1> : 42: LO_ORDERDATE\n" +
+                "  |  <slot 2> : 43: LO_ORDERKEY\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: lo_mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=0/1\n" +
+                "     rollup: lo_mv_2");
 
         /*
         String query3 = "select LO_ORDERDATE, LO_ORDERKEY from lineorder_flat_for_mv where LO_REVENUE < 50000 ;";
@@ -242,7 +249,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
 
 
         String query2 = "SELECT t0.v1, test_all_type.t1d, test_all_type.t1c" +
-                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d = 1";
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d < 200";
         String plan2 = getFragmentPlan(query2);
         assertContains(plan2, "OUTPUT EXPRS:1: v1 | 7: t1d | 6: t1c\n" +
                 "  PARTITION: RANDOM\n" +
@@ -280,7 +287,7 @@ public class MaterializedViewRewriteOptimizationTest extends PlanTestBase {
     public void testSingleTableAgg() throws Exception {
 
         String query1 = "SELECT LO_ORDERKEY, sum(LO_REVENUE), count(LO_REVENUE)" +
-                " from lineorder_flat_for_mv group by LO_ORDERKEY";
+                " from lineorder_flat_for_mv where LO_ORDERKEY < 200 group by LO_ORDERKEY";
         String plan1 = getFragmentPlan(query1);
         Assert.assertEquals("", plan1);
 
