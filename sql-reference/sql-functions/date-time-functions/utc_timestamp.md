@@ -2,7 +2,7 @@
 
 ## 功能
 
-返回当前UTC日期和时间的 "YYYY-MM-DD HH:MM:SS" 或"YYYYMMDDHHMMSS"格式的值。
+返回当前 UTC 日期和时间的 "YYYY-MM-DD HH:MM:SS" 或 "YYYYMMDDHHMMSS" 格式的值。
 
 ## 语法
 

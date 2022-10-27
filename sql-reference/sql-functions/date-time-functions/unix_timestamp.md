@@ -2,15 +2,15 @@
 
 ## 功能
 
-将 DATE 或者 DATETIME 类型的值转化为 UNIX 时间戳。
+将 DATE 或 DATETIME 类型的值转化为 UNIX 时间戳。
 
 如果未指定参数，则将当前的时间转化为 UNIX 时间戳。
 
 对于在 1970-01-01 00:00:00 之前或 2038-01-19 03:14:07 之后的时间，该函数将返回 0。
 
-Format 的格式请参阅 `date_format` 函数的格式说明。
+`fmt` 的格式请参阅 [date_format](./date_format.md) 函数的格式说明。
 
-该函数受时区影响。
+该函数受时区影响，具体参见 [设置时区](../../../using_starrocks/timezone.md)。
 
 ## 语法
 
