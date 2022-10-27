@@ -21,6 +21,7 @@
 
 package com.starrocks.clone;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -29,6 +30,7 @@ import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -83,10 +85,6 @@ public class ColocateTableBalancerTest {
         UtFrameUtils.createMinStarRocksCluster();
         ConnectContext ctx = UtFrameUtils.createDefaultCtx();
         starRocksAssert = new StarRocksAssert(ctx);
-        starRocksAssert.withDatabase("db1").useDatabase("db1")
-                .withTable("CREATE TABLE db1.tbl(id INT NOT NULL) " +
-                        "distributed by hash(`id`) buckets 3 " +
-                        "properties('replication_num' = '1', 'colocate_with' = 'group1');");
     }
 
     @Before
@@ -763,7 +761,12 @@ public class ColocateTableBalancerTest {
     }
 
     @Test
-    public void test1MatchGroup() {
+    public void test1MatchGroup() throws Exception {
+        starRocksAssert.withDatabase("db1").useDatabase("db1")
+                .withTable("CREATE TABLE db1.tbl(id INT NOT NULL) " +
+                        "distributed by hash(`id`) buckets 3 " +
+                        "properties('replication_num' = '1', 'colocate_with' = 'group1');");
+
         Database database = GlobalStateMgr.getCurrentState().getDb("db1");
         OlapTable table = (OlapTable) database.getTable("tbl");
         addTabletsToScheduler("db1", "tbl", false);
@@ -798,6 +801,45 @@ public class ColocateTableBalancerTest {
         colocateTableBalancer.runAfterCatalogReady();
         long after = stat.counterColocateBalanceRound.get();
         Assert.assertEquals(before + 1, after);
+    }
+
+    @Test
+    public void test3RepairWithBadReplica() throws Exception {
+        UtFrameUtils.addMockBackend(10002);
+        UtFrameUtils.addMockBackend(10003);
+        UtFrameUtils.addMockBackend(10004);
+        starRocksAssert.withDatabase("db3").useDatabase("db3")
+                .withTable("CREATE TABLE db3.tbl3(id INT NOT NULL) " +
+                        "distributed by hash(`id`) buckets 1 " +
+                        "properties('replication_num' = '1', 'colocate_with' = 'group3');");
+
+        Database database = GlobalStateMgr.getCurrentState().getDb("db3");
+        OlapTable table = (OlapTable) database.getTable("tbl3");
+        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+
+        // get backend list before set bad
+        List<List<Long>> backendListBefore = ImmutableList.copyOf(
+                colocateTableIndex.getBackendsPerBucketSeq(colocateTableIndex.getGroup(table.getId())));
+        System.out.println(backendListBefore);
+
+        List<Partition> partitions = Lists.newArrayList(table.getPartitions());
+        LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
+        tablet.getImmutableReplicas().get(0).setBad(true);
+        ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
+        Config.tablet_sched_repair_delay_factor_second = -1;
+        // the created pseudo min cluster can only have backend on the same host, so we can only create table with
+        // single replica, we need to open this test switch to test the behavior of bad replica balance
+        ColocateTableBalancer.ignoreSingleReplicaCheck = true;
+        // call twice to trigger the real balance action
+        colocateTableBalancer.runAfterCatalogReady();
+        colocateTableBalancer.runAfterCatalogReady();
+
+        // get backend list after set bad
+        List<List<Long>> backendListAfter =
+                colocateTableIndex.getBackendsPerBucketSeq(colocateTableIndex.getGroup(table.getId()));
+        System.out.println(backendListAfter);
+        // backend set changed because of bad replica
+        Assert.assertFalse(backendListBefore.equals(backendListAfter));
     }
 
     @Test
