@@ -410,5 +410,14 @@ fi
 cd -
 echo "Finished patching $STREAMVBYTE_SOURCE"
 
+# patch hyperscan
+cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/hyperscan-5.4.0.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $HYPERSCAN_SOURCE"
+
 cd -
 

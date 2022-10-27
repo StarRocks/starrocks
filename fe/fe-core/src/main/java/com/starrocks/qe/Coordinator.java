@@ -2263,6 +2263,14 @@ public class Coordinator {
                     });
                 }
 
+                if (assignPerDriverSeq) {
+                    instanceParam.nodeToPerDriverSeqScanRanges.forEach((scanId, perDriverSeqScanRanges) -> {
+                        for (int driverSeq = 0; driverSeq < instanceParam.pipelineDop; ++driverSeq) {
+                            perDriverSeqScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
+                        }
+                    });
+                }
+
                 params.instanceExecParams.add(instanceParam);
             }
         }

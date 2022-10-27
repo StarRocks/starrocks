@@ -95,6 +95,10 @@ struct PerLaneBuffer {
                 chunks[next_gc_chunk_idx++].reset();
             }
             ++next_gc_chunk_idx;
+        }
+
+        if (state == PLBS_PASSTHROUGH) {
+            // In passthrough mode, chunks are used exclusively by post-aggregate operator, so it need not be cloned
             return std::move(chunks[next_chunk_idx++]);
         } else {
             // CRITICAL(by satanson): The method is invoked when cloning chunk, when query cache enabled, chunk

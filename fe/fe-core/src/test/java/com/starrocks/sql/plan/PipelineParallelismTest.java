@@ -58,10 +58,8 @@ public class PipelineParallelismTest extends PlanTestBase {
         ExecPlan plan = getExecPlan("select * from information_schema.columns");
         PlanFragment fragment0 = plan.getFragments().get(0);
         assertContains(fragment0.getExplainString(TExplainLevel.NORMAL), "SCAN SCHEMA");
-        // SchemaScanNode doesn't support pipeline, so ParallelExecNum of fragment is 
-        // equal to the corresponding session variables.
-        Assert.assertEquals(parallelExecInstanceNum, fragment0.getParallelExecNum());
-        Assert.assertEquals(1, fragment0.getPipelineDop());
+        Assert.assertEquals(1, fragment0.getParallelExecNum());
+        Assert.assertEquals(numHardwareCores / 2, fragment0.getPipelineDop());
     }
 
     @Test
@@ -69,10 +67,8 @@ public class PipelineParallelismTest extends PlanTestBase {
         ExecPlan plan = getExecPlan("select * from t0 [_META_]");
         PlanFragment fragment1 = plan.getFragments().get(1);
         assertContains(fragment1.getExplainString(TExplainLevel.NORMAL), "MetaScan");
-        // MetaScanNode doesn't support pipeline, so ParallelExecNum of fragment is 
-        // equal to the corresponding session variables.
-        Assert.assertEquals(parallelExecInstanceNum, fragment1.getParallelExecNum());
-        Assert.assertEquals(1, fragment1.getPipelineDop());
+        Assert.assertEquals(1, fragment1.getParallelExecNum());
+        Assert.assertEquals(numHardwareCores / 2, fragment1.getPipelineDop());
     }
 
     @Test

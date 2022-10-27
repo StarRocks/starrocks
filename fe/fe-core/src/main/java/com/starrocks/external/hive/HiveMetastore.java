@@ -5,7 +5,6 @@ package com.starrocks.external.hive;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.external.PartitionUtil;
@@ -53,7 +52,7 @@ public class HiveMetastore implements IHiveMetastore {
             throw new StarRocksConnectorException("Table is missing storage descriptor");
         }
 
-        if (!HudiTable.isHudiTable(table.getSd().getInputFormat())) {
+        if (!HiveMetastoreApiConverter.isHudiTable(table.getSd().getInputFormat())) {
             return HiveMetastoreApiConverter.toHiveTable(table, catalogName);
         } else {
             return HiveMetastoreApiConverter.toHudiTable(table, catalogName);

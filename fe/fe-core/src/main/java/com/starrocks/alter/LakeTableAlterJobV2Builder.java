@@ -52,8 +52,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
             for (Partition partition : table.getPartitions()) {
                 long partitionId = partition.getId();
                 List<Tablet> originTablets = partition.getIndex(originIndexId).getTablets();
-                List<Long> shadowTabletIds =
-                        createShards(originTablets.size(), table.getPartitionShardStorageInfo(partitionId));
+                List<Long> shadowTabletIds = createShards(originTablets.size(),
+                                table.getPartitionShardStorageInfo(partitionId), partitionId);
                 Preconditions.checkState(originTablets.size() == shadowTabletIds.size());
 
                 TStorageMedium medium = table.getPartitionInfo().getDataProperty(partitionId).getStorageMedium();
@@ -77,7 +77,8 @@ public class LakeTableAlterJobV2Builder extends AlterJobV2Builder {
     }
 
     @VisibleForTesting
-    public static List<Long> createShards(int shardCount, ShardStorageInfo storageInfo) throws DdlException {
-        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, storageInfo);
+    public static List<Long> createShards(int shardCount, ShardStorageInfo storageInfo, long groupId) throws DdlException {
+        return GlobalStateMgr.getCurrentStarOSAgent().createShards(shardCount, storageInfo, groupId);
     }
+
 }

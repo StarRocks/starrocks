@@ -30,7 +30,6 @@ Status ChunkAccumulateOperator::set_finished(RuntimeState*) {
 }
 
 Status ChunkAccumulateOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
-    _is_finished = false;
     _acc.reset();
 
     return Status::OK();

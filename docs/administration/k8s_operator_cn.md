@@ -1,4 +1,4 @@
-# Deploy and manage CN on Kubernetes with StarRocks Operator
+# Deploy and manage CN on Kubernetes with StarRocks Operator [Preview]
 
 Since 2.4,  in addition to FEs and BEs, StarRocks introduces a new kind of node, a stateless compute node (CN for short) into the system. CNs provide compute service and are reponsible for carrying out part of the execution plan. They don't store data. Multiple CNs consist of a CN cluster. It can be containerized and be deployed and maintained on Kubernetes to achieve autoscaling. Thus, the StarRocks cluster as a whole can better support data analysis scenarios that consume a lot of compute resources, such as data lake analysis.
 

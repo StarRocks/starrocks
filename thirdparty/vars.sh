@@ -171,10 +171,10 @@ RE2_SOURCE=re2-2017-05-01
 RE2_MD5SUM="4aa65a0b22edacb7ddcd7e4aec038dcf"
 
 # boost
-BOOST_DOWNLOAD="http://sourceforge.net/projects/boost/files/boost/1.75.0/boost_1_75_0.tar.gz"
-BOOST_NAME=boost_1_75_0.tar.gz
-BOOST_SOURCE=boost_1_75_0
-BOOST_MD5SUM="38813f6feb40387dfe90160debd71251"
+BOOST_DOWNLOAD="https://boostorg.jfrog.io/artifactory/main/release/1.80.0/source/boost_1_80_0.tar.gz"
+BOOST_NAME=boost_1_80_0.tar.gz
+BOOST_SOURCE=boost_1_80_0
+BOOST_MD5SUM="077f074743ea7b0cb49c6ed43953ae95"
 
 # leveldb
 LEVELDB_DOWNLOAD="https://github.com/google/leveldb/archive/v1.20.tar.gz"
