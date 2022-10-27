@@ -28,7 +28,7 @@ Currently, `string_format` supports the following formats:
 
 Other formats are invalid and NULL will be returned.
 
-If the specified timestamp is less than 0 or greater than 253402271999, NULL will be returned. The range for timestamp is `1970-01-01 00:00:00` to `9999-12-31 23:59:59`.
+If the specified timestamp is less than 0 or greater than 2147483647, NULL will be returned. The range for timestamp is `1970-01-01 00:00:00` to `2038-01-19 11:14:07`.
 
 ## Examples
 
