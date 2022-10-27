@@ -100,6 +100,9 @@ public class AnalyzeFunctionTest {
 
         analyzeFail("select time_slice(ta, -1) from tall",
                 "time_slice requires second parameter must be greater than 0");
+
+        analyzeFail("select time_slice(th, interval 1 second, FCEILK) from tall",
+                "time_slice must use FLOOR/CEIL as third parameter");
     }
 
     @Test
