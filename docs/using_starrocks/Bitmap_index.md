@@ -1,66 +1,152 @@
-# Bitmap Indexing
+# Bitmap indexing
 
-StarRocks supports bitmap-based indexing that significantly speeds up queries.
+This topic describes how to create and manage a bitmap index, along with usage cases.
 
-## Principle
+A bitmap index is a special database index that uses bitmaps, which are an array of bits. A bit is always in one of two values: 0 and 1. Each bit in the bitmap corresponds to a single row in the table. The value of each bit depends upon the value of the corresponding row.
 
-### What is  Bitmap
+A bitmap index can help improve the query performance on a given column. If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](../using_starrocks/Bloomfilter_index.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key, you can create a bitmap index for the column.
 
-Bitmap is an array of one-bit elements with 0 and 1 value. Those elements can be set and cleared. Bitmap can be used in the following scenarios:
+## Benefits
 
-* Use two long types to represent the gender of 16 students. 0 represents female and 1 represents male.
-* A bitmap indicates whether there is a null value in a set of data, where 0 represents the element is not null and 1 represents null.
-* A bitmap indicates quarters (Q1, Q2, Q3, Q4), where 1 represents Q4 and 0 represents the other quarters.
+You can benefit from bitmap indexes in the following aspects:
 
-### What is  Bitmap index
+- Reduce response time when the column has low cardinality, such as the columns of the ENUM type. If the number of distinct values in a column is relatively high, we recommend that you use a bloom filter index to improve query speed. For more information, see [Bloom filter indexing](../using_starrocks/Bloomfilter_index.md).
+- Use less storage space compared to other indexing techniques. Bitmap indexes typically take up only a fraction of the size of the indexed data in a table.
+- Combine multiple bitmap indexes together to fire queries on multiple columns. For more information, see [Query multiple columns](#query-multiple-columns).
 
-![Bitmap Index](../assets/3.6.1-1.png)
+## Usage notes
 
-Bitmap can only represent an array of columns with two values. When the values of the columns are of multiple enumeration types, such as quarters (Q1, Q2, Q3, Q4) and system platforms (Linux, Windows, FreeBSD, MacOS), it is not possible to encode them in a single Bitmap. In this case, you can create a Bitmap for each value and a dictionary of the actual enumerated values.
+- You can create a bitmap index for a column that can be filtered by using the equal (`=`) or [NOT] IN operator.
+- You can create bitmap indexes for all columns of a table that uses the Duplicate Key Model or Unique Key Model. For a table that uses the Aggregate Key Model or Primary Key model, you can only create bitmap indexes for key columns.
+- The columns of the FLOAT, DOUBLE, BOOLEAN, and DECIMAL types do not support creating bitmap indexes.
+- You can check whether a query uses bitmap indexes by viewing the `BitmapIndexFilterRows` field of the query's profile.
 
-As shown above, there are 4 rows of data in the `platform` column, and the possible values are `Android` and `iOS`. StarRocks will first build a dictionary for the `platform` column, and then map `Android` and `iOS` to int. `Android` and `iOS` are encoded as 0 and 1 respectively.Since `Android` appears in rows 1, 2 and 3, the bitmap is 0111; `iOS` appears in row 4, the bitmap is 1000.
+## Create a bitmap index
 
-If there is a SQL query against the table containing the `platform` column, e.g. `select xxx from table where Platform = iOS`, StarRocks will first look up the dictionary to find the `iOS` whose encoding value is 1, and then go to the bitmap index to find out that 1 corresponds to a bitmap of 1000. As a result, StarRocks will only read the 4th row of data as it meets the query condition.
+There are two ways to create a bitmap index for a column.
 
-## Suitable scenarios
+- Create a bitmap index for a column when you create a table. Example:
 
-### Non-prefix filtering
+    ```SQL
+    CREATE TABLE d0.table_hash
+    (
+        k1 TINYINT,
+        k2 DECIMAL(10, 2) DEFAULT "10.5",
+        v1 CHAR(10) REPLACE,
+        v2 INT SUM,
+        INDEX index_name (column_name [, ...]) USING BITMAP COMMENT ''
+    )
+    ENGINE = olap
+    AGGREGATE KEY(k1, k2)
+    DISTRIBUTED BY HASH(k1) BUCKETS 10
+    PROPERTIES ("storage_type" = "column");
+    ```
 
-Referring to [shortkey index](../table_design/Sort_key.md), StarRocks can quickly filter the first few columns by shortkey indexing. However, for the columns that are in the middle or the end, shortkey indexing doesn’t work. Instead, users can create a bitmap index for filtering.
+    The following table describes the parameters related to the bitmap index.
 
-### Multi-Column Filtering
+    | **Parameter** | **Required** | **Description**                                              |
+    | ------------- | ------------ | ------------------------------------------------------------ |
+    | index_name    | Yes          | The name of the bitmap index.                                |
+    | column_name   | Yes          | The name of the column on which a bitmap index is created. You can create the index for multiple columns at a time by specifying these column names. |
+    | COMMENT ''    | No           | The comment of the bitmap index.                             |
 
-Since Bitmap can perform bitwise operations quickly, users can consider creating a bitmap index for each column in a multi-column filtering scenario.
+    For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-## How to use
+- Create a bitmap index for a column of a table using the CREATE INDEX statement. For parameter descriptions and examples, see [CREATE INDEX](../sql-reference/sql-statements/data-definition/CREATE%20INDEX.md).
 
-### Create an Index
+    ```SQL
+    CREATE INDEX index_name ON table_name (column_name) [USING BITMAP] [COMMENT ''];
+    ```
 
-Create a bitmap index for the `site_id` column on table1.
+## Display bitmap indexes
 
-~~~ SQL
-CREATE INDEX index_name ON table1 (site_id) USING BITMAP COMMENT 'balabala';
-~~~
+You can view all bitmap indexes created in a table using the SHOW INDEX statement. For parameter descriptions and examples, see [SHOW INDEX](../sql-reference/sql-statements/Administration/SHOW%20INDEX.md).
 
-### View an index
+```SQL
+SHOW { INDEX[ES] | KEY[S] } FROM [db_name.]table_name [FROM db_name];
+```
 
-Show the index under the specified `table_name`.
+> **Note**
+>
+> Creating indexes is an asynchronous process. Therefore, you can only see the indexes that have completed the creation process.
 
-~~~ SQL
-SHOW INDEX FROM example_db.table_name;
-~~~
+## Delete a bitmap index
 
-### Delete an index
+You can delete a bitmap index from a table using the DROP INDEX statement. For parameter descriptions and examples, see [DROP INDEX](../sql-reference/sql-statements/data-definition/DROP%20INDEX.md).
 
-Delete an index with the specified name from a table.
-
-~~~ SQL
+```SQL
 DROP INDEX index_name ON [db_name.]table_name;
-~~~
+```
 
-## Notes
+## Usage cases
 
-1. For the duplicate model, all columns can be bitmap indexed; for the aggregate model, only the key column can be Bitmap indexed.
-2. Bitmap indexes should be created on columns that have enumerated values, a large number of duplicate values, and a low base. These columns are used for equivalence queries or can be converted to equivalence queries.
-3. Bitmap indexes are not supported for Float, Double, or Decimal type columns.
-4. To see whether a query hits the Bitmap index, check the its profile information.
+For example, the following table `employee` shows a portion of a company's employee information.
+
+| **ID** | **Gender** | **Position** | **Income_level** |
+| ------ | ---------- | ------------ | ---------------- |
+| 01     | female     | Developer    | level_1          |
+| 02     | female     | Analyst      | level_2          |
+| 03     | female     | Salesman     | level_1          |
+| 04     | male       | Accountant   | level_3          |
+
+### Query a single column
+
+For example, if you want to improve the query performance on the `Gender` column, you can create a bitmap index for the column by using the following statement.
+
+```SQL
+CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
+```
+
+After you execute the preceding statement, the bitmap index is generated as shown in the following figure.
+
+![figure](../assets/3.6.1-2.png)
+
+1. Build a dictionary: StarRocks builds a dictionary for the `Gender` column and maps `female` and `male` to coded values of the INT type: `0` and `1`.
+2. Generate bitmaps: StarRocks generates bitmaps for `female` and `male` based on the coded values. The bitmap of `female` is `1110` because `female` displays in the first three rows. The bitmap of `male` is `0001` because `male` only displays in the fourth row.
+
+If you want to find out the male employee in the company, you can send a query as follows.
+
+```SQL
+SELECT xxx FROM employee WHERE Gender = male;
+```
+
+After the query is sent, StarRocks searches for the dictionary to get the coded value of `male`, which is `1`and then gets the bitmap of `male`, which is `0001`. This means that only the fourth row matches the query condition. Then StarRocks will skip the first three rows and read only the fourth row.
+
+### Query multiple columns
+
+For example, if you want to improve the query performance on the `Gender` and `Income_level`column, you can create bitmap indexes for these two columns by using the following statements.
+
+- `Gender`
+
+    ```SQL
+    CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
+    ```
+
+- `Income_level`
+
+    ```SQL
+    CREATE INDEX index2 ON employee (Income_level) USING BITMAP COMMENT 'index2';
+    ```
+
+After you execute the preceding two statements, the bitmap indexes are generated as shown in the following figure.
+
+![figure](../assets/3.6.1-3.png)
+
+StarRocks builds a dictionary for the `Gender` and `Income_level` columns and then generates bitmaps for the distinct values in these two columns.
+
+- `Gender`: The bitmap of `female` is `1110` and the bitmap of `male` is `0001`.
+- `Producer`: The bitmap of `level_1` is `1010`, the bitmap of `level_2` is `0100`, and the bitmap of `level_3` is `0001`.
+
+If you want to find out the female employees whose salary is in the `level_1`, you can send a query as follows.
+
+```SQL
+ SELECT xxx FROM employee 
+ WHERE Gender = female AND Income_level = Level_1;
+```
+
+After the query is sent, StarRocks search for the dictionaries of `Gender` and `Income_level` at the same time to get the following information:
+
+- The coded value of `female` is `0` and the bitmap of `female` is `1110`.
+- The coded value of `level_1` is `0` and the bitmap of `level_1` is `1010`.
+
+StarRocks performs a bitwise logical operation `1110 & 1010` based on the `AND` operator to get the result `1010`.  According to the result, StarRocks only reads the first row and the third row.
