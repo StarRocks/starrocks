@@ -291,20 +291,20 @@ public class TimeUtils {
         }
     }
 
-    public static long getNextValidTimeSecond(long timeSecond, long targetTimeSecond,
+    public static long getNextValidTimeSecond(long startTimeSecond, long targetTimeSecond,
                                               long period, TimeUnit timeUnit) throws DdlException {
-        long interval = convertTimeUnitValueToSecond(period, timeUnit);
-        if (interval < 1) {
+        if (startTimeSecond > targetTimeSecond) {
+            return startTimeSecond;
+        }
+        long intervalSecond = convertTimeUnitValueToSecond(period, timeUnit);
+        if (intervalSecond < 1) {
             throw new DdlException("Can not get next valid time second," +
-                    "timeSecond:" + timeSecond +
+                    "startTimeSecond:" + startTimeSecond +
                     " period:" + period +
                     " timeUnit:" + timeUnit);
         }
-        if (timeSecond > targetTimeSecond) {
-            return timeSecond;
-        }
-        long difference = targetTimeSecond - timeSecond;
-        long step = difference / interval + 1;
-        return timeSecond + step * interval;
+        long difference = targetTimeSecond - startTimeSecond;
+        long step = difference / intervalSecond + 1;
+        return startTimeSecond + step * intervalSecond;
     }
 }
