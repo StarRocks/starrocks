@@ -56,6 +56,7 @@ public class PartitionUtilTest {
     public void testGetSuffixName() {
         Assert.assertEquals("file", getSuffixName("/path/", "/path/file"));
         Assert.assertEquals("file", getSuffixName("/path", "/path/file"));
+        Assert.assertEquals("file", getSuffixName("/dt=(a)/", "/dt=(a)/file"));
     }
 
     @Test(expected = IllegalArgumentException.class)
