@@ -291,6 +291,17 @@ public class TimeUtils {
         }
     }
 
+    /**
+     * Based on the start seconds, get the seconds closest and greater than the target second by interval,
+     * the interval use period and time unit to calculate.
+     *
+     * @param startTimeSecond  start time second
+     * @param targetTimeSecond target time second
+     * @param period           period
+     * @param timeUnit         time unit
+     * @return next valid time second
+     * @throws DdlException
+     */
     public static long getNextValidTimeSecond(long startTimeSecond, long targetTimeSecond,
                                               long period, TimeUnit timeUnit) throws DdlException {
         if (startTimeSecond > targetTimeSecond) {
