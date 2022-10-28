@@ -750,7 +750,8 @@ public:
             const size_t batch_num = (nums > 4096) ? 4096 : nums;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size);
             RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
-            std::vector<Slice> keys(batch_num);
+            std::vector<Slice> keys;
+            keys.reserve(batch_num);
             std::vector<IndexValue> values;
             values.reserve(batch_num);
             size_t buf_offset = 0;
