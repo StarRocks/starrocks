@@ -203,32 +203,38 @@ private:
 };
 
 // batch allocate states
+// For streaming aggregates, the maximum number of aggregate states we can hold is chunk_size + 1
+// (the states for processing a batch of chunks and the last remaining state).
+// So we can just allocate chunk size * 2 states and decide which states
+// to return based on the remaining states
 struct StateAllocator {
     static size_t constexpr aligned = 16;
+    struct buffer_range {
+        uint8_t* start;
+        uint8_t* end;
+    };
     StateAllocator(MemPool* pool_, size_t batch_size, size_t aggregate_state_size) : pool(pool_) {
-        buffer1_st = pool->allocate_aligned(batch_size * aggregate_state_size, aligned);
-        buffer1_ed = buffer1_st + batch_size * aggregate_state_size;
-        buffer2_st = pool->allocate_aligned(batch_size * aggregate_state_size, aligned);
-        buffer2_ed = buffer2_st + batch_size * aggregate_state_size;
+        buffer[0].start = pool->allocate_aligned(batch_size * aggregate_state_size, aligned);
+        buffer[0].end = buffer[0].start + batch_size * aggregate_state_size;
+        buffer[1].start = pool->allocate_aligned(batch_size * aggregate_state_size, aligned);
+        buffer[1].end = buffer[1].start + batch_size * aggregate_state_size;
     }
 
     uint8_t* allocated(uint8_t* input) {
         if (input == nullptr) {
-            return buffer1_st;
+            return buffer[0].start;
         }
-        DCHECK((input >= buffer1_st && input < buffer1_ed) || (input >= buffer2_st && input < buffer2_ed));
-        if (input >= buffer1_st && input < buffer1_ed) {
-            return buffer2_st;
+        DCHECK((input >= buffer[0].start && input < buffer[0].end) ||
+               (input >= buffer[1].start && input < buffer[1].end));
+        if (input >= buffer[0].start && input < buffer[0].end) {
+            return buffer[1].start;
         }
-        return buffer1_st;
+        return buffer[0].start;
     }
 
 private:
     MemPool* pool;
-    uint8_t* buffer1_st;
-    uint8_t* buffer1_ed;
-    uint8_t* buffer2_st;
-    uint8_t* buffer2_ed;
+    buffer_range buffer[2];
 };
 
 SortedStreamingAggregator::SortedStreamingAggregator(const TPlanNode& tnode) : Aggregator(tnode) {}
@@ -262,7 +268,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
         }
     }
 
-    RETURN_IF_ERROR(_compure_group_by(chunk_size));
+    RETURN_IF_ERROR(_compute_group_by(chunk_size));
 
     RETURN_IF_ERROR(_update_states(chunk_size));
 
@@ -310,7 +316,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     return Status::OK();
 }
 
-Status SortedStreamingAggregator::_compure_group_by(size_t chunk_size) {
+Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
     // compare stage
     // _cmp_vector[i] = group[i - 1].equals(group[i])
     // _cmp_vector[i] == 0 means group[i - 1].equals(group[i])

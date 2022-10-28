@@ -22,7 +22,7 @@ public:
     StatusOr<vectorized::ChunkPtr> pull_eos_chunk();
 
 private:
-    Status _compure_group_by(size_t chunk_size);
+    Status _compute_group_by(size_t chunk_size);
 
     Status _update_states(size_t chunk_size);
 

@@ -114,13 +114,13 @@ public:
                                        const std::vector<uint8_t>& selection) const override {
         DCHECK(to->is_numeric());
         int64_t values[chunk_size];
-        size_t selected_lengh = 0;
+        size_t selected_length = 0;
         for (size_t i = 0; i < chunk_size; i++) {
-            values[selected_lengh] = this->data(agg_states[i] + state_offset).count;
-            selected_lengh += !selection[i];
+            values[selected_length] = this->data(agg_states[i] + state_offset).count;
+            selected_length += !selection[i];
         }
-        if (selected_lengh) {
-            CHECK(to->append_numbers(values, selected_lengh * sizeof(int64_t)));
+        if (selected_length) {
+            CHECK(to->append_numbers(values, selected_length * sizeof(int64_t)));
         }
     }
 
