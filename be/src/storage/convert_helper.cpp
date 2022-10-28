@@ -1747,7 +1747,7 @@ public:
                 return dst;
             }
         }
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = src.size();
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
             Datum src_datum = src.get(i);
