@@ -54,6 +54,7 @@ import com.starrocks.metric.Metric.MetricUnit;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.Backend.BackendStatus;
@@ -74,6 +75,7 @@ import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TMasterResult;
 import com.starrocks.thrift.TPartitionVersionInfo;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -104,7 +106,8 @@ public class ReportHandler extends Daemon {
         TABLET_REPORT,
         DISK_REPORT,
         TASK_REPORT,
-        RESOURCE_GROUP_REPORT
+        RESOURCE_GROUP_REPORT,
+        RESOURCE_USAGE_REPORT
     }
 
     private static final Logger LOG = LogManager.getLogger(ReportHandler.class);
@@ -127,6 +130,7 @@ public class ReportHandler extends Daemon {
         pendingTaskMap.put(ReportType.DISK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.TASK_REPORT, Maps.newHashMap());
         pendingTaskMap.put(ReportType.RESOURCE_GROUP_REPORT, Maps.newHashMap());
+        pendingTaskMap.put(ReportType.RESOURCE_USAGE_REPORT, Maps.newHashMap());
     }
 
     public TMasterResult handleReport(TReportRequest request) throws TException {
@@ -152,6 +156,7 @@ public class ReportHandler extends Daemon {
         Map<String, TDisk> disks = null;
         Map<Long, TTablet> tablets = null;
         List<TWorkGroup> activeWorkGroups = null;
+        TResourceUsage resourceUsage = null;
         long reportVersion = -1;
 
         ReportType reportType = ReportType.UNKNOWN_REPORT;
@@ -204,12 +209,24 @@ public class ReportHandler extends Daemon {
             activeWorkGroups = request.active_workgroups;
             reportType = ReportType.RESOURCE_GROUP_REPORT;
         }
+
+        if (request.isSetResource_usage()) {
+            if (reportType != ReportType.UNKNOWN_REPORT) {
+                buildErrorResult(tStatus,
+                        "invalid report request, multi fields " + reportType + " " + ReportType.RESOURCE_USAGE_REPORT);
+                return result;
+            }
+
+            resourceUsage = request.getResource_usage();
+            reportType = ReportType.RESOURCE_USAGE_REPORT;
+        }
+
         List<TWorkGroupOp> workGroupOps =
                 GlobalStateMgr.getCurrentState().getResourceGroupMgr().getResourceGroupsNeedToDeliver(beId);
         result.setWorkgroup_ops(workGroupOps);
 
         ReportTask reportTask =
-                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups);
+                new ReportTask(beId, reportType, tasks, disks, tablets, reportVersion, activeWorkGroups, resourceUsage);
         try {
             putToQueue(reportTask);
         } catch (Exception e) {
@@ -272,11 +289,13 @@ public class ReportHandler extends Daemon {
         private Map<Long, TTablet> tablets;
         private long reportVersion;
         private List<TWorkGroup> activeWorkGroups;
+        private TResourceUsage resourceUsage;
 
         public ReportTask(long beId, ReportType type, Map<TTaskType, Set<Long>> tasks,
                           Map<String, TDisk> disks,
                           Map<Long, TTablet> tablets, long reportVersion,
-                          List<TWorkGroup> activeWorkGroups) {
+                          List<TWorkGroup> activeWorkGroups,
+                          TResourceUsage resourceUsage) {
             this.beId = beId;
             this.type = type;
             this.tasks = tasks;
@@ -284,6 +303,7 @@ public class ReportHandler extends Daemon {
             this.tablets = tablets;
             this.reportVersion = reportVersion;
             this.activeWorkGroups = activeWorkGroups;
+            this.resourceUsage = resourceUsage;
         }
 
         @Override
@@ -299,6 +319,9 @@ public class ReportHandler extends Daemon {
             }
             if (activeWorkGroups != null) {
                 ReportHandler.workgroupReport(beId, activeWorkGroups);
+            }
+            if (resourceUsage != null) {
+                ReportHandler.resourceUsageReport(beId, resourceUsage);
             }
         }
     }
@@ -454,6 +477,23 @@ public class ReportHandler extends Daemon {
         GlobalStateMgr.getCurrentState().getResourceGroupMgr().saveActiveResourceGroupsForBe(backendId, workGroups);
         LOG.debug("finished to handle workgroup report from backend{}, cost: {} ms, num: {}",
                 backendId, System.currentTimeMillis() - start, workGroups.size());
+    }
+
+    // For test.
+    public static void testHandleResourceUsageReport(long backendId, TResourceUsage usage) {
+        resourceUsageReport(backendId, usage);
+    }
+
+    private static void resourceUsageReport(long backendId, TResourceUsage usage) {
+        LOG.debug("begin to handle resource usage report from backend {}", backendId);
+        long start = System.currentTimeMillis();
+        boolean isChanged = QueryQueueManager.getInstance().updateResourceUsage(
+                backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes());
+        if (isChanged) {
+            GlobalStateMgr.getCurrentState().updateResourceUsage(backendId, usage);
+        }
+        LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
+                backendId, (System.currentTimeMillis() - start));
     }
 
     private static void sync(Map<Long, TTablet> backendTablets, ListMultimap<Long, Long> tabletSyncMap,

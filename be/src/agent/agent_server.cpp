@@ -51,6 +51,7 @@ const uint32_t REPORT_TASK_WORKER_COUNT = 1;
 const uint32_t REPORT_DISK_STATE_WORKER_COUNT = 1;
 const uint32_t REPORT_OLAP_TABLE_WORKER_COUNT = 1;
 const uint32_t REPORT_WORKGROUP_WORKER_COUNT = 1;
+const uint32_t REPORT_RESOURCE_USAGE_WORKER_COUNT = 1;
 
 class AgentServer::Impl {
 public:
@@ -101,6 +102,7 @@ private:
     std::unique_ptr<ReportDiskStateTaskWorkerPool> _report_disk_state_workers;
     std::unique_ptr<ReportOlapTableTaskWorkerPool> _report_tablet_workers;
     std::unique_ptr<ReportWorkgroupTaskWorkerPool> _report_workgroup_workers;
+    std::unique_ptr<ReportResourceUsageTaskWorkerPool> _report_resource_usage_workers;
 };
 
 void AgentServer::Impl::init_or_die() {
@@ -209,6 +211,8 @@ void AgentServer::Impl::init_or_die() {
     CREATE_AND_START_POOL(_report_disk_state_workers, ReportDiskStateTaskWorkerPool, REPORT_DISK_STATE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_tablet_workers, ReportOlapTableTaskWorkerPool, REPORT_OLAP_TABLE_WORKER_COUNT)
     CREATE_AND_START_POOL(_report_workgroup_workers, ReportWorkgroupTaskWorkerPool, REPORT_WORKGROUP_WORKER_COUNT)
+    CREATE_AND_START_POOL(_report_resource_usage_workers, ReportResourceUsageTaskWorkerPool,
+                          REPORT_RESOURCE_USAGE_WORKER_COUNT)
 #undef CREATE_AND_START_POOL
 }
 
@@ -241,6 +245,7 @@ AgentServer::Impl::~Impl() {
     STOP_POOL(REPORT_DISK_STATE, _report_disk_state_workers);
     STOP_POOL(REPORT_OLAP_TABLE, _report_tablet_workers);
     STOP_POOL(REPORT_WORKGROUP, _report_workgroup_workers);
+    STOP_POOL(REPORT_WORKGROUP, _report_resource_usage_workers);
 #undef STOP_POOL
 }
 

@@ -166,6 +166,8 @@ public class ConnectContext {
 
     protected ResourceGroup resourceGroup;
 
+    protected volatile boolean isPending = false;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -535,13 +537,14 @@ public class ConnectContext {
 
     // kill operation with no protect.
     public void kill(boolean killConnection) {
-        LOG.warn("kill timeout query, {}, kill connection: {}",
+        LOG.warn("kill query, {}, kill connection: {}",
                 getMysqlChannel().getRemoteHostPortString(), killConnection);
         // Now, cancel running process.
         StmtExecutor executorRef = executor;
         if (killConnection) {
             isKilled = true;
         }
+        QueryQueueManager.getInstance().cancelQuery(this);
         if (executorRef != null) {
             executorRef.cancel();
         }
@@ -584,7 +587,11 @@ public class ConnectContext {
                 killConnection = true;
             }
         } else {
-            if (delta > sessionVariable.getQueryTimeoutS() * 1000L) {
+            long timeoutSecond = sessionVariable.getQueryTimeoutS();
+            if (isPending) {
+                timeoutSecond += GlobalVariable.getQueryQueuePendingTimeoutSecond();
+            }
+            if (delta > timeoutSecond * 1000L) {
                 LOG.warn("kill query timeout, remote: {}, query timeout: {}",
                         getMysqlChannel().getRemoteHostPortString(), sessionVariable.getQueryTimeoutS());
 
@@ -615,6 +622,14 @@ public class ConnectContext {
 
     public int getTotalBackendNumber() {
         return globalStateMgr.getClusterInfo().getTotalBackendNumber();
+    }
+
+    public void setPending(boolean pending) {
+        isPending = pending;
+    }
+
+    public boolean isPending() {
+        return isPending;
     }
 
     public class ThreadInfo {
@@ -648,6 +663,7 @@ public class ConnectContext {
                 }
             }
             row.add(stmt);
+            row.add(Boolean.toString(isPending));
             return row;
         }
     }

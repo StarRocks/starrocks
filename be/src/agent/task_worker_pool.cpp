@@ -36,6 +36,7 @@
 #include "agent/report_task.h"
 #include "agent/task_singatures_manager.h"
 #include "common/status.h"
+#include "exec/pipeline/query_context.h"
 #include "exec/workgroup/work_group.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
@@ -687,6 +688,46 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             workgroup::WorkGroupManager::instance()->apply(result.workgroup_ops);
         }
         sleep(config::report_workgroup_interval_seconds);
+    }
+
+    return nullptr;
+}
+
+void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this) {
+    auto* worker_pool_this = (ReportResourceUsageTaskWorkerPool*)arg_this;
+
+    TReportRequest request;
+    AgentStatus status = STARROCKS_SUCCESS;
+
+    while ((!worker_pool_this->_stopped)) {
+        auto master_address = get_master_address();
+        if (master_address.port == 0) {
+            // port == 0 means not received heartbeat yet
+            // sleep a short time and try again
+            sleep(config::sleep_one_second);
+            continue;
+        }
+
+        StarRocksMetrics::instance()->report_resource_usage_requests_total.increment(1);
+        request.__set_backend(BackendOptions::get_localBackend());
+        request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
+
+        TResourceUsage resource_usage;
+        resource_usage.__set_num_running_queries(ExecEnv::GetInstance()->query_context_mgr()->size());
+        resource_usage.__set_mem_used_bytes(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
+        resource_usage.__set_mem_limit_bytes(ExecEnv::GetInstance()->process_mem_tracker()->limit());
+        request.__set_resource_usage(std::move(resource_usage));
+
+        TMasterResult result;
+        status = report_task(request, &result);
+
+        if (status != STARROCKS_SUCCESS) {
+            StarRocksMetrics::instance()->report_resource_usage_requests_failed.increment(1);
+            LOG(WARNING) << "Fail to report resource_usage to " << master_address.hostname << ":" << master_address.port
+                         << ", err=" << status;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(config::report_resource_usage_interval_ms));
     }
 
     return nullptr;

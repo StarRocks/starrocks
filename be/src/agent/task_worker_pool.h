@@ -201,4 +201,18 @@ private:
     }
 };
 
+class ReportResourceUsageTaskWorkerPool : public TaskWorkerPool<AgentTaskRequestWithoutReqBody> {
+public:
+    ReportResourceUsageTaskWorkerPool(ExecEnv* env, int worker_num) : TaskWorkerPool(env, worker_num) {
+        _callback_function = _worker_thread_callback;
+    }
+
+private:
+    static void* _worker_thread_callback(void* arg_this);
+
+    AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
+        return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
+    }
+};
+
 } // namespace starrocks

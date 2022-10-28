@@ -54,10 +54,13 @@ import com.starrocks.system.Frontend;
 import com.starrocks.system.HeartbeatMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.codehaus.jackson.map.ObjectMapper;
@@ -948,6 +951,32 @@ public class NodeMgr {
         this.leaderIp = info.getIp();
         this.leaderHttpPort = info.getHttpPort();
         this.leaderRpcPort = info.getRpcPort();
+    }
+
+    public void updateResourceUsage(long backendId, TResourceUsage usage) {
+        List<Frontend> allFrontends = getFrontends(null);
+        for (Frontend fe : allFrontends) {
+            if (fe.getHost().equals(getSelfNode().first)) {
+                continue;
+            }
+
+            TUpdateResourceUsageRequest request = new TUpdateResourceUsageRequest();
+            request.setBackend_id(backendId);
+            request.setResource_usage(usage);
+
+            try {
+                TUpdateResourceUsageResponse response = FrontendServiceProxy
+                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
+                                Config.thrift_rpc_retry_times,
+                                client -> client.updateResourceUsage(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost());
+                }
+            } catch (Exception e) {
+                LOG.warn("UpdateResourceUsage to remote fe: {} failed", fe.getHost(), e);
+            }
+        }
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {

@@ -9,6 +9,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.CoordinatorMonitor;
+import com.starrocks.qe.GlobalVariable;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -74,6 +75,10 @@ public class ComputeNode implements IComputable, Writable {
     // port of starlet on BE
     @SerializedName("starletPort")
     private volatile int starletPort;
+
+    private volatile int numRunningQueries = 0;
+    private volatile long memLimitBytes = 0;
+    private volatile long memUsedBytes = 0;
 
     public ComputeNode() {
         this.host = "";
@@ -266,6 +271,41 @@ public class ComputeNode implements IComputable, Writable {
         return this.isAlive.get() && !this.isDecommissioned.get();
     }
 
+    public int getNumRunningQueries() {
+        return numRunningQueries;
+    }
+
+    public long getMemUsedBytes() {
+        return memUsedBytes;
+    }
+    public long getMemLimitBytes() {
+        return memLimitBytes;
+    }
+
+    public double getMemUsedPct() {
+        if (0 == memLimitBytes) {
+            return 0;
+        }
+        return ((double) memUsedBytes) / memLimitBytes;
+    }
+
+    public boolean updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes) {
+        boolean isChanged = false;
+        if (numRunningQueries != this.numRunningQueries) {
+            this.numRunningQueries = numRunningQueries;
+            isChanged = true;
+        }
+        if (memLimitBytes != this.memLimitBytes) {
+            this.memLimitBytes = memLimitBytes;
+            isChanged = true;
+        }
+        if (memUsedBytes != this.memUsedBytes) {
+            this.memUsedBytes = memUsedBytes;
+            isChanged = true;
+        }
+        return isChanged;
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         String s = GsonUtils.GSON.toJson(this);
@@ -433,5 +473,23 @@ public class ComputeNode implements IComputable, Writable {
         }
 
         return isChanged;
+    }
+
+    public boolean isResourceOverloaded() {
+        if (!GlobalVariable.isQueryQueueEnable()) {
+            return false;
+        }
+
+        if (!isAvailable()) {
+            return false;
+        }
+
+        if (GlobalVariable.isQueryQueueConcurrencyHardLimitEffective() &&
+                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyHardLimit()) {
+            return true;
+        }
+
+        return GlobalVariable.isQueryQueueMemUsedPctHardLimitEffective() &&
+                getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctHardLimit();
     }
 }

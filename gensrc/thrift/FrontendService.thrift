@@ -34,6 +34,7 @@ include "Exprs.thrift"
 include "RuntimeProfile.thrift"
 include "MasterService.thrift"
 include "AgentService.thrift"
+include "ResourceUsage.thrift"
 
 // These are supporting structs for JniFrontend.java, which serves as the glue
 // between our C++ execution environment and the Java frontend.
@@ -1021,6 +1022,15 @@ struct TGetTablesInfoResponse {
     1: optional list<TTableInfo> tables_infos
 }
 
+struct TUpdateResourceUsageRequest {
+    1: optional i64 backend_id 
+    2: optional ResourceUsage.TResourceUsage resource_usage
+}
+
+struct TUpdateResourceUsageResponse {
+    1: optional Status.TStatus status
+}
+
 struct TTableInfo {
     1: optional string table_catalog
     2: optional string table_schema
@@ -1099,5 +1109,7 @@ service FrontendService {
     TAbortRemoteTxnResponse  abortRemoteTxn(1: TAbortRemoteTxnRequest request)
 
     TSetConfigResponse setConfig(1: TSetConfigRequest request)
+
+    TUpdateResourceUsageResponse updateResourceUsage(1: TUpdateResourceUsageRequest request)
 }
 

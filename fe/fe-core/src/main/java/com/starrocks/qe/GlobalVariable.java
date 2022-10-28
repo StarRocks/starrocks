@@ -46,6 +46,12 @@ public final class GlobalVariable {
     public static final String DEFAULT_ROWSET_TYPE = "default_rowset_type";
     public static final String CHARACTER_SET_DATABASE = "character_set_database";
 
+    public static final String QUERY_QUEUE_ENABLE = "query_queue_enable";
+    public static final String QUERY_QUEUE_CONCURRENCY_HARD_LIMIT = "query_queue_concurrency_hard_limit";
+    public static final String QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT = "query_queue_mem_used_pct_hard_limit";
+    public static final String QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
+    public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
+
     @VariableMgr.VarAttr(name = VERSION_COMMENT, flag = VariableMgr.READ_ONLY)
     public static String versionComment = "StarRocks version " + Version.STARROCKS_VERSION;
 
@@ -86,6 +92,89 @@ public final class GlobalVariable {
     // Compatible with jdbc that version > 8.0.15
     @VariableMgr.VarAttr(name = "performance_schema", flag = VariableMgr.READ_ONLY)
     private static boolean performanceSchema = false;
+
+    /**
+     * Query will be pending when BE is overloaded, if `queryQueueEnable` is true.
+     * <p>
+     * If the number of running queries of any BE `exceeds queryQueueConcurrencyHardLimit`,
+     * or memory usage rate of any BE exceeds `queryQueueMemUsedPctHardLimit`,
+     * the current query will be pending or failed:
+     * - if the number of pending queries in this FE exceeds `queryQueueMaxQueuedQueries`,
+     * the query will be failed.
+     * - otherwise, the query will be pending until all the BEs aren't overloaded anymore
+     * or timeout `queryQueuePendingTimeoutSecond`.
+     * <p>
+     * Every BE reports at interval the resources containing the number of running queries and memory usage rate
+     * to the FE leader. And the FE leader synchronizes the resource usage info to FE followers by RPC.
+     * <p>
+     * The queries only using schema meta will never been queued, because a MySQL client will
+     * query schema meta after the connection is established.
+     */
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_ENABLE, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    private static boolean queryQueueEnable = false;
+    // Effective iff it is positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_HARD_LIMIT, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    private static int queryQueueConcurrencyHardLimit = 0;
+    // Effective iff it is positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    private static double queryQueueMemUsedPctHardLimit = 0;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    private static int queryQueuePendingTimeoutSecond = 300;
+    // Unlimited iff it is non-positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    private static int queryQueueMaxQueuedQueries = 1024;
+
+    public static boolean isQueryQueueEnable() {
+        return queryQueueEnable;
+    }
+
+    public static void setQueryQueueEnable(boolean queryQueueEnable) {
+        GlobalVariable.queryQueueEnable = queryQueueEnable;
+    }
+
+    public static boolean isQueryQueueConcurrencyHardLimitEffective() {
+        return queryQueueConcurrencyHardLimit > 0;
+    }
+
+    public static int getQueryQueueConcurrencyHardLimit() {
+        return queryQueueConcurrencyHardLimit;
+    }
+
+    public static void setQueryQueueConcurrencyHardLimit(int queryQueueConcurrencyHardLimit) {
+        GlobalVariable.queryQueueConcurrencyHardLimit = queryQueueConcurrencyHardLimit;
+    }
+
+    public static boolean isQueryQueueMemUsedPctHardLimitEffective() {
+        return queryQueueMemUsedPctHardLimit > 0;
+    }
+
+    public static double getQueryQueueMemUsedPctHardLimit() {
+        return queryQueueMemUsedPctHardLimit;
+    }
+
+    public static void setQueryQueueMemUsedPctHardLimit(double queryQueueMemUsedPctHardLimit) {
+        GlobalVariable.queryQueueMemUsedPctHardLimit = queryQueueMemUsedPctHardLimit;
+    }
+
+    public static int getQueryQueuePendingTimeoutSecond() {
+        return queryQueuePendingTimeoutSecond;
+    }
+
+    public static void setQueryQueuePendingTimeoutSecond(int queryQueuePendingTimeoutSecond) {
+        GlobalVariable.queryQueuePendingTimeoutSecond = queryQueuePendingTimeoutSecond;
+    }
+
+    public static boolean isQueryQueueMaxQueuedQueriesEffective() {
+        return queryQueueMaxQueuedQueries > 0;
+    }
+
+    public static int getQueryQueueMaxQueuedQueries() {
+        return queryQueueMaxQueuedQueries;
+    }
+
+    public static void setQueryQueueMaxQueuedQueries(int queryQueueMaxQueuedQueries) {
+        GlobalVariable.queryQueueMaxQueuedQueries = queryQueueMaxQueuedQueries;
+    }
 
     // Don't allow create instance.
     private GlobalVariable() {

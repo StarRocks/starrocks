@@ -70,6 +70,7 @@ import com.starrocks.planner.StreamLoadPlanner;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectProcessor;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.qe.QueryQueueManager;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -137,6 +138,7 @@ import com.starrocks.thrift.TRefreshTableResponse;
 import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TReportRequest;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TSetConfigRequest;
 import com.starrocks.thrift.TSetConfigResponse;
 import com.starrocks.thrift.TShowVariableRequest;
@@ -152,6 +154,8 @@ import com.starrocks.thrift.TTableType;
 import com.starrocks.thrift.TTaskInfo;
 import com.starrocks.thrift.TTaskRunInfo;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
+import com.starrocks.thrift.TUpdateResourceUsageRequest;
+import com.starrocks.thrift.TUpdateResourceUsageResponse;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
@@ -1409,5 +1413,17 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
 
         return InformationSchemaDataSource.generateTablesInfoResponse(request);
+    }
+
+    @Override
+    public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
+        TResourceUsage usage = request.getResource_usage();
+        QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
+                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes());
+
+        TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
+        TStatus status = new TStatus(TStatusCode.OK);
+        res.setStatus(status);
+        return res;
     }
 }

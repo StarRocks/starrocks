@@ -100,6 +100,8 @@ public class AuditEvent {
     public double planCpuCosts = 0.0;
     @AuditField(value = "PlanMemCost")
     public double planMemCosts = 0.0;
+    @AuditField(value = "PendingTimeMs")
+    public long pendingTimeMs = 0;
 
     public static class AuditEventBuilder {
 
@@ -232,6 +234,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPlanMemCosts(double memCosts) {
             auditEvent.planMemCosts = memCosts;
+            return this;
+        }
+
+        public AuditEventBuilder setPendingTimeMs(long pendingTimeMs) {
+            auditEvent.pendingTimeMs = pendingTimeMs;
             return this;
         }
 
