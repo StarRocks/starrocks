@@ -4,7 +4,7 @@
 
 Converts a datetime value dt from the time zone given by from_tz to the time zone given by to_tz and returns the resulting value. If the argument is invalid, return NULL.
 
-This function may return different results for different time zones. For more information, see [Configure a time zone](../../../using_starrocks/timezone.md).
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/timezone.md).
 
 ## Syntax
 
