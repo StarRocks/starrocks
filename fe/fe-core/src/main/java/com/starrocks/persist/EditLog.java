@@ -70,6 +70,7 @@ import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.scheduler.persist.UpdateProgressInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.staros.StarMgrJournal;
@@ -689,6 +690,10 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
+                case OperationType.OP_UPDATE_PROGRESS:
+                    UpdateProgressInfo updateProgressInfo = (UpdateProgressInfo) journal.getData();
+                    globalStateMgr.getTaskManager().replayUpdateProgress(updateProgressInfo.getTaskRunProgressMap());
+                    break;
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
@@ -1083,6 +1088,10 @@ public class EditLog {
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logUpdateProgressInfo(UpdateProgressInfo info) {
+        logEdit(OperationType.OP_UPDATE_PROGRESS, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {

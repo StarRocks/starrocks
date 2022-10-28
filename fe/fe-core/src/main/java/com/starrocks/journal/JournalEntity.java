@@ -107,6 +107,7 @@ import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
+import com.starrocks.scheduler.persist.UpdateProgressInfo;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeStatus;
@@ -541,6 +542,10 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_DROP_TASK_RUNS:
                 data = DropTaskRunsLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_UPDATE_PROGRESS:
+                data = UpdateProgressInfo.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_CREATE_SMALL_FILE:

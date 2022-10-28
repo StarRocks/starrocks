@@ -568,6 +568,17 @@ public class TaskManager {
                 .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
+    public void replayUpdateProgress(Map<Long, Integer> taskRunProgresMap) {
+        Map<Long, TaskRun> runningTaskRunMap = taskRunManager.getRunningTaskRunMap();
+        for (Map.Entry<Long, Integer> entry : taskRunProgresMap.entrySet()) {
+            // When replaying the log, the task run may have ended
+            // and the status has changed to success or failed
+            if (runningTaskRunMap.containsKey(entry.getKey())) {
+                runningTaskRunMap.get(entry.getKey()).getStatus().setProgress(entry.getValue());
+            }
+        }
+    }
+
     public void removeExpiredTasks() {
         long currentTimeMs = System.currentTimeMillis();
 
