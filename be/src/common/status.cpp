@@ -34,7 +34,7 @@ inline const char* assemble_state(TStatusCode::type code, Slice msg, Slice ctx) 
     return result;
 }
 
-const char* Status::copy_state(const char* state) const {
+const char* Status::copy_state(const char* state) {
     uint16_t len1;
     uint16_t len2;
     strings::memcpy_inlined(&len1, state, sizeof(len1));
@@ -45,7 +45,7 @@ const char* Status::copy_state(const char* state) const {
     return result;
 }
 
-const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) const {
+const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) {
     uint16_t len1;
     uint16_t len2;
     strings::memcpy_inlined(&len1, state, sizeof(len1));
