@@ -53,4 +53,4 @@ StarRocks 2.3 及以上版本提供了 internal catalog（内部数据目录）�
 
 ## 更多操作
 
-如要查询外部数据，请参见[查询外部数据](/using_starrocks/catalog/query_external_data.md)。
+如要查询外部数据，请参见[查询外部数据](/data_source/catalog/query_external_data.md)。

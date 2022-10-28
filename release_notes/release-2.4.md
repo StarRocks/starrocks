@@ -14,9 +14,9 @@
 
 - Outer Join 支持通过 `<`、`<=`、`>`、`>=`、`<>` 等比较操作符对多表进行非等值关联。相关文档，请参见 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md)。
 
-- 支持创建 Iceberg Catalog 和 Hudi Catalog，创建后即可查询 Apache Iceberg 和 Apache Hudi 数据。相关文档，请参见 [Iceberg catalog](../using_starrocks/catalog/iceberg_catalog.md) 和 [Hudi catalog](../using_starrocks/catalog/hudi_catalog.md)。
+- 支持创建 Iceberg Catalog 和 Hudi Catalog，创建后即可查询 Apache Iceberg 和 Apache Hudi 数据。相关文档，请参见 [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) 和 [Hudi catalog](../data_source/catalog/hudi_catalog.md)。
 
-- 支持查询 CSV 格式 Apache Hive™ 表中的 ARRAY 列。相关文档，请参见[外部表](../using_starrocks/External_table.md#创建-hive-外表)。
+- 支持查询 CSV 格式 Apache Hive™ 表中的 ARRAY 列。相关文档，请参见[外部表](../data_source/External_table.md#创建-hive-外表)。
 
 - 支持通过 DESC 语句查看外部数据的表结构。相关文档，请参见 [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md)。
 
@@ -56,7 +56,7 @@
 
 - 函数相关：
   - 支持在一条 SELECT 语句中使用多个 COUNT(DISTINCT)。相关文档，请参见[count](../sql-reference/sql-functions/aggregate-functions/count.md)。
-  - 窗口函数 min 和 max 支持滑动窗口。相关文档，请参见[窗口函数](../using_starrocks/Window_function.md#使用-MAX()-窗口函数)。
+  - 窗口函数 min 和 max 支持滑动窗口。相关文档，请参见[窗口函数](../sql-reference/sql-functions/Window_function.md#使用-MAX()-窗口函数)。
   - 优化函数 window_funnel 性能。相关文档，请参见[window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)。
 
 ### 问题修复

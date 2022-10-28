@@ -36,11 +36,11 @@
 + 查询数据源
   + Catalog
     + [概述](/data_source/catalog/catalog_overview.md)
-    + [Default catalog](/using_starrocks/catalog/default_catalog.md)
-    + [Hive catalog](/using_starrocks/catalog/hive_catalog.md)
-    + [Iceberg catalog](/using_starrocks/catalog/iceberg_catalog.md)
-    + [Hudi catalog](/using_starrocks/catalog/hudi_catalog.md)
-    + [查询外部数据](/using_starrocks/catalog/query_external_data.md)
+    + [Default catalog](/data_source/catalog/default_catalog.md)
+    + [Hive catalog](/data_source/catalog/hive_catalog.md)
+    + [Iceberg catalog](/data_source/catalog/iceberg_catalog.md)
+    + [Hudi catalog](/data_source/catalog/hudi_catalog.md)
+    + [查询外部数据](/data_source/catalog/query_external_data.md)
   + [外部表](/data_source/External_table.md)
 + 查询加速
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)

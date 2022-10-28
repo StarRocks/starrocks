@@ -119,7 +119,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。<br>建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。<br>如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br>说明：这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。 |
 | timeout          | 否           | 用于导入作业的超时时间。单位：秒。取值范围：1 ~ 259200。默认值：`600`。<br>说明：除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](/administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
 | strict_mode      | 否           | 用于指定是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。 |
-| timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br>该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/using_starrocks/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](/using_starrocks/timezone.md)”中所述的会话级时区。 |
+| timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br>该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/administration/timezone.md。导入参数 `timezone` 设置的时区对应“[设置时区](/administration/timezone.md)”中所述的会话级时区。 |
 | load_mem_limit   | 否           | 导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。 |
 
 ## 列映射

@@ -5,7 +5,7 @@
 该语句用于更新缓存在 StarRocks 中的 Apache Hive™ 和 Apache Hudi 元数据，其主要有以下两个使用场景：
 
 - **外部表**：使用 Hive 外部表和 Hudi 外部表查询 Hive 和 Hudi 数据时， 可使用该语句更新缓存的 Hive 和 Hudi 元数据。
-- **External catalog**：使用 [Hive catalog](/using_starrocks/catalog/hive_catalog.md) 和 [Hudi catalog](/using_starrocks/catalog/hudi_catalog.md) 查询 Hive 和 Hudi 数据时，可使用该语句更新缓存的 Hive 和 Hudi 元数据。
+- **External catalog**：使用 [Hive catalog](/data_source/catalog/hive_catalog.md) 和 [Hudi catalog](/data_source/catalog/hudi_catalog.md) 查询 Hive 和 Hudi 数据时，可使用该语句更新缓存的 Hive 和 Hudi 元数据。
 
 ## 基本概念
 
