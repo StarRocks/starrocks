@@ -102,10 +102,6 @@ public class CompactionScheduler extends Daemon {
         return finishedWaiting;
     }
 
-    private boolean isVerboseLogEnabled() {
-        return Config.lake_verbose_compaction_log || LOG.isDebugEnabled();
-    }
-
     private void schedule() {
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionContext>> iterator = runningCompactions.entrySet().iterator();
@@ -128,8 +124,8 @@ public class CompactionScheduler extends Daemon {
             if (context.transactionHasCommitted() && context.waitTransactionVisible(100, TimeUnit.MILLISECONDS)) {
                 context.setCommitTs(System.currentTimeMillis());
                 iterator.remove();
-                if (isVerboseLogEnabled()) {
-                    LOG.info("Removed published compaction. {} cost={}ms running={}", context.getDebugString(),
+                if (LOG.isDebugEnabled()) {
+                    LOG.debug("Removed published compaction. {} cost={}ms running={}", context.getDebugString(),
                             (context.getCommitTs() - context.getStartTs()), runningCompactions.size());
                 }
                 compactionManager.enableCompactionAfter(partition, MIN_COMPACTION_INTERVAL_MS_ON_SUCCESS);
@@ -153,8 +149,8 @@ public class CompactionScheduler extends Daemon {
             }
             numRunningTasks += context.getNumCompactionTasks();
             runningCompactions.put(partition, context);
-            if (isVerboseLogEnabled()) {
-                LOG.info("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("Created new compaction job. partition={} txnId={}", partition, context.getTxnId());
             }
         }
     }
@@ -341,8 +337,8 @@ public class CompactionScheduler extends Daemon {
         if (db == null) {
             throw new MetaNotFoundException("database not exist");
         }
-        if (isVerboseLogEnabled()) {
-            LOG.info("Committing compaction transaction. partition={} txnId={}", partition, context.getTxnId());
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Committing compaction transaction. partition={} txnId={}", partition, context.getTxnId());
         }
 
         VisibleStateWaiter waiter;
@@ -354,7 +350,7 @@ public class CompactionScheduler extends Daemon {
         }
         context.setVisibleStateWaiter(waiter);
         context.setCommitTs(System.currentTimeMillis());
-        if (isVerboseLogEnabled()) {
+        if (LOG.isDebugEnabled()) {
             long numInputBytes = 0;
             long numInputRows = 0;
             long numOutputBytes = 0;
@@ -366,7 +362,7 @@ public class CompactionScheduler extends Daemon {
                 numOutputBytes += response.numOutputBytes;
                 numOutputRows += response.numOutputRows;
             }
-            LOG.info("Committed compaction. {} inputBytes={} inputRows={} outputBytes={} outputRows={} time={}",
+            LOG.debug("Committed compaction. {} inputBytes={} inputRows={} outputBytes={} outputRows={} time={}",
                     context.getDebugString(),
                     numInputBytes,
                     numInputRows,
