@@ -13,7 +13,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.external.PartitionUtil;
 import com.starrocks.external.RemoteFileDesc;
 import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.external.RemoteFileOperations;
@@ -21,7 +20,6 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -41,6 +39,7 @@ import java.util.stream.Collectors;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkState;
 import static com.google.common.collect.Maps.immutableEntry;
+import static com.starrocks.external.PartitionUtil.toHivePartitionName;
 import static java.lang.Double.NEGATIVE_INFINITY;
 import static java.lang.Double.POSITIVE_INFINITY;
 import static java.lang.Double.isFinite;
@@ -75,7 +74,7 @@ public class HiveStatisticsProvider {
                 .peek(partitionKey -> checkState(partitionKey.getKeys().size() == partitionColumnNames.size(),
                         "columns size is " + partitionColumnNames.size() +
                                 " but values size is " + partitionKey.getKeys().size()))
-                .map(partitionKey -> FileUtils.makePartName(partitionColumnNames, PartitionUtil.fromPartitionKey(partitionKey)))
+                .map(partitionKey -> toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
 
         List<String> sampledPartitionNames = getPartitionsSample(partitionNames, sampleSize);
@@ -229,7 +228,7 @@ public class HiveStatisticsProvider {
 
         double estimatedNullsCount = partitionKeys.stream()
                 .filter(partitionKey -> partitionKey.getKeys().get(index).isNullable())
-                .map(partitionKey -> FileUtils.makePartName(partitionColumnNames, PartitionUtil.fromPartitionKey(partitionKey)))
+                .map(partitionKey -> toHivePartitionName(partitionColumnNames, partitionKey))
                 .mapToDouble(partitionName -> getPartitionRowCount(partitionName, statistics).orElse(avgNumPerPartition))
                 .sum();
 
