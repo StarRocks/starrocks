@@ -3,6 +3,9 @@ name: Trigger Jobs
 on:
   pull_request_target:
     types: [synchronize, labeled, reopened]
+    paths:
+      - 'fe/**'
+      - 'be/**'
 
 jobs:
   Trigger-Admit-Test:
