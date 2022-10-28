@@ -16,6 +16,13 @@ public class ComputeNodeTest {
         ComputeNode node = new ComputeNode();
         boolean needSync = node.handleHbResponse(hbResponse, false);
         Assert.assertTrue(needSync);
+
+        hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.ALIVE;
+        node.handleHbResponse(hbResponse, true);
+        Assert.assertTrue(node.isAlive());
+        hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.NOT_ALIVE;
+        node.handleHbResponse(hbResponse, true);
+        Assert.assertFalse(node.isAlive());
     }
 
     @Test
