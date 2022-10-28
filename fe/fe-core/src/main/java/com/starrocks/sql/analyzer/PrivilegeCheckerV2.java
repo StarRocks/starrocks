@@ -9,11 +9,14 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeTypes;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
@@ -162,6 +165,33 @@ public class PrivilegeCheckerV2 {
             PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
             if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        // ---------------------------------------- External Resource Statement---------------------------------------------
+        @Override
+        public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeTypes.SystemActions.CREATE_RESOURCE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE_RESOURCE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropResourceStatement(DropResourceStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkResourceAction(
+                    context, statement.getResourceName(), PrivilegeTypes.ResourceActions.DROP)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitAlterResourceStatement(AlterResourceStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkResourceAction(
+                    context, statement.getResourceName(), PrivilegeTypes.ResourceActions.ALTER)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
             }
             return null;
         }

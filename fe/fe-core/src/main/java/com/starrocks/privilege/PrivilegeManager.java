@@ -245,6 +245,7 @@ public class PrivilegeManager {
                 break;
             case USER:
             case DATABASE:
+            case RESOURCE:
                 objects.add(provider.generateObject(
                         type.name(),
                         Arrays.asList(type.getPlural()),
@@ -616,6 +617,17 @@ public class PrivilegeManager {
         }
     }
 
+    public static boolean checkResourceAction(ConnectContext context, String name, PrivilegeTypes.ResourceActions action) {
+        PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
+        try {
+            PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
+            return manager.checkResourceAction(collection, name, action);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check action[{}] on resource {}", action, name, e);
+            return false;
+        }
+    }
+
     /**
      * show databases; use database
      */
@@ -685,6 +697,15 @@ public class PrivilegeManager {
         PEntryObject object = provider.generateObject(
                 PrivilegeTypes.DATABASE.name(), Arrays.asList(db), globalStateMgr);
         return provider.check(dbTypeId, want, object, collection);
+    }
+
+    protected boolean checkResourceAction(PrivilegeCollection collection, String name, PrivilegeTypes.ResourceActions action)
+            throws PrivilegeException {
+        short typeId = typeStringToId.getOrDefault(PrivilegeTypes.RESOURCE.name(), (short) -1);
+        Action want = typeToActionMap.get(typeId).get(action.name());
+        PEntryObject object = provider.generateObject(
+                PrivilegeTypes.RESOURCE.name(), Arrays.asList(name), globalStateMgr);
+        return provider.check(typeId, want, object, collection);
     }
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {

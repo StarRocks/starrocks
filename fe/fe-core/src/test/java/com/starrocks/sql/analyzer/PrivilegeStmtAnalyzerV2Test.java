@@ -404,4 +404,16 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
         }
     }
+
+    @Test
+    public void testResourceException() throws Exception {
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on resource 'not_exists' to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("cannot find resource: not_exists"));
+        }
+    }
 }

@@ -10,7 +10,8 @@ public enum PrivilegeTypes {
     TABLE(TableActions.values(), "TABLES"),
     DATABASE(DbActions.values(), "DATABASES"),
     SYSTEM(SystemActions.values(), null),
-    USER(UserActions.values(), "USERS");
+    USER(UserActions.values(), "USERS"),
+    RESOURCE(ResourceActions.values(), "RESOURCES");
 
     private final List<String> validActions;
 
@@ -48,10 +49,17 @@ public enum PrivilegeTypes {
 
     public enum SystemActions {
         GRANT,
-        NODE  // AND MORE...
+        NODE,
+        CREATE_RESOURCE// AND MORE...
     }
 
     public enum UserActions {
         IMPERSONATE
+    }
+
+    public enum ResourceActions {
+        USAGE,
+        ALTER,
+        DROP
     }
 }
