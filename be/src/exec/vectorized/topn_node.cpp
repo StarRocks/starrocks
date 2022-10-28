@@ -44,6 +44,8 @@ Status TopNNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.sort_node.__isset.analytic_partition_exprs) {
         RETURN_IF_ERROR(
                 Expr::create_expr_trees(_pool, tnode.sort_node.analytic_partition_exprs, &_analytic_partition_exprs));
+        RETURN_IF_ERROR(Expr::prepare(_analytic_partition_exprs, runtime_state()));
+        RETURN_IF_ERROR(Expr::open(_analytic_partition_exprs, runtime_state()));
         for (auto& expr : _analytic_partition_exprs) {
             auto& type_desc = expr->root()->type();
             if (!type_desc.support_groupby()) {

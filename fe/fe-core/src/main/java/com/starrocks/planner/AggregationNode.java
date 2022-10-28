@@ -68,6 +68,8 @@ public class AggregationNode extends PlanNode {
 
     private String streamingPreaggregationMode = "auto";
 
+    private boolean useSortAgg = false;
+    
     private boolean withLocalShuffle = false;
 
     /**
@@ -124,6 +126,10 @@ public class AggregationNode extends PlanNode {
         this.streamingPreaggregationMode = mode;
     }
 
+    public void setUseSortAgg(boolean useSortAgg) {
+        this.useSortAgg = useSortAgg;
+    }
+
     @Override
     public void computeStats(Analyzer analyzer) {
     }
@@ -176,6 +182,7 @@ public class AggregationNode extends PlanNode {
         if (sqlAggFuncBuilder.length() > 0) {
             msg.agg_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());
         }
+        msg.agg_node.setUse_sort_agg(useSortAgg);
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
@@ -244,6 +251,9 @@ public class AggregationNode extends PlanNode {
 
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
+        }
+        if (useSortAgg) {
+            output.append(detailPrefix).append("sorted streaming: true\n");
         }
 
         if (withLocalShuffle) {

@@ -127,6 +127,8 @@ public class OlapScanNode extends ScanNode {
     private ArrayList<Long> scanTabletIds = Lists.newArrayList();
     private boolean isFinalized = false;
 
+    private boolean isSortedByKeyPerTablet = false;
+
     private final HashSet<Long> scanBackendIds = new HashSet<>();
 
     private Map<Long, Integer> tabletId2BucketSeq = Maps.newHashMap();
@@ -153,6 +155,10 @@ public class OlapScanNode extends ScanNode {
     }
 
     public void setCanTurnOnPreAggr(boolean canChangePreAggr) {
+    }
+
+    public void setIsSortedByKeyPerTablet(boolean isSortedByKeyPerTablet) {
+        this.isSortedByKeyPerTablet = isSortedByKeyPerTablet;
     }
 
     public Collection<Long> getSelectedPartitionIds() {
@@ -643,6 +649,7 @@ public class OlapScanNode extends ScanNode {
             if (!olapTable.hasDelete()) {
                 msg.olap_scan_node.setUnused_output_column_name(unUsedOutputStringColumns);
             }
+            msg.olap_scan_node.setSorted_by_keys_per_tablet(isSortedByKeyPerTablet);
         }
     }
 

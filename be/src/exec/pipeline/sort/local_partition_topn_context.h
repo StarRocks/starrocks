@@ -72,7 +72,7 @@ private:
 
     // Every partition holds a chunks_sorter
     vectorized::ChunksSorters _chunks_sorters;
-    SortExecExprs _sort_exec_exprs;
+    SortExecExprs& _sort_exec_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     const std::string _sort_keys;
@@ -108,7 +108,7 @@ private:
     const std::vector<TExpr>& _t_partition_exprs;
 
     vectorized::ChunksSorters _chunks_sorters;
-    SortExecExprs _sort_exec_exprs;
+    SortExecExprs& _sort_exec_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     const std::string _sort_keys;
