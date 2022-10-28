@@ -65,7 +65,7 @@ enum TPlanNodeType {
   LAKE_SCAN_NODE,
   NESTLOOP_JOIN_NODE,
   
-  BINLOG_SOURCE_NODE,
+  STREAM_SCAN_NODE,
   STREAM_JOIN_NODE,
   STREAM_AGG_NODE,
 }
@@ -904,7 +904,7 @@ struct TConnectorScanNode {
 }
 
 // TODO
-struct TBinlogSourceNode {
+struct TStreamScanNode {
 }
 
 struct TStreamJoinNode {
@@ -931,15 +931,7 @@ struct TStreamAggregationNode {
   1: optional list<Exprs.TExpr> grouping_exprs
   // aggregate exprs. The root of each expr is the aggregate function. The
   // other exprs are the inputs to the aggregate function.
-  2: required list<Exprs.TExpr> aggregate_functions
-
-  // Tuple id used for intermediate aggregations (with slots of agg intermediate types)
-  3: required Types.TTupleId intermediate_tuple_id
-
-  // Tupld id used for the aggregation output (with slots of agg output types)
-  // Equal to intermediate_tuple_id if intermediate type == output type for all
-  // aggregate functions.
-  4: required Types.TTupleId output_tuple_id
+  2: optional list<Exprs.TExpr> aggregate_functions
 
   // IMT info
   // 10: optional Descriptors.TIMTDescriptor detail_imt
@@ -1024,7 +1016,7 @@ struct TPlanNode {
 
   // 70 ~ 80 are reserved for stream operators
   // Stream plan
-  70: optional TBinlogSourceNode binlog_source_node;
+  70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
 }

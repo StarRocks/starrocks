@@ -287,6 +287,11 @@ public class Optimizer {
             context.getRuleSet().addAutoJoinImplementationRule();
         }
 
+        // add realtime mv rules
+        if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
+            context.getRuleSet().addRealtimeMVRules();
+        }
+
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }

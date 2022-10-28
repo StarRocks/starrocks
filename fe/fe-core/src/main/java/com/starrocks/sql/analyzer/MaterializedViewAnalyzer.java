@@ -232,6 +232,7 @@ public class MaterializedViewAnalyzer {
                         new ColumnRefSet(logicalPlan.getOutputColumn()),
                         columnRefFactory);
 
+                // TODO: refine rules for mv plan
                 // TODO: infer key property
                 // TODO: infer retraction op
                 // TODO: infer state

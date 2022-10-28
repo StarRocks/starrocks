@@ -353,7 +353,7 @@ public class RuleSet {
         return REWRITE_RULES.get(type);
     }
 
-    public void addMVRules() {
+    public void addRealtimeMVRules() {
         this.implementRules.add(StreamJoinImplementationRule.getInstance());
         this.implementRules.add(StreamAggregateImplementationRule.getInstance());
     }

@@ -68,8 +68,8 @@ public class StreamAggNode extends PlanNode {
 
         List<TExpr> aggregateFunctions =
                 aggInfo.getMaterializedAggregateExprs().stream().map(Expr::treeToThrift).collect(Collectors.toList());
-        msg.stream_agg_node = new TStreamAggregationNode(
-                aggregateFunctions, aggInfo.getIntermediateTupleId().asInt(), aggInfo.getOutputTupleId().asInt());
+        msg.stream_agg_node = new TStreamAggregationNode();
+        msg.stream_agg_node.setAggregate_functions(aggregateFunctions);
 
         // Aggregate expression
         String sqlAggFunctions =
