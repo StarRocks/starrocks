@@ -3,6 +3,8 @@ name: Trigger Jobs
 on:
   pull_request_target:
     types: [synchronize, labeled, reopened]
+    paths-ignore:
+      - 'docs/**'
 
 jobs:
   Trigger-Admit-Test:
