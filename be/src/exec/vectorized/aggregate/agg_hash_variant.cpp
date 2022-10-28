@@ -147,7 +147,7 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx8, SerializedKeyAggHashS
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx16, SerializedKeyAggHashSetFixedSize16<PhmapSeed2>);
 
 } // namespace detail
-void AggHashMapVariant::init(RuntimeState* state, Type type_) {
+void AggHashMapVariant::init(RuntimeState* state, Type type_, AggStatistics* agg_stat) {
     type = type_;
     switch (type_) {
 #define M(NAME)                                                                                                    \
@@ -184,7 +184,7 @@ void AggHashMapVariant::convert_to_two_level(RuntimeState* state) {
     CONVERT_TO_TWO_LEVEL_MAP(phase2_slice_two_level, phase2_slice);
 }
 
-void AggHashSetVariant::init(RuntimeState* state, Type type_) {
+void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg_stat) {
     type = type_;
     switch (type_) {
 #define M(NAME)                                                                                                    \

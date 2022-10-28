@@ -106,8 +106,6 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _intermediate_tuple_id = _tnode.agg_node.intermediate_tuple_id;
     _output_tuple_id = _tnode.agg_node.output_tuple_id;
 
-    _rows_returned_counter = ADD_COUNTER(_runtime_profile, "RowsReturned", TUnit::UNIT);
-
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.conjuncts, &_conjunct_ctxs));
     RETURN_IF_ERROR(Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &_group_by_expr_ctxs));
     // add profile attributes
@@ -260,22 +258,7 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
 
     _is_only_group_by_columns = _agg_expr_ctxs.empty() && !_group_by_expr_ctxs.empty();
 
-    _get_results_timer = ADD_TIMER(_runtime_profile, "GetResultsTime");
-    _iter_timer = ADD_TIMER(_runtime_profile, "ResultIteratorTime");
-    _agg_append_timer = ADD_TIMER(_runtime_profile, "ResultAggAppendTime");
-    _group_by_append_timer = ADD_TIMER(_runtime_profile, "ResultGroupByAppendTime");
-    //TODO: split agg_compute_timer to cunstruct_ht_time + agg_func_compute_time
-    _agg_compute_timer = ADD_TIMER(_runtime_profile, "AggComputeTime");
-    _streaming_timer = ADD_TIMER(_runtime_profile, "StreamingTime");
-    _expr_compute_timer = ADD_TIMER(_runtime_profile, "ExprComputeTime");
-    _expr_release_timer = ADD_TIMER(_runtime_profile, "ExprReleaseTime");
-
-    _input_row_count = ADD_COUNTER(_runtime_profile, "InputRowCount", TUnit::UNIT);
-    _hash_table_size = ADD_COUNTER(_runtime_profile, "HashTableSize", TUnit::UNIT);
-    _pass_through_row_count = ADD_COUNTER(_runtime_profile, "PassThroughRowCount", TUnit::UNIT);
-    _state_destroy_timer = ADD_TIMER(_runtime_profile, "StateDestroy");
-    _allocate_state_timer = ADD_TIMER(_runtime_profile, "StateAllocate");
-
+    _agg_stat = _pool->add(new AggStatistics(_runtime_profile));
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
     _intermediate_tuple_desc = state->desc_tbl().get_tuple_descriptor(_intermediate_tuple_id);
@@ -472,6 +455,7 @@ bool Aggregator::should_expand_preagg_hash_tables(size_t prev_row_returned, size
 }
 
 void Aggregator::compute_single_agg_state(size_t chunk_size) {
+    SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         if (!_is_merge_funcs[i] && !use_intermediate) {
@@ -486,6 +470,7 @@ void Aggregator::compute_single_agg_state(size_t chunk_size) {
 }
 
 void Aggregator::compute_batch_agg_states(size_t chunk_size) {
+    SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         if (!_is_merge_funcs[i] && !use_intermediate) {
@@ -500,6 +485,7 @@ void Aggregator::compute_batch_agg_states(size_t chunk_size) {
 }
 
 void Aggregator::compute_batch_agg_states_with_selection(size_t chunk_size) {
+    SCOPED_TIMER(_agg_stat->agg_function_compute_timer);
     bool use_intermediate = _use_intermediate_as_input();
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         if (!_is_merge_funcs[i] && !use_intermediate) {
@@ -528,6 +514,7 @@ Status Aggregator::_evaluate_const_columns(int i) {
 }
 
 void Aggregator::convert_to_chunk_no_groupby(vectorized::ChunkPtr* chunk) {
+    SCOPED_TIMER(_agg_stat->get_results_timer);
     // TODO(kks): we should approve memory allocate here
     vectorized::Columns agg_result_column = _create_agg_result_columns(1);
     auto use_intermediate = _use_intermediate_as_output();
@@ -564,7 +551,7 @@ void Aggregator::process_limit(vectorized::ChunkPtr* chunk) {
     if (_reached_limit()) {
         int64_t num_rows_over = _num_rows_returned - _limit;
         (*chunk)->set_num_rows((*chunk)->num_rows() - num_rows_over);
-        COUNTER_SET(_rows_returned_counter, _limit);
+        COUNTER_SET(_agg_stat->rows_returned_counter, _limit);
         _is_ht_eos = true;
         LOG(INFO) << "Aggregate Node ReachedLimit " << _limit;
     }
@@ -610,7 +597,7 @@ void Aggregator::output_chunk_by_streaming(vectorized::ChunkPtr* chunk) {
     _num_rows_returned += result_chunk->num_rows();
     _num_rows_processed += result_chunk->num_rows();
     *chunk = std::move(result_chunk);
-    COUNTER_SET(_pass_through_row_count, _num_pass_through_rows);
+    COUNTER_SET(_agg_stat->pass_through_row_count, _num_pass_through_rows);
 }
 
 void Aggregator::output_chunk_by_streaming_with_selection(vectorized::ChunkPtr* chunk) {
@@ -654,8 +641,6 @@ void Aggregator::try_convert_to_two_level_map() {
 void Aggregator::try_convert_to_two_level_set() {
     if (_mem_tracker->consumption() > two_level_memory_threshold) {
         _hash_set_variant.convert_to_two_level(_state);
-        // CONVERT_TO_TWO_LEVEL_SET(phase1_slice_two_level, phase1_slice);
-        // CONVERT_TO_TWO_LEVEL_SET(phase2_slice_two_level, phase2_slice);
     }
 }
 
@@ -667,8 +652,6 @@ Status Aggregator::check_has_error() {
     }
     return Status::OK();
 }
-
-#undef CONVERT_TO_TWO_LEVEL
 
 // When need finalize, create column by result type
 // otherwise, create column by serde type
@@ -751,7 +734,7 @@ vectorized::ChunkPtr Aggregator::_build_output_chunk(const vectorized::Columns& 
 }
 
 void Aggregator::_reset_exprs() {
-    SCOPED_TIMER(_expr_release_timer);
+    SCOPED_TIMER(_agg_stat->expr_release_timer);
     for (size_t i = 0; i < _group_by_columns.size(); i++) {
         _group_by_columns[i] = nullptr;
     }
@@ -766,7 +749,7 @@ void Aggregator::_reset_exprs() {
 }
 
 Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
-    SCOPED_TIMER(_expr_compute_timer);
+    SCOPED_TIMER(_agg_stat->expr_compute_timer);
     // Compute group by columns
     for (size_t i = 0; i < _group_by_expr_ctxs.size(); i++) {
         ASSIGN_OR_RETURN(_group_by_columns[i], _group_by_expr_ctxs[i]->evaluate(chunk));
@@ -945,7 +928,7 @@ void Aggregator::_init_agg_hash_variant(HashVariantType& hash_variant) {
     }
     VLOG_ROW << "hash type is "
              << static_cast<typename std::underlying_type<typename HashVariantType::Type>::type>(type);
-    hash_variant.init(_state, type);
+    hash_variant.init(_state, type, _agg_stat);
 
     hash_variant.visit([&](auto& variant) {
         if constexpr (vectorized::is_combined_fixed_size_key<std::decay_t<decltype(*variant)>>) {

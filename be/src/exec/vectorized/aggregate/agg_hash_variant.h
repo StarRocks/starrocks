@@ -11,6 +11,7 @@
 #include "column/hash_set.h"
 #include "exec/vectorized/aggregate/agg_hash_map.h"
 #include "exec/vectorized/aggregate/agg_hash_set.h"
+#include "exec/vectorized/aggregate/agg_profile.h"
 #include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
@@ -456,7 +457,7 @@ struct AggHashMapVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
     }
 
-    void init(RuntimeState* state, Type type_);
+    void init(RuntimeState* state, Type type_, AggStatistics* agg_statis);
 
     void convert_to_two_level(RuntimeState* state);
 
@@ -561,7 +562,6 @@ struct AggHashSetVariant {
         phase2_slice_fx16,
     };
 
-    Type type = Type::phase1_slice;
     detail::AggHashSetWithKeyPtr hash_set_with_key;
     auto& get_variant() { return hash_set_with_key; }
     template <class Vistor>
@@ -569,7 +569,7 @@ struct AggHashSetVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_set_with_key);
     }
 
-    void init(RuntimeState* state, Type type_);
+    void init(RuntimeState* state, Type type_, AggStatistics* agg_stat);
 
     void convert_to_two_level(RuntimeState* state);
 
@@ -600,6 +600,9 @@ struct AggHashSetVariant {
                    pool->total_allocated_bytes();
         });
     }
+
+private:
+    Type type = Type::phase1_slice;
 };
 
 } // namespace starrocks::vectorized
