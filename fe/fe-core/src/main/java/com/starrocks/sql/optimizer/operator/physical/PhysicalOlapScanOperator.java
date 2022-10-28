@@ -34,7 +34,7 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     private boolean isPreAggregation;
     private String turnOffReason;
-    protected boolean sortedResult = false;
+    protected boolean needSortedByKeyPerTablet = false;
 
     private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
     // For the simple predicate k1 = "olap", could apply global dict optimization,
@@ -121,12 +121,12 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
         return Utils.canDoReplicatedJoin((OlapTable) table, selectedIndexId, selectedPartitionId, selectedTabletId);
     }
 
-    public boolean isSortedResult() {
-        return sortedResult;
+    public boolean needSortedByKeyPerTablet() {
+        return needSortedByKeyPerTablet;
     }
 
-    public void setSortedResult(boolean sortedResult) {
-        this.sortedResult = sortedResult;
+    public void setNeedSortedByKeyPerTablet(boolean needSortedByKeyPerTablet) {
+        this.needSortedByKeyPerTablet = needSortedByKeyPerTablet;
     }
 
     @Override

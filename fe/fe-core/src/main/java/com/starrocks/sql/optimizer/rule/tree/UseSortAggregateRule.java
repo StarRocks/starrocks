@@ -81,7 +81,7 @@ public class UseSortAggregateRule extends OptExpressionVisitor<Void, Void> imple
 
         if (nonKeyGroupBys.isEmpty()) {
             agg.setUseSortAgg(true);
-            scan.setSortedResult(true);
+            scan.setNeedSortedByKeyPerTablet(true);
         }
 
         return null;
