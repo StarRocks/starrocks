@@ -31,13 +31,8 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     // HivePartitionKeys of each event to process. for unpartition table, the partition values are empty.
     protected List<HivePartitionName> hivePartitionNames = Lists.newArrayList();
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreTableEvent.java
     protected MetastoreTableEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
-=======
-    protected MetastoreTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
-        super(event, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreTableEvent.java
         Preconditions.checkNotNull(dbName, "Database name cannot be null");
         tblName = Preconditions.checkNotNull(event.getTableName());
 

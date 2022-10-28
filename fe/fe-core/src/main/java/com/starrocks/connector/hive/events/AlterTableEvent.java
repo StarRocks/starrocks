@@ -6,15 +6,9 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HivePartitionName;
 import com.starrocks.connector.hive.HiveTableName;
-=======
-import com.starrocks.external.hive.HiveMetastoreApiConverter;
-import com.starrocks.external.hive.HivePartitionName;
-import com.starrocks.external.hive.HiveTableName;
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -42,13 +36,8 @@ public class AlterTableEvent extends MetastoreTableEvent {
     // true if this alter event was due to a schema change operation
     protected boolean isSchemaChange = false;
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
     private AlterTableEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
-=======
-    private AlterTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
-        super(event, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
         Preconditions.checkArgument(MetastoreEventType.ALTER_TABLE.equals(getEventType()));
         JSONAlterTableMessage alterTableMessage =
                 (JSONAlterTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
@@ -70,14 +59,9 @@ public class AlterTableEvent extends MetastoreTableEvent {
                 || !hmsTbl.getTableName().equalsIgnoreCase(tableAfter.getTableName());
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new AlterTableEvent(event, cacheProcessor, catalogName));
-=======
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
-        return Lists.newArrayList(new AlterTableEvent(event, metaCache, catalogName));
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
     }
 
     private boolean isSchemaChange(List<FieldSchema> before, List<FieldSchema> after) {
@@ -132,15 +116,7 @@ public class AlterTableEvent extends MetastoreTableEvent {
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
             LOG.warn("Table [{}.{}.{}] doesn't exist in cache on event id: [{}]",
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
                     catalogName, getDbName(), getTblName(), getEventId());
-=======
-                    cache.getCatalogName(), getDbName(), getTblName(), getEventId());
->>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
-=======
-                    catalogName, getDbName(), getTblName(), getEventId());
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
             return;
         }
 
@@ -152,16 +128,10 @@ public class AlterTableEvent extends MetastoreTableEvent {
 
         try {
             HiveTable updatedTable = HiveMetastoreApiConverter.toHiveTable(tableAfter, catalogName);
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
             cache.refreshCacheByEvent(getEventType(), HiveTableName.of(dbName, tblName),
                     HivePartitionName.of(dbName, tblName, Lists.newArrayList()),
                     toHiveCommonStats(hmsTbl.getParameters()),
                     HiveMetastoreApiConverter.toPartition(hmsTbl.getSd(), hmsTbl.getParameters()), updatedTable);
-=======
-            cache.alterCacheByEvent(getEventType(), HiveTableName.of(dbName, tblName), updatedTable.isUnPartitioned() ?
-                            HivePartitionName.of(dbName, tblName, Lists.newArrayList()) : getHivePartitionKey(),
-                    tableAfter.getParameters(), tableAfter.getSd(), updatedTable);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

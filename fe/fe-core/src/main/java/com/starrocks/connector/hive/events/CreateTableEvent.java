@@ -16,7 +16,6 @@ import java.util.List;
 public class CreateTableEvent extends MetastoreTableEvent {
     public static final String CREATE_TABLE_EVENT_TYPE = "CREATE_TABLE";
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/CreateTableEvent.java
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new CreateTableEvent(event, cacheProcessor, catalogName));
@@ -26,15 +25,6 @@ public class CreateTableEvent extends MetastoreTableEvent {
                              CacheUpdateProcessor cacheProcessor, String catalogName)
             throws MetastoreNotificationException {
         super(event, cacheProcessor, catalogName);
-=======
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
-        return Lists.newArrayList(new CreateTableEvent(event, metaCache, catalogName));
-    }
-
-    private CreateTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName)
-            throws MetastoreNotificationException {
-        super(event, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/CreateTableEvent.java
         Preconditions.checkArgument(MetastoreEventType.CREATE_TABLE.equals(getEventType()));
         Preconditions.checkNotNull(MetastoreEventType.CREATE_TABLE, debugString("Event message is null"));
         CreateTableMessage createTableMessage =

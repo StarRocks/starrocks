@@ -21,24 +21,11 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
-=======
-import java.util.Optional;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
->>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
-=======
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
 import javax.annotation.Nullable;
 
 /**
@@ -80,7 +67,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     // when manually executing refresh operation. This lock needs to be acquired
     // when executing refresh table or refresh partition in HiveMetaCache
     private final ReadWriteLock eventProcessorLock = new ReentrantReadWriteLock();
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
 
     // resourcemapcatalog.dbName.tableName
     private final List<String> tables = Lists.newArrayList();
@@ -88,8 +74,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     private final ReadWriteLock tablesLock = new ReentrantReadWriteLock();
 
     HiveExternalTableCounter counter = new HiveExternalTableCounter();
-=======
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
 
     public MetastoreEventsProcessor() {
         super(MetastoreEventsProcessor.class.getName(), Config.hms_events_polling_interval_ms);
@@ -104,7 +88,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         cacheUpdateProcessors.remove(catalogName);
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
     public void registerTable(String catalogTableName) {
         tablesLock.writeLock().lock();
         try {
@@ -134,8 +117,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         }
     }
 
-=======
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
     /**
      * Gets metastore notification events from the given eventId. The returned list of
      * NotificationEvents are filtered using the NotificationFilter provided if it is not null.
@@ -158,14 +139,11 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
                                                      @Nullable final IMetaStoreClient.NotificationFilter filter) {
         LOG.info("Start to pull events on catalog [{}]", catalogName);
         CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
         if (updateProcessor == null) {
             LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
             return Collections.emptyList();
         }
 
-=======
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
         NotificationEventResponse response = updateProcessor.getNextEventResponse(catalogName, getAllEvents);
         if (response == null) {
             return Collections.emptyList();
@@ -228,13 +206,8 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
      * Process the given list of notification events. Useful for tests which provide a list of events
      */
     private void processEvents(List<NotificationEvent> events, String catalogName) {
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
         CacheUpdateProcessor cacheProcessor = cacheUpdateProcessors.get(catalogName);
         List<MetastoreEvent> filteredEvents = metastoreEventFactory.getFilteredEvents(events, cacheProcessor, catalogName);
-=======
-        CacheUpdateProcessor metaCache = cacheUpdateProcessors.get(catalogName);
-        List<MetastoreEvent> filteredEvents = metastoreEventFactory.getFilteredEvents(events, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
 
         if (filteredEvents.isEmpty()) {
             cacheProcessor.setLastSyncedEventId(events.get(events.size() - 1).getEventId());
@@ -271,11 +244,7 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
                                 "in the range of event id from {} to {}.", catalogName,
                         events.get(0).getEventId(), events.get(events.size() - 1).getEventId(), ex);
             } finally {
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
                 eventProcessorLock.writeLock().unlock();
-=======
-                eventProcessorLock.writeLock().lock();
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
             }
         }
     }
@@ -319,7 +288,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         return MESSAGE_DESERIALIZER;
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventsProcessor.java
     public HiveExternalTableCounter getCounter() {
         return counter;
     }
@@ -388,9 +356,4 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     public boolean isCachedCatalog(String catalogName) {
         return cacheUpdateProcessors.keySet().contains(catalogName);
     }
-=======
-    public ReadWriteLock getEventProcessorLock() {
-        return eventProcessorLock;
-    }
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventsProcessor.java
 }

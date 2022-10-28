@@ -6,6 +6,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
+import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -310,9 +312,5 @@ public class HiveMetaClient {
         } catch (Exception e) {
             throw new MetastoreNotificationFetchException("Failed to get next notification. msg: " + e.getMessage());
         }
-    }
-
-    public long getBaseHmsEventId() {
-        return baseHmsEventId;
     }
 }

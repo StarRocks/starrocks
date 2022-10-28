@@ -32,13 +32,8 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     private DropPartitionEvent(NotificationEvent event,
                                CacheUpdateProcessor cacheProcessor,
                                Map<String, String> droppedPartition,
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/DropPartitionEvent.java
                                String catalogName) {
         super(event, cacheProcessor, catalogName);
-=======
-                               List<Column> partCols, String catalogName) {
-        super(event, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/DropPartitionEvent.java
         Preconditions.checkState(getEventType().equals(DROP_PARTITION));
         Preconditions.checkNotNull(event.getMessage());
         DropPartitionMessage dropPartitionMessage =
@@ -61,13 +56,8 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/DropPartitionEvent.java
                                                     CacheUpdateProcessor cacheProcessor,
                                                     String catalogName) {
-=======
-                                                    CacheUpdateProcessor metaCache,
-                                                    List<Column> partCols, String catalogName) {
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/DropPartitionEvent.java
         DropPartitionMessage dropPartitionMessage =
                 MetastoreEventsProcessor.getMessageDeserializer()
                         .getDropPartitionMessage(event.getMessage());
@@ -75,11 +65,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
         try {
             List<Map<String, String>> droppedPartitions = dropPartitionMessage.getPartitions();
             droppedPartitions.forEach(part ->
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/DropPartitionEvent.java
                     dropPartitionEvents.add(new DropPartitionEvent(event, cacheProcessor, part, catalogName)));
-=======
-                    dropPartitionEvents.add(new DropPartitionEvent(event, metaCache, part, partCols, catalogName)));
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/DropPartitionEvent.java
         } catch (Exception e) {
             throw new MetastoreNotificationException(e);
         }
@@ -112,11 +98,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         try {
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/DropPartitionEvent.java
             cache.refreshCacheByEvent(DROP_PARTITION, null, getHivePartitionKey(),
-=======
-            cache.alterCacheByEvent(DROP_PARTITION, null, getHivePartitionKey(),
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/DropPartitionEvent.java
                     null, null, HiveMetastoreApiConverter.toHiveTable(hmsTbl, catalogName));
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",

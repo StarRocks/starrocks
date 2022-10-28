@@ -32,18 +32,12 @@ public class MetastoreEventFactory implements EventFactory {
      * It is convenient for creating batch tasks to parallel processing.
      */
     @Override
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventFactory.java
     public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor cacheProcessor,
                                     String catalogName) {
-=======
-    public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor metaCache,
-                                    HiveTable table, String catalogName) {
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventFactory.java
         Preconditions.checkNotNull(event.getEventType());
         MetastoreEventType metastoreEventType = MetastoreEventType.from(event.getEventType());
         switch (metastoreEventType) {
             case CREATE_TABLE:
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventFactory.java
                 return CreateTableEvent.getEvents(event, cacheProcessor, catalogName);
             case ALTER_TABLE:
                 return AlterTableEvent.getEvents(event, cacheProcessor, catalogName);
@@ -60,42 +54,13 @@ public class MetastoreEventFactory implements EventFactory {
             default:
                 // ignore all the unknown events by creating a IgnoredEvent
                 return Lists.newArrayList(new IgnoredEvent(event, cacheProcessor, catalogName));
-=======
-                return CreateTableEvent.getEvents(event, metaCache, catalogName);
-            case ALTER_TABLE:
-                return AlterTableEvent.getEvents(event, metaCache, catalogName);
-            case DROP_TABLE:
-                return DropTableEvent.getEvents(event, metaCache, catalogName);
-            case ADD_PARTITION:
-                return AddPartitionEvent.getEvents(event, metaCache, table.getPartitionColumns(), catalogName);
-            case ALTER_PARTITION:
-                return AlterPartitionEvent.getEvents(event, metaCache, catalogName);
-            case DROP_PARTITION:
-                return DropPartitionEvent.getEvents(event, metaCache, table.getPartitionColumns(), catalogName);
-            case INSERT:
-                return InsertEvent.getEvents(event, metaCache, catalogName);
-            default:
-                // ignore all the unknown events by creating a IgnoredEvent
-                return Lists.newArrayList(new IgnoredEvent(event, metaCache, catalogName));
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventFactory.java
         }
     }
 
     List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events,
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventFactory.java
                                            CacheUpdateProcessor cacheProcessor, String catalogName) {
         List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
 
-=======
-                                           CacheUpdateProcessor metaCache, String catalogName) {
-        List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
-
-        if (metaCache == null) {
-            LOG.error("Meta cache is null on catalog [{}]", catalogName);
-            return metastoreEvents;
-        }
-
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventFactory.java
         // Currently, the hive external table needs to be manually created in StarRocks to map with the hms table.
         // Therefore, it's necessary to filter the events pulled this time from the hms instance,
         // and the events of the tables that don't register in the fe MetastoreEventsProcessor need to be filtered out.
@@ -112,17 +77,7 @@ public class MetastoreEventFactory implements EventFactory {
                         catalogName, event.getDbName(), event.getTableName(), event);
                 continue;
             }
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventFactory.java
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventFactory.java
             metastoreEvents.addAll(get(event, cacheProcessor, catalogName));
-=======
-            metastoreEvents.addAll(
-                    get(event, metaCache, (HiveTable) (metaCache.getTable(event.getDbName(), event.getTableName()))));
->>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventFactory.java
-=======
-            metastoreEvents.addAll(get(event, metaCache,
-                    (HiveTable) (metaCache.getTable(event.getDbName(), event.getTableName())), catalogName));
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventFactory.java
         }
 
         List<MetastoreEvent> tobeProcessEvents = metastoreEvents.stream()

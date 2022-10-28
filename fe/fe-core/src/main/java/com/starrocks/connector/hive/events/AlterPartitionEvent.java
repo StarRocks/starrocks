@@ -33,13 +33,8 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     // the Partition object after alter operation, as parsed from the NotificationEvent
     private final Partition partitionAfter;
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterPartitionEvent.java
     private AlterPartitionEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
-=======
-    private AlterPartitionEvent(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
-        super(event, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterPartitionEvent.java
         Preconditions.checkState(getEventType() == ALTER_PARTITION);
         Preconditions.checkNotNull(event.getMessage());
         AlterPartitionMessage alterPartitionMessage =
@@ -62,14 +57,9 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
         }
     }
 
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterPartitionEvent.java
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new AlterPartitionEvent(event, cacheProcessor, catalogName));
-=======
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
-        return Lists.newArrayList(new AlterPartitionEvent(event, metaCache, catalogName));
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterPartitionEvent.java
     }
 
     @Override
@@ -116,16 +106,10 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
         }
 
         try {
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterPartitionEvent.java
             cache.refreshCacheByEvent(ALTER_PARTITION, HiveTableName.of(getDbName(), getTblName()),
                     getHivePartitionKey(), toHiveCommonStats(hmsTbl.getParameters()),
                     HiveMetastoreApiConverter.toPartition(hmsTbl.getSd(), hmsTbl.getParameters()),
                     HiveMetastoreApiConverter.toHiveTable(hmsTbl, catalogName));
-=======
-            HiveTable updatedTable = HiveMetastoreApiConverter.toHiveTable(hmsTbl, catalogName);
-            cache.alterCacheByEvent(ALTER_PARTITION, HiveTableName.of(getDbName(), getTblName()),
-                    getHivePartitionKey(), partitionAfter.getParameters(), partitionAfter.getSd(), updatedTable);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterPartitionEvent.java
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

@@ -4,10 +4,6 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AddPartitionEvent.java
-=======
-import com.starrocks.catalog.Column;
->>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AddPartitionEvent.java
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.common.FileUtils;
@@ -35,13 +31,8 @@ public class AddPartitionEvent extends MetastoreTableEvent {
     private AddPartitionEvent(NotificationEvent event,
                               CacheUpdateProcessor cacheProcessor,
                               Partition addedPartition,
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AddPartitionEvent.java
                               String catalogName) {
         super(event, cacheProcessor, catalogName);
-=======
-                              List<Column> partCols, String catalogName) {
-        super(event, metaCache, catalogName);
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AddPartitionEvent.java
         Preconditions.checkState(getEventType().equals(MetastoreEventType.ADD_PARTITION));
         if (event.getMessage() == null) {
             throw new IllegalStateException(debugString("Event message is null"));
@@ -65,24 +56,15 @@ public class AddPartitionEvent extends MetastoreTableEvent {
     }
 
     protected static List<MetastoreEvent> getEvents(NotificationEvent event,
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AddPartitionEvent.java
                                                     CacheUpdateProcessor cacheProcessor,
                                                     String catalogName) {
-=======
-                                                    CacheUpdateProcessor metaCache,
-                                                    List<Column> partCols, String catalogName) {
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AddPartitionEvent.java
         List<MetastoreEvent> addPartitionEvents = Lists.newArrayList();
         try {
             AddPartitionMessage addPartitionMessage =
                     MetastoreEventsProcessor.getMessageDeserializer()
                             .getAddPartitionMessage(event.getMessage());
             addPartitionMessage.getPartitionObjs().forEach(partition ->
-<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AddPartitionEvent.java
                     addPartitionEvents.add(new AddPartitionEvent(event, cacheProcessor, partition, catalogName)));
-=======
-                    addPartitionEvents.add(new AddPartitionEvent(event, metaCache, partition, partCols, catalogName)));
->>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AddPartitionEvent.java
         } catch (Exception ex) {
             throw new MetastoreNotificationException(ex);
         }
