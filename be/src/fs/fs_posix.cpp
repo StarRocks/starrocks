@@ -261,7 +261,9 @@ public:
     Status sync() override {
         if (_pending_sync) {
             _pending_sync = false;
-            RETURN_IF_ERROR(do_sync(_fd, _filename));
+            if (LIKELY(config::sync_tablet_data)) {
+                RETURN_IF_ERROR(do_sync(_fd, _filename));
+            }
         }
         return Status::OK();
     }

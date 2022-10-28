@@ -164,10 +164,12 @@ Status DataDir::get_shard(uint64_t* shard) {
     RETURN_IF_ERROR(_fs->create_dir_recursive(shard_path));
     if (sync_data_path) {
         std::string data_path = _path + DATA_PREFIX;
-        Status st = fs::sync_dir(data_path);
-        if (!st.ok()) {
-            LOG(WARNING) << "Fail to sync " << data_path << ": " << st.to_string();
-            return st;
+        if (LIKELY(config::sync_tablet_data)) {
+            Status st = fs::sync_dir(data_path);
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << data_path << ": " << st.to_string();
+                return st;
+            }
         }
     }
     *shard = next_shard;
