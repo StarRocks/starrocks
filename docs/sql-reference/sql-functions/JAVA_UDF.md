@@ -658,10 +658,10 @@ Execute the DROP FUNCTION statement to delete a UDF. For more information, see [
 
 ## Parameter settings
 
-Configure the following environment variable in the **be/conf/hadoop_env.sh** file of each Java virtual machine (JVM) in your cluster to control the usage of memory resources:
+Configure the following environment variable in the **be/conf/hadoop_env.sh** file of each Java virtual machine (JVM) in your cluster to control the usage of memory resources and set other parameters:
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+export LIBHDFS_OPTS="-Xms1024m -Xmx1024m -Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
 ```
 
 ## FAQ
