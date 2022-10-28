@@ -281,7 +281,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |hive_meta_cache_refresh_interval_s|7200|定时刷新 Hive 外表元数据缓存的周期，单位为秒。|
 |hive_meta_cache_ttl_s|86400|HIve 外表元数据缓存失效时间，单位为秒。|
 |hive_meta_store_timeout_s|10|连接 Hive Metastore 的超时时间。|
-|es_state_sync_interval_second|10|FE 获取 Elasticsearch Index 的时间，单位为秒。|
+|es_state_sync_interval_second|10|FE 周期性获取 Elasticsearch Index ，以及 StarRocks 外部表元信息周期性同步的时间间隔，单位为秒。|
 |enable_auth_check|TRUE|是否开启鉴权。|
 |auth_token|空字符串|为空则在 Leader FE 第一次启动时随机生成一个。|
 |enable_metric_calculator|TRUE|是否开启定期收集 metrics。|
