@@ -147,13 +147,14 @@ DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx8, SerializedKeyAggHashS
 DEFINE_SET_TYPE(AggHashSetVariant::Type::phase2_slice_fx16, SerializedKeyAggHashSetFixedSize16<PhmapSeed2>);
 
 } // namespace detail
-void AggHashMapVariant::init(RuntimeState* state, Type type_, AggStatistics* agg_stat) {
-    type = type_;
-    switch (type_) {
+void AggHashMapVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
+    _type = type;
+    _agg_stat = agg_stat;
+    switch (_type) {
 #define M(NAME)                                                                                                    \
     case Type::NAME:                                                                                               \
         hash_map_with_key = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::NAME>::HashMapWithKeyType>( \
-                state->chunk_size());                                                                              \
+                state->chunk_size(), _agg_stat);                                                                   \
         break;
         APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
@@ -161,9 +162,9 @@ void AggHashMapVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
 }
 
 #define CONVERT_TO_TWO_LEVEL_MAP(DST, SRC)                                                                            \
-    if (type == vectorized::AggHashMapVariant::Type::SRC) {                                                           \
+    if (_type == vectorized::AggHashMapVariant::Type::SRC) {                                                          \
         auto dst = std::make_unique<detail::AggHashMapVariantTypeTraits<Type::DST>::HashMapWithKeyType>(              \
-                state->chunk_size());                                                                                 \
+                state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
                 [&](auto& hash_map_with_key) {                                                                        \
                     if constexpr (std::is_same_v<typename decltype(hash_map_with_key->hash_map)::key_type,            \
@@ -174,7 +175,7 @@ void AggHashMapVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
                 },                                                                                                    \
                 hash_map_with_key);                                                                                   \
                                                                                                                       \
-        type = vectorized::AggHashMapVariant::Type::DST;                                                              \
+        _type = vectorized::AggHashMapVariant::Type::DST;                                                             \
         hash_map_with_key = std::move(dst);                                                                           \
         return;                                                                                                       \
     }

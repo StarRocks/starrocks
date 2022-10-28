@@ -457,7 +457,7 @@ struct AggHashMapVariant {
         return std::visit(std::forward<Vistor>(vistor), hash_map_with_key);
     }
 
-    void init(RuntimeState* state, Type type_, AggStatistics* agg_statis);
+    void init(RuntimeState* state, Type type, AggStatistics* agg_statis);
 
     void convert_to_two_level(RuntimeState* state);
 
@@ -486,7 +486,8 @@ struct AggHashMapVariant {
     }
 
 private:
-    Type type = Type::phase1_slice;
+    Type _type = Type::phase1_slice;
+    AggStatistics* _agg_stat = nullptr;
 };
 
 // 1) AggHashSetVariant is alike HashMapVariant, while a set only holds keys, no associated value.
@@ -603,6 +604,7 @@ struct AggHashSetVariant {
 
 private:
     Type type = Type::phase1_slice;
+    AggStatistics* _agg_stat = nullptr;
 };
 
 } // namespace starrocks::vectorized

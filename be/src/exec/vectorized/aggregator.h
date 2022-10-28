@@ -349,7 +349,8 @@ protected:
 
 public:
     template <typename HashMapWithKey>
-    void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool agg_group_by_with_limit = false) {
+    ATTRIBUTE_NOINLINE void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size,
+                                           bool agg_group_by_with_limit = false) {
         if (agg_group_by_with_limit) {
             if (hash_map_with_key.hash_map.size() >= _limit) {
                 build_hash_map_with_selection(hash_map_with_key, chunk_size);
@@ -363,23 +364,24 @@ public:
     }
 
     template <typename HashMapWithKey>
-    void build_hash_map_with_selection(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
+    ATTRIBUTE_NOINLINE void build_hash_map_with_selection(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
         hash_map_with_key.compute_agg_states(chunk_size, _group_by_columns, AllocateState<HashMapWithKey>(this),
                                              &_tmp_agg_states, &_streaming_selection);
     }
 
     template <typename HashSetWithKey>
-    void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size) {
+    ATTRIBUTE_NOINLINE void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size) {
         hash_set.build_set(chunk_size, _group_by_columns, _mem_pool.get());
     }
 
     template <typename HashSetWithKey>
-    void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
+    ATTRIBUTE_NOINLINE void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
         hash_set.build_set(chunk_size, _group_by_columns, &_streaming_selection);
     }
 
     template <typename HashMapWithKey>
-    void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+    ATTRIBUTE_NOINLINE void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
+                                                      vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_agg_stat->get_results_timer);
 
         auto it = std::any_cast<RawHashTableIterator>(_it_hash);
@@ -459,7 +461,8 @@ public:
     }
 
     template <typename HashSetWithKey>
-    void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
+    ATTRIBUTE_NOINLINE void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size,
+                                                      vectorized::ChunkPtr* chunk) {
         SCOPED_TIMER(_agg_stat->get_results_timer);
         using Iterator = typename HashSetWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
@@ -571,7 +574,7 @@ protected:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     template <typename HashMapWithKey>
-    void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
+    ATTRIBUTE_NOINLINE void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
         // If all function states are of POD type,
         // then we don't have to traverse the hash table to call destroy method.
         //

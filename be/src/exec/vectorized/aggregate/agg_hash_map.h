@@ -13,6 +13,7 @@
 #include "column/vectorized_fwd.h"
 #include "common/compiler_util.h"
 #include "exec/vectorized/aggregate/agg_hash_set.h"
+#include "exec/vectorized/aggregate/agg_profile.h"
 #include "gutil/casts.h"
 #include "gutil/strings/fastmem.h"
 #include "runtime/mem_pool.h"
@@ -92,8 +93,10 @@ static_assert(sizeof(AggDataPtr) == sizeof(size_t));
 
 template <typename HashMap>
 struct AggHashMapWithKey {
+    AggHashMapWithKey(int chunk_size, AggStatistics* agg_stat_) : agg_stat(agg_stat_) {}
     using HashMapType = HashMap;
     HashMap hash_map;
+    AggStatistics* agg_stat;
 };
 
 // ==============================================================
@@ -101,6 +104,7 @@ struct AggHashMapWithKey {
 // handle one number hash key
 template <PrimitiveType primitive_type, typename HashMap>
 struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
+    using Base = AggHashMapWithKey<HashMap>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ColumnType = RunTimeColumnType<primitive_type>;
@@ -109,7 +113,8 @@ struct AggHashMapWithOneNumberKey : public AggHashMapWithKey<HashMap> {
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
-    AggHashMapWithOneNumberKey(int32_t chunk_size) {}
+    template <class... Args>
+    AggHashMapWithOneNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
 
@@ -196,7 +201,8 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
 
     static_assert(sizeof(FieldType) <= sizeof(KeyType), "hash map key size needs to be larger than the actual element");
 
-    AggHashMapWithOneNullableNumberKey(int32_t chunk_size) : Base(chunk_size) {}
+    template <class... Args>
+    AggHashMapWithOneNullableNumberKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
@@ -317,11 +323,13 @@ struct AggHashMapWithOneNullableNumberKey : public AggHashMapWithOneNumberKey<pr
 
 template <typename HashMap>
 struct AggHashMapWithOneStringKey : public AggHashMapWithKey<HashMap> {
+    using Base = AggHashMapWithKey<HashMap>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
 
-    AggHashMapWithOneStringKey(int32_t chunk_size) {}
+    template <class... Args>
+    AggHashMapWithOneStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return nullptr; }
 
@@ -410,7 +418,8 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
 
-    AggHashMapWithOneNullableStringKey(int32_t chunk_size) : Base(chunk_size) {}
+    template <class... Args>
+    AggHashMapWithOneNullableStringKey(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     AggDataPtr get_null_key_data() { return null_key_data; }
 
@@ -534,12 +543,15 @@ struct AggHashMapWithOneNullableStringKey : public AggHashMapWithOneStringKey<Ha
 
 template <typename HashMap>
 struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
+    using Base = AggHashMapWithKey<HashMap>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using ResultVector = typename std::vector<Slice>;
 
-    AggHashMapWithSerializedKey(int32_t chunk_size)
-            : mem_pool(std::make_unique<MemPool>()),
+    template <class... Args>
+    AggHashMapWithSerializedKey(int chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...),
+              mem_pool(std::make_unique<MemPool>()),
               buffer(mem_pool->allocate(max_one_row_size * chunk_size)),
               _chunk_size(chunk_size) {}
 
@@ -650,6 +662,7 @@ struct AggHashMapWithSerializedKey : public AggHashMapWithKey<HashMap> {
 
 template <typename HashMap>
 struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> {
+    using Base = AggHashMapWithKey<HashMap>;
     using KeyType = typename HashMap::key_type;
     using Iterator = typename HashMap::iterator;
     using FixedSizeSliceKey = typename HashMap::key_type;
@@ -667,8 +680,11 @@ struct AggHashMapWithSerializedKeyFixedSize : public AggHashMapWithKey<HashMap> 
 
     std::vector<CacheEntry> caches;
 
-    AggHashMapWithSerializedKeyFixedSize(int32_t chunk_size)
-            : mem_pool(std::make_unique<MemPool>()), _chunk_size(chunk_size) {
+    template <class... Args>
+    AggHashMapWithSerializedKeyFixedSize(int chunk_size, Args&&... args)
+            : Base(chunk_size, std::forward<Args>(args)...),
+              mem_pool(std::make_unique<MemPool>()),
+              _chunk_size(chunk_size) {
         caches.reserve(chunk_size);
         uint8_t* buffer = reinterpret_cast<uint8_t*>(caches.data());
         memset(buffer, 0x0, max_fixed_size * _chunk_size);
