@@ -139,3 +139,15 @@ export LOG_DIR=/Users/smith/Code/starrocks/fe/log
 To standardize the coding style, you should import the `fe/starrocks_intellij_style.xml` code style file in IDEA.
 
 ![image-20220701193938856](../../assets/IDEA-2.png)
+
+## Attach debugger
+
+
+If you started the FE with the debug option, you can then attach the IDEA debugger to the FE process.
+
+
+```
+./start_fe.sh --debug
+```
+
+See https://www.jetbrains.com/help/idea/attaching-to-local-process.html#attach-to-local.
