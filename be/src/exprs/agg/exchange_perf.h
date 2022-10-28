@@ -4,8 +4,12 @@
 
 #include <fmt/format.h>
 
+#include "column/binary_column.h"
+#include "column/column.h"
+#include "column/fixed_length_column.h"
 #include "exprs/agg/aggregate.h"
 #include "gutil/casts.h"
+#include "udf/udf.h"
 #include "util/time.h"
 
 namespace starrocks::vectorized {

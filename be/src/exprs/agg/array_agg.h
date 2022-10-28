@@ -9,7 +9,6 @@
 #include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
-
 template <PrimitiveType PT, typename = guard::Guard>
 struct ArrayAggAggregateState {};
 
