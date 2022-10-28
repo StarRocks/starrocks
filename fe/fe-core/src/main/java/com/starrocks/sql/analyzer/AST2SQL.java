@@ -33,6 +33,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -528,7 +529,7 @@ public class AST2SQL {
                 sb.append("DISTINCT ");
             }
 
-            if (functionName.equalsIgnoreCase("TIME_SLICE")) {
+            if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE) || functionName.equalsIgnoreCase(FunctionSet.DATE_SLICE)) {
                 sb.append(visit(node.getChild(0))).append(", ");
                 sb.append("INTERVAL ");
                 sb.append(visit(node.getChild(1)));

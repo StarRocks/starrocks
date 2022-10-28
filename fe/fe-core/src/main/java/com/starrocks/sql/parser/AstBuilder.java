@@ -4200,7 +4200,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
         FunctionName fnName = FunctionName.createFnName(functionName);
-        if (functionName.equals(FunctionSet.TIME_SLICE)) {
+        if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
                 Expr e2 = (Expr) visit(context.expression(1));

@@ -697,14 +697,14 @@ public class ExpressionAnalyzer {
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 if (!(node.getChild(1) instanceof IntLiteral)) {
                     throw new SemanticException(
-                            FunctionSet.TIME_SLICE + " requires second parameter must be a constant interval");
+                            fnName + " requires second parameter must be a constant interval");
                 }
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(
-                            FunctionSet.TIME_SLICE + " requires second parameter must be greater than 0");
+                            fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
