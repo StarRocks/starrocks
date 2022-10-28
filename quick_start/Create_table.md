@@ -45,24 +45,35 @@ StarRocks 支持 [多种数据模型](../table_design/Data_model.md)，以适用
 
 ```sql
 use example_db;
-CREATE TABLE IF NOT EXISTS detailDemo (
-    recruit_date  DATE           NOT NULL COMMENT "YYYY-MM-DD",
-    region_num    TINYINT        COMMENT "range [-128, 127]",
-    num_plate     SMALLINT       COMMENT "range [-32768, 32767] ",
-    tel           INT            COMMENT "range [-2147483648, 2147483647]",
-    id            BIGINT         COMMENT "range [-2^63 + 1 ~ 2^63 - 1]",
-    password      LARGEINT       COMMENT "range [-2^127 + 1 ~ 2^127 - 1]",
-    name          CHAR(20)       NOT NULL COMMENT "range char(m),m in (1-255) ",
-    profile       VARCHAR(500)   NOT NULL COMMENT "upper limit value 65533 bytes",
-    hobby         STRING         NOT NULL COMMENT "upper limit value 65533 bytes",
-    leave_time    DATETIME       COMMENT "YYYY-MM-DD HH:MM:SS",
-    channel       FLOAT          COMMENT "4 bytes",
-    income        DOUBLE         COMMENT "8 bytes",
-    account       DECIMAL(12,4)  COMMENT "",
-    ispass        BOOLEAN        COMMENT "true/false"
+CREATE TABLE IF NOT EXISTS `detailDemo` (
+    `recruit_date`  DATE           NOT NULL COMMENT "YYYY-MM-DD",
+    `region_num`    TINYINT        COMMENT "range [-128, 127]",
+    `num_plate`     SMALLINT       COMMENT "range [-32768, 32767] ",
+    `tel`           INT            COMMENT "range [-2147483648, 2147483647]",
+    `id`            BIGINT         COMMENT "range [-2^63 + 1 ~ 2^63 - 1]",
+    `password`      LARGEINT       COMMENT "range [-2^127 + 1 ~ 2^127 - 1]",
+    `name`          CHAR(20)       NOT NULL COMMENT "range char(m),m in (1-255)",
+    `profile`       VARCHAR(500)   NOT NULL COMMENT "upper limit value 1048576 bytes",
+    `hobby`         STRING         NOT NULL COMMENT "upper limit value 65533 bytes",
+    `leave_time`    DATETIME       COMMENT "YYYY-MM-DD HH:MM:SS",
+    `channel`       FLOAT          COMMENT "4 bytes",
+    `income`        DOUBLE         COMMENT "8 bytes",
+    `account`       DECIMAL(12,4)  COMMENT "",
+    `ispass`        BOOLEAN        COMMENT "true/false"
 ) ENGINE=OLAP
-DUPLICATE KEY(recruit_date, region_num)
-DISTRIBUTED BY HASH(recruit_date, region_num) BUCKETS 8;
+DUPLICATE KEY(`recruit_date`, `region_num`)
+PARTITION BY RANGE(`recruit_date`)
+(
+    PARTITION p20220311 VALUES [('2022-03-11'), ('2022-03-12')),
+    PARTITION p20220312 VALUES [('2022-03-12'), ('2022-03-13')),
+    PARTITION p20220313 VALUES [('2022-03-13'), ('2022-03-14')),
+    PARTITION p20220314 VALUES [('2022-03-14'), ('2022-03-15')),
+    PARTITION p20220315 VALUES [('2022-03-15'), ('2022-03-16'))
+)
+DISTRIBUTED BY HASH(`recruit_date`, `region_num`) BUCKETS 8
+PROPERTIES (
+    "replication_num" = "1" 
+);
 ```
 
 > 注意
