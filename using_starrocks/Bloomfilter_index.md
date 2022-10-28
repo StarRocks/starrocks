@@ -1,65 +1,69 @@
-# Bloomfilter 索引
+# Bloom filter 索引
 
-## 原理
+本文介绍了 bloom filter（布隆过滤器）索引的原理，以及如何创建和修改 bloom filter 索引。
 
-### **1 什么是 Bloom Filter**
+Bloom filter 索引可以快速判断表的数据文件中是否可能包含要查询的数据，如果不包含就跳过，从而减少扫描的数据量。Bloom filter 索引空间效率高，适用于基数较高的列，如 ID 列。如果一个查询条件命中前缀索引列，StarRocks 会使用[前缀索引](../table_design/Sort_key.md)快速返回查询结果。但是前缀索引的长度有限，如果想要快速查询一个非前缀索引列且该列基数较高，即可为这个列创建 bloom filter 索引。
 
-Bloom Filter（布隆过滤器）是用于判断某个元素是否在一个集合中的数据结构，优点是空间效率和时间效率都比较高，缺点是有一定的误判率。
+## 索引原理
 
-![bloomfilter](../assets/3.7.1.png)
+例如，在表 `table1` 的 `column1` 列上创建 bloom filter 索引，然后执行一个 SQL 查询 `Select xxx from table1 where column1 = something;` 命中索引，那么在扫描表的数据文件时会出现两种情况：
 
-布隆过滤器是由一个Bit数组和n个哈希函数构成。Bit数组初始全部为0，当插入一个元素时，n个Hash函数对元素进行计算，得到n个slot，然后将Bit数组中n个slot的Bit置1。
+- 如果 bloom filter 索引判断一个数据文件中不存在目标数据，那 StarRocks 会跳过该文件，从而提高查询效率。
+- 如果 bloom filter 索引判断一个数据文件中可能存在目标数据，那 StarRocks 会读取该文件确认目标数据是否存在。注意，这里仅仅是判断该文件中可能包含目标数据。Bloom filter 索引有一定的误判率，也称为假阳性概率 (False Positive Probability)，即判断某行中包含目标数据，而实际上该行并不包含目标数据的概率。
 
-当我们要判断一个元素是否在集合中时，还是通过相同的n个Hash函数计算Hash值，如果所有Hash值在布隆过滤器里对应的Bit不全为1，则该元素不存在。当对应Bit全1时，则元素的存在与否，无法确定.  这是因为布隆过滤器的位数有限，由该元素计算出的slot，恰好全部和其他元素的slot冲突.  所以全1情形，需要回源查找才能判断元素的存在性。
+## 使用说明
 
-### **2 什么是 Bloom Filter 索引**
+- 主键模型和明细模型中所有列都可以创建 bloom filter 索引；聚合模型和更新模型中，只有维度列（即 Key 列）支持创建 bloom filter 索引。
+- 不支持为 TINYINT、FLOAT、DOUBLE 和 DECIMAL 类型的列创建 bloom filter 索引。
+- Bloom filter 索引只能提高包含 `in` 和 `=` 过滤条件的查询效率，例如 `Select xxx from table where xxx in ()` 和 `Select xxx from table where column = xxx`。
+- 如要了解一个查询是否命中了 bloom filter 索引，可查看该查询的 Profile 中的 `BloomFilterFilterRows` 字段。关于如何查看 Profile，参见[分析查询](../administration/Query_planning.md#查看分析-profile)。
 
-StarRocks的建表时，可通过PROPERTIES{"bloom\_filter\_columns"="c1,c2,c3"}指定需要建BloomFilter索引的列，查询时，BloomFilter可快速判断某个列中是否存在某个值。如果Bloom Filter判定该列中不存在指定的值，就不需要读取数据文件；如果是全1情形，此时需要读取数据块确认目标值是否存在。另外，Bloom Filter索引无法确定具体是哪一行数据具有该指定的值。
+## 创建索引
 
-## 适用场景
+建表时，通过在 `PROPERTIES` 中指定 `bloom_filter_columns` 来创建索引。例如，如下语句为表 `table1` 的 `k1` 和 `k2` 列创建 bloom filter 索引。
 
-满足以下几个条件时可以考虑对某列建立Bloom Filter 索引：
+```SQL
+CREATE TABLE table1
+(
+    k1 BIGINT,
+    k2 LARGEINT,
+    v1 VARCHAR(2048) REPLACE,
+    v2 SMALLINT DEFAULT "10"
+)
+ENGINE = olap
+PRIMARY KEY(k1, k2)
+DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+PROPERTIES("bloom_filter_columns" = "k1,k2");
+```
 
-1. 首先BloomFilter也适用于非前缀过滤。
-2. 查询会根据该列高频过滤，而且查询条件大多是in和=。
-3. 不同于Bitmap，BloomFilter适用于高基数列。
+您可以同时创建多个索引，多个索引列之间需用逗号 (`,`) 隔开。关于建表的其他参数说明，请参见 [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md)。
 
-## 如何使用
+## 查看索引
 
-### **1 创建索引**
+例如，查看表 `table1` 的索引。有关返回值说明，请参见 [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md)。
 
-建表时使用指定bloom\_filter\_columns即可：
+```SQL
+SHOW CREATE TABLE table1;
+```
 
-~~~ SQL
-PROPERTIES ( "bloom_filter_columns"="k1,k2,k3" )
-~~~
+## 修改索引
 
-### **2 查看索引**
+您可以使用 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 语句来增加，减少和删除索引。
 
-展示指定table\_name下的Bloom Filter索引：
+- 如下语句增加了一个 bloom filter 索引列 `v1`。
 
-~~~ SQL
-SHOW CREATE TABLE table_name;
-~~~
+    ```SQL
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1,k2,v1");
+    ```
 
-### **3 删除索引**
+- 如下语句减少了一个 bloom filter 索引列 `k2`。
 
-删除索引即为将索引列从bloom\_filter\_columns属性中移除：
+    ```SQL
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1");
+    ```
 
-~~~SQL
-ALTER TABLE example_db.my_table SET ("bloom_filter_columns" = "");
-~~~
+- 如下语句删除了 `table1` 的所有 bloom filter 索引。
 
-### **4 修改索引**
-
-修改索引即为修改表的bloom\_filter\_columns属性：
-
-~~~SQL
-ALTER TABLE example_db.my_table SET ("bloom_filter_columns" = "k1,k2,k3");
-~~~
-
-## 注意事项
-
-* 不支持对Tinyint、Float、Double、Decimal 类型的列创建Bloom Filter索引。
-* Bloom Filter索引只对in和=过滤查询有加速效果。
-* 如果要查看某个查询是否命中了Bloom Filter索引，可以通过查询[Profile](https://docs.starrocks.com/zh-cn/main/administration/Query_planning#profile%E5%88%86%E6%9E%90)的信息来查看是否命中。
+    ```SQL
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "");
+    ```
