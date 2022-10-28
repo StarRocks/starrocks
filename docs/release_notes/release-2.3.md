@@ -107,7 +107,7 @@ Release date: July 29, 2022
 
 - Added the following functions:
   - [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md)
-  - [ntile](../using_starrocks/Window_function.md)
+  - [ntile](../sql-reference/sql-functions/Window_function.md)
   - [bitmap_union_count](../sql-reference/sql-functions/bitmap-functions/bitmap_union_count.md), [base64_to_bitmap](../sql-reference/sql-functions/bitmap-functions/base64_to_bitmap.md), [array_to_bitmap](../sql-reference/sql-functions/array-functions/array_to_bitmap.md)
   - [week](../sql-reference/sql-functions/date-time-functions/week.md), [time_slice](../sql-reference/sql-functions/date-time-functions/time_slice.md)
 

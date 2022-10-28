@@ -38,14 +38,10 @@
   + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
-  + [Window functions](./using_starrocks/Window_function.md)
-  + [Java UDFs](./using_starrocks/JAVA_UDF.md)
   + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
   + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
-  + [Precise de-duplication with bitmap](./using_starrocks/Using_bitmap.md)
-  + [Approximate de-duplication with HLL](./using_starrocks/Using_HLL.md)
-  + [Configure a time zone](./using_starrocks/timezone.md)
-  + [File manager](./using_starrocks/filemanager.md)
+  + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
+  + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
@@ -58,6 +54,9 @@
     + [Scale in and out](./administration/Scale_up_down.md)
     + [Backup and restore](./administration/Backup_and_restore.md)
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
+    + [Manage a cluster](./administration/Cluster_administration.md)
+    + [Enable FQDN access](./administration/enable_fqdn.md)
+    + [Configure a time zone](./administration/timezone.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query management](./administration/Query_management.md)
@@ -65,6 +64,7 @@
       + [Load balancing](./administration/Load_balance.md)
       + [Replica](./administration/Replica.md)
       + [Blacklist](./administration/Blacklist.md)
+      + [File manager](./administration/filemanager.md)
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
@@ -181,6 +181,8 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+    + Auxiliary Commands
+      + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
       + Numeric
         + [BIGINT](./sql-reference/sql-statements/data-types/BIGINT.md)
@@ -200,13 +202,13 @@
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
-        + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
-        + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
+        + [ARRAY](./sql-reference/sql-statements/data-types/ARRAY.md)
         + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
-        + [Array](./using_starrocks/Array.md)
-    + Auxiliary Commands
-      + [DESCRIBE](./sql-reference/sql-statements/Utility/DESCRIBE.md)
+        + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
+        + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
   + Function Reference
+    + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
+    + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + Date Functions
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
