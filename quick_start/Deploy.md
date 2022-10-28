@@ -117,7 +117,7 @@ bin/start_fe.sh --daemon
 ...
 ```
 
-* 通过运行 `jps` 命令查看 Java 进程，确认 **StarRocksFe** 进程是否存在。
+* 通过运行 `jps` 命令查看 Java 进程，确认 **StarRocksFE** 进程是否存在。
 * 通过在浏览器访问 `FE ip:http_port`（默认 `http_port` 为 `8030`），进入 StarRocks 的 WebUI，用户名为 `root`，密码为空。
 
 > 说明
