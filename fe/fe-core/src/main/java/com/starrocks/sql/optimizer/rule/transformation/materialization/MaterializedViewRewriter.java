@@ -20,6 +20,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -331,9 +332,16 @@ public class MaterializedViewRewriter {
         }
 
         // List<ColumnRefOperator> viewOutputColumns = queryOutputColumns;
+        // generate new prjection
+        Map<ColumnRefOperator, ScalarOperator> unionProjection = Maps.newHashMap();
+        for (int i = 0; i < queryOutputColumns.size(); i++) {
+            unionProjection.put(queryOutputColumns.get(i), unionOutputColumns.get(i));
+        }
+        Projection projection = new Projection(unionProjection);
         LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
                 .setOutputColumnRefOp(unionOutputColumns)
                 .setChildOutputColumns(Lists.newArrayList(queryOutputColumns, viewOutputColumns))
+                .setProjection(projection)
                 .isUnionAll(true)
                 .build();
         OptExpression unionExpr = OptExpression.create(unionOperator, queryInput, viewInput);
