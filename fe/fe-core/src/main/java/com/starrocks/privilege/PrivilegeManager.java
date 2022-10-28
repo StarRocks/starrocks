@@ -6,6 +6,7 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.SystemId;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -59,10 +60,6 @@ public class PrivilegeManager {
 
     private final ReentrantReadWriteLock userLock;
 
-    // for quick lookup
-    private short dbTypeId;
-    private short tableTypeId;
-    private short systemTypeId;
     private String publicRoleName = null; // ut may be null
 
     // only when deserialized
@@ -95,10 +92,11 @@ public class PrivilegeManager {
         roleLock = new ReentrantReadWriteLock();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
+        initIdNameMaps();
+        initBuiltinRolesAndUsers();
     }
 
     public void initBuiltinRolesAndUsers() {
-        initIdNameMaps();
         try {
             // built-in role ids are hard-coded negative numbers because globalStateMgr.getNextId() cannot be called by a follower
             long builtinRoleId = -1;
@@ -161,12 +159,9 @@ public class PrivilegeManager {
             if (rolePrivilegeCollection != null) {
                 // GRANT SELECT ON ALL TABLES IN infomation_schema
                 String tableTypeStr = PrivilegeTypes.TABLE.name();
-                List<PEntryObject> object = Arrays.asList(provider.generateObject(
-                            tableTypeStr,
-                            Arrays.asList(PrivilegeTypes.TABLE.getPlural()),
-                            PrivilegeTypes.DATABASE.name(),
-                            "information_schema",
-                            globalStateMgr));
+                List<PEntryObject> object = Arrays.asList(new TablePEntryObject(
+                        SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
+                short tableTypeId = typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
                 ActionSet selectAction = analyzeActionSet(
                         tableTypeStr, tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
                 rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
@@ -201,9 +196,6 @@ public class PrivilegeManager {
                 actionId++;
             }
         }
-        systemTypeId = typeStringToId.getOrDefault(PrivilegeTypes.SYSTEM.name(), (short) -1);
-        dbTypeId = typeStringToId.getOrDefault(PrivilegeTypes.DATABASE.name(), (short) -1);
-        tableTypeId = typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
     }
 
     // called by initBuiltinRolesAndUsers()
@@ -618,7 +610,8 @@ public class PrivilegeManager {
             // 1. check for any action in db
             PEntryObject dbObject = manager.provider.generateObject(
                     PrivilegeTypes.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
-            if (manager.provider.checkAnyAction(manager.dbTypeId, dbObject, collection)) {
+            short dbTypeId = manager.typeStringToId.getOrDefault(PrivilegeTypes.DATABASE.name(), (short) -1);
+            if (manager.provider.checkAnyAction(dbTypeId, dbObject, collection)) {
                 return true;
             }
             // 2. check for any action in any table in this db
@@ -628,7 +621,8 @@ public class PrivilegeManager {
                     PrivilegeTypes.DATABASE.name(),
                     db,
                     manager.globalStateMgr);
-            return manager.provider.checkAnyAction(manager.tableTypeId, allTableInDbObject, collection);
+            short tableTypeId = manager.typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
+            return manager.provider.checkAnyAction(tableTypeId, allTableInDbObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
             return false;
@@ -644,7 +638,8 @@ public class PrivilegeManager {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             PEntryObject tableObject = manager.provider.generateObject(
                     PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
-            return manager.provider.checkAnyAction(manager.tableTypeId, tableObject, collection);
+            short tableTypeId = manager.typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
+            return manager.provider.checkAnyAction(tableTypeId, tableObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
             return false;
@@ -652,6 +647,7 @@ public class PrivilegeManager {
     }
 
     protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeTypes.SystemActions action) {
+        short systemTypeId = typeStringToId.getOrDefault(PrivilegeTypes.SYSTEM.name(), (short) -1);
         Action want = typeToActionMap.get(systemTypeId).get(action.name());
         return provider.check(systemTypeId, want, null, collection);
     }
@@ -659,6 +655,7 @@ public class PrivilegeManager {
     protected boolean checkTableAction(
             PrivilegeCollection collection, String db, String table, PrivilegeTypes.TableActions action)
             throws PrivilegeException {
+        short tableTypeId = typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
         Action want = typeToActionMap.get(tableTypeId).get(action.name());
         PEntryObject object = provider.generateObject(
                 PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), globalStateMgr);
@@ -667,6 +664,7 @@ public class PrivilegeManager {
 
     protected boolean checkDbAction(PrivilegeCollection collection, String db, PrivilegeTypes.DbActions action)
             throws PrivilegeException {
+        short dbTypeId = typeStringToId.getOrDefault(PrivilegeTypes.DATABASE.name(), (short) -1);
         Action want = typeToActionMap.get(dbTypeId).get(action.name());
         PEntryObject object = provider.generateObject(
                 PrivilegeTypes.DATABASE.name(), Arrays.asList(db), globalStateMgr);
@@ -690,8 +688,9 @@ public class PrivilegeManager {
     public boolean allowGrant(ConnectContext context, short type, ActionSet wants, List<PEntryObject> objects) {
         try {
             PrivilegeCollection collection = mergePrivilegeCollection(context);
-            // check for WITH GRANT OPTION in the specific type
-            return provider.allowGrant(type, wants, objects, collection);
+            // check for GRANT or WITH GRANT OPTION in the specific type
+            return checkSystemAction(collection, PrivilegeTypes.SystemActions.GRANT)
+                    || provider.allowGrant(type, wants, objects, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when allowGrant", e);
             return false;
@@ -725,6 +724,7 @@ public class PrivilegeManager {
                 privilegeCollection.grantRole(getRoleIdByNameNoLock(publicRoleName));
             }
             userToPrivilegeCollection.put(user, privilegeCollection);
+            LOG.info("user privilege for {} is created, role {} is granted", user, publicRoleName);
             return privilegeCollection;
         } finally {
             userWriteUnlock();
@@ -1210,6 +1210,7 @@ public class PrivilegeManager {
                 } else {
                     ret.provider = provider;
                 }
+                ret.initBuiltinRolesAndUsers();
                 // 1 json for num user
                 int numUser = (int) reader.readJson(int.class);
                 LOG.info("loading {} users", numUser);

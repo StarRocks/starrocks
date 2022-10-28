@@ -535,6 +535,7 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
+        initAuth(usingNewPrivilege);
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
@@ -589,7 +590,6 @@ public class GlobalStateMgr {
         this.insertOverwriteJobManager = new InsertOverwriteJobManager();
         this.shardManager = new ShardManager();
         this.compactionManager = new CompactionManager();
-        initAuth(usingNewPrivilege);
 
         GlobalStateMgr gsm = this;
         this.execution = new StateChangeExecution() {
@@ -1238,7 +1238,6 @@ public class GlobalStateMgr {
 
         if (usingNewPrivilege) {
             auth = null;
-            privilegeManager.initBuiltinRolesAndUsers();
         }
 
         long loadImageEndTime = System.currentTimeMillis();
