@@ -2,7 +2,9 @@
 
 本文介绍如何配置部署 Broker。
 
-通过 Broker，StarRocks 可读取对应数据源（如HDFS、S3）上的数据，利用自身的计算资源对数据进行预处理和导入。除此之外，Broker 也被应用于数据导出，备份恢复等功能。
+通过 Broker，StarRocks 可读取对应数据源（如HDFS、S3）上的数据，利用自身的计算资源对数据进行预处理和导入。除此之外，Broker 也被应用于数据导出，备份恢复等功能。  
+Broker 与 BE 之间使用网络传输数据，当 Broker 和 BE 部署在相同机器时会优先选择本地节点进行链接。  
+部署 Broker 节点的数量建议与 BE 节点数量相等，并将所有 Broker 添加到相同的 Broker name 下（ Broker 在处理任务时会自动调度数据传输压力）。
 
 ## 下载并解压安装包
 
@@ -64,15 +66,31 @@ SHOW PROC "/brokers"\G
 ```plain text
 MySQL [(none)]> SHOW PROC "/brokers"\G
 
-*************************** 1. row ***************************
-          Name: broker1
-            IP: 172.26.xxx.xx
+*************************** 3. row ***************************
+          Name: hdfs_broker
+            IP: 172.26.xxx.x
           Port: 8000
          Alive: true
  LastStartTime: 2022-05-19 11:21:36
 LastUpdateTime: 2022-05-19 11:28:31
         ErrMsg:
-1 row in set (0.00 sec)
+
+          Name: hdfs_broker
+            IP: 172.26.198.2
+          Port: 8000
+         Alive: true
+ LastStartTime: 2022-05-19 11:22:30
+LastUpdateTime: 2022-05-19 11:28:31
+        ErrMsg:
+
+          Name: hdfs_broker
+            IP: 172.26.198.3
+          Port: 8000
+         Alive: true
+ LastStartTime: 2022-05-19 11:23:10
+LastUpdateTime: 2022-05-19 11:28:31
+        ErrMsg:
+3 row in set (0.00 sec)
 ```
 
 当 `Alive` 为 `true` 时，当前 Broker 节点正常接入集群。
@@ -83,6 +101,14 @@ LastUpdateTime: 2022-05-19 11:28:31
 
 ```bash
 sh ./bin/stop_broker.sh --daemon
+```
+
+## 删除 Broker 节点
+
+您可通过 MySQL 客户端连接 StarRocks 以添加或删除 Broker 节点。
+
+```sql
+ALTER SYSTEM DROP BROKER broker_name "host:port";
 ```
 
 <br/>
