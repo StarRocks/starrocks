@@ -24,9 +24,14 @@ public class DropTableEvent extends MetastoreTableEvent {
     private final String dbName;
     private final String tableName;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/DropTableEvent.java
     private DropTableEvent(NotificationEvent event,
                            CacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
+=======
+    private DropTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
+        super(event, metaCache, catalogName);
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/DropTableEvent.java
         Preconditions.checkArgument(DROP_TABLE.equals(getEventType()));
         JSONDropTableMessage dropTableMessage =
                 (JSONDropTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
@@ -42,9 +47,14 @@ public class DropTableEvent extends MetastoreTableEvent {
         }
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/DropTableEvent.java
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
                                                  CacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new DropTableEvent(event, cacheProcessor, catalogName));
+=======
+    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
+        return Lists.newArrayList(new DropTableEvent(event, metaCache, catalogName));
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/DropTableEvent.java
     }
 
     @Override

@@ -398,6 +398,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
                                      HiveCommonStats commonStats, Partition partition, HiveTable updatedHiveTable) {
         tableCache.put(hiveTableName, updatedHiveTable);
         if (updatedHiveTable.isUnPartitioned()) {
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/CachingHiveMetastore.java
             HivePartitionStats partitionStats =
                     getPartitionStatus(commonStats, get(tableStatsCache, hiveTableName).getColumnStats());
             tableStatsCache.put(hiveTableName, partitionStats);
@@ -409,6 +410,18 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
     private HivePartitionStats getPartitionStatus(HiveCommonStats commonStats, Map<String, HiveColumnStats> columnStats) {
+=======
+            HivePartitionStats partitionStats = getPartitionByEvent(params, get(tableStatsCache, hiveTableName).getColumnStats());
+            tableStatsCache.put(hiveTableName, partitionStats);
+            partitionCache.put(hivePartitionName, HiveMetastoreApiConverter.toPartition(sd, params));
+        } else {
+            alterPartitionByEvent(hiveTableName, hivePartitionName, params, sd);
+        }
+    }
+
+    private <K, V> HivePartitionStats getPartitionByEvent(Map<String, String> params, Map<String, HiveColumnStats> columnStats) {
+        HiveCommonStats commonStats = toHiveCommonStats(params);
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/CachingHiveMetastore.java
         long totalRowNums = commonStats.getRowNums();
         if (totalRowNums == -1) {
             return HivePartitionStats.empty();
@@ -416,10 +429,19 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return new HivePartitionStats(commonStats, columnStats);
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/CachingHiveMetastore.java
     private void refreshPartitionByEvent(HivePartitionName hivePartitionName,
                                          HiveCommonStats commonStats, Partition partition) {
         HivePartitionStats partitionStats = getPartitionStatus(
                 commonStats, get(partitionStatsCache, hivePartitionName).getColumnStats());
+=======
+    public void alterPartitionByEvent(HiveTableName hiveTableName,
+                                      HivePartitionName hivePartitionName,
+                                      Map<String, String> params, StorageDescriptor sd) {
+        HivePartitionStats partitionStats = getPartitionByEvent(
+                params, get(partitionStatsCache, hivePartitionName).getColumnStats());
+        tableStatsCache.put(hiveTableName, partitionStats);
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/CachingHiveMetastore.java
         partitionStatsCache.put(hivePartitionName, partitionStats);
         partitionCache.put(hivePartitionName, partition);
     }
@@ -462,9 +484,14 @@ public class CachingHiveMetastore implements IHiveMetastore {
     }
 
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/CachingHiveMetastore.java
     public long getBaseHmsEventId() {
         return metastore.getBaseHmsEventId();
 >>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/CachingHiveMetastore.java
+=======
+    public long getCurrentEventId() {
+        return metastore.getCurrentEventId();
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/CachingHiveMetastore.java
     }
 
     public NotificationEventResponse getNextEventResponse(long lastSyncedEventId, String catalogName,

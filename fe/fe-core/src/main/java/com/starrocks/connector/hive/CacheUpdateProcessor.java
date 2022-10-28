@@ -8,9 +8,12 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+<<<<<<< HEAD
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemotePathKey;
+=======
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
 import com.starrocks.connector.exception.StarRocksConnectorException;
 <<<<<<< HEAD
 import com.starrocks.connector.hive.events.MetastoreEventType;
@@ -27,7 +30,11 @@ import com.starrocks.external.hive.IHiveMetastore;
 import com.starrocks.external.hive.Partition;
 import com.starrocks.external.hive.events.MetastoreEventType;
 import com.starrocks.external.hive.events.MetastoreNotificationFetchException;
+<<<<<<< HEAD
 >>>>>>> bc43ed9ba (refactor hive meta incremental sync by events)
+=======
+import com.starrocks.server.GlobalStateMgr;
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -82,6 +89,7 @@ public class CacheUpdateProcessor {
             metastore.refreshTable(hmsTable.getDbName(), hmsTable.getTableName());
 
 <<<<<<< HEAD
+<<<<<<< HEAD
             updateTableRemoteFileIO(hmsTable, "REFRESH");
 =======
             if (remoteFileIO.isPresent()) {
@@ -103,6 +111,9 @@ public class CacheUpdateProcessor {
                 }
             }
 >>>>>>> bc43ed9ba (refactor hive meta incremental sync by events)
+=======
+            updateTableRemoteFileIO(hmsTable, "REFRESH");
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
 
             boolean isSchemaChange = false;
             if (isResourceMappingCatalog(catalogName) && table.isHiveTable()) {
@@ -211,6 +222,9 @@ public class CacheUpdateProcessor {
     public NotificationEventResponse getNextEventResponse(String catalogName, final boolean getAllEvents)
             throws MetastoreNotificationFetchException {
 <<<<<<< HEAD
+<<<<<<< HEAD
+=======
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
         if (lastSyncedEventId == -1) {
             lastSyncedEventId = metastore.getCurrentEventId();
             LOG.info("Last synced event id is null when pulling events on catalog [{}]", catalogName);
@@ -222,8 +236,11 @@ public class CacheUpdateProcessor {
             LOG.info("Event id not updated when pulling events on catalog [{}]", catalogName);
             return null;
         }
+<<<<<<< HEAD
 =======
 >>>>>>> bc43ed9ba (refactor hive meta incremental sync by events)
+=======
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
         return ((CachingHiveMetastore) metastore).getNextEventResponse(lastSyncedEventId, catalogName, getAllEvents);
     }
 
@@ -241,6 +258,7 @@ public class CacheUpdateProcessor {
 =======
     public void alterCacheByEvent(MetastoreEventType eventType, HiveTableName hiveTableName, HivePartitionName hivePartitionName,
                                   Map<String, String> params, StorageDescriptor sd, HiveTable hiveTable) {
+<<<<<<< HEAD
         try {
             refreshMetaCacheLock.writeLock().lock();
             ((CachingHiveMetastore) metastore).alterCacheByEvent(
@@ -250,12 +268,18 @@ public class CacheUpdateProcessor {
             refreshMetaCacheLock.writeLock().unlock();
         }
 >>>>>>> bc43ed9ba (refactor hive meta incremental sync by events)
+=======
+        ((CachingHiveMetastore) metastore).alterCacheByEvent(eventType, hiveTableName,
+                    hivePartitionName, params, sd, hiveTable);
+        updateRemoteFilebyEvent(eventType, hiveTableName, hivePartitionName, hiveTable);
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
     }
 
     public void updateRemoteFilebyEvent(MetastoreEventType eventType, HiveTableName hiveTableName,
                                         HivePartitionName hivePartitionName, HiveTable hiveTable) {
         switch (eventType) {
             case ALTER_TABLE:
+<<<<<<< HEAD
 <<<<<<< HEAD
                 updateTableRemoteFileIO(hiveTable, "ALTER");
                 break;
@@ -324,6 +348,17 @@ public class CacheUpdateProcessor {
                 break;
             default:
                 return;
+=======
+                updateTableRemoteFileIO(hiveTable, "ALTER");
+                break;
+            case ALTER_PARTITION:
+                updatePartitionRemoteFileIO(hiveTable, hivePartitionName.getPartitionValues(), hiveTable, "ALTER");
+                break;
+            case DROP_PARTITION:
+                updatePartitionRemoteFileIO(hiveTable, hivePartitionName.getPartitionValues(), hiveTable, "DROP");
+            case DROP_TABLE:
+                updateTableRemoteFileIO(hiveTable, "DROP");
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events)
         }
     }
 

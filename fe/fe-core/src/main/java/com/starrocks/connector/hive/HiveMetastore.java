@@ -12,9 +12,12 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 <<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/HiveMetastore.java
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/HiveMetastore.java
 =======
 import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 >>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/HiveMetastore.java
+=======
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/HiveMetastore.java
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;

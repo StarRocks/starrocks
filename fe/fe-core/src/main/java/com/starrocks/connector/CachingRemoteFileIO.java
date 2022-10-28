@@ -81,6 +81,10 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         cache.put(pathKey, loadRemoteFiles(pathKey));
     }
 
+    public void removeRemoteFile(RemotePathKey pathKey) {
+        cache.invalidate(pathKey);
+    }
+
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         if (expiresAfterWriteSec >= 0) {

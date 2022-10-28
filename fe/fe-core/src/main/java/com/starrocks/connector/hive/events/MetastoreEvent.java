@@ -42,14 +42,22 @@ public abstract class MetastoreEvent {
 
     protected final String catalogName;
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEvent.java
     protected MetastoreEvent(NotificationEvent event, CacheUpdateProcessor cacheProcessor, String catalogName) {
+=======
+    protected MetastoreEvent(NotificationEvent event, CacheUpdateProcessor metaCache, String catalogName) {
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEvent.java
         this.event = event;
         this.dbName = event.getDbName();
         this.tblName = event.getTableName();
         this.eventId = event.getEventId();
         this.eventType = MetastoreEventType.from(event.getEventType());
         this.metastoreNotificationEvent = event;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEvent.java
         this.cache = cacheProcessor;
+=======
+        this.cache = metaCache;
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEvent.java
         this.catalogName = catalogName;
     }
 

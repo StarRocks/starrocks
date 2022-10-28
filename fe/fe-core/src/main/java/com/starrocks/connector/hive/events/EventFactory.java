@@ -21,6 +21,11 @@ public interface EventFactory {
      * @throws MetastoreNotificationException If the hmsEvent information cannot be parsed.
      */
     List<MetastoreEvent> get(NotificationEvent hmsEvent,
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/EventFactory.java
                              CacheUpdateProcessor cacheProcessor,
                              String catalogName) throws MetastoreNotificationException;
+=======
+                             CacheUpdateProcessor metaCache,
+                             HiveTable table, String catalogNames) throws MetastoreNotificationException;
+>>>>>>> 4ae77f3d0 (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/EventFactory.java
 }
