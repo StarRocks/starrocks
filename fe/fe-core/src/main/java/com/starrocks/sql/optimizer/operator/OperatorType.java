@@ -79,7 +79,7 @@ public enum OperatorType {
      */
     SCALAR,
     ARRAY,
-    ARRAY_ELEMENT,
+    COLLECTION_ELEMENT,
     ARRAY_SLICE,
     VARIABLE,
     CONSTANT,

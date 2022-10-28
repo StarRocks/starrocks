@@ -326,11 +326,11 @@ int TypeDescriptor::get_slot_size() const {
     case TYPE_DECIMAL128:
         return 16;
     case TYPE_ARRAY:
+    case TYPE_MAP:
         return sizeof(void*); // sizeof(Collection*)
     case INVALID_TYPE:
     case TYPE_BINARY:
     case TYPE_STRUCT:
-    case TYPE_MAP:
     case TYPE_FUNCTION:
         DCHECK(false);
         break;
