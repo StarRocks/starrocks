@@ -49,6 +49,7 @@ set(EXEC_FILES
     parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
+    vectorized/sorted_streaming_aggregator.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp
@@ -187,6 +188,8 @@ set(EXEC_FILES
     pipeline/aggregate/aggregate_distinct_blocking_source_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_sink_operator.cpp
     pipeline/aggregate/aggregate_distinct_streaming_source_operator.cpp
+    pipeline/aggregate/sorted_aggregate_streaming_sink_operator.cpp
+    pipeline/aggregate/sorted_aggregate_streaming_source_operator.cpp
     pipeline/aggregate/repeat/repeat_operator.cpp
     pipeline/analysis/analytic_sink_operator.cpp
     pipeline/analysis/analytic_source_operator.cpp

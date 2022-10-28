@@ -82,6 +82,7 @@ inline uint8_t* RawHashTableIterator::value() {
 }
 
 class Aggregator;
+class SortedStreamingAggregator;
 
 template <class HashMapWithKey>
 struct AllocateState {
@@ -139,18 +140,19 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-class Aggregator final : public pipeline::ContextWithDependency {
+class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() {
+    virtual ~Aggregator() {
         if (_state != nullptr) {
             close(_state);
         }
     }
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
+    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                           MemTracker* mem_tracker);
 
     void close(RuntimeState* state) override;
 
@@ -244,7 +246,7 @@ public:
 #endif
     HashTableKeyAllocator _state_allocator;
 
-private:
+protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
@@ -354,6 +356,8 @@ private:
     RuntimeProfile::Counter* _pass_through_row_count{};
     RuntimeProfile::Counter* _expr_compute_timer{};
     RuntimeProfile::Counter* _expr_release_timer{};
+    RuntimeProfile::Counter* _state_destroy_timer{};
+    RuntimeProfile::Counter* _allocate_state_timer{};
 
 public:
     template <typename HashMapWithKey>
@@ -460,29 +464,10 @@ public:
         }
 
         _it_hash = it;
-
-        vectorized::ChunkPtr _result_chunk = std::make_shared<vectorized::Chunk>();
-        // For different agg phase, we should use different TupleDescriptor
-        if (!use_intermediate) {
-            for (size_t i = 0; i < group_by_columns.size(); i++) {
-                _result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
-            }
-            for (size_t i = 0; i < agg_result_columns.size(); i++) {
-                size_t id = group_by_columns.size() + i;
-                _result_chunk->append_column(agg_result_columns[i], _output_tuple_desc->slots()[id]->id());
-            }
-        } else {
-            for (size_t i = 0; i < group_by_columns.size(); i++) {
-                _result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
-            }
-            for (size_t i = 0; i < agg_result_columns.size(); i++) {
-                size_t id = group_by_columns.size() + i;
-                _result_chunk->append_column(agg_result_columns[i], _intermediate_tuple_desc->slots()[id]->id());
-            }
-        }
+        auto result_chunk = _build_output_chunk(group_by_columns, agg_result_columns);
         _num_rows_returned += read_index;
         _num_rows_processed += read_index;
-        *chunk = std::move(_result_chunk);
+        *chunk = std::move(result_chunk);
     }
 
     template <typename HashSetWithKey>
@@ -548,7 +533,7 @@ public:
         *chunk = std::move(result_chunk);
     }
 
-private:
+protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     bool _use_intermediate_as_input() {
@@ -578,6 +563,10 @@ private:
                              const vectorized::Columns& agg_result_columns);
     void _finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
                             const vectorized::Columns& agg_result_columns);
+    void _destroy_state(vectorized::AggDataPtr __restrict state);
+
+    vectorized::ChunkPtr _build_output_chunk(const vectorized::Columns& group_by_columns,
+                                             const vectorized::Columns& agg_result_columns);
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
     bool is_passthrough() const { return _is_passthrough; }
@@ -643,19 +632,18 @@ inline vectorized::AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nul
     return agg_state;
 }
 
-class AggregatorFactory;
-using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
-
-class AggregatorFactory {
+template <class T>
+class AggregatorFactoryBase {
 public:
-    AggregatorFactory(const TPlanNode& tnode) : _tnode(tnode) {}
+    using Ptr = std::shared_ptr<T>;
+    AggregatorFactoryBase(const TPlanNode& tnode) : _tnode(tnode) {}
 
-    AggregatorPtr get_or_create(size_t id) {
+    Ptr get_or_create(size_t id) {
         auto it = _aggregators.find(id);
         if (it != _aggregators.end()) {
             return it->second;
         }
-        auto aggregator = std::make_shared<Aggregator>(_tnode);
+        auto aggregator = std::make_shared<T>(_tnode);
         aggregator->set_aggr_mode(_aggr_mode);
         _aggregators[id] = aggregator;
         return aggregator;
@@ -665,8 +653,14 @@ public:
 
 private:
     const TPlanNode& _tnode;
+    std::unordered_map<size_t, Ptr> _aggregators;
     AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
-    std::unordered_map<size_t, AggregatorPtr> _aggregators;
 };
+
+using AggregatorFactory = AggregatorFactoryBase<Aggregator>;
+using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
+
+using StreamingAggregatorFactory = AggregatorFactoryBase<SortedStreamingAggregator>;
+using StreamingAggregatorFactoryPtr = std::shared_ptr<StreamingAggregatorFactory>;
 
 } // namespace starrocks

@@ -147,6 +147,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         aggregator_factory->set_aggr_mode(aggr_mode);
         std::vector<ExprContext*> partition_expr_ctxs;
         Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs);
+        Expr::prepare(partition_expr_ctxs, runtime_state());
+        Expr::open(partition_expr_ctxs, runtime_state());
         auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory, std::move(partition_expr_ctxs));
         auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(

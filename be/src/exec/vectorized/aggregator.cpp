@@ -6,6 +6,7 @@
 
 #include "column/chunk.h"
 #include "common/status.h"
+#include "exec/exec_node.h"
 #include "exec/pipeline/operator.h"
 #include "exprs/anyval_util.h"
 #include "gen_cpp/PlanNodes_types.h"
@@ -270,6 +271,8 @@ Status Aggregator::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile
     _input_row_count = ADD_COUNTER(_runtime_profile, "InputRowCount", TUnit::UNIT);
     _hash_table_size = ADD_COUNTER(_runtime_profile, "HashTableSize", TUnit::UNIT);
     _pass_through_row_count = ADD_COUNTER(_runtime_profile, "PassThroughRowCount", TUnit::UNIT);
+    _state_destroy_timer = ADD_TIMER(_runtime_profile, "StateDestroy");
+    _allocate_state_timer = ADD_TIMER(_runtime_profile, "StateAllocate");
 
     SCOPED_TIMER(_runtime_profile->total_time_counter());
 
@@ -747,6 +750,36 @@ void Aggregator::_finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());
     }
+}
+
+void Aggregator::_destroy_state(vectorized::AggDataPtr __restrict state) {
+    for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
+        _agg_functions[i]->destroy(_agg_fn_ctxs[i], state + _agg_states_offsets[i]);
+    }
+}
+
+vectorized::ChunkPtr Aggregator::_build_output_chunk(const vectorized::Columns& group_by_columns,
+                                                     const vectorized::Columns& agg_result_columns) {
+    vectorized::ChunkPtr result_chunk = std::make_shared<vectorized::Chunk>();
+    // For different agg phase, we should use different TupleDescriptor
+    if (!_use_intermediate_as_output()) {
+        for (size_t i = 0; i < group_by_columns.size(); i++) {
+            result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
+        }
+        for (size_t i = 0; i < agg_result_columns.size(); i++) {
+            size_t id = group_by_columns.size() + i;
+            result_chunk->append_column(agg_result_columns[i], _output_tuple_desc->slots()[id]->id());
+        }
+    } else {
+        for (size_t i = 0; i < group_by_columns.size(); i++) {
+            result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
+        }
+        for (size_t i = 0; i < agg_result_columns.size(); i++) {
+            size_t id = group_by_columns.size() + i;
+            result_chunk->append_column(agg_result_columns[i], _intermediate_tuple_desc->slots()[id]->id());
+        }
+    }
+    return result_chunk;
 }
 
 void Aggregator::_reset_exprs() {

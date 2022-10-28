@@ -2,16 +2,21 @@
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
+#include <type_traits>
+
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "exec/vectorized/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
@@ -169,25 +174,15 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
+template <class AggFactory, class SourceFactory, class SinkFactory>
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_decompose_to_pipeline(
+        std::vector<std::shared_ptr<pipeline::OperatorFactory>>& ops_with_sink,
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
-    context->has_aggregation = true;
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
-    auto& agg_node = _tnode.agg_node;
-    if (agg_node.need_finalize) {
-        // If finalize aggregate with group by clause, then it can be parallelized
-        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            if (context->need_local_shuffle(ops_with_sink)) {
-                std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                                  group_by_expr_ctxs);
-            }
-        } else {
-            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
-        }
-    }
+    // create aggregator factory
+    // shared by sink operator and source operator
+    auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
+
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
     // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
@@ -195,15 +190,14 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
     auto operators_generator = [this, should_cache, &context](bool post_cache) {
         // shared by sink operator and source operator
-        AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+        auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                    aggregator_factory);
-        auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(),
-                                                                                        id(), aggregator_factory);
+        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
+        auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
+
     auto operators = operators_generator(false);
     auto sink_operator = std::move(std::get<0>(operators));
     auto source_operator = std::move(std::get<1>(operators));
@@ -220,15 +214,62 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    down_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
-            ->set_need_local_shuffle(
-                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
+    source_operator->set_need_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
 
     ops_with_source.push_back(std::move(source_operator));
     if (should_cache) {
         ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
+
+    return ops_with_source;
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    context->has_aggregation = true;
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    auto& agg_node = _tnode.agg_node;
+
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
+    bool need_local_shuffle = context->need_local_shuffle(ops_with_sink) && has_group_by_keys;
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        std::vector<ExprContext*> group_by_expr_ctxs;
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::prepare(group_by_expr_ctxs, runtime_state());
+        Expr::open(group_by_expr_ctxs, runtime_state());
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+    };
+
+    if (agg_node.need_finalize && !sorted_streaming_aggregate) {
+        // If finalize aggregate with group by clause, then it can be parallelized
+        if (has_group_by_keys) {
+            if (need_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
+        } else {
+            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+        }
+    }
+
+    OpFactories ops_with_source;
+    if (sorted_streaming_aggregate) {
+        ops_with_source =
+                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
+    } else {
+        ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
+                                                 AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+    }
+
+    // insert local shuffle after sorted streaming aggregate
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && need_local_shuffle) {
+        ops_with_source = try_interpolate_local_shuffle(ops_with_source);
+    }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         ops_with_source.emplace_back(
