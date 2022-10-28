@@ -149,6 +149,8 @@
       + [SPARK LOAD](/sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](/sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+    + 辅助命令
+      + [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md)
     + 数据类型
       + 数字类型
         + [BIGINT](/sql-reference/sql-statements/data-types/BIGINT.md)
@@ -168,11 +170,10 @@
         + [DATE](/sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](/sql-reference/sql-statements/data-types/DATETIME.md)
       + 其他类型
-        + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
+        + [ARRAY](/sql-reference/sql-statements/data-types/Array.md)
         + [BITMAP](/sql-reference/sql-statements/data-types/BITMAP.md)
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
-    + 辅助命令
-      + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
+        + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
   + 函数参考
     + 日期函数
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)
@@ -184,7 +185,6 @@
       + [date_sub](/sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)
       + [date_trunc](/sql-reference/sql-functions/date-time-functions/date_trunc.md)
-      + [day](/sql-reference/sql-functions/date-time-functions/day.md)
       + [dayname](/sql-reference/sql-functions/date-time-functions/dayname.md)
       + [dayofmonth](/sql-reference/sql-functions/date-time-functions/dayofmonth.md)
       + [dayofweek](/sql-reference/sql-functions/date-time-functions/dayofweek.md)
@@ -195,6 +195,7 @@
       + [quarter](/sql-reference/sql-functions/date-time-functions/quarter.md)
       + [month](/sql-reference/sql-functions/date-time-functions/month.md)
       + [week](/sql-reference/sql-functions/date-time-functions/week.md)
+      + [day](/sql-reference/sql-functions/date-time-functions/day.md)
       + [hour](/sql-reference/sql-functions/date-time-functions/hour.md)
       + [minute](/sql-reference/sql-functions/date-time-functions/minute.md)
       + [second](/sql-reference/sql-functions/date-time-functions/second.md)
@@ -213,12 +214,12 @@
       + [timestampadd](/sql-reference/sql-functions/date-time-functions/timestampadd.md)
       + [timestampdiff](/sql-reference/sql-functions/date-time-functions/timestampdiff.md)
       + [from_unixtime](/sql-reference/sql-functions/date-time-functions/from_unixtime.md)
-      + [from_days](/sql-reference/sql-functions/date-time-functions/from_days.md)
-      + [to_date](/sql-reference/sql-functions/date-time-functions/to_date.md)
-      + [to_days](/sql-reference/sql-functions/date-time-functions/to_days.md)
-      + [time_to_sec](/sql-reference/sql-functions/date-time-functions/time_to_sec.md)
       + [unix_timestamp](/sql-reference/sql-functions/date-time-functions/unix_timestamp.md)
       + [utc_timestamp](/sql-reference/sql-functions/date-time-functions/utc_timestamp.md)
+      + [from_days](/sql-reference/sql-functions/date-time-functions/from_days.md)
+      + [to_days](/sql-reference/sql-functions/date-time-functions/to_days.md)
+      + [to_date](/sql-reference/sql-functions/date-time-functions/to_date.md)
+      + [time_to_sec](/sql-reference/sql-functions/date-time-functions/time_to_sec.md)
       + [microseconds_add](/sql-reference/sql-functions/date-time-functions/microseconds_add.md)
       + [microseconds_sub](/sql-reference/sql-functions/date-time-functions/microseconds_sub.md)
     + 加密函数
