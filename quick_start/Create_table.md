@@ -104,7 +104,7 @@ StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [
 
 #### ENGINE 类型
 
-默认 ENGINE 类型为 `OLAP`，对应 StarRocks 集群内部表。其他可选项包括 `mysql`，`elasticsearch`，`hive`，以及 `ICEBERG`，分别代表所创建的表为相应类型的 [外部表](/using_starrocks/External_table.md)。
+默认 ENGINE 类型为 `OLAP`，对应 StarRocks 集群内部表。其他可选项包括 `mysql`，`elasticsearch`，`hive`，以及 `ICEBERG`，分别代表所创建的表为相应类型的 [外部表](/data_source/External_table.md)。
 
 ## 查看表信息
 

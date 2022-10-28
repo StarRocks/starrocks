@@ -8,7 +8,7 @@
 - Iceberg catalog：用于查询 Apache Iceberg 集群中的数据。
 - Hudi catalog：用于查询 Apache Hudi 集群中的数据。
 
-在创建 external catalog 前，需要根据数据源的存储系统（如 Amazon S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见 [Hive catalog](/using_starrocks/catalog/hive_catalog.md#前提条件)、[Iceberg catalog](/using_starrocks/catalog/iceberg_catalog.md#前提条件) 和 [Hudi catalog](/using_starrocks/catalog/hudi_catalog.md#前提条件)。
+在创建 external catalog 前，需要根据数据源的存储系统（如 Amazon S3）、元数据服务（如 Hive metastore）和认证方式（如 Kerberos）在 StarRocks 中做相应的配置。详细信息，请参见 [Hive catalog](/data_source/catalog/hive_catalog.md#前提条件)、[Iceberg catalog](/data_source/catalog/iceberg_catalog.md#前提条件) 和 [Hudi catalog](/data_source/catalog/hudi_catalog.md#前提条件)。
 
 ## 语法
 
