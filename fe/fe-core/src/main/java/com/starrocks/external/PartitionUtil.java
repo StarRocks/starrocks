@@ -198,7 +198,8 @@ public class PartitionUtil {
                     "dirPath " + dirPath + " should be prefix of filePath " + filePath);
         }
 
-        String name = filePath.replaceFirst(dirPath, "");
+        //we had checked the startsWith, so just get substring
+        String name = filePath.substring(dirPath.length());
         if (name.startsWith("/")) {
             name = name.substring(1);
         }
