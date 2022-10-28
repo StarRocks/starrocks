@@ -1,65 +1,71 @@
-# Bloom Filter Indexing
+# Bloom filter indexing
 
-## Principle
+This topic describes how to create and modify bloom filter indexes, along with how they works.
 
-### What is Bloom Filter
+A bloom filter index is a space-efficiency data structure that is used to detect the possible presence of filtered data in data files of a table. If the bloom filter index detects that the data to be filtered are not in a certain data file, StarRocks skips scanning the data file. Bloom filter indexes can reduce response time when the column (such as ID) has a relatively high cardinality.
 
-Bloom Filter is a data structure used to determine whether an element is in a collection. The advantage is that it is more space and time efficient, and the disadvantage is that it has a certain rate of misclassification.
+If a query hits a sort key column, StarRocks efficiently returns the query result by using the [prefix index](../table_design/Sort_key.md). However, the prefix index entry for a data block cannot exceed 36 bytes in length. If you want to improve the query performance on a column, which is not used as a sort key and has a relatively high cardinality, you can create a bloom filter index for the column.
 
-![bloomfilter](../assets/3.7.1.png)
+## How it works
 
-Bloom Filter is composed of a bit array and a number of hash functions. The bit array is initially set to 0. When an element is inserted, the hash functions (number of n) compute on the element and obtain the slots (number of n)The corresponding number of slots in the bit array is set to 1.
+For example, you create a bloom filter index on a `column1` of a given table `table1` and run a query such as `Select xxx from table1 where column1 = something;`. Then the following situations happen when StarRocks scans the data files of `table1`.
 
-To confirm whether an element is in the set, the system will calculate the Hash value based on the hash functions. If the hash values in the bloom filter have at least one 0, the element does not exist. When all the corresponding slots in the bit are 1, the existence of the element cannot be confirmed. This is because the number of slots in the bloom filter is limited, and it is possible that all the slots calculated from this element are the same as the slots calculated from another existing element. Therefore, in the all-1 case, we need to go back to the source to confirm the existence of the element.
+- If the bloom filter index detects that a data file does not contain the data to be filtered, StarRocks skips the data file to improve query performance.
+- If the bloom filter index detects that a data file may contain the data to be filtered, StarRocks reads the data file to check whether the data exists. Note that the bloom filter can tell you for sure if a value is not present, but it cannot say for sure that a value is present, only that it may be present. Using a bloom filter index to determine whether a value is present may give false positives, which means that a bloom filter index detects that a data file contains the data to be filtered, but the data file does not actually contain the data.
 
-### What is Bloom Filter Indexing
+## Usage notes
 
-When creating a table in StarRocks, you can specify the columns to be indexed by BloomFilter through `PROPERTIES{"bloom_filter_columns"="c1,c2,c3"}`. BloomFilter can quickly confirm whether a certain value exists in a column when querying. If the bloom filter determines that the specified value does not exist in the column, there is no need to read the data file. If it is an all-1 situation, it needs to read the data block to confirm whether the target value exists. In addition, bloom filter indexes cannot determine which specific row of data has the specified value.
+- You can create bloom filter indexes for all columns of a table that uses the Duplicate Key Model or Primary Key Model. For a table that uses the Aggregate Key Model or Unique Key model, you can only create bloom filter indexes for key columns.
+- The columns of the TINYINT, FLOAT, DOUBLE, and DECIMAL types do not support creating bloom filter indexes.
+- Bloom filter indexes can only improve the performance of queries that contain the `in` and `=` operators, such as `Select xxx from table where x in {}` and `Select xxx from table where column = xxx`.
+- You can check whether a query uses bitmap indexes by viewing the `BloomFilterFilterRows` field of the query's profile.
 
-## Suitable scenarios
+## Create bloom filter indexes
 
-A bloom filter index can be built when the following conditions are met.
+You can create a bloom filter index for a column when you create a table by specifying the `bloom_filter_columns` parameter in `PROPERTIES`. For example, create bloom filter indexes for the `k1` and `k2` columns in `table1`.
 
-1. Bloom Filter is suitable for non-prefix filtering.
-2. The query will be frequently filtered according to the column, and most of the query conditions are `in` and `=`.
-3. Unlike Bitmap, BloomFilter is suitable for columns with a high base number.
+```SQL
+CREATE TABLE table1
+(
+    k1 BIGINT,
+    k2 LARGEINT,
+    v1 VARCHAR(2048) REPLACE,
+    v2 SMALLINT DEFAULT "10"
+)
+ENGINE = olap
+PRIMARY KEY(k1, k2)
+DISTRIBUTED BY HASH (k1, k2) BUCKETS 10
+PROPERTIES("bloom_filter_columns" = "k1,k2");
+```
 
-## How to use
+You can create bloom filter indexes for multiple columns at a time by specifying these column names. Note that you need to separate these column names with commas (`,`). For other parameter descriptions of the CREATE TABLE statement, see [CREATE TABLE](../sql-reference/sql-statements/data-definition/CREATE%20TABLE.md).
 
-### Create an index
+## Display bloom filter indexes
 
-When creating a table, use `bloom_filter_columns`.
+For example, the following statement displays bloom filter indexes of `table1`. For the output description, see [SHOW CREATE TABLE](../sql-reference/sql-statements/data-manipulation/SHOW%20CREATE%20TABLE.md).
 
-~~~ SQL
-PROPERTIES ( "bloom_filter_columns"="k1,k2,k3" )
-~~~
+```SQL
+SHOW CREATE TABLE table1;
+```
 
-### View an index
+## Modify bloom filter indexes
 
-View the bloom filter indexes under the `table_name`.
+You can add, reduce, and delete bloom filter indexes by using the [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) statement.
 
-~~~ SQL
-SHOW CREATE TABLE table_name;
-~~~
+- The following statement adds a bloom filter index on the `v1` column.
 
-### Delete an Index
+    ```SQL
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1,k2,v1");
+    ```
 
-Deleting an index means removing the index column from the `bloom_filter_columns` property:
+- The following statement reduces the bloom filter index on the `k2` column.
+  
+    ```SQL
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "k1");
+    ```
 
-~~~ SQL
-ALTER TABLE example_db.my_table SET ("bloom_filter_columns" = "");
-~~~
+- The following statement deletes all bloom filter indexes of `table1`.
 
-### Modify an index
-
-Modifying an index means modifying the `bloom_filter_columns` property.
-
-~~~SQL
-ALTER TABLE example_db.my_table SET ("bloom_filter_columns" = "k1,k2,k3");
-~~~
-
-## Notes
-
-* Bloom Filter indexing is not supported for Tinyint, Float, Double type columns.
-* Bloom Filter indexing only has an accelerating effect on `in` and `=` filter queries.
-* To see whether a query hits the bloom filter index, check its profile information.
+    ```SQL
+    ALTER TABLE table1 SET ("bloom_filter_columns" = "");
+    ```
