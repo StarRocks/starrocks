@@ -263,9 +263,11 @@ public class SchemaChangeHandler extends AlterHandler {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
             }
             MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
-            for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
-                if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
-                    throw new DdlException("Can not drop sort column in primary data model table");
+            if (indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
+                        throw new DdlException("Can not modify sort column in primary data model table");
+                    }
                 }
             }
             if (modColumn.getAggregationType() != null) {

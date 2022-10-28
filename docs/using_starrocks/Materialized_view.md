@@ -643,4 +643,4 @@ DROP MATERIALIZED VIEW order_mv;
 
 - Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
 
-- The query statement does not support random functions, including rand, random, uuid, and sleep.
+- The query statement does not support random functions, including rand((), random(), uuid()), and sleep().

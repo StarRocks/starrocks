@@ -52,7 +52,8 @@ public:
     int32_t backend_num() const { return _unique_request.backend_num; }
     int32_t pipeline_dop() const { return _unique_request.__isset.pipeline_dop ? _unique_request.pipeline_dop : 0; }
     int32_t pipeline_sink_dop() const {
-        return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 0;
+        // NOTE: default dop is 1, compatible with old version(before 2.5)
+        return _unique_request.params.__isset.pipeline_sink_dop ? _unique_request.params.pipeline_sink_dop : 1;
     }
 
     const TUniqueId& fragment_instance_id() const { return _unique_request.params.fragment_instance_id; }

@@ -91,7 +91,6 @@ if [ ${ENABLE_DEBUGGER} -eq 1 ]; then
     final_java_opt="${final_java_opt} -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005"
     echo $final_java_opt
 fi
-echo $final_java_opt
 
 if [ ! -d $LOG_DIR ]; then
     mkdir -p $LOG_DIR
