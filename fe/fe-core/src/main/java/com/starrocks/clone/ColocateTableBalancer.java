@@ -776,6 +776,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
         List<Long> badReplicaIdList = Lists.newArrayList();
         Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
         List<Long> availableBeIds = getAvailableBeIds(infoService);
+        Set<Long> removedBackendIdSet = Sets.newHashSet();
         boolean isBackendSetChanged = false;
 
         // Traverse all replicas of the tablet to check if we need to replace backend of bad replica.
@@ -798,8 +799,10 @@ public class ColocateTableBalancer extends LeaderDaemon {
                 int idx = backendWithReplicaNum.size() - 1;
                 while (idx >= 0) {
                     long chosenBackendId = backendWithReplicaNum.get(idx).getKey();
-                    if (chosenBackendId != backendId && !currentBackendsSet.contains(chosenBackendId)) {
+                    if (chosenBackendId != backendId && !currentBackendsSet.contains(chosenBackendId) &&
+                            !removedBackendIdSet.contains(chosenBackendId)) {
                         replaceBackendId = chosenBackendId;
+                        removedBackendIdSet.add(backendId);
                         break;
                     }
                     idx--;
