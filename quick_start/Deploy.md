@@ -220,6 +220,10 @@ cd StarRocks-x.x.x/be
 
 修改 BE 节点配置文件 **conf/be.conf**。因默认配置即可启动集群，以下示例并未修改 BE 节点配置。如需在生产环境中对集群进行详细优化配置，参考 [BE 参数配置](../administration/Configuration.md#BE-参数配置)。
 
+> 注意
+>
+> 当一台机器拥有多个 IP 地址时，需要在 BE 配置文件 **conf/be.conf** 中设置 `priority_networks`，为该节点设定唯一 IP。
+
 ### 创建数据路径
 
 创建 BE 节点中的数据路径 **storage**。
