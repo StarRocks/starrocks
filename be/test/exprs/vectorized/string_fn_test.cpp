@@ -1838,6 +1838,47 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplace) {
                     .ok());
 }
 
+PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
+    std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
+    auto context = ctx.get();
+
+    Columns columns;
+
+    auto str = BinaryColumn::create();
+    auto ptn = ColumnHelper::create_const_column<TYPE_VARCHAR>("", 1);
+    auto replace = BinaryColumn::create();
+
+    std::string strs[] = {"yyyy-mm-dd", "yyyy-mm-dd"};
+    std::string replaces[] = {"CHINA", "CHINA"};
+
+    std::string res[] = {"CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA", "CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA"};
+
+    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
+        str->append(strs[i]);
+        replace->append(replaces[i]);
+    }
+
+    columns.emplace_back(str);
+    columns.emplace_back(ptn);
+    columns.emplace_back(replace);
+
+    context->impl()->set_constant_columns(columns);
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_replace_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
+
+    auto result = StringFunctions::regexp_replace(context, columns);
+    auto v = ColumnHelper::as_column<BinaryColumn>(result);
+
+    for (int i = 0; i < sizeof(res) / sizeof(res[0]); ++i) {
+        ASSERT_EQ(res[i], v->get_data()[i].to_string());
+    }
+
+    ASSERT_TRUE(
+            StringFunctions::regexp_close(context, FunctionContext::FunctionContext::FunctionStateScope::THREAD_LOCAL)
+                    .ok());
+}
+
 PARALLEL_TEST(VecStringFunctionsTest, moneyFormatDouble) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
 
