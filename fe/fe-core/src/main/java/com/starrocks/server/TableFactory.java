@@ -11,6 +11,7 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.FeConstants;
 import com.starrocks.external.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
@@ -152,7 +153,8 @@ public class TableFactory {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType())) {
+            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType()) &&
+                    !FeConstants.runningUnitTest) {
                 throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
                         "to correct type [" + oColumn.getType() + "]");
             }
