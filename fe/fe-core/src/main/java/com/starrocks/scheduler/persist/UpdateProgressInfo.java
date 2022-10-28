@@ -15,7 +15,7 @@ import java.util.Map;
 
 public class UpdateProgressInfo implements Writable {
     // taskId -> progress
-    @SerializedName("jobProgressMap")
+    @SerializedName("taskRunProgressMap")
     private Map<Long, Integer> taskRunProgressMap;
 
     public UpdateProgressInfo(Map<Long, Integer> taskRunProgressMap) {
