@@ -62,6 +62,7 @@ private:
     vectorized::TableFunctionState* _table_function_state = nullptr;
 
     RuntimeProfile::Counter* _table_function_exec_timer = nullptr;
+    RuntimeProfile::Counter* _table_function_exec_counter = nullptr;
 
     bool _is_finished = false;
 };

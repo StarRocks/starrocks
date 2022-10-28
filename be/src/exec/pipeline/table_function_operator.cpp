@@ -77,7 +77,8 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     _table_function_result_eos = false;
     _remain_repeat_times = 0;
 
-    _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionTime");
+    _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionExecTime");
+    _table_function_exec_counter = ADD_COUNTER(_unique_metrics, "TableFunctionExecCount", TUnit::UNIT);
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
     return _table_function->open(state, _table_function_state);
 }
@@ -188,6 +189,7 @@ vectorized::ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<vecto
 void TableFunctionOperator::_process_table_function() {
     if (!_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
+        COUNTER_UPDATE(_table_function_exec_counter, 1);
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
         DCHECK_EQ(_input_chunk->num_rows() + 1, _table_function_result.second->size());
     }
