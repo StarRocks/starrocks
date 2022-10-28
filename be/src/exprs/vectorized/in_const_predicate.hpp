@@ -241,6 +241,9 @@ public:
             for (int row = 0; row < size; ++row) {
                 if (filter[row]) {
                     update_row(row);
+                } else {
+                    // any value will be OK since we don't use it.
+                    builder.append_null();
                 }
             }
         } else {
