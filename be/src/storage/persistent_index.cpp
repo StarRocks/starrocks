@@ -38,7 +38,11 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 // if l0_mem_size exceeds this value, l0 need snapshot
+#if BE_TEST
+constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
+#else
 constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
+#endif
 constexpr size_t kLongKeySize = 64;
 
 const char* const kIndexFileMagic = "IDX1";
@@ -1174,7 +1178,7 @@ public:
                 values.emplace_back(value);
                 offset += kv_pair_size;
             }
-            RETURN_IF_ERROR(load_wals(nums, keys, values.data()));
+            RETURN_IF_ERROR(load_wals(batch_num, keys, values.data()));
             nums -= batch_num;
         }
         return Status::OK();
@@ -2653,18 +2657,21 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kFlush));
         // clear _l0 and reload _l1
         RETURN_IF_ERROR(_reload(*index_meta));
+        LOG(INFO) << "flush l0";
     } else if (_dump_snapshot) {
         index_meta->set_size(_size);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kSnapshot));
+        LOG(INFO) << "dumpsnapshot l0";
     } else {
         index_meta->set_size(_size);
         index_meta->set_format_version(PERSISTENT_INDEX_VERSION_2);
         _version.to_pb(index_meta->mutable_version());
         MutableIndexMetaPB* l0_meta = index_meta->mutable_l0_meta();
         RETURN_IF_ERROR(_l0->commit(l0_meta, _version, kAppendWAL));
+        LOG(INFO) << "append wal";
     }
     return Status::OK();
 }
