@@ -14,7 +14,6 @@ StarRocks v2.4 之前版本仅支持通过 IP 地址访问每个节点。即便�
 
 - **/etc/hosts** 文件中不能有重复的 IP 地址。
 
-
 ## 新集群启用 FQDN 访问
 
 如需部署启用 FQDN 访问的新集群，需要安装 StarRocks v2.4.0 或更高版本。有关如何安装 StarRocks 的详细说明，请参阅 [手动部署 StarRocks](../quick_start/Deploy.md)。
