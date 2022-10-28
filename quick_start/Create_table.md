@@ -33,7 +33,7 @@ MySQL [(none)]> SHOW DATABASES;
 3 rows in set (0.00 sec)
 ```
 
-> 说明：与 MySQL 的表结构类似，`Information_schema` 包含当前 StarRocks 集群的元数据信息，但是部分统计信息还不完善。推荐您通过 `DESC table_name` 等命令来获取数据库元数据信息。
+> 说明：与 MySQL 的表结构类似，`information_schema` 包含当前 StarRocks 集群的元数据信息，但是部分统计信息还不完善。推荐您通过 `DESC table_name` 等命令来获取数据库元数据信息。
 
 ## 创建表
 
