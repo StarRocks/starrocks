@@ -13,6 +13,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
+import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 
 import java.util.List;
 
@@ -52,7 +53,8 @@ public class IntersectAddDistinctRule extends TransformationRule {
         double originRows = childOpt.getStatistics().getOutputRowCount();
         double aggRows = aggOpt.getStatistics().getOutputRowCount();
 
-        if (aggRows <= 0 || originRows <= 0 || aggRows * 1000 > originRows) {
+        if (aggRows <= 0 || originRows <= 0 ||
+                aggRows * StatisticsEstimateCoefficient.MEDIUM_AGGREGATE_EFFECT_COEFFICIENT > originRows) {
             return childOpt;
         }
         return aggOpt;

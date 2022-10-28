@@ -157,7 +157,7 @@ public class SplitAggregateRule extends TransformationRule {
 
         double inputRowCount = Math.max(1, inputStatistics.getOutputRowCount());
         double rowCount = Math.max(1, statistics.getOutputRowCount());
-        if (rowCount / inputRowCount < StatisticsEstimateCoefficient.DEFAULT_AGGREGATE_EFFECT_COEFFICIENT) {
+        if (rowCount * StatisticsEstimateCoefficient.LOW_AGGREGATE_EFFECT_COEFFICIENT < inputRowCount) {
             return true;
         }
         return false;
