@@ -17,7 +17,7 @@
 |-----------|------------|------|
 |硬件要求|<ul><li>集群至少拥有两台物理或虚拟节点。</li><li>BE 节点 CPU 需支持 AVX2 指令集。</li><li>各节点间需要通过万兆网卡及万兆交换机连接。</li></ul>|<ul><li>FE 节点建议配置 8 核 或以上 CPU，16GB 或以上内存。</li> <li>BE 节点建议配置 16 核 或以上 CPU，64GB 或以上内存。</li><li>通过运行 <code>cat /proc/cpuinfo \|grep avx2</code> 命令查看节点 CPU 支持的指令集，若有结果返回则表明 CPU 支持 AVX2 指令集。</li></ul>|
 |操作系统|所有节点操作系统需为 CentOS（7 或以上）。| |
-|软件要求|<ul><li>所有节点需安装 Java Development Kit（1.8 或以上）。</li> <li>客户端节点需安装 MySQL 客户端（5.5 或以上）。</li> </ul>|  |
+|软件要求|<ul><li>所有节点需安装 Java Development Kit（1.8 或以上，推荐使用1.8）。</li> <li>客户端节点需安装 MySQL 客户端（5.5 或以上）。</li> </ul>|  |
 |系统环境|<ul><li>集群时钟需保持同步。 </li> <li> 用户需要有设置 <code>ulimit -n</code> 权限。 </li> </ul> | |
 
 > 说明
