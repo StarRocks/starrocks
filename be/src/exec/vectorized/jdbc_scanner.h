@@ -11,6 +11,7 @@
 #include "exprs/expr_context.h"
 #include "jni.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
@@ -61,7 +62,7 @@ private:
 
     Status _init_jdbc_scanner();
 
-    Status _init_column_class_name();
+    Status _init_column_class_name(RuntimeState* state);
 
     Status _init_jdbc_util();
 
