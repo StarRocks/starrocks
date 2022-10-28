@@ -59,7 +59,7 @@ Release date: October 20th, 2022
 - Functions:
 
   - You can use multiple COUNT(DISTINCT) in one statement. For more information, see [count](../sql-reference/sql-functions/aggregate-functions/count.md).
-  - Window functions min() and max() support sliding windows. For more information, see [Window functions](../using_starrocks/Window_function.md).
+  - Window functions min() and max() support sliding windows. For more information, see [Window functions](../sql-reference/sql-functions/Window_function.md).
   - Optimized the performance of the window_funnel function. For more information, see [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md).
 
 ### Bug Fixes
