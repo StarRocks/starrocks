@@ -104,6 +104,7 @@ public class FunctionSet {
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String TIME_SLICE = "time_slice";
+    public static final String DATE_SLICE = "date_slice";
     public static final String DATE_FLOOR = "date_floor";
     public static final String STRFTIME = "strftime";
     public static final String TIME_FORMAT = "time_format";
