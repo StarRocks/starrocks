@@ -2,6 +2,7 @@
 
 package com.starrocks.external;
 
+@Deprecated
 public class ObjectStorageUtils {
     private static final String SCHEME_S3A = "s3a://";
     private static final String SCHEME_S3 = "s3://";

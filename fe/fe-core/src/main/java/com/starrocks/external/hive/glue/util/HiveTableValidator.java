@@ -23,14 +23,6 @@ public enum HiveTableValidator {
                 missingProperty = "TableType";
             } else if (table.getStorageDescriptor() == null) {
                 missingProperty = "StorageDescriptor";
-            } else if (table.getStorageDescriptor().getInputFormat() == null) {
-                missingProperty = "StorageDescriptor#InputFormat";
-            } else if (table.getStorageDescriptor().getOutputFormat() == null) {
-                missingProperty = "StorageDescriptor#OutputFormat";
-            } else if (table.getStorageDescriptor().getSerdeInfo() == null) {
-                missingProperty = "StorageDescriptor#SerdeInfo";
-            } else if (table.getStorageDescriptor().getSerdeInfo().getSerializationLibrary() == null) {
-                missingProperty = "StorageDescriptor#SerdeInfo#SerializationLibrary";
             }
 
             if (missingProperty != null) {
