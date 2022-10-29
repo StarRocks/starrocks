@@ -118,8 +118,11 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
 
 EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone,
                          ObjectPool* pool)
-        : _context(context), _tuple_desc(tuple_desc),
-          _es_query_status(Status::OK()), _timezone(timezone), _pool(pool) {}
+        : _context(context),
+          _tuple_desc(tuple_desc),
+          _es_query_status(Status::OK()),
+          _timezone(timezone),
+          _pool(pool) {}
 
 EsPredicate::~EsPredicate() {
     for (auto& _disjunct : _disjuncts) {
@@ -353,14 +356,13 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     return Status::OK();
 }
 
-#define BUILD_INPRED_VALUES(TYPE)                                                                                    \
-    case TYPE: {                                                                                                     \
-        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                    \
-            in_pred_values.emplace_back(new VExtLiteral(slot_desc->type().type,                                      \
-                                                        vectorized::ColumnHelper::create_const_column<TYPE>(v, 1),   \
-                                                        _timezone)); \
-        }));                                                                                                         \
-        break;                                                                                                       \
+#define BUILD_INPRED_VALUES(TYPE)                                                                                   \
+    case TYPE: {                                                                                                    \
+        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                   \
+            in_pred_values.emplace_back(new VExtLiteral(                                                            \
+                    slot_desc->type().type, vectorized::ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
+        }));                                                                                                        \
+        break;                                                                                                      \
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
