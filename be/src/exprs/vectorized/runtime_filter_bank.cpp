@@ -647,8 +647,8 @@ public:
 
         // NOTE(yan): make sure following code can be compiled into SIMD instructions:
         // in original version, we use
-        // 1. memcpy filter -> res
-        // 2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
+        //   1. memcpy filter -> res
+        //   2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
         // but they can not be compiled into SIMD instructions.
         if (col->is_nullable()) {
             auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
@@ -657,6 +657,7 @@ public:
             for (int i = 0; i < size; i++) {
                 res[i] = (data[i] >= _min_value && data[i] <= _max_value);
             }
+            // we take null as true value.
             for (int i = 0; i < size; i++) {
                 res[i] = res[i] | null_data[i];
             }
@@ -667,11 +668,12 @@ public:
             }
         }
 
-        if (filter != nullptr) {
-            for (int i = 0; i < size; i++) {
-                res[i] = res[i] & filter[i];
-            }
-        }
+        // NOTE(yan): filter can be used optionally.
+        // if (filter != nullptr) {
+        //     for (int i = 0; i < size; i++) {
+        //         res[i] = res[i] & filter[i];
+        //     }
+        // }
 
         return result;
     }
