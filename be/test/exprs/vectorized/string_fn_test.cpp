@@ -1851,7 +1851,8 @@ PARALLEL_TEST(VecStringFunctionsTest, regexpReplaceWithEmptyPattern) {
     std::string strs[] = {"yyyy-mm-dd", "yyyy-mm-dd"};
     std::string replaces[] = {"CHINA", "CHINA"};
 
-    std::string res[] = {"CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA", "CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA"};
+    std::string res[] = {"CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA",
+                         "CHINAyCHINAyCHINAyCHINAyCHINA-CHINAmCHINAmCHINA-CHINAdCHINAdCHINA"};
 
     for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
         str->append(strs[i]);
