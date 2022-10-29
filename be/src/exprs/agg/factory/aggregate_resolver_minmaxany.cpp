@@ -9,35 +9,10 @@
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/maxmin.h"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 #include "types/bitmap_value.h"
 
 namespace starrocks::vectorized {
-
-template <PrimitiveType pt>
-using MinStateTrait = MinAggregateData<pt>;
-template <PrimitiveType pt>
-using MaxStateTrait = MaxAggregateData<pt>;
-template <PrimitiveType pt>
-using AnyStateTrait = AnyValueAggregateData<pt>;
-template <PrimitiveType pt>
-inline constexpr PrimitiveType MaxMinResultTrait = pt;
-
-template <PrimitiveType pt>
-struct MinBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeMinAggregateFunction<pt>(); }
-};
-template <PrimitiveType pt>
-struct MaxBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeMaxAggregateFunction<pt>(); }
-};
-template <PrimitiveType pt>
-struct AnyBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeAnyValueAggregateFunction<pt>(); }
-};
-template <PrimitiveType pt>
-struct MaybyBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeMaxByAggregateFunction<pt>(); }
-};
 
 void AggregateFuncResolver::register_bitmap() {
     add_aggregate_mapping<TYPE_TINYINT, TYPE_BIGINT, BitmapValue>(
@@ -48,45 +23,61 @@ void AggregateFuncResolver::register_bitmap() {
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_INT>());
     add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, BitmapValue>(
             "bitmap_union_int", false, AggregateFactory::MakeBitmapUnionIntAggregateFunction<TYPE_BIGINT>());
-    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, false, BitmapValue>(
-            "bitmap_union", AggregateFactory::MakeBitmapUnionAggregateFunction());
-    add_object_mapping<TYPE_OBJECT, TYPE_OBJECT, false, BitmapValuePacked>(
-            "bitmap_intersect", AggregateFactory::MakeBitmapIntersectAggregateFunction());
-    add_object_mapping<TYPE_OBJECT, TYPE_BIGINT, true, BitmapValue>(
-            "bitmap_union_count", AggregateFactory::MakeBitmapUnionCountAggregateFunction());
+    add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValue>("bitmap_union", false,
+                                                                 AggregateFactory::MakeBitmapUnionAggregateFunction());
+    add_aggregate_mapping<TYPE_OBJECT, TYPE_OBJECT, BitmapValuePacked>(
+            "bitmap_intersect", false, AggregateFactory::MakeBitmapIntersectAggregateFunction());
+    add_aggregate_mapping<TYPE_OBJECT, TYPE_BIGINT, BitmapValue>(
+            "bitmap_union_count", true, AggregateFactory::MakeBitmapUnionCountAggregateFunction());
 }
 
+struct MinMaxAnyDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_binary<pt>) {
+            resolver->add_aggregate_mapping<pt, pt, MinAggregateData<pt>>(
+                    "min", true, AggregateFactory::MakeMinAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<pt, pt, MaxAggregateData<pt>>(
+                    "max", true, AggregateFactory::MakeMaxAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
+                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
+        }
+        if constexpr (pt_is_json<pt>) {
+            resolver->add_aggregate_mapping<pt, pt, AnyValueAggregateData<pt>>(
+                    "any_value", true, AggregateFactory::MakeAnyValueAggregateFunction<pt>());
+        }
+    }
+};
+
+template <PrimitiveType ret_type>
+struct MaxByDispatcherInner {
+    template <PrimitiveType arg_type>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr ((pt_is_aggregate<arg_type> || pt_is_binary<arg_type>)&&(pt_is_aggregate<ret_type> ||
+                                                                              pt_is_binary<ret_type>)) {
+            resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
+                    "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
+        }
+    }
+};
+
+struct MaxByDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver, PrimitiveType ret_type) {
+        type_dispatch_all(ret_type, MaxByDispatcherInner<pt>(), resolver);
+    }
+};
+
 void AggregateFuncResolver::register_minmaxany() {
-    ADD_ALL_TYPE1("max_by", TYPE_BOOLEAN);
-    ADD_ALL_TYPE1("max_by", TYPE_TINYINT);
-    ADD_ALL_TYPE1("max_by", TYPE_SMALLINT);
-    ADD_ALL_TYPE1("max_by", TYPE_INT);
-    ADD_ALL_TYPE1("max_by", TYPE_BIGINT);
-    ADD_ALL_TYPE1("max_by", TYPE_LARGEINT);
-    ADD_ALL_TYPE1("max_by", TYPE_FLOAT);
-    ADD_ALL_TYPE1("max_by", TYPE_DOUBLE);
-    ADD_ALL_TYPE1("max_by", TYPE_VARCHAR);
-    ADD_ALL_TYPE1("max_by", TYPE_CHAR);
-    ADD_ALL_TYPE1("max_by", TYPE_DECIMALV2);
-    ADD_ALL_TYPE1("max_by", TYPE_DATETIME);
-    ADD_ALL_TYPE1("max_by", TYPE_DATE);
-    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL32);
-    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL64);
-    ADD_ALL_TYPE1("max_by", TYPE_DECIMAL128);
+    for (auto ret_type : aggregate_types()) {
+        for (auto arg_type : aggregate_types()) {
+            type_dispatch_all(arg_type, MaxByDispatcher(), this, ret_type);
+        }
+    }
 
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("max", true, MaxMinResultTrait, MaxStateTrait, MaxBuilder);
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("min", true, MaxMinResultTrait, MinStateTrait, MinBuilder);
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("any_value", true, MaxMinResultTrait, AnyStateTrait, AnyBuilder);
-
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, MinStateTrait, MinBuilder>("min", true);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_CHAR, MinStateTrait, MinBuilder>("min", true);
-
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, MaxStateTrait, MaxBuilder>("max", true);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_CHAR, MaxStateTrait, MaxBuilder>("max", true);
-
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, AnyStateTrait, AnyBuilder>("any_value", true);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_CHAR, AnyStateTrait, AnyBuilder>("any_value", true);
-    add_aggregate_mapping<TYPE_JSON, TYPE_JSON, AnyStateTrait, AnyBuilder>("any_value", true);
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, MinMaxAnyDispatcher(), this);
+    }
 }
 
 } // namespace starrocks::vectorized
