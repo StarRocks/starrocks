@@ -93,7 +93,8 @@ Status ESDataSource::_build_conjuncts() {
     _predicate_idx.reserve(conjunct_sz);
 
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        EsPredicate* predicate = _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _runtime_state, _pool));
+        EsPredicate* predicate = _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc,
+                                                            _runtime_state->timezone(), _pool));
         predicate->set_field_context(_fields_context);
         status = predicate->build_disjuncts_list(true);
         if (status.ok()) {

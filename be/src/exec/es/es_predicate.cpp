@@ -42,7 +42,6 @@
 #include "runtime/string_value.h"
 #include "service/backend_options.h"
 #include "util/runtime_profile.h"
-#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -61,7 +60,7 @@ static constexpr bool is_type_in() {
     return (std::is_same_v<T, Ts> || ...);
 }
 
-VExtLiteral::VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column, RuntimeState* runtime_state) {
+VExtLiteral::VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column, const std::string& timezone) {
     DCHECK(!column->empty());
     // We need to convert the predicate column into the corresponding string.
     // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
@@ -74,7 +73,12 @@ VExtLiteral::VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column, Runti
         DCHECK(!viewer.is_null(0));
         vectorized::TimestampValue datetime_value = viewer.value(0);
         // Use timezone variable from FE
-        int64_t offsets = TimezoneUtils::to_utc_offset(runtime_state->timezone_obj());
+        cctz::time_zone timezone_obj;
+        if (!TimezoneUtils::find_cctz_time_zone(timezone, timezone_obj)) {
+            // Use default +8 timezone instead.
+            TimezoneUtils::find_cctz_time_zone(TimezoneUtils::default_time_zone, timezone_obj);
+        }
+        int64_t offsets = TimezoneUtils::to_utc_offset(timezone_obj);
         _value = std::to_string((datetime_value.to_unix_second() - offsets) * 1000);
     } else if (type == TYPE_BOOLEAN) {
         vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
@@ -112,10 +116,10 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, RuntimeState* runtime_state,
+EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone,
                          ObjectPool* pool)
         : _context(context), _tuple_desc(tuple_desc),
-          _es_query_status(Status::OK()), _runtime_state(runtime_state), _pool(pool) {}
+          _es_query_status(Status::OK()), _timezone(timezone), _pool(pool) {}
 
 EsPredicate::~EsPredicate() {
     for (auto& _disjunct : _disjuncts) {
@@ -219,7 +223,7 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
 
         // how to process literal
         ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
-        auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _runtime_state));
+        auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
         std::string col = slot_desc->col_name();
 
         // ES does not support non-bool literal pushdown for bool type
@@ -251,7 +255,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             }
             Expr* expr = conjunct->get_child(1);
             ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
-            auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _runtime_state));
+            auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
             std::vector<ExtLiteral*> query_conditions;
             query_conditions.emplace_back(literal);
             std::vector<ExtColumnDesc> cols;
@@ -319,7 +323,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             }
 
             ASSIGN_OR_RETURN(auto expr_col, _context->evaluate(expr, nullptr));
-            auto literal = _pool->add(new VExtLiteral(type, std::move(expr_col), _runtime_state));
+            auto literal = _pool->add(new VExtLiteral(type, std::move(expr_col), _timezone));
             ExtPredicate* predicate = new ExtLikePredicate(TExprNodeType::LIKE_PRED, col, slot_desc->type(), literal);
 
             _disjuncts.push_back(predicate);
@@ -354,7 +358,7 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
         RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                    \
             in_pred_values.emplace_back(new VExtLiteral(slot_desc->type().type,                                      \
                                                         vectorized::ColumnHelper::create_const_column<TYPE>(v, 1),   \
-                                                        _runtime_state)); \
+                                                        _timezone)); \
         }));                                                                                                         \
         break;                                                                                                       \
     }
@@ -435,7 +439,7 @@ Status EsPredicate::_build_compound_predicate(const Expr* conjunct, bool* handle
         if (conjunct->op() == TExprOpcode::COMPOUND_AND) {
             std::vector<EsPredicate*> conjuncts;
             for (int i = 0; i < conjunct->get_num_children(); ++i) {
-                EsPredicate* predicate = _pool->add(new EsPredicate(_context, _tuple_desc, _runtime_state, _pool));
+                EsPredicate* predicate = _pool->add(new EsPredicate(_context, _tuple_desc, _timezone, _pool));
                 predicate->set_field_context(_field_context);
                 Status status = predicate->_vec_build_disjuncts_list(conjunct->children()[i]);
                 if (status.ok()) {
