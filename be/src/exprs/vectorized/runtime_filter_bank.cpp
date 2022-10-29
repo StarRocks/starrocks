@@ -645,21 +645,26 @@ public:
             return result;
         }
 
-        if (filter != nullptr) {
-            memcpy(res, filter, size);
-        }
-
         if (col->is_nullable()) {
             auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
-            uint8_t* null_data = tmp->null_column_data().data();
-            CppType* data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
+            uint8_t* __restrict__ null_data = tmp->null_column_data().data();
+            CppType* __restrict__ data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data().data();
             for (int i = 0; i < size; i++) {
-                res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
+                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
+            }
+            for (int i = 0; i < size; i++) {
+                res[i] = res[i] | null_data[i];
             }
         } else {
             CppType* data = ColumnHelper::cast_to_raw<Type>(col)->get_data().data();
             for (int i = 0; i < size; i++) {
-                res[i] = res[i] && (data[i] >= _min_value && data[i] <= _max_value);
+                res[i] = (data[i] >= _min_value && data[i] <= _max_value);
+            }
+        }
+
+        if (filter != nullptr) {
+            for (int i = 0; i < size; i++) {
+                res[i] = res[i] & filter[i];
             }
         }
 
