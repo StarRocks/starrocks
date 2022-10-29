@@ -47,7 +47,7 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column);
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column, RuntimeState* runtime_state);
 
     VExtLiteral() = default;
     const std::string& to_string() const override { return _value; }
@@ -134,7 +134,7 @@ struct ExtFunction : public ExtPredicate {
 
 class EsPredicate {
 public:
-    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
+    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, RuntimeState* runtime_state, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
     Status build_disjuncts_list(bool use_vectorized = true);
@@ -160,6 +160,7 @@ private:
     const TupleDescriptor* _tuple_desc = nullptr;
     std::vector<ExtPredicate*> _disjuncts;
     Status _es_query_status;
+    RuntimeState* _runtime_state;
     ObjectPool* _pool = nullptr;
     std::map<std::string, std::string> _field_context;
 };
