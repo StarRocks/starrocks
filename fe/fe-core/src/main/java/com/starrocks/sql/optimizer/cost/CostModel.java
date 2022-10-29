@@ -94,13 +94,6 @@ public class CostModel {
                 costEstimate.getNetworkCost() * networkCostWeight;
     }
 
-    public static int getParallelExecInstanceNum(int leftMostScanTabletsNum) {
-        if (ConnectContext.get().getSessionVariable().isEnablePipelineEngine()) {
-            return 1;
-        }
-        return Math.min(ConnectContext.get().getSessionVariable().getDegreeOfParallelism(), leftMostScanTabletsNum);
-    }
-
     private static class CostEstimator extends OperatorVisitor<CostEstimate, ExpressionContext> {
 
         private final List<PhysicalPropertySet> inputProperties;
@@ -240,20 +233,17 @@ public class CostModel {
                     result = CostEstimate.ofCpu(outputSize);
                     break;
                 case BROADCAST:
-                    int parallelExecInstanceNum = getParallelExecInstanceNum(
-                            context.getRootProperty().getLeftMostScanTabletsNum());
                     // beNum is the number of right table should broadcast, now use alive backends
                     int aliveBackendNumber = ctx.getAliveBackendNumber();
                     int beNum = Math.max(1, aliveBackendNumber);
 
                     result = CostEstimate.of(outputSize * aliveBackendNumber,
-                            outputSize * beNum * parallelExecInstanceNum,
-                            Math.max(outputSize * beNum * parallelExecInstanceNum, 1));
+                            outputSize * beNum,
+                            Math.max(outputSize * beNum, 1));
                     if (outputSize > sessionVariable.getMaxExecMemByte()) {
                         result = result.multiplyBy(StatsConstants.BROADCAST_JOIN_MEM_EXCEED_PENALTY);
                     }
-                    LOG.debug("parallelInstNum: {}, beNum: {}, aliveBeNum: {}, outputSize: {}.",
-                            parallelExecInstanceNum, aliveBackendNumber, beNum, outputSize);
+                    LOG.debug("beNum: {}, aliveBeNum: {}, outputSize: {}.", aliveBackendNumber, beNum, outputSize);
                     break;
                 case SHUFFLE:
                     // This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
@@ -303,9 +293,6 @@ public class CostModel {
         @Override
         public CostEstimate visitPhysicalMergeJoin(PhysicalMergeJoinOperator join, ExpressionContext context) {
             Preconditions.checkState(context.arity() == 2);
-            // For broadcast join, use leftExecInstanceNum as right child real destinations num.
-            int leftExecInstanceNum = context.getChildLeftMostScanTabletsNum(0);
-            context.getChildLogicalProperty(1).setLeftMostScanTabletsNum(leftExecInstanceNum);
 
             Statistics statistics = context.getStatistics();
             Preconditions.checkNotNull(statistics);

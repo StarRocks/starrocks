@@ -49,14 +49,15 @@ public class HashJoinCostModel {
         double probeCost;
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
-        int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber());
+        int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
+                ConnectContext.get().getSessionVariable().getDegreeOfParallelism());
         switch (execMode) {
             case BROADCAST:
                 buildCost = rightOutput;
                 probeCost = leftOutput * getAvgProbeCost();
                 break;
             case SHUFFLE:
-                buildCost = rightOutput / beNum;
+                buildCost = rightOutput / parallelFactor;
                 probeCost = leftOutput * getAvgProbeCost();
                 break;
             default:
@@ -71,12 +72,11 @@ public class HashJoinCostModel {
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         double memCost;
         int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber());
-        switch (execMode) {
-            case BROADCAST:
-                memCost = rightOutput * beNum;
-                break;
-            default:
-                memCost = rightOutput;
+
+        if (BROADCAST.equals(execMode)) {
+            memCost = rightOutput * beNum;
+        } else {
+            memCost = rightOutput;
         }
         return memCost;
     }
@@ -97,13 +97,14 @@ public class HashJoinCostModel {
         int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
-        switch (execMode) {
-            case BROADCAST:
-                degradeRatio = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
-                break;
-            default:
-                degradeRatio = Math.max(1, (Math.log(mapSize / BOTTOM_NUMBER) -
-                        Math.log(parallelFactor) / Math.log(2)));
+
+        if (BROADCAST.equals(execMode)) {
+            degradeRatio = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
+            degradeRatio = Math.min(12, degradeRatio);
+        } else {
+            degradeRatio = Math.max(1, (Math.log(mapSize / BOTTOM_NUMBER) -
+                    Math.log(parallelFactor) / Math.log(2)));
+            degradeRatio = Math.min(3, degradeRatio);
         }
         LOG.debug("execMode: {}, degradeRatio: {}", execMode, degradeRatio);
         return degradeRatio;
@@ -118,4 +119,5 @@ public class HashJoinCostModel {
             return SHUFFLE;
         }
     }
+
 }
