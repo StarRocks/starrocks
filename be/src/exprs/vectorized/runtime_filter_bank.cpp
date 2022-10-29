@@ -645,6 +645,11 @@ public:
             return result;
         }
 
+        // NOTE(yan): make sure following code can be compiled into SIMD instructions:
+        // in original version, we use
+        // 1. memcpy filter -> res
+        // 2. res[i] = res[i] && (null_data[i] || (data[i] >= _min_value && data[i] <= _max_value));
+        // but they can not be compiled into SIMD instructions.
         if (col->is_nullable()) {
             auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
             uint8_t* __restrict__ null_data = tmp->null_column_data().data();
