@@ -2851,10 +2851,9 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        DateValue check_result[6] = {
-                DateValue::create(0001, 1, 1), DateValue::create(0001, 3, 2),
-                DateValue::create(0001, 5, 6), DateValue::create(2022, 7, 5),
-                DateValue::create(2022, 9, 8), DateValue::create(2022, 11, 2)};
+        DateValue check_result[6] = {DateValue::create(0001, 1, 1), DateValue::create(0001, 3, 2),
+                                     DateValue::create(0001, 5, 6), DateValue::create(2022, 7, 5),
+                                     DateValue::create(2022, 9, 8), DateValue::create(2022, 11, 2)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2896,10 +2895,9 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        DateValue check_result[6] = {
-                DateValue::create(0001, 1, 1), DateValue::create(0001, 1, 1),
-                DateValue::create(0001, 1, 1), DateValue::create(2022, 4, 1),
-                DateValue::create(2022, 9, 1), DateValue::create(2022, 9, 1)};
+        DateValue check_result[6] = {DateValue::create(0001, 1, 1), DateValue::create(0001, 1, 1),
+                                     DateValue::create(0001, 1, 1), DateValue::create(2022, 4, 1),
+                                     DateValue::create(2022, 9, 1), DateValue::create(2022, 9, 1)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2941,10 +2939,9 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        DateValue check_result[6] = {
-                DateValue::create(0001, 1, 1), DateValue::create(0001, 1, 1),
-                DateValue::create(0001, 1, 1), DateValue::create(2021, 1, 1),
-                DateValue::create(2021, 1, 1), DateValue::create(2021, 1, 1)};
+        DateValue check_result[6] = {DateValue::create(0001, 1, 1), DateValue::create(0001, 1, 1),
+                                     DateValue::create(0001, 1, 1), DateValue::create(2021, 1, 1),
+                                     DateValue::create(2021, 1, 1), DateValue::create(2021, 1, 1)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -2986,10 +2983,9 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        DateValue check_result[6] = {
-                DateValue::create(0001, 1, 1),  DateValue::create(0001, 2, 5),
-                DateValue::create(0001, 4, 16), DateValue::create(2022, 6, 20),
-                DateValue::create(2022, 8, 29), DateValue::create(2022, 10, 3)};
+        DateValue check_result[6] = {DateValue::create(0001, 1, 1),  DateValue::create(0001, 2, 5),
+                                     DateValue::create(0001, 4, 16), DateValue::create(2022, 6, 20),
+                                     DateValue::create(2022, 8, 29), DateValue::create(2022, 10, 3)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -3031,10 +3027,9 @@ TEST_F(TimeFunctionsTest, DateSliceFloorTest) {
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        DateValue check_result[6] = {
-                DateValue::create(0001, 1, 1), DateValue::create(0001, 1, 1),
-                DateValue::create(0001, 1, 1), DateValue::create(2022, 4, 1),
-                DateValue::create(2022, 4, 1), DateValue::create(2022, 4, 1)};
+        DateValue check_result[6] = {DateValue::create(0001, 1, 1), DateValue::create(0001, 1, 1),
+                                     DateValue::create(0001, 1, 1), DateValue::create(2022, 4, 1),
+                                     DateValue::create(2022, 4, 1), DateValue::create(2022, 4, 1)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
@@ -3092,10 +3087,9 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
         auto datetimes =
                 ColumnHelper::cast_to<TYPE_DATE>(ColumnHelper::as_column<NullableColumn>(result)->data_column());
 
-        DateValue check_result[6] = {
-                DateValue::create(0001, 1, 6), DateValue::create(0001, 3, 7),
-                DateValue::create(0001, 5, 11), DateValue::create(2022, 7, 10),
-                DateValue::create(2022, 9, 13), DateValue::create(2022, 11, 7)};
+        DateValue check_result[6] = {DateValue::create(0001, 1, 6),  DateValue::create(0001, 3, 7),
+                                     DateValue::create(0001, 5, 11), DateValue::create(2022, 7, 10),
+                                     DateValue::create(2022, 9, 13), DateValue::create(2022, 11, 7)};
 
         for (size_t i = 0; i < sizeof(check_result) / sizeof(check_result[0]); ++i) {
             ASSERT_EQ(check_result[i], datetimes->get_data()[i]);
