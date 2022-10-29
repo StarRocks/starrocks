@@ -44,6 +44,15 @@ public:
     void register_approx();
     void register_others();
 
+    const std::vector<PrimitiveType>& aggregate_types() const {
+        const static std::vector<PrimitiveType> kTypes{
+                TYPE_BOOLEAN,   TYPE_TINYINT,   TYPE_SMALLINT,  TYPE_INT,        TYPE_BIGINT, TYPE_LARGEINT,
+                TYPE_FLOAT,     TYPE_DOUBLE,    TYPE_VARCHAR,   TYPE_CHAR,       TYPE_DATE,   TYPE_DATETIME,
+                TYPE_DECIMALV2, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128,
+        };
+        return kTypes;
+    }
+
     const AggregateFunction* get_aggregate_info(const std::string& name, const PrimitiveType arg_type,
                                                 const PrimitiveType return_type, const bool is_window_function,
                                                 const bool is_null) const {
