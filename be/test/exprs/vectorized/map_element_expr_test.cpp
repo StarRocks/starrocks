@@ -5,8 +5,8 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
-#include "column/map_column.h"
 #include "column/column_helper.h"
+#include "column/map_column.h"
 
 namespace starrocks::vectorized {
 namespace {
@@ -198,24 +198,24 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
     auto column = ColumnHelper::create_column(type_map_varchar_int, true);
 
     DatumMap map;
-    map[(Slice)"a"] = (int32_t)11;
-    map[(Slice)"b"] = (int32_t)22;
-    map[(Slice)"c"] = (int32_t)33;
+    map[(Slice) "a"] = (int32_t)11;
+    map[(Slice) "b"] = (int32_t)22;
+    map[(Slice) "c"] = (int32_t)33;
     column->append_datum(map);
 
     DatumMap map1;
-    map1[(Slice)"a"] = (int32_t)44;
-    map1[(Slice)"b"] = (int32_t)55;
-    map1[(Slice)"d"] = (int32_t)66;
+    map1[(Slice) "a"] = (int32_t)44;
+    map1[(Slice) "b"] = (int32_t)55;
+    map1[(Slice) "d"] = (int32_t)66;
     column->append_datum(map1);
 
     DatumMap map2;
-    map2[(Slice)"b"] = (int32_t)77;
-    map2[(Slice)"c"] = (int32_t)88;
+    map2[(Slice) "b"] = (int32_t)77;
+    map2[(Slice) "c"] = (int32_t)88;
     column->append_datum(map2);
 
     DatumMap map3;
-    map3[(Slice)"b"] = (int32_t)99;
+    map3[(Slice) "b"] = (int32_t)99;
     column->append_datum(map3);
 
     column->append_datum(DatumMap());
@@ -303,6 +303,5 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
         EXPECT_EQ(88, result->get(2).get_int32());
     }
 }
-
 
 } // namespace starrocks::vectorized
