@@ -145,7 +145,6 @@ public class MaterializedViewRewriter {
         Map<ColumnRefOperator, ScalarOperator> mvLineage =
                 getLineage(mvExpression, materializationContext.getMvColumnRefFactory());
         ReplaceColumnRefRewriter mvColumnRefRewriter = new ReplaceColumnRefRewriter(mvLineage, true);
-
         List<ScalarOperator> mvConjuncts = RewriteUtils.getAllPredicates(mvExpression);
         ScalarOperator mvPredicate = null;
         if (!mvConjuncts.isEmpty()) {

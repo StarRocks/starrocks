@@ -105,4 +105,8 @@ public class MaterializationContext {
     public void setOptimizerContext(OptimizerContext optimizerContext) {
         this.optimizerContext = optimizerContext;
     }
+
+    public Set<String> getPartitionNamesToRefresh() {
+        return partitionNamesToRefresh;
+    }
 }
