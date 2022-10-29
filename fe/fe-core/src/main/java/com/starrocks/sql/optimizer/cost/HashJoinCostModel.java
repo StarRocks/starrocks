@@ -13,6 +13,25 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 
+/**
+ * For different distributed join execution methods, due to their different execution characteristics,
+ * they should have different cost. We currently have four execution modes: broadcast join,
+ * bucket_shuffle join, shuffle join, and colocate join. The latter three are essentially shuffle joins,
+ * so their execution efficiency can be approximately regarded as consistent. The implementation of
+ * broadcast join is a little different from the other three.
+ * 1. In the build hash table stage of broadcast join, the parallelism is 1
+ *    while it can be parallelized in shuffle join.
+ * 2. Broadcast join consumes more memory for redundant data in multiple BEs.
+ * 3. The data size in each hash table of shuffle join is 1/parallelism of right table_size
+ *    while it is full size in broadcast join. A small hash table can improve probe efficiency.
+ * 4. The process of redistributing data by shuffle operation makes the tasks of each processing thread
+ *    are more balanced, and it is more conducive to parallel computing.
+ * Therefore, our join execution cost calculation model should consider parameters such as join execution mode,
+ * parallelism, and left and right table size. The most important thing in the model is the evaluation of the
+ * probe cost for each row. When the size of the right table is greater than bottom_number, the average probe
+ * cost needs to be expanded. The parallel computing characteristics of shuffle join can offset part of the
+ * probe cost. We also set an upper limit on the probe cost to avoid cost distortion caused by huge table.
+ */
 public class HashJoinCostModel {
 
     private static final Logger LOG = LogManager.getLogger(HashJoinCostModel.class);
@@ -23,6 +42,10 @@ public class HashJoinCostModel {
     private static final String SHUFFLE = "SHUFFLE";
 
     private static final int BOTTOM_NUMBER = 100000;
+
+    private static final double SHUFFLE_MAX_RATIO = 3;
+
+    private static final double BROADCAST_MAT_RATIO = 12;
 
     private final Statistics leftStatistics;
 
@@ -100,11 +123,13 @@ public class HashJoinCostModel {
 
         if (BROADCAST.equals(execMode)) {
             degradeRatio = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
-            degradeRatio = Math.min(12, degradeRatio);
+            // normalize ration when it hits the limit
+            degradeRatio = Math.min(BROADCAST_MAT_RATIO, degradeRatio);
         } else {
             degradeRatio = Math.max(1, (Math.log(mapSize / BOTTOM_NUMBER) -
                     Math.log(parallelFactor) / Math.log(2)));
-            degradeRatio = Math.min(3, degradeRatio);
+            // normalize ration when it hits the limit
+            degradeRatio = Math.min(SHUFFLE_MAX_RATIO, degradeRatio);
         }
         LOG.debug("execMode: {}, degradeRatio: {}", execMode, degradeRatio);
         return degradeRatio;

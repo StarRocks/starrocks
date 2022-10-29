@@ -443,8 +443,8 @@ public class ReplayFromDumpTest {
     public void testJoinWithPipelineDop() throws Exception {
         Pair<QueryDumpInfo, String> replayPair =
                 getPlanFragment(getDumpInfoFromFile("query_dump/join_pipeline_dop"), null, TExplainLevel.NORMAL);
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("24:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (BROADCAST)\n" +
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("25:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (PARTITIONED)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 5: ss_customer_sk = 52: c_customer_sk"));
     }
