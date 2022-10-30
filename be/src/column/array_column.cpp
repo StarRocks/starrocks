@@ -513,7 +513,7 @@ StatusOr<ColumnPtr> ArrayColumn::downgrade() {
     return downgrade_helper_func(&_elements);
 }
 
-bool ArrayColumn::empty_null_array(NullColumnPtr null_map) {
+bool ArrayColumn::empty_null_array(const NullColumnPtr& null_map) {
     DCHECK(null_map->size() == this->size());
     bool need_empty = false;
     auto size = this->size();

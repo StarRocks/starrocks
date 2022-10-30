@@ -73,7 +73,7 @@ const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
     return _shared_build_match_flag;
 }
 
-void NLJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
+void NLJoinContext::append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& chunk) {
     _input_chunks[sinker_id].push_back(chunk);
 }
 

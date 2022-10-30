@@ -245,7 +245,7 @@ Status DeltaWriter::get_err_status() const {
     return _err_status;
 }
 
-void DeltaWriter::_set_state(State state, Status st) {
+void DeltaWriter::_set_state(State state, const Status& st) {
     std::lock_guard l(_state_lock);
     _state = state;
     if (!st.ok() && _err_status.ok()) {

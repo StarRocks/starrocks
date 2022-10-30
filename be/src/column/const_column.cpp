@@ -2,13 +2,15 @@
 
 #include "column/const_column.h"
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "simd/simd.h"
 #include "util/coding.h"
 
 namespace starrocks::vectorized {
 
-ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(data, 0) {}
+ConstColumn::ConstColumn(ColumnPtr data) : ConstColumn(std::move(data), 0) {}
 
 ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), _size(size) {
     DCHECK(!_data->is_constant());

@@ -360,7 +360,7 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
-void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb) {
+void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb) {
     // This writing is to ensure that MemTracker will not be destructed before the thread ends.
     // This writing method is a bit tricky, and when there is a better way, replace it
     auto profile = exec_state->runtime_state()->runtime_profile_ptr();

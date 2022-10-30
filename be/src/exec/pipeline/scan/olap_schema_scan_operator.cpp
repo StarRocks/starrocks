@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/scan/olap_schema_scan_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/olap_schema_chunk_source.h"
@@ -31,7 +33,7 @@ OperatorPtr OlapSchemaScanOperatorFactory::do_create(int32_t dop, int32_t driver
 
 OlapSchemaScanOperator::OlapSchemaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
                                                int32_t dop, ScanNode* scan_node, OlapSchemaScanContextPtr ctx)
-        : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(ctx) {}
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(std::move(ctx)) {}
 
 OlapSchemaScanOperator::~OlapSchemaScanOperator() {}
 

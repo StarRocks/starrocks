@@ -168,7 +168,7 @@ void ChunkCursor::reset_with_next_chunk_for_pipeline() {
 }
 
 SimpleChunkSortCursor::SimpleChunkSortCursor(ChunkProvider chunk_provider, const std::vector<ExprContext*>* sort_exprs)
-        : _chunk_provider(chunk_provider), _sort_exprs(sort_exprs) {}
+        : _chunk_provider(std::move(chunk_provider)), _sort_exprs(sort_exprs) {}
 
 bool SimpleChunkSortCursor::is_data_ready() {
     if (!_data_ready && !_chunk_provider(nullptr, nullptr)) {

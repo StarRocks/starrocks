@@ -25,7 +25,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    void _send_error_reply(HttpRequest* req, Status st);
+    void _send_error_reply(HttpRequest* req, const Status& st);
 
     ExecEnv* _exec_env;
 };
@@ -46,7 +46,7 @@ public:
 private:
     Status _on_header(HttpRequest* http_req, StreamLoadContext* ctx);
     Status _exec_plan_fragment(HttpRequest* http_req, StreamLoadContext* ctx);
-    void _send_error_reply(HttpRequest* req, Status st);
+    void _send_error_reply(HttpRequest* req, const Status& st);
     Status _parse_request(HttpRequest* http_req, StreamLoadContext* ctx, TStreamLoadPutRequest& request);
 
     ExecEnv* _exec_env;

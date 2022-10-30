@@ -910,7 +910,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     return Status::OK();
 }
 
-Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
+Status SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                                         std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
@@ -1043,7 +1043,7 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     return status;
 }
 
-Status SchemaChangeHandler::_validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request) {
     int64_t max_continuous_version = new_tablet->max_continuous_version();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
               << ", version=" << max_continuous_version;

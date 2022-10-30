@@ -87,7 +87,7 @@ QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(qu
 #endif
 }
 
-void QueryTrace::register_drivers(TUniqueId fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
+void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
     if (!_is_enable) {
         return;
@@ -152,7 +152,7 @@ Status QueryTrace::dump() {
     return Status::OK();
 }
 
-void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragment_instance_id, std::uintptr_t driver) {
+void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id, std::uintptr_t driver) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
     if (!query_trace->_is_enable) {
         tls_trace_ctx.reset();

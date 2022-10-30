@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/scan/olap_meta_scan_prepare_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/scan/olap_meta_scan_context.h"
 #include "exec/pipeline/scan/olap_meta_scan_operator.h"
 #include "exec/vectorized/olap_meta_scanner.h"
@@ -19,7 +21,7 @@ OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factor
                                                          OlapMetaScanContextPtr scan_ctx)
         : SourceOperator(factory, id, "olap_meta_scan_prepare", plan_node_id, driver_sequence),
           _scan_node(scan_node),
-          _scan_ctx(scan_ctx) {}
+          _scan_ctx(std::move(scan_ctx)) {}
 
 OlapMetaScanPrepareOperator::~OlapMetaScanPrepareOperator() {}
 
@@ -64,7 +66,7 @@ OlapMetaScanPrepareOperatorFactory::OlapMetaScanPrepareOperatorFactory(
         std::shared_ptr<OlapMetaScanContextFactory> scan_ctx_factory)
         : SourceOperatorFactory(id, "olap_meta_scan_prepare", plan_node_id),
           _scan_node(scan_node),
-          _scan_ctx_factory(scan_ctx_factory) {}
+          _scan_ctx_factory(std::move(scan_ctx_factory)) {}
 
 Status OlapMetaScanPrepareOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();

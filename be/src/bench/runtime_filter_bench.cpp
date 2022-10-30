@@ -49,7 +49,8 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     running_ctx.compatibility = true;
 
     std::vector<Column*> column_ptrs;
-    for (auto& column : columns) {
+    column_ptrs.reserve(columns.size());
+for (auto& column : columns) {
         column_ptrs.push_back(column.get());
     }
 

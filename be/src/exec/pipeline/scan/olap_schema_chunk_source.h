@@ -20,7 +20,7 @@ namespace pipeline {
 class OlapSchemaChunkSource final : public ChunkSource {
 public:
     OlapSchemaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                          OlapSchemaScanContextPtr ctx);
+                          const OlapSchemaScanContextPtr& ctx);
 
     ~OlapSchemaChunkSource() override;
 

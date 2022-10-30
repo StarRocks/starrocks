@@ -471,7 +471,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     if (request->has_kafka_offset_batch_request()) {
         MonotonicStopWatch watch;
         watch.start();
-        for (auto offset_req : request->kafka_offset_batch_request().requests()) {
+        for (const auto& offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
 
@@ -546,7 +546,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
                                                                                        &partitions);
         if (st.ok()) {
             PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
-            for (std::string p : partitions) {
+            for (const std::string& p : partitions) {
                 pulsar_result->add_partitions(p);
             }
         }
@@ -568,7 +568,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
         return;
     }
     if (request->has_pulsar_backlog_batch_request()) {
-        for (auto backlog_req : request->pulsar_backlog_batch_request().requests()) {
+        for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
             std::vector<int64_t> backlog_nums;
             Status st =
                     _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);

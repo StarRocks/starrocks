@@ -271,7 +271,7 @@ public:
     }
 };
 
-SortedRun::SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs)
+SortedRun::SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs)
         : chunk(ichunk), range(0, ichunk->num_rows()) {
     DCHECK(ichunk);
     if (!ichunk->is_empty()) {

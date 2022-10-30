@@ -72,11 +72,11 @@ public:
     ~QueryTrace() = default;
 
     // init event buffer for all drivers in a single fragment instance
-    void register_drivers(TUniqueId fragment_instance_id, starrocks::pipeline::Drivers& drivers);
+    void register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers);
 
     Status dump();
 
-    static void set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragment_instance_id, std::uintptr_t driver);
+    static void set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id, std::uintptr_t driver);
 
 private:
     TUniqueId _query_id;

@@ -18,7 +18,7 @@ DIAGNOSTIC_POP
 #include "util/priority_thread_pool.hpp"
 
 namespace starrocks {
-PromiseStatusPtr call_function_in_pthread(RuntimeState* state, std::function<Status()> func) {
+PromiseStatusPtr call_function_in_pthread(RuntimeState* state, const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
         state->exec_env()->udf_call_pool()->offer([promise = ms.get(), state, func]() {
@@ -32,7 +32,7 @@ PromiseStatusPtr call_function_in_pthread(RuntimeState* state, std::function<Sta
     return ms;
 }
 
-PromiseStatusPtr call_hdfs_scan_function_in_pthread(std::function<Status()> func) {
+PromiseStatusPtr call_hdfs_scan_function_in_pthread(const std::function<Status()>& func) {
     PromiseStatusPtr ms = std::make_unique<PromiseStatus>();
     if (bthread_self()) {
         ExecEnv::GetInstance()->connector_scan_executor_without_workgroup()->submit(

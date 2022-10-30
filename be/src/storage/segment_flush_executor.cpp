@@ -4,6 +4,7 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <utility>
 
 #include "common/closure_guard.h"
 #include "gen_cpp/InternalService_types.h"
@@ -17,7 +18,7 @@ namespace starrocks {
 
 SegmentFlushToken::SegmentFlushToken(std::unique_ptr<ThreadPoolToken> flush_pool_token,
                                      std::shared_ptr<starrocks::vectorized::DeltaWriter> delta_writer)
-        : _flush_token(std::move(flush_pool_token)), _writer(delta_writer) {}
+        : _flush_token(std::move(flush_pool_token)), _writer(std::move(delta_writer)) {}
 
 Status SegmentFlushToken::submit(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                                  PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
@@ -89,7 +90,7 @@ Status SegmentFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
 }
 
 std::unique_ptr<SegmentFlushToken> SegmentFlushExecutor::create_flush_token(
-        std::shared_ptr<starrocks::vectorized::DeltaWriter> delta_writer, ThreadPool::ExecutionMode execution_mode) {
+        const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer, ThreadPool::ExecutionMode execution_mode) {
     return std::make_unique<SegmentFlushToken>(_flush_pool->new_token(execution_mode), delta_writer);
 }
 

@@ -59,7 +59,8 @@ public:
 
     std::vector<Datum> values() const {
         std::vector<Datum> res;
-        for (int i = 0; i < _code_mapping.size(); ++i) {
+        res.reserve(_code_mapping.size());
+for (int i = 0; i < _code_mapping.size(); ++i) {
             res.emplace_back(int(_code_mapping[i]));
         }
         return res;

@@ -233,7 +233,7 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
     for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
         Columns tmp_columns;
         tmp_columns.reserve(chunks.size());
-        for (auto chunk : chunks) {
+        for (const auto& chunk : chunks) {
             tmp_columns.push_back(chunk->get_column_by_index(col_index));
         }
         materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);

@@ -50,7 +50,7 @@ void AggregateFuncResolver::register_approx() {
     AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT("intersect_count", false, CountResult, IntersectCountStateTrait,
                                          IntersectCountBuilder);
 
-    for (auto func_name : std::vector<std::string>{"ndv", "approx_count_distinct"}) {
+    for (const auto& func_name : std::vector<std::string>{"ndv", "approx_count_distinct"}) {
         AGGREGATE_ALL_OBJECT_TYPE_FROM_TRAIT(func_name, false, CountResult, NDVStateTrait, NDVBuilder);
     }
 }
