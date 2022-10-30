@@ -183,15 +183,15 @@ std::pair<ChunkUniquePtr, Columns> SimpleChunkSortCursor::try_get_next() {
     DCHECK(_sort_exprs);
 
     if (_eos) {
-        return {nullptr, {}};
+        return {nullptr, Columns{}};
     }
     ChunkUniquePtr chunk = nullptr;
     if (!_chunk_provider(&chunk, &_eos) || !chunk) {
-        return {nullptr, {}};
+        return {nullptr, Columns{}};
     }
     DCHECK(!!chunk);
     if (chunk->is_empty()) {
-        return {nullptr, {}};
+        return {nullptr, Columns{}};
     }
 
     Columns sort_columns;

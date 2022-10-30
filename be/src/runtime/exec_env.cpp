@@ -27,6 +27,7 @@
 #include "agent/master_info.h"
 #include "column/column_pool.h"
 #include "common/config.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -395,7 +396,7 @@ Status ExecEnv::init_mem_tracker() {
 }
 
 int64_t ExecEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
+    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (_mem_tracker->has_limit()) {
         mem_limit = _mem_tracker->limit();
