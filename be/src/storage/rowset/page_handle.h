@@ -42,7 +42,8 @@ public:
 
     // This class will take the content of cache data, and will make input
     // cache_data to a invalid cache handle.
-    explicit PageHandle(PageCacheHandle cache_data) : _cache_data(std::move(cache_data)) {}
+    explicit PageHandle(PageCacheHandle&& cache_data)
+            : _data(static_cast<uint8_t*>(nullptr), 0), _cache_data(std::move(cache_data)) {}
 
     // Move constructor
     PageHandle(PageHandle&& other) noexcept : _data(other._data), _cache_data(std::move(other._cache_data)) {

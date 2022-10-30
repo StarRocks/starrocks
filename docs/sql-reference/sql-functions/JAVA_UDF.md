@@ -473,7 +473,7 @@ For more information, see "Step 1: Create a Maven project" in the "Create and us
 
     | Method                                                   | Description                                                  |
     | -------------------------------------------------------- | ------------------------------------------------------------ |
-    | void windowUpdate(State state, int, int, int , int, ...) | Updates the data of a window. For more information about UDWFs, see [Window functions](../using_starrocks/Window_function.md). Every time when you enter a row as input, this method obtains the window information and updates intermediate results accordingly. - peer_group_start: the start position of the current partition. PARTITION BY is used in the OVER clause to specify a partition column. Rows with the same values in the partition column are considered to be in the same partition. - peer_group_end: the end position of the current partition. - frame_start: the start position of the current window frame. The window frame clause specifies a calculation range, which covers the current row and the rows that are within a specified distance to the currrent row. For example, ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING specifies a calculation range that covers the current row, the previous row before the current row, and the following row after the current row. - frame_end: the end position of the current window frame. - inputs: the data that is entered as the input to a window. The data is an array package that supports only specific data types. In this example, INT values are entered as input, and the array package is Integer[]. |
+    | void windowUpdate(State state, int, int, int , int, ...) | Updates the data of a window. For more information about UDWFs, see [Window functions](./Window_function.md). Every time when you enter a row as input, this method obtains the window information and updates intermediate results accordingly. - peer_group_start: the start position of the current partition. PARTITION BY is used in the OVER clause to specify a partition column. Rows with the same values in the partition column are considered to be in the same partition. - peer_group_end: the end position of the current partition. - frame_start: the start position of the current window frame. The window frame clause specifies a calculation range, which covers the current row and the rows that are within a specified distance to the currrent row. For example, ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING specifies a calculation range that covers the current row, the previous row before the current row, and the following row after the current row. - frame_end: the end position of the current window frame. - inputs: the data that is entered as the input to a window. The data is an array package that supports only specific data types. In this example, INT values are entered as input, and the array package is Integer[]. |
 
 2. Run `mvn package` to package the code.
 
@@ -658,10 +658,10 @@ Execute the DROP FUNCTION statement to delete a UDF. For more information, see [
 
 ## Parameter settings
 
-Configure the following environment variable in the **be/conf/hadoop_env.sh** file of each Java virtual machine (JVM) in your cluster to control the usage of memory resources:
+Configure the following environment variable in the **be/conf/hadoop_env.sh** file of each Java virtual machine (JVM) in your cluster to control the usage of memory resources and set other parameters:
 
 ```Bash
-export LIBHDFS_OPTS="-Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
+export LIBHDFS_OPTS="-Xms1024m -Xmx1024m -Xloggc:$STARROCKS_HOME/log/be.gc.log -server"
 ```
 
 ## FAQ

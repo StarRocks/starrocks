@@ -5,7 +5,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
@@ -14,6 +13,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ExistsPredicate;
@@ -54,7 +54,6 @@ import com.starrocks.sql.optimizer.SubqueryUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalApplyOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -63,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CloneOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -272,12 +272,11 @@ public final class SqlToScalarOperatorTranslator {
         }
 
         @Override
-        public ScalarOperator visitArrayElementExpr(ArrayElementExpr node,
-                                                    Context context) {
+        public ScalarOperator visitCollectionElementExpr(CollectionElementExpr node, Context context) {
             Preconditions.checkState(node.getChildren().size() == 2);
-            ScalarOperator arrayOperator = visit(node.getChild(0), context.clone(node));
+            ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
-            return new ArrayElementOperator(node.getType(), arrayOperator, subscriptOperator);
+            return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
         }
 
         @Override

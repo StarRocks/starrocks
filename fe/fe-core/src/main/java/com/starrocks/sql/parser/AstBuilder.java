@@ -10,7 +10,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
@@ -20,6 +19,7 @@ import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CaseWhenClause;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.ColumnSeparator;
@@ -4200,7 +4200,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         String functionName = getQualifiedName(context.qualifiedName()).toString().toLowerCase();
 
         FunctionName fnName = FunctionName.createFnName(functionName);
-        if (functionName.equals(FunctionSet.TIME_SLICE)) {
+        if (functionName.equals(FunctionSet.TIME_SLICE) || functionName.equals(FunctionSet.DATE_SLICE)) {
             if (context.expression().size() == 2) {
                 Expr e1 = (Expr) visit(context.expression(0));
                 Expr e2 = (Expr) visit(context.expression(1));
@@ -4596,10 +4596,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     }
 
     @Override
-    public ParseNode visitArraySubscript(StarRocksParser.ArraySubscriptContext context) {
+    public ParseNode visitCollectionSubscript(StarRocksParser.CollectionSubscriptContext context) {
         Expr value = (Expr) visit(context.value);
         Expr index = (Expr) visit(context.index);
-        return new ArrayElementExpr(value, index);
+        return new CollectionElementExpr(value, index);
     }
 
     @Override

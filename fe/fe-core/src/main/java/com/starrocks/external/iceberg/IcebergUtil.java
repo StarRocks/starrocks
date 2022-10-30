@@ -13,6 +13,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.hive.RemoteFileInputFormat;
+import com.starrocks.external.iceberg.glue.IcebergGlueCatalog;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.BaseTable;
 import org.apache.iceberg.FileFormat;
@@ -85,6 +86,10 @@ public class IcebergUtil {
             throws StarRocksIcebergException {
         return (IcebergCatalog) CatalogLoader.custom(String.format("Custom-%s", catalogImpl),
                 new Configuration(), icebergProperties, catalogImpl).loadCatalog();
+    }
+
+    public static IcebergCatalog getIcebergGlueCatalog(String catalogName, Map<String, String> icebergProperties) {
+        return IcebergGlueCatalog.getInstance(catalogName, icebergProperties);
     }
 
     /**
@@ -240,6 +245,17 @@ public class IcebergUtil {
         properties.put(IcebergTable.ICEBERG_TABLE, tblName);
         properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "HIVE_CATALOG");
         properties.put(IcebergTable.ICEBERG_METASTORE_URIS, metastoreURI);
+        return convertToSRTable(icebergTable, properties);
+    }
+
+    public static IcebergTable convertGlueCatalogToSRTable(org.apache.iceberg.Table icebergTable,
+                                                           String catalogName, String dbName,
+                                                           String tblName) throws DdlException {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(IcebergTable.ICEBERG_CATALOG, catalogName);
+        properties.put(IcebergTable.ICEBERG_DB, dbName);
+        properties.put(IcebergTable.ICEBERG_TABLE, tblName);
+        properties.put(IcebergTable.ICEBERG_CATALOG_TYPE, "GLUE_CATALOG");
         return convertToSRTable(icebergTable, properties);
     }
 

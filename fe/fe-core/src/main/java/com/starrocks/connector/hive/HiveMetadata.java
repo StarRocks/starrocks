@@ -7,6 +7,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
@@ -143,6 +144,10 @@ public class HiveMetadata implements ConnectorMetadata {
         for (ColumnRefOperator column : columns) {
             session.getDumpInfo().addTableStatistics(table, column.getName(), statistics.getColumnStatistic(column));
         }
+
+        HiveTable hiveTable = (HiveTable) table;
+        session.getDumpInfo().getHMSTable(hiveTable.getResourceName(), hiveTable.getDbName(), hiveTable.getName())
+                .setScanRowCount(statistics.getOutputRowCount());
 
         return statistics;
     }

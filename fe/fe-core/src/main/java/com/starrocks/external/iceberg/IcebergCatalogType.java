@@ -5,6 +5,7 @@ package com.starrocks.external.iceberg;
 public enum IcebergCatalogType {
     HIVE_CATALOG,
     CUSTOM_CATALOG,
+    GLUE_CATALOG,
     UNKNOWN;
     // TODO: add more iceberg catalog type
 

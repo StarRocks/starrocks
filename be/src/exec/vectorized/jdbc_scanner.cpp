@@ -37,7 +37,7 @@ Status JDBCScanner::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(_init_jdbc_scanner());
 
-    RETURN_IF_ERROR(_init_column_class_name());
+    RETURN_IF_ERROR(_init_column_class_name(state));
 
     RETURN_IF_ERROR(_init_jdbc_util());
 
@@ -269,7 +269,7 @@ StatusOr<PrimitiveType> JDBCScanner::_precheck_data_type(const std::string& java
     __builtin_unreachable();
 }
 
-Status JDBCScanner::_init_column_class_name() {
+Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
     auto* env = JVMFunctionHelper::getInstance().getEnv();
 
     jmethodID get_result_column_class_names =
@@ -305,6 +305,8 @@ Status JDBCScanner::_init_column_class_name() {
                                                                            column_ref, &_pool, true);
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
+    RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_cast_exprs, state));
 
     return Status::OK();
 }

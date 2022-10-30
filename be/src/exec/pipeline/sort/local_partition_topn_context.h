@@ -6,6 +6,7 @@
 
 #include "exec/vectorized/chunks_sorter.h"
 #include "exec/vectorized/partition/chunks_partitioner.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
@@ -27,7 +28,7 @@ using LocalPartitionTopnContextFactoryPtr = std::shared_ptr<LocalPartitionTopnCo
 //                                   └────► topn ────┘
 class LocalPartitionTopnContext {
 public:
-    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs,
+    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
                               const std::string& sort_keys, int64_t offset, int64_t partition_limit,
                               const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
@@ -72,7 +73,7 @@ private:
 
     // Every partition holds a chunks_sorter
     vectorized::ChunksSorters _chunks_sorters;
-    SortExecExprs _sort_exec_exprs;
+    const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     const std::string _sort_keys;
@@ -92,7 +93,7 @@ using LocalPartitionTopnContextPtr = std::shared_ptr<LocalPartitionTopnContext>;
 class LocalPartitionTopnContextFactory {
 public:
     LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
-                                     SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
+                                     const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
                                      std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset,
                                      int64_t partition_limit, const TTopNType::type topn_type,
                                      const std::vector<OrderByType>& order_by_types,
@@ -100,6 +101,7 @@ public:
                                      const RowDescriptor& parent_node_row_desc,
                                      const RowDescriptor& parent_node_child_row_desc);
 
+    Status prepare(RuntimeState* state);
     LocalPartitionTopnContext* create(int32_t driver_sequence);
 
 private:
@@ -108,7 +110,7 @@ private:
     const std::vector<TExpr>& _t_partition_exprs;
 
     vectorized::ChunksSorters _chunks_sorters;
-    SortExecExprs _sort_exec_exprs;
+    const std::vector<ExprContext*>& _sort_exprs;
     std::vector<bool> _is_asc_order;
     std::vector<bool> _is_null_first;
     const std::string _sort_keys;

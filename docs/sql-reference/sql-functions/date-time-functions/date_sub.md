@@ -18,7 +18,7 @@ DATETIME DATE_SUB(DATETIME date,INTERVAL expr type)
 
 ## Return value
 
-Returns a DATETIME value. If the date does not exist, for example, 2020-02-30, or if the date is not a DATETIME value, NULL is returned.
+Returns a DATETIME value. If the date does not exist, for example, `2020-02-30`, or if the date is not a DATETIME value, NULL is returned.
 
 ## Examples
 

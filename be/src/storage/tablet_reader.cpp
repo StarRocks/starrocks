@@ -4,6 +4,7 @@
 
 #include "column/datum_convert.h"
 #include "common/status.h"
+#include "gen_cpp/tablet_schema.pb.h"
 #include "gutil/stl_util.h"
 #include "service/backend_options.h"
 #include "storage/aggregate_iterator.h"
@@ -169,6 +170,23 @@ Status TabletReader::_init_collector(const TabletReaderParams& params) {
         //
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
+        } else {
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+        }
+    } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
+               seg_iters.size() > 1) {
+        // when enable sorted by keys. we need call heap merge for DUP KEYS and PKS
+        // but for UNIQ KEYS or AGG KEYS we need build new_aggregate_iterator for them.
+        if (params.profile != nullptr && (params.is_pipeline || params.profile->parent() != nullptr)) {
+            RuntimeProfile* p;
+            if (params.is_pipeline) {
+                p = params.profile;
+            } else {
+                p = params.profile->parent()->create_child("MERGE", true, true);
+            }
+            RuntimeProfile::Counter* sort_timer = ADD_TIMER(p, "Sort");
+            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = timed_chunk_iterator(_collect_iter, sort_timer);
         } else {
             _collect_iter = new_heap_merge_iterator(seg_iters);
         }

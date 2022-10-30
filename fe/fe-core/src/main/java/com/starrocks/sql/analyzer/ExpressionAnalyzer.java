@@ -7,7 +7,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
@@ -16,6 +15,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -42,6 +42,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
@@ -249,25 +250,37 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitArrayElementExpr(ArrayElementExpr node, Scope scope) {
+        public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
-            if (!expr.getType().isArrayType()) {
+            if (!expr.getType().isArrayType() && !expr.getType().isMapType()) {
                 throw new SemanticException("cannot subscript type " + expr.getType()
-                        + " because it is not an array");
+                        + " because it is not an array or a map");
             }
-            if (!subscript.getType().isNumericType()) {
-                throw new SemanticException("array subscript must have type integer");
-            }
-            try {
-                if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
-                    node.castChild(Type.INT, 1);
-
+            if (expr.getType().isArrayType()) {
+                if (!subscript.getType().isNumericType()) {
+                    throw new SemanticException("array subscript must have type integer");
                 }
-                node.setType(((ArrayType) expr.getType()).getItemType());
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+                try {
+                    if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
+                        node.castChild(Type.INT, 1);
+                    }
+                    node.setType(((ArrayType) expr.getType()).getItemType());
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            } else {
+                try {
+                    if (subscript.getType().getPrimitiveType() !=
+                            ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
+                        node.castChild(((MapType) expr.getType()).getKeyType(), 1);
+                    }
+                    node.setType(((MapType) expr.getType()).getValueType());
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             }
+
             return null;
         }
 
@@ -697,14 +710,14 @@ public class ExpressionAnalyzer {
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 if (!(node.getChild(1) instanceof IntLiteral)) {
                     throw new SemanticException(
-                            FunctionSet.TIME_SLICE + " requires second parameter must be a constant interval");
+                            fnName + " requires second parameter must be a constant interval");
                 }
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(
-                            FunctionSet.TIME_SLICE + " requires second parameter must be greater than 0");
+                            fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {

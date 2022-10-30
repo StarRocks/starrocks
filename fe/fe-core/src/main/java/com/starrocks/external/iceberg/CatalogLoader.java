@@ -2,6 +2,7 @@
 
 package com.starrocks.external.iceberg;
 
+import com.starrocks.external.iceberg.glue.IcebergGlueCatalog;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.iceberg.CatalogProperties;
 import org.apache.iceberg.CatalogUtil;
@@ -34,6 +35,40 @@ public interface CatalogLoader {
     static CatalogLoader custom(String name, Configuration hadoopConf, Map<String, String> properties,
                                 String catalogImpl) {
         return new CustomCatalogLoader(name, hadoopConf, properties, catalogImpl);
+    }
+
+    static CatalogLoader glue(String name, Configuration hadoopConf, Map<String, String> properties) {
+        return new GlueCatalogLoader(name, hadoopConf, properties);
+    }
+
+    class GlueCatalogLoader implements CatalogLoader {
+        private final String catalogName;
+        private final SerializableConfiguration hadoopConf;
+        private final int clientPoolSize;
+        private final Map<String, String> properties;
+
+        private GlueCatalogLoader(String catalogName, Configuration conf, Map<String, String> properties) {
+            this.catalogName = catalogName;
+            this.hadoopConf = new SerializableConfiguration(conf);
+            this.clientPoolSize = properties.containsKey(CatalogProperties.CLIENT_POOL_SIZE) ?
+                    Integer.parseInt(properties.get(CatalogProperties.CLIENT_POOL_SIZE)) :
+                    CatalogProperties.CLIENT_POOL_SIZE_DEFAULT;
+            this.properties = Maps.newHashMap(properties);
+        }
+
+        @Override
+        public Catalog loadCatalog() {
+            return CatalogUtil.loadCatalog(IcebergGlueCatalog.class.getName(), catalogName, properties,
+                    hadoopConf.get());
+        }
+
+        @Override
+        public String toString() {
+            return MoreObjects.toStringHelper(this)
+                    .add("catalogName", catalogName)
+                    .add("clientPoolSize", clientPoolSize)
+                    .toString();
+        }
     }
 
     class HiveCatalogLoader implements CatalogLoader {

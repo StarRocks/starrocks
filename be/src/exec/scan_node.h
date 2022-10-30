@@ -56,8 +56,6 @@ class TScanRange;
 //
 class ScanNode : public ExecNode {
 public:
-    static constexpr int MAX_IO_TASKS_PER_OP = 4;
-
     ScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs) : ExecNode(pool, tnode, descs) {}
     ~ScanNode() override = default;
 
@@ -103,7 +101,7 @@ public:
 
     const std::string& name() const { return _name; }
 
-    virtual int io_tasks_per_scan_operator() const { return MAX_IO_TASKS_PER_OP; }
+    virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);
