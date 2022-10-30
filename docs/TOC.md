@@ -14,7 +14,9 @@
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
-  + [Data distribution](./table_design/Data_distribution.md)
+  + Data distribution
+    + [Data distribution](./table_design/Data_distribution.md)
+    + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
@@ -28,27 +30,26 @@
   + [Continuously load data from Apache Flink®](./loading/Flink-connector-starrocks.md)
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
-+ Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Spark connector](./unloading/Spark_connector.md)
-  + [Flink connector](./unloading/Flink_connector.md)
-+ Using StarRocks
++ Data source
+  + Catalog
+    + [Overview](./data_source/catalog/catalog_overview.md)
+    + [Default catalog](./data_source/catalog/default_catalog.md)
+    + [Hive catalog](./data_source/catalog/hive_catalog.md)
+    + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
+    + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
+    + [Query external data](./data_source/catalog/query_external_data.md)
+  + [External tables](./data_source/External_table.md)
++ Query acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [External tables](./using_starrocks/External_table.md)
-  + Catalog
-    + [Overview](./using_starrocks/catalog/catalog_overview.md)
-    + [Default catalog](./using_starrocks/catalog/default_catalog.md)
-    + [Hive catalog](./using_starrocks/catalog/hive_catalog.md)
-    + [Iceberg catalog](./using_starrocks/catalog/iceberg_catalog.md)
-    + [Hudi catalog](./using_starrocks/catalog/hudi_catalog.md)
-    + [Query external data](./using_starrocks/catalog/query_external_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
-  + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
-  + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
-  + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
-  + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
+  + Index
+    + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
+    + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
+  + Count distinct
+    + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
+    + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
@@ -422,6 +423,10 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
+  + [Spark connector](./unloading/Spark_connector.md)
+  + [Flink connector](./unloading/Flink_connector.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
