@@ -2,6 +2,8 @@
 
 #include "serde/protobuf_serde.h"
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
@@ -71,7 +73,7 @@ void EncodeContext::set_encode_levels_in_pb(ChunkPB* const res) {
 }
 
 int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk,
-                                                std::shared_ptr<EncodeContext> context) {
+                                                const std::shared_ptr<EncodeContext>& context) {
     int64_t serialized_size = 8; // 4 bytes version plus 4 bytes row number
 
     if (context == nullptr) {
@@ -88,7 +90,7 @@ int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk,
 
 StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
                                                 std::shared_ptr<EncodeContext> context) {
-    StatusOr<ChunkPB> res = serialize_without_meta(chunk, context);
+    StatusOr<ChunkPB> res = serialize_without_meta(chunk, std::move(context));
     if (!res.ok()) return res.status();
 
     const auto& slot_id_to_index = chunk.get_slot_id_to_index_map();
@@ -122,7 +124,7 @@ StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
 }
 
 StatusOr<ChunkPB> ProtobufChunkSerde::serialize_without_meta(const vectorized::Chunk& chunk,
-                                                             std::shared_ptr<EncodeContext> context) {
+                                                             const std::shared_ptr<EncodeContext>& context) {
     ChunkPB chunk_pb;
     chunk_pb.set_compress_type(CompressionTypePB::NO_COMPRESSION);
 

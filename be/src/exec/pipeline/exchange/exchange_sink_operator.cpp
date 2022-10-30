@@ -683,7 +683,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     return Status::OK();
 }
 
-int64_t ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chunk_request,
+int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment) {
     int64_t attachment_physical_bytes = 0;
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {

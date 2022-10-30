@@ -45,7 +45,7 @@ public:
     }
 
     void add_function_mapping(std::string&& name, const std::vector<PrimitiveType>& arg_type,
-                              const std::vector<PrimitiveType>& return_type, TableFunctionPtr table_func) {
+                              const std::vector<PrimitiveType>& return_type, const TableFunctionPtr& table_func) {
         _infos_mapping.emplace(std::make_tuple(name, arg_type, return_type), table_func);
     }
 

@@ -42,8 +42,8 @@ public:
 
     CompactionCandidate pick_candidate();
 
-    void update_tablet_async(TabletSharedPtr tablet, bool need_update_context, bool is_compaction = false);
-    void update_tablet(TabletSharedPtr tablet, bool need_update_context, bool is_compaction);
+    void update_tablet_async(const TabletSharedPtr& tablet, bool need_update_context, bool is_compaction = false);
+    void update_tablet(const TabletSharedPtr& tablet, bool need_update_context, bool is_compaction);
 
     void register_scheduler(CompactionScheduler* scheduler) {
         std::lock_guard lg(_scheduler_mutex);

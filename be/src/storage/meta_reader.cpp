@@ -2,6 +2,7 @@
 
 #include "storage/meta_reader.h"
 
+#include <utility>
 #include <vector>
 
 #include "column/array_column.h"
@@ -70,7 +71,7 @@ Status MetaReader::_init_params(const MetaReaderParams& read_params) {
 
 Status MetaReader::_build_collect_context(const MetaReaderParams& read_params) {
     _collect_context.seg_collecter_params.max_cid = 0;
-    for (auto it : *(read_params.id_to_names)) {
+    for (const auto& it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
@@ -146,7 +147,7 @@ Status MetaReader::_get_segments(const TabletSharedPtr& tablet, const Version& v
 
     for (auto& rowset : _rowsets) {
         RETURN_IF_ERROR(rowset->load());
-        for (auto seg : rowset->segments()) {
+        for (const auto& seg : rowset->segments()) {
             segments->emplace_back(seg);
         }
     }
@@ -226,7 +227,7 @@ bool MetaReader::has_more() {
     return _has_more;
 }
 
-SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(segment) {}
+SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(std::move(segment)) {}
 
 SegmentMetaCollecter::~SegmentMetaCollecter() {}
 

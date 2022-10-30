@@ -476,6 +476,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
         DCHECK_GT(perm.size(), 0);
 
         std::vector<ColumnPtr> vertical_columns;
+        vertical_columns.reserve(vertical_chunks.size());
         for (const auto& columns : vertical_chunks) {
             vertical_columns.push_back(columns[col]);
         }

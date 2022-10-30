@@ -11,7 +11,7 @@ namespace starrocks {
 namespace pipeline {
 
 OlapSchemaChunkSource::OlapSchemaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
-                                             MorselPtr&& morsel, OlapSchemaScanContextPtr ctx)
+                                             MorselPtr&& morsel, const OlapSchemaScanContextPtr& ctx)
         : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), ctx->get_chunk_buffer()), _ctx(ctx) {}
 
 OlapSchemaChunkSource::~OlapSchemaChunkSource() {}

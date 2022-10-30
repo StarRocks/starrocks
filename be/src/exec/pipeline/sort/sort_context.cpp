@@ -17,7 +17,7 @@ void SortContext::close(RuntimeState* state) {
     _chunks_sorter_partitions.clear();
 }
 
-void SortContext::add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
+void SortContext::add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter) {
     _chunks_sorter_partitions.push_back(chunks_sorter);
 }
 

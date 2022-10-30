@@ -57,7 +57,7 @@ public:
     Status init(const std::vector<DataDir*>& data_dirs);
 
     std::unique_ptr<SegmentFlushToken> create_flush_token(
-            std::shared_ptr<starrocks::vectorized::DeltaWriter> delta_writer,
+            const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer,
             ThreadPool::ExecutionMode execution_mode = ThreadPool::ExecutionMode::CONCURRENT);
 
 private:

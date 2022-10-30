@@ -42,7 +42,7 @@ void QueryCacheAction::handle(HttpRequest* req) {
                       strings::Substitute("Not support $0 method: '$1'", to_method_desc(req->method()), req->uri()));
     }
 }
-void QueryCacheAction::_handle(HttpRequest* req, std::function<void(rapidjson::Document&)> func) {
+void QueryCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjson::Document&)>& func) {
     rapidjson::Document root;
     root.SetObject();
     func(root);

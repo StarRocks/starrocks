@@ -185,7 +185,7 @@ Type* TypeImpl::addUnionChild(std::unique_ptr<Type> fieldType) {
     return this;
 }
 
-bool isUnquotedFieldName(std::string fieldName) {
+bool isUnquotedFieldName(const std::string& fieldName) {
     for (auto& ch : fieldName) {
         if (!isalnum(ch) && ch != '_') {
             return false;
@@ -234,7 +234,7 @@ std::string TypeImpl::toString() const {
             } else {
                 std::string name(fieldNames[i]);
                 size_t pos = 0;
-                while ((pos = name.find("`", pos)) != std::string::npos) {
+                while ((pos = name.find('`', pos)) != std::string::npos) {
                     name.replace(pos, 1, "``");
                     pos += 2;
                 }
@@ -681,7 +681,7 @@ std::unique_ptr<Type> TypeImpl::parseDecimalType(const std::string& input, size_
     return std::unique_ptr<Type>(new TypeImpl(DECIMAL, precision, scale));
 }
 
-void validatePrimitiveType(std::string category, const std::string& input, const size_t pos) {
+void validatePrimitiveType(const std::string& category, const std::string& input, const size_t pos) {
     if (input[pos] == '<' || input[pos] == '(') {
         std::ostringstream oss;
         oss << "Invalid " << input[pos] << " after " << category << " type.";

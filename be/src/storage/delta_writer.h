@@ -140,7 +140,7 @@ private:
 
     void _reset_mem_table();
 
-    void _set_state(State state, Status st);
+    void _set_state(State state, const Status& st);
 
     State _state;
     Status _err_status;

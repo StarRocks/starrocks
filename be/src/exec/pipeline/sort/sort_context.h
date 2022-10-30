@@ -39,7 +39,7 @@ public:
 
     void close(RuntimeState* state) override;
 
-    void add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter);
+    void add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter);
     void finish_partition(uint64_t partition_rows);
     bool is_partition_sort_finished() const;
     bool is_output_finished() const;

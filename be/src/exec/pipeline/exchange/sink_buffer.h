@@ -99,7 +99,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    void _try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works);
+    void _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded

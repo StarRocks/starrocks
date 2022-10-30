@@ -50,7 +50,7 @@ public:
 
     int get_build_chunk_size() const { return _build_chunk_desired_size; }
 
-    void append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr build_chunk);
+    void append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& build_chunk);
 
     Status finish_one_right_sinker(RuntimeState* state);
 

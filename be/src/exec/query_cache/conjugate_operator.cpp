@@ -2,6 +2,8 @@
 
 #include "exec/query_cache/conjugate_operator.h"
 
+#include <utility>
+
 namespace starrocks {
 namespace query_cache {
 
@@ -94,12 +96,12 @@ Status ConjugateOperator::reset_state(RuntimeState* state, const std::vector<Chu
 }
 
 ConjugateOperatorFactory::ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory,
-                                                   pipeline::OpFactoryPtr source_op_factory)
+                                                   const pipeline::OpFactoryPtr& source_op_factory)
         : pipeline::OperatorFactory(
                   source_op_factory->id(),
                   strings::Substitute("conjugate_$0", base_name_of_conjugate_op(source_op_factory->get_raw_name())),
                   source_op_factory->plan_node_id()),
-          _sink_op_factory(sink_op_factory),
+          _sink_op_factory(std::move(sink_op_factory)),
           _source_op_factory(source_op_factory) {}
 
 Status ConjugateOperatorFactory::prepare(RuntimeState* state) {

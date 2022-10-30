@@ -189,7 +189,7 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
     return chunk;
 }
 
-Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
+Status NLJoinProbeOperator::_probe(RuntimeState* state, const ChunkPtr& chunk) {
     vectorized::FilterPtr filter;
     if (!_join_conjuncts.empty() && chunk && !chunk->is_empty()) {
         size_t rows = chunk->num_rows();
@@ -292,7 +292,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
 }
 
 // Permute one probe row with current build chunk
-void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk) {
+void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, const ChunkPtr& chunk) {
     DCHECK(_curr_build_chunk);
     size_t cur_build_chunk_rows = _curr_build_chunk->num_rows();
     COUNTER_UPDATE(_permute_rows_counter, cur_build_chunk_rows);
@@ -311,7 +311,7 @@ void NLJoinProbeOperator::_permute_probe_row(RuntimeState* state, ChunkPtr chunk
 }
 
 // Permute probe side for left join
-void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index,
+void NLJoinProbeOperator::_permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index,
                                              size_t probe_rows) {
     COUNTER_UPDATE(_permute_left_rows_counter, probe_rows);
     for (size_t i = 0; i < _col_types.size(); i++) {

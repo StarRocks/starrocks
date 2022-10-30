@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/column_visitor_adapter.h"
 #include "column/const_column.h"
@@ -230,10 +232,10 @@ private:
 
 class ColumnTieBuilder final : public ColumnVisitorAdapter<ColumnTieBuilder> {
 public:
-    explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie)
+    explicit ColumnTieBuilder(const ColumnPtr& column, Tie* tie)
             : ColumnVisitorAdapter(this), _column(column), _tie(tie), _nullable_column(nullptr) {}
 
-    explicit ColumnTieBuilder(const ColumnPtr column, Tie* tie, const NullColumnPtr nullable_column)
+    explicit ColumnTieBuilder(const ColumnPtr& column, Tie* tie, const NullColumnPtr& nullable_column)
             : ColumnVisitorAdapter(this), _column(column), _tie(tie), _nullable_column(nullable_column) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
@@ -294,15 +296,15 @@ private:
     const NullColumnPtr _nullable_column;
 };
 
-int compare_column(const ColumnPtr column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
-    ColumnCompare compare(cmp_vector, rhs_value, desc);
+int compare_column(const ColumnPtr& column, CompareVector& cmp_vector, Datum rhs_value, const SortDesc& desc) {
+    ColumnCompare compare(cmp_vector, std::move(rhs_value), desc);
 
     [[maybe_unused]] Status st = column->accept(&compare);
     DCHECK(st.ok());
     return compare.get_equal_count();
 }
 
-void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
+void compare_columns(const Columns& columns, std::vector<int8_t>& cmp_vector, const std::vector<Datum>& rhs_values,
                      const SortDescs& sort_desc) {
     if (columns.empty()) {
         return;
@@ -322,7 +324,7 @@ void compare_columns(const Columns columns, std::vector<int8_t>& cmp_vector, con
     }
 }
 
-void build_tie_for_column(const ColumnPtr column, Tie* tie, const NullColumnPtr null_column) {
+void build_tie_for_column(const ColumnPtr& column, Tie* tie, const NullColumnPtr& null_column) {
     DCHECK(!!tie);
     DCHECK_EQ(column->size(), tie->size());
 

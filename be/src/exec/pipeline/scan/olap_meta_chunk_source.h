@@ -15,7 +15,7 @@ namespace pipeline {
 class OlapMetaChunkSource final : public ChunkSource {
 public:
     OlapMetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                        OlapMetaScanContextPtr scan_ctx);
+                        const OlapMetaScanContextPtr& scan_ctx);
 
     ~OlapMetaChunkSource() override;
 
