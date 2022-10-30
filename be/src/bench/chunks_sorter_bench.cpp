@@ -600,6 +600,23 @@ static void BM_selective_int64(benchmark::State& state) {
 BENCHMARK(BM_selective_int64);
 
 // Benchmark shuffle string
+// Run on (104 X 3199.92 MHz CPU s)
+// CPU Caches:
+//   L1 Data 32 KiB (x52)
+//   L1 Instruction 32 KiB (x52)
+//   L2 Unified 1024 KiB (x52)
+//   L3 Unified 36608 KiB (x2)
+// Load Average: 40.86, 21.31, 19.16
+// -----------------------------------------------------------------------------------
+// Benchmark                         Time             CPU   Iterations UserCounters...
+// -----------------------------------------------------------------------------------
+// BM_selective_int64             3608 ns         3607 ns       188512 payload_size=32.768k
+// BM_selective_string/1         12989 ns        12988 ns        53864 payload_size=36.864k
+// BM_selective_string/4         13323 ns        13320 ns        52922 payload_size=49.152k
+// BM_selective_string/16        14101 ns        14099 ns        49830 payload_size=98.304k
+// BM_selective_string/64        25019 ns        24999 ns        28125 payload_size=294.912k
+// BM_selective_string/256       92448 ns        92436 ns         7573 payload_size=1081.34k
+// BM_selective_string/1024     342813 ns       342721 ns         1995 payload_size=4.22707M
 static void BM_selective_string(benchmark::State& state) {
     constexpr size_t kChunkSize = 4096;
     auto column = BinaryColumn::create();
