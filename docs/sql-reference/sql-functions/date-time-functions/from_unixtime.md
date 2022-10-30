@@ -4,17 +4,6 @@
 
 Converts a UNIX timestamp into the required time format. The default format is `yyyy-MM-dd HH:mm:ss`. It also supports the formats in [date_format](./date_format.md).
 
-## Syntax
-
-```Haskell
-DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
-```
-
-## Parameters
-
-- `unix_timestamp`: the UNIX timestamp you want to convert.
-- `string_format`: the required time format.
-
 Currently, `string_format` supports the following formats:
 
 ```plain text
@@ -28,7 +17,23 @@ Currently, `string_format` supports the following formats:
 
 Other formats are invalid and NULL will be returned.
 
-If the specified timestamp is less than 0 or greater than 2147483647, NULL will be returned. The range for timestamp is `1970-01-01 00:00:00` to `2038-01-19 11:14:07`.
+## Syntax
+
+```Haskell
+DATETIME|DATE FROM_UNIXTIME(INT unix_timestamp[, VARCHAR string_format])
+```
+
+## Parameters
+
+- `unix_timestamp`: the UNIX timestamp you want to convert. It must be of the INT type. If the specified timestamp is less than 0 or greater than 2147483647, NULL will be returned. That is, the range for timestamp is `1970-01-01 00:00:00` to `2038-01-19 11:14:07`.
+
+- `string_format`: the required time format.
+
+## Return value
+
+Returns a value of the DATETIME or DATE type. If `string_format` specifies the DATE format, a DATE value is returned.
+
+If the timestamp exceeds the value range or if `string_format` is invalid, NULL will be returned.
 
 ## Examples
 

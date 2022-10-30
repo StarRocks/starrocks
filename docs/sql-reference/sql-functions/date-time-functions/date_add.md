@@ -18,7 +18,7 @@ DATETIME DATE_ADD(DATETIME date,INTERVAL expr type)
 
 ## Return value
 
-Returns a DATETIME value. If the date does not exist, for example, 2020-02-30, NULL is returned. If the date is a DATE value, it will be converted into a DATETIME value.
+Returns a DATETIME value. If the date does not exist, for example, `2020-02-30`, NULL is returned. If the date is a DATE value, it will be converted into a DATETIME value.
 
 ## Examples
 

@@ -4,7 +4,7 @@
 
 Returns the current date and time.
 
-This function may return different results for different time zones. For more information, see [Configure a time zone](../../../using_starrocks/timezone.md).
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/timezone.md).
 
 ## Syntax
 
