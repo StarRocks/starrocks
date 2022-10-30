@@ -14,6 +14,8 @@
 
 namespace starrocks::vectorized {
 
+static const double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
+
 // ==== basic check rules =========
 DEFINE_UNARY_FN_WITH_IMPL(NegativeCheck, value) {
     return value < 0;
@@ -28,7 +30,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NanCheck, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ExpCheck, value) {
-    return std::isnan(value) || value > MathFunctions::MAX_EXP_PARAMETER;
+    return std::isnan(value) || value > MAX_EXP_PARAMETER;
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(ZeroCheck, value) {
