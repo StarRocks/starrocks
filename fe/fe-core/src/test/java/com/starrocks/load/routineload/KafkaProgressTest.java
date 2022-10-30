@@ -4,6 +4,7 @@ package com.starrocks.load.routineload;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.KafkaUtil;
@@ -12,7 +13,7 @@ import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
@@ -41,12 +42,26 @@ public class KafkaProgressTest {
         };
 
         KafkaProgress progress = new KafkaProgress();
-        // modify offset while paused
-        progress.modifyOffset(Arrays.asList(new Pair<>(3, 20L)));
+        // modify offset while paused when partition is not ready
+        try {
+            List<Pair<Integer, Long>> partitionToOffset = new ArrayList<>();
+            partitionToOffset.add(new Pair<>(3, 20L));
+            progress.modifyOffset(partitionToOffset);
+        } catch (DdlException e) {
+            Assert.assertEquals("The specified partition 3 is not in the consumed partitions", e.getMessage());
+        }
+
         progress.addPartitionOffset(new Pair<>(0, -1L));
         progress.addPartitionOffset(new Pair<>(1, -2L));
         progress.addPartitionOffset(new Pair<>(2, 10L));
+        progress.addPartitionOffset(new Pair<>(3, 10L));
         progress.convertOffset("127.0.0.1:9020", "topic", Maps.newHashMap());
+
+        List<Pair<Integer, Long>> partitionToOffset = new ArrayList<>();
+        partitionToOffset.add(new Pair<>(3, 20L));
+        progress.modifyOffset(partitionToOffset);
+        Assert.assertEquals(4, partitionToOffset.size());
+
         Assert.assertEquals(100L, (long) progress.getOffsetByPartition(0));
         Assert.assertEquals(1L, (long) progress.getOffsetByPartition(1));
         Assert.assertEquals(10L, (long) progress.getOffsetByPartition(2));

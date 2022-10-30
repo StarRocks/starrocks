@@ -36,6 +36,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Objects;
 
 // Our new cost based query optimizer is more powerful and stable than old query optimizer,
 // The old query optimizer related codes could be deleted safely.
@@ -336,6 +337,6 @@ public class IntLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Long.hashCode(value);
+        return Objects.hash(super.hashCode(), value);
     }
 }

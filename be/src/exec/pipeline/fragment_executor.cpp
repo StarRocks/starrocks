@@ -306,6 +306,9 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const TExec
     // Set up sink if required
     std::unique_ptr<DataSink> sink;
     if (fragment.__isset.output_sink) {
+        if (fragment.output_sink.type == TDataSinkType::RESULT_SINK) {
+            _query_ctx->set_result_sink(true);
+        }
         RowDescriptor row_desc;
         RETURN_IF_ERROR(DataSink::create_data_sink(runtime_state, fragment.output_sink, fragment.output_exprs, params,
                                                    row_desc, &sink));
@@ -405,11 +408,18 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     DCHECK(request.__isset.fragment);
 
     bool prepare_success = false;
-    DeferOp defer([this, &prepare_success]() {
-        if (!prepare_success) {
+    int64_t prepare_time = 0;
+    DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
+        if (prepare_success) {
+            auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.params.fragment_instance_id);
+            auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
+                    "FragmentInstancePrepareTime", TUnit::TIME_NS);
+            COUNTER_SET(prepare_timer, prepare_time);
+        } else {
             _fail_cleanup();
         }
     });
+    SCOPED_RAW_TIMER(&prepare_time);
     RETURN_IF_ERROR(exec_env->query_pool_mem_tracker()->check_mem_limit("Start execute plan fragment."));
 
     RETURN_IF_ERROR(_prepare_query_ctx(exec_env, request));

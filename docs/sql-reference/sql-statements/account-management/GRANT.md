@@ -24,7 +24,7 @@ GRANT privilege_list ON RESOURCE 'resource_name' TO {user_identity | ROLE 'role_
 
 The privileges that can be granted to a user or a role. If you want to grant multiple privileges at a time, separate the privileges with commas (`,`). The following privileges are supported:
 
-- `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes. This privilege can only be granted to the root user.
+- `NODE_PRIV`: the privilege to manage cluster nodes such as enabling nodes and disabling nodes.
 - `ADMIN_PRIV`: all privileges except `NODE_PRIV`.
 - `GRANT_PRIV`: the privilege of performing operations such as creating users and roles, deleting users and roles, granting privileges, revoking privileges, and setting passwords for accounts.
 - `SELECT_PRIV`: the read privilege on databases and tables.

@@ -1210,6 +1210,11 @@ public class PlanFragmentBuilder {
                 if (!partitionExpressions.isEmpty()) {
                     inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
                 }
+
+                // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
+                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isGlobal()) {
                 if (node.hasSingleDistinct()) {
                     // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
@@ -1249,10 +1254,6 @@ public class PlanFragmentBuilder {
                             new AggregationNode(context.getNextNodeId(), inputFragment.getPlanRoot(),
                                     aggInfo);
                 }
-                // set aggregate node can use local aggregate
-                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                    aggregationNode.setColocate(true);
-                }
 
                 // set predicate
                 List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
@@ -1264,6 +1265,11 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 aggregationNode.setLimit(node.getLimit());
+
+                // Check colocate for one-phase local agg.
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                 AggregateInfo aggInfo = AggregateInfo.create(
@@ -1498,7 +1504,7 @@ public class PlanFragmentBuilder {
                 sortExprs.add(new SlotRef(slotDesc));
             }
 
-            ColumnRefSet columnRefSet = optExpr.getLogicalProperty().getOutputColumns();
+            ColumnRefSet columnRefSet = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
             for (int i = 0; i < columnRefSet.getColumnIds().length; ++i) {
                 /*
                  * Add column not be used in ordering
@@ -2082,6 +2088,9 @@ public class PlanFragmentBuilder {
             analyticEvalNode.setLimit(node.getLimit());
             analyticEvalNode.setHasNullableGenerateChild();
             analyticEvalNode.computeStatistics(optExpr.getStatistics());
+            if (hasColocateOlapScanChildInFragment(analyticEvalNode)) {
+                analyticEvalNode.setColocate(true);
+            }
 
             // set predicate
             List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());

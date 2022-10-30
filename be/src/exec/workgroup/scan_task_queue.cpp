@@ -21,7 +21,7 @@ StatusOr<ScanTask> PriorityScanTaskQueue::take() {
 }
 
 bool PriorityScanTaskQueue::try_offer(ScanTask task) {
-    return _queue.blocking_put(std::move(task));
+    return _queue.try_put(std::move(task));
 }
 
 /// WorkGroupScanTaskQueue.
@@ -124,8 +124,9 @@ bool WorkGroupScanTaskQueue::should_yield(const WorkGroup* wg, int64_t unaccount
 
     // Return true, if the minimum-vruntime workgroup is not current workgroup anymore.
     auto* wg_entity = _sched_entity(wg);
-    return _min_wg_entity.load() != wg_entity &&
-           _min_vruntime_ns.load() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
+    auto* min_entity = _min_wg_entity.load();
+    return min_entity != wg_entity && min_entity &&
+           min_entity->vruntime_ns() < wg_entity->vruntime_ns() + unaccounted_runtime_ns / wg_entity->cpu_limit();
 }
 
 bool WorkGroupScanTaskQueue::_throttled(const workgroup::WorkGroupScanSchedEntity* wg_entity,
@@ -144,10 +145,8 @@ bool WorkGroupScanTaskQueue::_throttled(const workgroup::WorkGroupScanSchedEntit
 void WorkGroupScanTaskQueue::_update_min_wg() {
     auto* min_wg_entity = _take_next_wg();
     if (min_wg_entity == nullptr) {
-        _min_vruntime_ns = std::numeric_limits<int64_t>::max();
         _min_wg_entity = nullptr;
     } else {
-        _min_vruntime_ns = min_wg_entity->vruntime_ns();
         _min_wg_entity = min_wg_entity;
     }
 }

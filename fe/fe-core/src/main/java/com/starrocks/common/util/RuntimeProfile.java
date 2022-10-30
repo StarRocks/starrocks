@@ -36,6 +36,7 @@ import org.apache.commons.lang3.tuple.Triple;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collections;
 import java.util.Formatter;
 import java.util.List;
 import java.util.Map;
@@ -61,15 +62,14 @@ public class RuntimeProfile {
 
     private final Counter counterTotalTime;
 
-    private final Map<String, String> infoStrings = Maps.newHashMap();
-    private final List<String> infoStringsDisplayOrder = Lists.newArrayList();
+    private final Map<String, String> infoStrings = Collections.synchronizedMap(Maps.newLinkedHashMap());
 
     // These will be hold by other thread.
     private final Map<String, Pair<Counter, String>> counterMap = Maps.newConcurrentMap();
     private final Map<String, RuntimeProfile> childMap = Maps.newConcurrentMap();
 
     private final Map<String, Set<String>> childCounterMap = Maps.newConcurrentMap();
-    private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newArrayList();
+    private final List<Pair<RuntimeProfile, Boolean>> childList = Lists.newCopyOnWriteArrayList();
 
     private String name;
     private double localTimePercent;
@@ -165,10 +165,19 @@ public class RuntimeProfile {
 
     public Counter getCounter(String name) {
         Pair<Counter, String> pair = counterMap.get(name);
-        if (pair == null) {
-            return null;
+        if (pair != null) {
+            return pair.first;
         }
-        return pair.first;
+        return null;
+    }
+
+    public Counter getMaxCounter(String name) {
+        Counter counter;
+        if ((counter = getCounter(MERGED_INFO_PREFIX_MAX + name)) != null) {
+            return counter;
+        }
+
+        return getCounter(name);
     }
 
     // Copy all the counters from src profile
@@ -282,13 +291,7 @@ public class RuntimeProfile {
             for (String key : node.info_strings_display_order) {
                 String value = nodeInfoStrings.get(key);
                 Preconditions.checkState(value != null);
-                if (this.infoStrings.containsKey(key)) {
-                    // exists then replace
-                    this.infoStrings.put(key, value);
-                } else {
-                    this.infoStrings.put(key, value);
-                    this.infoStringsDisplayOrder.add(key);
-                }
+                addInfoString(key, value);
             }
         }
 
@@ -332,7 +335,8 @@ public class RuntimeProfile {
         builder.append("\n");
 
         // 2. info String
-        for (String key : this.infoStringsDisplayOrder) {
+        for (Map.Entry<String, String> infoPair : this.infoStrings.entrySet()) {
+            String key = infoPair.getKey();
             builder.append(prefix).append("   - ").append(key).append(": ")
                     .append(this.infoStrings.get(key)).append("\n");
         }
@@ -510,13 +514,11 @@ public class RuntimeProfile {
     }
 
     public void addInfoString(String key, String value) {
-        String target = this.infoStrings.get(key);
-        if (target == null) {
-            this.infoStrings.put(key, value);
-            this.infoStringsDisplayOrder.add(key);
-        } else {
-            this.infoStrings.put(key, value);
-        }
+        this.infoStrings.put(key, value);
+    }
+
+    public void removeInfoString(String key) {
+        infoStrings.remove(key);
     }
 
     // Copy all info strings from src profile
@@ -683,27 +685,10 @@ public class RuntimeProfile {
             }
             counter0.setValue(mergedValue);
 
-            boolean updateMinMax = false;
-            if (alreadyMerged) {
-                updateMinMax = true;
-            } else {
-                // If the values vary greatly, we need to save extra info (min value and max value) of this counter
-                double diff = maxValue - minValue;
-                if (Counter.isAverageType(counter0.getType())) {
-                    if (diff > 5000000L && diff > mergedValue / 5.0) {
-                        updateMinMax = true;
-                    }
-                } else {
-                    // All sum type counters will have extra info (min value and max value)
-                    updateMinMax = true;
-                }
-            }
-            if (updateMinMax) {
-                Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, name);
-                Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, name);
-                minCounter.setValue(minValue);
-                maxCounter.setValue(maxValue);
-            }
+            Counter minCounter = profile0.addCounter(MERGED_INFO_PREFIX_MIN + name, type, name);
+            Counter maxCounter = profile0.addCounter(MERGED_INFO_PREFIX_MAX + name, type, name);
+            minCounter.setValue(minValue);
+            maxCounter.setValue(maxValue);
         }
 
         // merge children
@@ -731,15 +716,27 @@ public class RuntimeProfile {
 
     public static void removeRedundantMinMaxMetrics(RuntimeProfile profile) {
         for (String name : profile.counterMap.keySet()) {
+            Counter counter = profile.getCounter(name);
             Counter minCounter = profile.getCounter(MERGED_INFO_PREFIX_MIN + name);
             Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
-            if (minCounter == null || maxCounter == null) {
+            if (counter == null || minCounter == null || maxCounter == null) {
                 continue;
             }
-            // Remove MIN/MAX metrics if it's value is identical
-            if (Objects.equals(minCounter.getValue(), maxCounter.getValue())) {
-                profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+
+            if (Counter.isAverageType(minCounter.getType())) {
+                // For time metrics, remove MIN/MAX metrics if it's values are close
+                long diff = maxCounter.getValue() - minCounter.getValue();
+                long mergedValue = counter.getValue();
+                if (diff <= mergedValue / 5.0) {
+                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
+                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+                }
+            } else {
+                // For non-time metrics, remove MIN/MAX metrics if it's value is identical
+                if (Objects.equals(minCounter.getValue(), maxCounter.getValue())) {
+                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
+                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
+                }
             }
         }
 

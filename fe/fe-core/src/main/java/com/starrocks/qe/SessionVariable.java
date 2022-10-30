@@ -141,6 +141,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE = "enable_pipeline";
 
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
+    public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
     // Use resource group. It will influence the CPU schedule, I/O scheduler, and
     // memory limit etc. in BE.
@@ -232,6 +233,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
+    private boolean enablePipelineQueryStatistic = true;
 
     @VariableMgr.VarAttr(name = RUNTIME_FILTER_SCAN_WAIT_TIME, flag = VariableMgr.INVISIBLE)
     private long runtimeFilterScanWaitTime = 20L;
@@ -1087,6 +1091,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
 
         tResult.setEnable_tablet_internal_parallel(enableTabletInternalParallel);
+        tResult.setEnable_pipeline_query_statistic(enablePipelineQueryStatistic);
 
         return tResult;
     }

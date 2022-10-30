@@ -134,7 +134,7 @@ The following table describes the `sink` options that you can configure when you
 | sink.buffer-flush.max-bytes   | No           | 94371840(90M)     | STRING        | The maximum size of data that can be loaded into StarRocks at a time. Valid values: 64 MB to 10 GB. |
 | sink.buffer-flush.max-rows    | No           | 500000            | STRING        | The maximum number of rows that can be loaded into StarRocks at a time. Valid values: 64000 to 5000000. |
 | sink.buffer-flush.interval-ms | No           | 300000            | STRING        | The interval at which data is flushed. Valid values: 1000 to 3600000. Unit: ms. |
-| sink.max-retries              | No           | 1                 | STRING        | The number of times that the system retries to perform the Stream Load. Valid values: 0 to 10. |
+| sink.max-retries              | No           | 3                 | STRING        | The number of times that the system retries to perform the Stream Load. Valid values: 0 to 10. |
 | sink.connect.timeout-ms       | No           | 1000              | STRING        | The period of time after which the stream load times out. Valid values: 100 to 60000. Unit: ms. |
 | sink.properties.*             | No           | NONE              | STRING        | The properties of the stream load. The properties include k1, k2, and k3. |
 

@@ -68,6 +68,7 @@ public class UtilsTest {
     public void testGetSuffixName() {
         Assert.assertEquals("file", Utils.getSuffixName("/path/", "/path/file"));
         Assert.assertEquals("file", Utils.getSuffixName("/path", "/path/file"));
+        Assert.assertEquals("file", Utils.getSuffixName("/dt=(a)/", "/dt=(a)/file"));
     }
 
     @Test(expected = IllegalArgumentException.class)
