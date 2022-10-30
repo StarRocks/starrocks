@@ -51,7 +51,7 @@ private:
 
 class ConjugateOperatorFactory : public pipeline::OperatorFactory {
 public:
-    ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory, pipeline::OpFactoryPtr source_op_factory);
+    ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory, const pipeline::OpFactoryPtr& source_op_factory);
     ~ConjugateOperatorFactory() = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

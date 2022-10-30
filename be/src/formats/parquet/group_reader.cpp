@@ -429,7 +429,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     return Status::OK();
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk,
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk,
                                     size_t chunk_size) {
     auto& ctx = _column_reader_opts.context;
     if (ctx->rows_to_skip == 0) {

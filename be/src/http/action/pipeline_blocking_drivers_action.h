@@ -24,7 +24,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    void _handle(HttpRequest* req, std::function<void(rapidjson::Document& root)> func);
+    void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
     // Returns information about the blocking drivers with the following format:
     // {
     //      "queries_not_in_workgroup": [{

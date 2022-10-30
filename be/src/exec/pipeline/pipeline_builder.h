@@ -69,7 +69,7 @@ public:
     bool should_interpolate_cache_operator(OpFactoryPtr& source_op, int32_t plan_node_id);
     OpFactories interpolate_cache_operator(
             OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
-            std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator);
+            const std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)>& merge_operators_generator);
 
     // help to change some actions after aggregations, for example,
     // disable to ignore local data after aggregations with profile exchange speed.

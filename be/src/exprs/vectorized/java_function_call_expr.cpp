@@ -47,7 +47,7 @@ struct UDFFunctionCallHelper {
             }
         }
 
-        for (auto col : columns) {
+        for (const auto& col : columns) {
             input_cols.emplace_back(col.get());
         }
         // each input arguments as three local references (nullcolumn, offsetcolumn, bytescolumn)

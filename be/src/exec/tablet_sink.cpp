@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -1318,7 +1319,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     _span->AddEvent("close");
     _span->SetAttribute("input_rows", _number_input_rows);
     _span->SetAttribute("output_rows", _number_output_rows);
-    Status status = close_status;
+    Status status = std::move(close_status);
     if (status.ok()) {
         // only if status is ok can we call this _profile->total_time_counter().
         // if status is not ok, this sink may not be prepared, so that _profile is null

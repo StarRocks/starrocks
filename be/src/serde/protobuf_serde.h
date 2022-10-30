@@ -58,7 +58,7 @@ class ProtobufChunkDeserializer;
 class ProtobufChunkSerde {
 public:
     static int64_t max_serialized_size(const vectorized::Chunk& chunk,
-                                       std::shared_ptr<EncodeContext> context = nullptr);
+                                       const std::shared_ptr<EncodeContext>& context = nullptr);
 
     // Write the contents of |chunk| to ChunkPB
     static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk,
@@ -70,7 +70,7 @@ public:
     //  - is_nulls()
     //  - is_consts()
     static StatusOr<ChunkPB> serialize_without_meta(const vectorized::Chunk& chunk,
-                                                    std::shared_ptr<EncodeContext> context = nullptr);
+                                                    const std::shared_ptr<EncodeContext>& context = nullptr);
 
     // REQUIRE: the following fields of |chunk_pb| must be non-empty:
     //  - slot_id_map()

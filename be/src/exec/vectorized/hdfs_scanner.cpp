@@ -13,7 +13,7 @@ namespace starrocks::vectorized {
 
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
-    explicit CountedSeekableInputStream(std::shared_ptr<io::SeekableInputStream> stream,
+    explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream,
                                         vectorized::HdfsScanStats* stats)
             : io::SeekableInputStreamWrapper(stream.get(), kDontTakeOwnership), _stream(stream), _stats(stats) {}
 

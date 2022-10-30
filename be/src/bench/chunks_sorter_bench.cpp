@@ -39,7 +39,7 @@ public:
 
     void TearDown() { _runtime_state.reset(); }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(TypeDescriptor type_desc,
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_sorted_column(const TypeDescriptor& type_desc,
                                                                                  int slot_index, bool low_card,
                                                                                  bool nullable) {
         DCHECK_EQ(TYPE_INT, type_desc.type);
@@ -67,8 +67,9 @@ public:
         return {column, std::move(expr)};
     }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(TypeDescriptor type_desc, int slot_index,
-                                                                          bool low_card, bool nullable) {
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc,
+                                                                          int slot_index, bool low_card,
+                                                                          bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);

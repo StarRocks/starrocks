@@ -3,6 +3,8 @@
 
 #include "storage/column_expr_predicate.h"
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
@@ -19,7 +21,7 @@ namespace starrocks::vectorized {
 
 ColumnExprPredicate::ColumnExprPredicate(TypeInfoPtr type_info, ColumnId column_id, RuntimeState* state,
                                          ExprContext* expr_ctx, const SlotDescriptor* slot_desc)
-        : ColumnPredicate(type_info, column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
+        : ColumnPredicate(std::move(type_info), column_id), _state(state), _slot_desc(slot_desc), _monotonic(true) {
     // note: conjuncts would be shared by multiple scanners
     // so here we have to clone one to keep thread safe.
     _add_expr_ctx(expr_ctx);
@@ -32,7 +34,7 @@ ColumnExprPredicate::~ColumnExprPredicate() {
     }
 }
 
-void ColumnExprPredicate::_add_expr_ctxs(std::vector<ExprContext*> expr_ctxs) {
+void ColumnExprPredicate::_add_expr_ctxs(const std::vector<ExprContext*>& expr_ctxs) {
     for (auto& expr : expr_ctxs) {
         _add_expr_ctx(expr);
     }

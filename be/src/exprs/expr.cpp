@@ -83,7 +83,7 @@ Expr::Expr(const Expr& expr)
           _fn(expr._fn),
           _fn_context_index(expr._fn_context_index) {}
 
-Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
+Expr::Expr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),

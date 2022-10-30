@@ -111,7 +111,7 @@ bool MultilaneOperator::is_finished() const {
 }
 
 Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
-                                  starrocks::query_cache::MultilaneOperator::FinishCallback finish_cb) {
+                                  const starrocks::query_cache::MultilaneOperator::FinishCallback& finish_cb) {
     _input_finished = true;
     auto status = Status::OK();
     for (auto it : _owner_to_lanes) {
@@ -276,7 +276,7 @@ Status MultilaneOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_own
     return lane.processor->reset_state(state, chunks);
 }
 
-MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, OperatorFactoryPtr factory, size_t num_lanes)
+MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, const OperatorFactoryPtr& factory, size_t num_lanes)
         : pipeline::OperatorFactory(id, strings::Substitute("ml_$0", factory->get_raw_name()), factory->plan_node_id()),
           _factory(factory),
           _num_lanes(num_lanes) {}

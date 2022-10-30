@@ -274,7 +274,7 @@ void LakeTabletsChannel::add_chunk(vectorized::Chunk* chunk, const PTabletWriter
                     count_down_latch.count_down();
                     continue;
                 }
-                dw->finish([&, id = tablet_id](Status st) {
+                dw->finish([&, id = tablet_id](const Status& st) {
                     if (st.ok()) {
                         context->add_finished_tablet(id);
                         VLOG(5) << "Finished tablet " << id;

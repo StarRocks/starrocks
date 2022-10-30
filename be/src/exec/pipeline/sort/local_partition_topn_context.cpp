@@ -4,6 +4,8 @@
 
 #include <exec/vectorized/partition/chunks_partitioner.h>
 
+#include <utility>
+
 #include "exec/vectorized/chunks_sorter_topn.h"
 
 namespace starrocks::pipeline {
@@ -16,8 +18,8 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(
         const RowDescriptor& parent_node_child_row_desc)
         : _t_partition_exprs(t_partition_exprs),
           _sort_exprs(sort_exprs),
-          _is_asc_order(is_asc_order),
-          _is_null_first(is_null_first),
+          _is_asc_order(std::move(is_asc_order)),
+          _is_null_first(std::move(is_null_first)),
           _sort_keys(sort_keys),
           _offset(offset),
           _partition_limit(partition_limit),
@@ -136,8 +138,8 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         : _ctxs(degree_of_parallelism),
           _t_partition_exprs(t_partition_exprs),
           _sort_exprs(sort_exprs),
-          _is_asc_order(is_asc_order),
-          _is_null_first(is_null_first),
+          _is_asc_order(std::move(is_asc_order)),
+          _is_null_first(std::move(is_null_first)),
           _sort_keys(sort_keys),
           _offset(offset),
           _partition_limit(partition_limit),

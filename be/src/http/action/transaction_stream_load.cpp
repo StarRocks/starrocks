@@ -80,7 +80,7 @@ static void _send_reply(HttpRequest* req, const std::string& str) {
     HttpChannel::send_reply(req, str);
 }
 
-void TransactionManagerAction::_send_error_reply(HttpRequest* req, Status st) {
+void TransactionManagerAction::_send_error_reply(HttpRequest* req, const Status& st) {
     auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
     ctx->label = req->header(HTTP_LABEL_KEY);
 
@@ -120,7 +120,7 @@ TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _e
 
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
 
-void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, Status st) {
+void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Status& st) {
     auto ctx = std::make_unique<StreamLoadContext>(_exec_env);
     ctx->label = req->header(HTTP_LABEL_KEY);
 
