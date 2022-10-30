@@ -492,7 +492,6 @@ public:
     static bool decimal_in_base_to_decimal(int64_t src_num, int8_t src_base, int64_t* result);
     static bool handle_parse_result(int8_t dest_base, int64_t* num, StringParser::ParseResult parse_res);
     static std::string decimal_to_base(int64_t src_num, int8_t dest_base);
-    static constexpr double MAX_EXP_PARAMETER = std::log(std::numeric_limits<double>::max());
 
 private:
     static const int32_t MIN_BASE = 2;
