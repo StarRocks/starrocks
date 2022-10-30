@@ -4,6 +4,7 @@
 #include <gtest/gtest.h>
 #include <testutil/assert.h>
 
+#include <algorithm>
 #include <memory>
 #include <numeric>
 #include <random>
@@ -575,6 +576,54 @@ static void BM_find_zero_memchr(benchmark::State& state) {
     }
 }
 BENCHMARK(BM_find_zero_memchr)->Range(8, 8 << 12);
+
+// Benchmark shuffle
+static void BM_selective_int64(benchmark::State& state) {
+    constexpr size_t kChunkSize = 4096;
+    auto column = Int64Column::create();
+    column->resize(kChunkSize);
+    auto& data = column->get_data();
+    std::iota(data.begin(), data.end(), 1);
+
+    std::vector<uint32_t> selector;
+    selector.resize(column->size());
+    std::iota(selector.begin(), selector.end(), 0);
+    std::random_shuffle(selector.begin(), selector.end());
+    auto dst = column->clone_empty();
+
+    for (auto _ : state) {
+        dst->append_selective(*column, selector);
+        dst->reset_column();
+    }
+    state.counters["payload_size"] = column->memory_usage();
+}
+BENCHMARK(BM_selective_int64);
+
+// Benchmark shuffle string
+static void BM_selective_string(benchmark::State& state) {
+    constexpr size_t kChunkSize = 4096;
+    auto column = BinaryColumn::create();
+    int str_len = state.range(0);
+    std::string str;
+    str.resize(str_len);
+    std::iota(str.begin(), str.end(), 1);
+    for (int i = 0; i < kChunkSize; i++) {
+        column->append_string(str);
+    }
+
+    std::vector<uint32_t> selector;
+    selector.resize(column->size());
+    std::iota(selector.begin(), selector.end(), 0);
+    std::random_shuffle(selector.begin(), selector.end());
+    auto dst = column->clone_empty();
+
+    for (auto _ : state) {
+        dst->append_selective(*column, selector);
+        dst->reset_column();
+    }
+    state.counters["payload_size"] = column->memory_usage();
+}
+BENCHMARK(BM_selective_string)->RangeMultiplier(4)->Range(1, 1024);
 
 } // namespace starrocks::vectorized
 
