@@ -48,6 +48,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DdlStmt;
 import com.starrocks.sql.ast.DropDbStmt;
+import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
 import com.starrocks.sql.ast.StatementBase;
@@ -175,6 +176,13 @@ public class StarRocksAssert {
         DropTableStmt dropTableStmt =
                 (DropTableStmt) UtFrameUtils.parseStmtWithNewParser("drop table " + tableName + ";", ctx);
         GlobalStateMgr.getCurrentState().dropTable(dropTableStmt);
+        return this;
+    }
+
+    public StarRocksAssert dropMaterializedView(String materializedViewName) throws Exception {
+        DropMaterializedViewStmt dropMaterializedViewStmt = (DropMaterializedViewStmt) UtFrameUtils.
+                parseStmtWithNewParser("drop materialized view " + materializedViewName + ";", ctx);
+        GlobalStateMgr.getCurrentState().dropMaterializedView(dropMaterializedViewStmt);
         return this;
     }
 
