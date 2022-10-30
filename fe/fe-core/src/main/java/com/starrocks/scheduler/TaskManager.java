@@ -568,7 +568,7 @@ public class TaskManager {
                 .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
     }
 
-    public void replayUpdateProgress(Map<Long, Integer> taskRunProgresMap) {
+    public void replayUpdateRunningTaskRunProgress(Map<Long, Integer> taskRunProgresMap) {
         Map<Long, TaskRun> runningTaskRunMap = taskRunManager.getRunningTaskRunMap();
         for (Map.Entry<Long, Integer> entry : taskRunProgresMap.entrySet()) {
             // When replaying the log, the task run may have ended

@@ -68,9 +68,9 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.RunningTaskRunProgressInfo;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
-import com.starrocks.scheduler.persist.UpdateProgressInfo;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.staros.StarMgrJournal;
@@ -690,9 +690,10 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
-                case OperationType.OP_UPDATE_PROGRESS:
-                    UpdateProgressInfo updateProgressInfo = (UpdateProgressInfo) journal.getData();
-                    globalStateMgr.getTaskManager().replayUpdateProgress(updateProgressInfo.getTaskRunProgressMap());
+                case OperationType.OP_UPDATE_RUNNING_TASK_RUN_PROGRESS:
+                    RunningTaskRunProgressInfo runningTaskRunProgressInfo = (RunningTaskRunProgressInfo) journal.getData();
+                    globalStateMgr.getTaskManager().replayUpdateRunningTaskRunProgress(
+                            runningTaskRunProgressInfo.getTaskRunProgressMap());
                     break;
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
@@ -1090,8 +1091,8 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
-    public void logUpdateProgressInfo(UpdateProgressInfo info) {
-        logEdit(OperationType.OP_UPDATE_PROGRESS, info);
+    public void logUpdateRunningTaskRunProgress(RunningTaskRunProgressInfo info) {
+        logEdit(OperationType.OP_UPDATE_RUNNING_TASK_RUN_PROGRESS, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {

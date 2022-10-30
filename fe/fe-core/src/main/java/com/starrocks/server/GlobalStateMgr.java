@@ -129,7 +129,7 @@ import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
-import com.starrocks.leader.UpdateProgress;
+import com.starrocks.leader.SpreadRunningTaskRunProgress;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -427,7 +427,7 @@ public class GlobalStateMgr {
 
     private StateChangeExecution execution;
 
-    private UpdateProgress updateProgress;
+    private SpreadRunningTaskRunProgress spreadRunningTaskRunProgress;
 
     // For LakeTable
     private CompactionManager compactionManager;
@@ -1097,8 +1097,8 @@ public class GlobalStateMgr {
         taskCleaner.start();
 
         // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
-        updateProgress = new UpdateProgress();
-        updateProgress.start();
+        spreadRunningTaskRunProgress = new  SpreadRunningTaskRunProgress();
+        spreadRunningTaskRunProgress.start();
 
         if (Config.use_staros) {
             shardManager.getShardDeleter().start();

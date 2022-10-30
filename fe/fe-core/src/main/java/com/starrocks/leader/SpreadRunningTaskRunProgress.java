@@ -6,7 +6,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunManager;
-import com.starrocks.scheduler.persist.UpdateProgressInfo;
+import com.starrocks.scheduler.persist.RunningTaskRunProgressInfo;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -14,14 +14,14 @@ import org.apache.logging.log4j.Logger;
 import java.util.HashMap;
 import java.util.Map;
 
-public class UpdateProgress extends LeaderDaemon {
-    public static final Logger LOG = LogManager.getLogger(UpdateProgress.class);
+public class SpreadRunningTaskRunProgress extends LeaderDaemon {
+    public static final Logger LOG = LogManager.getLogger(SpreadRunningTaskRunProgress.class);
     // taskId -> progress
     private Map<Long, Integer> runningTaskRunProgressMap;
     private TaskRunManager taskRunManager;
 
-    public UpdateProgress() {
-        super("UpdateProgress", FeConstants.default_update_progress_ms);
+    public SpreadRunningTaskRunProgress() {
+        super("SpreadRunningTaskRunProgress", FeConstants.default_spread_running_task_run_progress_ms);
         taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         runningTaskRunProgressMap = new HashMap<>();
         for (Map.Entry<Long, TaskRun> entry : taskRunManager.getRunningTaskRunMap().entrySet()) {
@@ -60,7 +60,8 @@ public class UpdateProgress extends LeaderDaemon {
 
         }
         if (!jobProgressMap.isEmpty()) {
-            GlobalStateMgr.getCurrentState().getEditLog().logUpdateProgressInfo(new UpdateProgressInfo(jobProgressMap));
+            GlobalStateMgr.getCurrentState().getEditLog().
+                    logUpdateRunningTaskRunProgress(new RunningTaskRunProgressInfo(jobProgressMap));
         }
     }
 }

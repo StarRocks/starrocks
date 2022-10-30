@@ -13,12 +13,12 @@ import java.io.IOException;
 import java.util.Map;
 
 
-public class UpdateProgressInfo implements Writable {
+public class RunningTaskRunProgressInfo implements Writable {
     // taskId -> progress
     @SerializedName("taskRunProgressMap")
     private Map<Long, Integer> taskRunProgressMap;
 
-    public UpdateProgressInfo(Map<Long, Integer> taskRunProgressMap) {
+    public RunningTaskRunProgressInfo(Map<Long, Integer> taskRunProgressMap) {
         this.taskRunProgressMap = taskRunProgressMap;
     }
 
@@ -30,9 +30,9 @@ public class UpdateProgressInfo implements Writable {
         this.taskRunProgressMap = taskRunPrgressMap;
     }
 
-    public static UpdateProgressInfo read(DataInput in) throws IOException {
+    public static RunningTaskRunProgressInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
-        return GsonUtils.GSON.fromJson(json, UpdateProgressInfo.class);
+        return GsonUtils.GSON.fromJson(json, RunningTaskRunProgressInfo.class);
     }
 
     @Override
