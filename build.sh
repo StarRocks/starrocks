@@ -47,6 +47,11 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]];
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/pulsar/Client.h ]]; then
+    echo "Thirdparty libraries need to be build ..."
+    ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
+fi
+
 WITH_BLOCK_CACHE=OFF
 if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
     echo "Thirdparty libraries need to be build ..."
