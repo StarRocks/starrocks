@@ -167,8 +167,8 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(logImpl, base, v) {
 }
 
 ColumnPtr MathFunctions::log(FunctionContext* context, const Columns& columns) {
-    auto l = VECTORIZED_FN_ARGS(0);
-    auto r = VECTORIZED_FN_ARGS(1);
+    const auto& l = VECTORIZED_FN_ARGS(0);
+    const auto& r = VECTORIZED_FN_ARGS(1);
     return VectorizedUnstrictBinaryFunction<logProduceNullImpl, logImpl>::evaluate<TYPE_DOUBLE>(l, r);
 }
 

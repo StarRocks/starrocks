@@ -443,7 +443,7 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
             bool is_dir = true;
             int64_t file_size = 0;
-            file_status->emplace_back(std::move(name), is_dir, file_size);
+            file_status->emplace_back(name, is_dir, file_size);
         }
         for (auto&& obj : result.GetContents()) {
             if (obj.GetKey() == uri.key()) {
@@ -464,7 +464,7 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
 
-            file_status->emplace_back(std::move(name), is_dir, file_size);
+            file_status->emplace_back(name, is_dir, file_size);
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);
