@@ -234,7 +234,8 @@ void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& a
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskRequest>& agent_task_req,
+                                ExecEnv* exec_env) {
     const TClearTransactionTaskRequest& clear_transaction_task_req = agent_task_req->task_req;
     LOG(INFO) << "get clear transaction task task, signature:" << agent_task_req->signature
               << ", txn_id: " << clear_transaction_task_req.transaction_id
@@ -576,7 +577,8 @@ void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& age
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
+void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskRequest>& agent_task_req,
+                               ExecEnv* exec_env) {
     const TReleaseSnapshotRequest& release_snapshot_request = agent_task_req->task_req;
     LOG(INFO) << "Got release snapshot task signature=" << agent_task_req->signature;
 

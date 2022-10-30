@@ -2359,7 +2359,7 @@ void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_r
     _buffer_stream_enabled = true;
     std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
     bs_io_ranges.reserve(io_ranges.size());
-for (const auto& r : io_ranges) {
+    for (const auto& r : io_ranges) {
         bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
                                                                      .size = static_cast<int64_t>(r.size)});
     }

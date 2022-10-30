@@ -90,7 +90,8 @@ Status SegmentFlushExecutor::init(const std::vector<DataDir*>& data_dirs) {
 }
 
 std::unique_ptr<SegmentFlushToken> SegmentFlushExecutor::create_flush_token(
-        const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer, ThreadPool::ExecutionMode execution_mode) {
+        const std::shared_ptr<starrocks::vectorized::DeltaWriter>& delta_writer,
+        ThreadPool::ExecutionMode execution_mode) {
     return std::make_unique<SegmentFlushToken>(_flush_pool->new_token(execution_mode), delta_writer);
 }
 

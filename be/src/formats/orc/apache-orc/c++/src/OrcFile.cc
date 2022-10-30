@@ -48,7 +48,8 @@ private:
     ReaderMetrics* metrics;
 
 public:
-    FileInputStream(std::string _filename, ReaderMetrics* _metrics) : filename(std::move(_filename)), metrics(_metrics) {
+    FileInputStream(std::string _filename, ReaderMetrics* _metrics)
+            : filename(std::move(_filename)), metrics(_metrics) {
         file = open(filename.c_str(), O_BINARY | O_RDONLY);
         if (file == -1) {
             throw ParseError("Can't open " + filename);

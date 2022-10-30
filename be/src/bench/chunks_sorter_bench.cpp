@@ -67,8 +67,9 @@ public:
         return {column, std::move(expr)};
     }
 
-    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc, int slot_index,
-                                                                          bool low_card, bool nullable) {
+    static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc,
+                                                                          int slot_index, bool low_card,
+                                                                          bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
         ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);

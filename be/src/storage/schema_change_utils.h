@@ -35,7 +35,8 @@ public:
                          MemPool* mem_pool);
 
 private:
-    const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function, FieldType type);
+    const MaterializeTypeConverter* get_materialize_type_converter(const std::string& materialized_function,
+                                                                   FieldType type);
 
     // @brief column-mapping specification of new schema
     SchemaMapping _schema_mapping;

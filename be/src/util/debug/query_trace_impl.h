@@ -76,7 +76,8 @@ public:
 
     Status dump();
 
-    static void set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id, std::uintptr_t driver);
+    static void set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id,
+                                      std::uintptr_t driver);
 
 private:
     TUniqueId _query_id;

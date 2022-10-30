@@ -152,7 +152,8 @@ Status QueryTrace::dump() {
     return Status::OK();
 }
 
-void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id, std::uintptr_t driver) {
+void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id,
+                                       std::uintptr_t driver) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
     if (!query_trace->_is_enable) {
         tls_trace_ctx.reset();

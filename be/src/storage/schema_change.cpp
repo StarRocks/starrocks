@@ -1043,7 +1043,8 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     return status;
 }
 
-Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_tablet,
+                                                   const TAlterTabletReqV2& request) {
     int64_t max_continuous_version = new_tablet->max_continuous_version();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
               << ", version=" << max_continuous_version;
