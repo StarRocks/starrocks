@@ -37,7 +37,7 @@ public:
         ColumnSelfComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
         RETURN_IF_ERROR(column.data_column()->accept(&comparator));
 
-        auto data_column = column.data_column();
+        const auto& data_column = column.data_column();
         // NOTE
         if (!_first_column->empty()) {
             _cmp_vector[0] |= _first_column->compare_at(0, 0, *data_column, 1) != 0;

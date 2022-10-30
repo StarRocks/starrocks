@@ -431,7 +431,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(vectorized::Chunk* chunk, 
             ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
             partition_by_columns.push_back(partition_column.get());
         }
-        filter->compute_hash(std::move(partition_by_columns), &eval_context.running_context);
+        filter->compute_hash(partition_by_columns, &eval_context.running_context);
     }
 }
 

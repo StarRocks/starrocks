@@ -12,7 +12,7 @@
 
 namespace starrocks::lake {
 
-GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(std::move(tablet)) {}
+GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(tablet) {}
 
 GeneralTabletWriter::~GeneralTabletWriter() {}
 

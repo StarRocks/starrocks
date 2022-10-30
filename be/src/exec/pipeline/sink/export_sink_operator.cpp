@@ -90,7 +90,7 @@ void ExportSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::
             return;
         }
     }
-    auto chunk = *iter;
+    const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
         close(_state);

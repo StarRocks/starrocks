@@ -454,7 +454,7 @@ ChunkIteratorPtr new_mask_merge_iterator(const std::vector<ChunkIteratorPtr>& ch
         return children[0];
     }
     DCHECK(children.size() > 1 && children.size() <= RowSourceMask::MAX_SOURCES);
-    return std::make_shared<MaskMergeIterator>(std::move(children), mask_buffer);
+    return std::make_shared<MaskMergeIterator>(children, mask_buffer);
 }
 
 } // namespace starrocks::vectorized

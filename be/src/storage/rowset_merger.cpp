@@ -437,7 +437,7 @@ private:
                 vector<vectorized::ChunkIteratorPtr> segment_iters;
                 for (const auto& segment_iter : res.value()) {
                     if (segment_iter) {
-                        segment_iters.emplace_back(std::move(segment_iter));
+                        segment_iters.emplace_back(segment_iter);
                     }
                 }
                 if (segment_iters.empty()) {

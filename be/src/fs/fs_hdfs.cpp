@@ -326,7 +326,7 @@ Status HdfsFileSystem::list_path(const std::string& dir, std::vector<FileStatus>
         std::string_view name(fileinfo[i].mName + dir_size);
         bool is_dir = fileinfo[i].mKind == tObjectKind::kObjectKindDirectory;
         int64_t file_size = fileinfo[i].mSize;
-        result->emplace_back(std::move(name), is_dir, file_size);
+        result->emplace_back(name, is_dir, file_size);
     }
     if (fileinfo) {
         hdfsFreeFileInfo(fileinfo, numEntries);

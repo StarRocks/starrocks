@@ -54,8 +54,7 @@ Status window_init_jvm_context(int64_t fid, const std::string& url, const std::s
     ASSIGN_OR_RETURN(auto batch_get_func, analyzer->get_method_object(state_clazz.clazz(), "batch_get"));
     ASSIGN_OR_RETURN(auto add_func, analyzer->get_method_object(state_clazz.clazz(), "add"));
 
-    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), std::move(get_func),
-                                                       std::move(batch_get_func), std::move(add_func));
+    udaf_ctx->states = std::make_unique<UDAFStateList>(std::move(instance), get_func, batch_get_func, add_func);
     udaf_ctx->_func = std::make_unique<UDAFFunction>(udaf_ctx->handle.handle(), context, udaf_ctx);
 
     return Status::OK();
