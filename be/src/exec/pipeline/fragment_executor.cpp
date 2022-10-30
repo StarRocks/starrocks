@@ -415,7 +415,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 }
 
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
-    const auto fragment_instance_id = request.fragment_instance_id();
+    const auto& fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
@@ -786,7 +786,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     std::make_shared<Pipeline>(context->next_pipe_id(), operators_source_with_local_exchange);
             fragment_ctx->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
         } else {
-            fragment_ctx->pipelines().back()->add_op_factory(std::move(tablet_sink_op));
+            fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
         }
     } else if (typeid(*datasink) == typeid(starrocks::ExportSink)) {
         ExportSink* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());

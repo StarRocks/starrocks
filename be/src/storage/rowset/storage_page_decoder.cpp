@@ -19,7 +19,7 @@ public:
     }
     Status decode_page_data(PageFooterPB* footer, uint32_t footer_size, EncodingTypePB encoding,
                             std::unique_ptr<char[]>* page, Slice* page_slice) override {
-        DataPageFooterPB data_footer = footer->data_page_footer();
+        const DataPageFooterPB& data_footer = footer->data_page_footer();
 
         size_t num_elements = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 0);
         size_t compressed_size = decode_fixed32_le((const uint8_t*)page_slice->data + _reserve_head_size + 4);

@@ -27,7 +27,7 @@ namespace starrocks {
 class ESScrollQueryBuilder {
 public:
     ESScrollQueryBuilder();
-    ~ESScrollQueryBuilder();
+    ~ESScrollQueryBuilder() = default;
     // build the query DSL for elasticsearch
     static std::string build_next_scroll_body(const std::string& scroll_id, const std::string& scroll);
     static std::string build_clear_scroll_body(const std::string& scroll_id);

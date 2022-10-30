@@ -156,7 +156,7 @@ pipeline::OpFactories AssertNumRowsNode::decompose_to_pipeline(pipeline::Pipelin
             runtime_state(), operator_before_assert_num_rows_source);
 
     auto source_factory = std::make_shared<AssertNumRowsOperatorFactory>(
-            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, std::move(_assertion));
+            context->next_operator_id(), id(), _desired_num_rows, _subquery_string, _assertion);
     operator_before_assert_num_rows_source.emplace_back(std::move(source_factory));
 
     // Create a shared RefCountedRuntimeFilterCollector

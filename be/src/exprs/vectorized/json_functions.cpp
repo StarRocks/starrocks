@@ -190,7 +190,7 @@ JsonFunctionType JsonTypeTraits<TYPE_VARCHAR>::JsonType = JSON_FUN_STRING;
 
 ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& columns) {
     auto jsons = _string_json(context, columns);
-    auto paths = columns[1];
+    const auto& paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
     return _json_int(context, Columns{jsons});
@@ -198,7 +198,7 @@ ColumnPtr JsonFunctions::get_json_int(FunctionContext* context, const Columns& c
 
 ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns& columns) {
     auto jsons = _string_json(context, columns);
-    auto paths = columns[1];
+    const auto& paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
     return _json_double(context, Columns{jsons});
@@ -206,7 +206,7 @@ ColumnPtr JsonFunctions::get_json_double(FunctionContext* context, const Columns
 
 ColumnPtr JsonFunctions::get_json_string(FunctionContext* context, const Columns& columns) {
     auto jsons = _string_json(context, columns);
-    auto paths = columns[1];
+    const auto& paths = columns[1];
 
     jsons = json_query(context, Columns{jsons, paths});
     return _json_string_unescaped(context, Columns{jsons});
@@ -261,7 +261,7 @@ ColumnPtr JsonFunctions::json_string(FunctionContext* context, const Columns& co
             if (!json_str.ok()) {
                 result.append_null();
             } else {
-                result.append(std::move(json_str.value()));
+                result.append(json_str.value());
             }
         }
     }
@@ -281,7 +281,7 @@ ColumnPtr JsonFunctions::_json_int(FunctionContext* context, const Columns& colu
             if (!json_int.ok()) {
                 result.append_null();
             } else {
-                result.append(std::move(json_int.value()));
+                result.append(json_int.value());
             }
         }
     }
@@ -301,7 +301,7 @@ ColumnPtr JsonFunctions::_json_double(FunctionContext* context, const Columns& c
             if (!json_d.ok()) {
                 result.append_null();
             } else {
-                result.append(std::move(json_d.value()));
+                result.append(json_d.value());
             }
         }
     }
@@ -353,7 +353,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
             }
 
             if (str.length() < 2) {
-                result.append(std::move(str));
+                result.append(str);
                 continue;
             }
 
@@ -361,7 +361,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
             if (str[0] == '"') str = str.substr(1, str.size() - 1);
             if (str[str.size() - 1] == '"') str = str.substr(0, str.size() - 1);
 
-            result.append(std::move(str));
+            result.append(str);
         }
     }
     return result.build(ColumnHelper::is_all_const(columns));

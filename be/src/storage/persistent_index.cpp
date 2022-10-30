@@ -2334,8 +2334,8 @@ Status PersistentIndex::load(const PersistentIndexMetaPB& index_meta) {
     ASSIGN_OR_RETURN(_fs, FileSystem::CreateSharedFromString(_path));
     RETURN_IF_ERROR(_load(index_meta));
     // delete expired _l0 file and _l1 file
-    MutableIndexMetaPB l0_meta = index_meta.l0_meta();
-    IndexSnapshotMetaPB snapshot_meta = l0_meta.snapshot();
+    const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
+    const IndexSnapshotMetaPB& snapshot_meta = l0_meta.snapshot();
     EditVersion l0_version = snapshot_meta.version();
     RETURN_IF_ERROR(_delete_expired_index_file(l0_version, _l1_version));
     return Status::OK();
@@ -2348,7 +2348,7 @@ Status PersistentIndex::_load(const PersistentIndexMetaPB& index_meta) {
     if (!index_meta.has_l0_meta()) {
         return Status::InternalError("invalid PersistentIndexMetaPB");
     }
-    MutableIndexMetaPB l0_meta = index_meta.l0_meta();
+    const MutableIndexMetaPB& l0_meta = index_meta.l0_meta();
     DCHECK(_l0 != nullptr);
     RETURN_IF_ERROR(_l0->load(l0_meta));
     std::unique_ptr<RandomAccessFile> l1_rfile;

@@ -123,7 +123,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::Ch
         }
         _is_writer_opened = true;
     }
-    auto chunk = *iter;
+    const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
         close(_state);
