@@ -4,9 +4,9 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.catalog.MaterializedView;
 
-public class RealtimeRefreshSchemeDesc extends RefreshSchemeDesc {
+public class IncrementalRefreshSchemeDesc extends RefreshSchemeDesc {
 
-    public RealtimeRefreshSchemeDesc() {
-        super(MaterializedView.RefreshType.REALTIME);
+    public IncrementalRefreshSchemeDesc() {
+        super(MaterializedView.RefreshType.INCREMENTAL);
     }
 }

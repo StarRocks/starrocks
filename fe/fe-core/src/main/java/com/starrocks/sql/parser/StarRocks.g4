@@ -1873,7 +1873,7 @@ distributionDesc
 refreshSchemeDesc
     : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
-    | REALTIME
+    | INCREMENTAL
     | MANUAL)
     ;
 

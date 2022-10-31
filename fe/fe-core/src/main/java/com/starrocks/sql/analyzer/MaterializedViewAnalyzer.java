@@ -202,7 +202,7 @@ public class MaterializedViewAnalyzer {
             if (!ctx.getSessionVariable().isEnableRealtimeRefreshMV()) {
                 return;
             }
-            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.REALTIME)) {
+            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
                 return;
             }
             QueryRelation queryRelation = query.getQueryRelation();

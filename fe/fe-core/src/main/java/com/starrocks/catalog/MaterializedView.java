@@ -62,7 +62,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         SYNC,
         ASYNC,
         MANUAL,
-        REALTIME
+        INCREMENTAL
     }
 
     public static class BaseTableInfo {
