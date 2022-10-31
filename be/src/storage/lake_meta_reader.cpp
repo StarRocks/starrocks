@@ -17,17 +17,12 @@
 
 namespace starrocks::vectorized {
 
-LakeMetaReader::LakeMetaReader() : _is_init(false), _has_more(false) {}
+LakeMetaReader::LakeMetaReader() : MetaReader() {}
 
 LakeMetaReader::~LakeMetaReader() {
-    // Rowset::release_readers(_rowsets);
 }
 
-
-Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaReader::init";
-
+Status LakeMetaReader::_init(const LakeMetaReaderParams& read_params) {
     RETURN_IF_ERROR(_init_params(read_params));
     RETURN_IF_ERROR(_build_collect_context(read_params));
     RETURN_IF_ERROR(_init_seg_meta_collecters(read_params));
@@ -47,7 +42,7 @@ Status LakeMetaReader::_init_params(const LakeMetaReaderParams& read_params) {
     // for debug
     LOG(INFO) << "enter LakeMetaReader::_init_params";
     read_params.check_validation();
-    _tablet = read_params.tablet;
+    _tablet = read_params.lake_tablet;
     _tablet_schema = read_params.tablet_schema;
     _version = read_params.version;
     _chunk_size = read_params.chunk_size;
@@ -101,22 +96,6 @@ Status LakeMetaReader::_build_collect_context(const LakeMetaReaderParams& read_p
     return Status::OK();
 }
 
-Status LakeMetaReader::_init_seg_meta_collecters(const LakeMetaReaderParams& params) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaReader::_init_seg_meta_collecters";
-    std::vector<SegmentSharedPtr> segments;
-    RETURN_IF_ERROR(_get_segments(params.tablet.value(), params.version, &segments));
-
-    for (auto& segment : segments) {
-        auto seg_collecter = std::make_unique<SegmentMetaCollecter>(segment);
-
-        RETURN_IF_ERROR(seg_collecter->init(&_collect_context.seg_collecter_params));
-        _collect_context.seg_collecters.emplace_back(std::move(seg_collecter));
-    }
-
-    return Status::OK();
-}
-
 Status LakeMetaReader::_get_segments(lake::Tablet tablet, const Version& version,
                                  std::vector<SegmentSharedPtr>* segments) {
     // for debug
@@ -136,80 +115,5 @@ Status LakeMetaReader::_get_segments(lake::Tablet tablet, const Version& version
 
     return Status::OK();
 }
-
-Status LakeMetaReader::_fill_result_chunk(Chunk* chunk) {
-    for (size_t i = 0; i < _collect_context.result_slot_ids.size(); i++) {
-        auto s_id = _collect_context.result_slot_ids[i];
-        auto slot = _params.desc_tbl->get_slot_descriptor(s_id);
-        if (_collect_context.seg_collecter_params.fields[i] == "dict_merge") {
-            TypeDescriptor item_desc;
-            item_desc = slot->type();
-            TypeDescriptor desc;
-            desc.type = TYPE_ARRAY;
-            desc.children.emplace_back(item_desc);
-            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(desc, false);
-            chunk->append_column(std::move(column), slot->id());
-        } else {
-            vectorized::ColumnPtr column = vectorized::ColumnHelper::create_column(slot->type(), false);
-            chunk->append_column(std::move(column), slot->id());
-        }
-    }
-    return Status::OK();
-}
-
-Status LakeMetaReader::do_get_next(ChunkPtr* result) {
-    const uint32_t chunk_capacity = _chunk_size;
-    uint16_t chunk_start = 0;
-
-    *result = std::make_shared<vectorized::Chunk>();
-    if (nullptr == result->get()) {
-        return Status::InternalError("Failed to allocate new chunk.");
-    }
-
-    RETURN_IF_ERROR(_fill_result_chunk(result->get()));
-
-    while ((chunk_start < chunk_capacity) && _has_more) {
-        RETURN_IF_ERROR(_read((*result).get(), chunk_capacity - chunk_start));
-        (*result)->check_or_die();
-        size_t next_start = (*result)->num_rows();
-        chunk_start = next_start;
-    }
-
-    return Status::OK();
-}
-
-Status LakeMetaReader::open() {
-    return Status::OK();
-}
-
-Status LakeMetaReader::_read(Chunk* chunk, size_t n) {
-    std::vector<vectorized::Column*> columns;
-    for (size_t i = 0; i < _collect_context.seg_collecter_params.fields.size(); ++i) {
-        const ColumnPtr& col = chunk->get_column_by_index(i);
-        columns.emplace_back(col.get());
-    }
-
-    size_t remaining = n;
-    while (remaining > 0) {
-        if (_collect_context.cursor_idx >= _collect_context.seg_collecters.size()) {
-            _has_more = false;
-            return Status::OK();
-        }
-        RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->open());
-        RETURN_IF_ERROR(_collect_context.seg_collecters[_collect_context.cursor_idx]->collect(&columns));
-        _collect_context.seg_collecters[_collect_context.cursor_idx].reset();
-        remaining--;
-        _collect_context.cursor_idx++;
-    }
-
-    return Status::OK();
-}
-
-bool LakeMetaReader::has_more() {
-    return _has_more;
-}
-
-
-
 
 } // namespace starrocks::vectorized

@@ -77,27 +77,28 @@ public:
         std::vector<int32_t> result_slot_ids;
     };
 
-private:
-    TabletSharedPtr _tablet;
+protected:
+    Status _init_seg_meta_collecters(const MetaReaderParams& read_params);
+    
     Version _version;
-    std::vector<RowsetSharedPtr> _rowsets;
-
+    int _chunk_size;
+    CollectContext _collect_context;
     bool _is_init;
     bool _has_more;
-    int _chunk_size;
-    MetaReaderParams _params;
 
-    CollectContext _collect_context;
+private:
+    TabletSharedPtr _tablet;
+    std::vector<RowsetSharedPtr> _rowsets;
+
+    MetaReaderParams _params;
 
     Status _init_params(const MetaReaderParams& read_params);
 
     Status _build_collect_context(const MetaReaderParams& read_params);
 
-    Status _init_seg_meta_collecters(const MetaReaderParams& read_params);
-
     Status _fill_result_chunk(Chunk* chunk);
 
-    Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
+   Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
                          std::vector<SegmentSharedPtr>* segments);
 
     Status _read(Chunk* chunk, size_t n);

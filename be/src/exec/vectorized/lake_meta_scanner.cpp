@@ -30,7 +30,7 @@ Status LakeMetaScanner::init(RuntimeState* runtime_state, const LakeMetaScannerP
 Status LakeMetaScanner::_init_meta_reader_params() {
     // for debug
     LOG(INFO) << "enter LakeMetaScanner::_init_meta_reader_params";
-    _reader_params.tablet = _tablet;
+    _reader_params.lake_tablet = _tablet;
     _reader_params.tablet_schema = _tablet_schema;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;

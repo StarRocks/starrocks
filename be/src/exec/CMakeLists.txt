@@ -62,6 +62,7 @@ set(EXEC_FILES
     vectorized/tablet_scanner.cpp
     vectorized/olap_scan_node.cpp
     vectorized/olap_scan_prepare.cpp
+    vectorized/meta_scan_node.cpp
     vectorized/olap_meta_scanner.cpp
     vectorized/olap_meta_scan_node.cpp
     vectorized/lake_meta_scanner.cpp
