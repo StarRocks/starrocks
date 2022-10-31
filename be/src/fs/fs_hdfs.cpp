@@ -25,7 +25,7 @@ namespace starrocks {
 // Now this is not thread-safe.
 class HdfsInputStream : public io::SeekableInputStream {
 public:
-    HdfsInputStream(hdfsFS fs, hdfsFile file, std::string  file_name)
+    HdfsInputStream(hdfsFS fs, hdfsFile file, std::string file_name)
             : _fs(fs), _file(file), _file_name(std::move(file_name)) {}
 
     ~HdfsInputStream() override;
@@ -119,7 +119,7 @@ StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_st
 
 class HDFSWritableFile : public WritableFile {
 public:
-    HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string  path, size_t offset)
+    HDFSWritableFile(hdfsFS fs, hdfsFile file, std::string path, size_t offset)
             : _fs(fs), _file(file), _path(std::move(path)), _offset(offset) {}
 
     ~HDFSWritableFile() override { (void)HDFSWritableFile::close(); }

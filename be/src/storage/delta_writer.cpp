@@ -26,7 +26,7 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
     return std::move(writer);
 }
 
-DeltaWriter::DeltaWriter(DeltaWriterOptions  opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
+DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
         : _state(kUninitialized),
           _opt(std::move(opt)),
           _mem_tracker(mem_tracker),

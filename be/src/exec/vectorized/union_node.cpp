@@ -76,7 +76,7 @@ Status UnionNode::prepare(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::prepare(exprs, state));
     }
 
-    for (auto & _child_expr_list : _child_expr_lists) {
+    for (auto& _child_expr_list : _child_expr_lists) {
         RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
     }
 

@@ -309,7 +309,7 @@ ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chu
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::ScannerCounter* counter,
                        JsonScanner* scanner, std::shared_ptr<SequentialFile> file, bool strict_mode,
-                       std::vector<SlotDescriptor*>  slot_descs)
+                       std::vector<SlotDescriptor*> slot_descs)
         : _state(state),
           _counter(counter),
           _scanner(scanner),

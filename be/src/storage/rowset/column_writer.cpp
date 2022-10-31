@@ -92,7 +92,7 @@ public:
     NullMapRLEBuilder() : _bitmap_buf(512), _rle_encoder(&_bitmap_buf, 1) {}
 
     explicit NullMapRLEBuilder(size_t reserve_bits)
-            :  _bitmap_buf(BitmapSize(reserve_bits)), _rle_encoder(&_bitmap_buf, 1) {}
+            : _bitmap_buf(BitmapSize(reserve_bits)), _rle_encoder(&_bitmap_buf, 1) {}
 
     void add_run(bool value, size_t run) {
         _has_null |= value;
@@ -125,7 +125,7 @@ public:
     explicit NullFlagsBuilder(NullEncodingPB null_encoding) : NullFlagsBuilder(32 * 1024, null_encoding) {}
 
     explicit NullFlagsBuilder(size_t reserve_bits, NullEncodingPB null_encoding)
-            :  _null_map(reserve_bits), _null_encoding(null_encoding) {}
+            : _null_map(reserve_bits), _null_encoding(null_encoding) {}
 
     void add_null_flags(const uint8_t* flags, size_t count) { _null_map.append(flags, count); }
 

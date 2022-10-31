@@ -29,8 +29,7 @@ class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, std::string  name, int32_t plan_node_id,
-             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -234,7 +233,7 @@ private:
 
 class OperatorFactory {
 public:
-    OperatorFactory(int32_t id, std::string  name, int32_t plan_node_id);
+    OperatorFactory(int32_t id, std::string name, int32_t plan_node_id);
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
     // For some operators, when share some status, need to know the degree_of_parallelism

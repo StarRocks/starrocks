@@ -734,7 +734,7 @@ public:
 
     size_t size() const override {
         size_t ret = 0;
-        for (const auto & _map : _maps) {
+        for (const auto& _map : _maps) {
             if (_map) {
                 ret += _map->size();
             }
@@ -744,7 +744,7 @@ public:
 
     size_t capacity() const override {
         size_t ret = 0;
-        for (const auto & _map : _maps) {
+        for (const auto& _map : _maps) {
             if (_map) {
                 ret += _map->capacity();
             }
@@ -848,7 +848,7 @@ public:
 
     std::size_t memory_usage() const final {
         size_t ret = 0;
-        for (const auto & _map : _maps) {
+        for (const auto& _map : _maps) {
             if (_map) {
                 ret += _map->memory_usage();
             }

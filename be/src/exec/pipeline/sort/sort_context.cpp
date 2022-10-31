@@ -107,8 +107,8 @@ Status SortContext::_init_merger() {
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                                        int64_t offset, int64_t limit, int32_t num_right_sinkers,
-                                       std::vector<ExprContext*>  sort_exprs,
-                                       const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
+                                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                                       const std::vector<bool>& is_null_first)
         : _state(state),
           _topn_type(topn_type),
           _is_merging(is_merging),

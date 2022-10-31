@@ -21,7 +21,7 @@ public:
     };
 
     static constexpr int64_t BLOCK_SIZE = 1 * 1024 * 1024;
-    explicit CacheInputStream(std::string  filename, std::shared_ptr<SeekableInputStream> stream);
+    explicit CacheInputStream(std::string filename, std::shared_ptr<SeekableInputStream> stream);
 
     ~CacheInputStream() override = default;
 

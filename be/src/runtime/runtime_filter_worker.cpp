@@ -535,7 +535,7 @@ static inline Status receive_total_runtime_filter_pipeline(
     }
 
     auto& probe_finst_ids = params.probe_finst_ids();
-    for (const auto & pb_finst_id : probe_finst_ids) {
+    for (const auto& pb_finst_id : probe_finst_ids) {
         TUniqueId finst_id;
         finst_id.hi = pb_finst_id.hi();
         finst_id.lo = pb_finst_id.lo();

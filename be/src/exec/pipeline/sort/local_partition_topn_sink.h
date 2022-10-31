@@ -46,7 +46,7 @@ private:
 class LocalPartitionTopnSinkOperatorFactory final : public OperatorFactory {
 public:
     LocalPartitionTopnSinkOperatorFactory(int32_t id, int32_t plan_node_id,
-                                          LocalPartitionTopnContextFactoryPtr  partition_topn_ctx_factory);
+                                          LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory);
 
     ~LocalPartitionTopnSinkOperatorFactory() override = default;
 

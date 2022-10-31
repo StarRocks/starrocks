@@ -30,7 +30,7 @@ template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
 ///WorkGroup.
-WorkGroup::WorkGroup(std::string  name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
+WorkGroup::WorkGroup(std::string name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
                      size_t concurrency, WorkGroupType type)
         : _name(std::move(name)),
           _id(id),
@@ -473,7 +473,7 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     {
         std::shared_lock read_lock(_mutex);
         workgroups.reserve(_workgroups.size());
-        for (auto & _workgroup : _workgroups) {
+        for (auto& _workgroup : _workgroups) {
             const auto& wg = _workgroup.second;
             auto twg = wg->to_thrift_verbose();
             workgroups.push_back(twg);

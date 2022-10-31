@@ -57,8 +57,7 @@ MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTrac
 }
 
 MemTracker::MemTracker(RuntimeProfile* profile, int64_t byte_limit, std::string label, MemTracker* parent)
-        : 
-          _limit(byte_limit),
+        : _limit(byte_limit),
           _label(std::move(label)),
           _parent(parent),
           _consumption(profile->AddHighWaterMarkCounter(COUNTER_NAME, TUnit::BYTES)),

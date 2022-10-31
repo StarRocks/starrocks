@@ -24,7 +24,7 @@ public:
             : ChunkIterator(child->schema(), child->chunk_size()),
               _child(std::move(child)),
               _pre_aggregate_factor(factor),
-              
+
               _is_vertical_merge(is_vertical_merge),
               _is_key(is_key) {
         CHECK_LT(_schema.num_key_fields(), std::numeric_limits<uint16_t>::max());

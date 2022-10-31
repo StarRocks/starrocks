@@ -19,7 +19,7 @@ public:
     using ResultColumnType = RunTimeColumnType<result_type>;
     using ColumnType = RunTimeColumnType<type>;
 
-    GlobalDictDecoderBase(Dict  dict) : _dict(std::move(dict)) {}
+    GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
     Status decode(vectorized::Column* in, vectorized::Column* out) override;
 

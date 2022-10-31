@@ -126,7 +126,7 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                           std::string  sort_keys, const bool is_topn)
+                           std::string sort_keys, const bool is_topn)
         : _state(state),
           _sort_exprs(sort_exprs),
           _sort_desc(*is_asc, *is_null_first),

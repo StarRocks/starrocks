@@ -128,7 +128,7 @@ public:
     Status get_err_status() const;
 
 private:
-    DeltaWriter(DeltaWriterOptions  opt, MemTracker* parent, StorageEngine* storage_engine);
+    DeltaWriter(DeltaWriterOptions opt, MemTracker* parent, StorageEngine* storage_engine);
 
     Status _init();
     Status _flush_memtable_async(bool eos = false);

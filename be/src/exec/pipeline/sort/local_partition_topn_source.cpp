@@ -25,7 +25,7 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSourceOperator::pull_chunk(Runt
 }
 
 LocalPartitionTopnSourceOperatorFactory::LocalPartitionTopnSourceOperatorFactory(
-        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr  partition_topn_ctx_factory)
+        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory)
         : SourceOperatorFactory(id, "local_partition_topn_source", plan_node_id),
           _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
 OperatorPtr LocalPartitionTopnSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {

@@ -176,7 +176,7 @@ TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name)
 class ScalarFieldTypeToPrimitiveTypeMapping {
 public:
     ScalarFieldTypeToPrimitiveTypeMapping() {
-        for (auto & i : _data) {
+        for (auto& i : _data) {
             i = INVALID_TYPE;
         }
         _data[OLAP_FIELD_TYPE_BOOL] = TYPE_BOOLEAN;

@@ -31,8 +31,7 @@
 namespace starrocks {
 
 struct BfdFindCtx {
-    BfdFindCtx(bfd_symbol** syms_, bfd_vma pc_)
-            :  syms(syms_), pc(pc_) {}
+    BfdFindCtx(bfd_symbol** syms_, bfd_vma pc_) : syms(syms_), pc(pc_) {}
 
     bool found{false};
     bfd_symbol** syms;

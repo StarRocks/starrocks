@@ -501,7 +501,7 @@ void check_meta_consistency(DataDir* data_dir) {
                     const auto& column_pb = footer.columns(ordinal);
                     columns_in_footer.emplace(column_pb.unique_id(), std::make_pair(ordinal, column_pb.type()));
                 }
-                for (const auto & column : columns) {
+                for (const auto& column : columns) {
                     uint32_t unique_id = column.unique_id();
                     starrocks::FieldType type = column.type();
                     auto iter = columns_in_footer.find(unique_id);

@@ -13,11 +13,11 @@ Schema::Schema(Fields fields) : Schema(fields, KeysType::DUP_KEYS, {}) {}
 
 #endif
 
-Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId>  sort_key_idxes)
+Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes)
         : _fields(std::move(fields)),
           _sort_key_idxes(std::move(sort_key_idxes)),
           _name_to_index_append_buffer(nullptr),
-          
+
           _keys_type(static_cast<uint8_t>(keys_type)) {
     auto is_key = [](const FieldPtr& f) { return f->is_key(); };
     _num_keys = std::count_if(_fields.begin(), _fields.end(), is_key);
@@ -25,7 +25,7 @@ Schema::Schema(Fields fields, KeysType keys_type, std::vector<ColumnId>  sort_ke
 }
 
 Schema::Schema(Schema* schema, const std::vector<ColumnId>& cids)
-        : _name_to_index_append_buffer(nullptr),  _keys_type(schema->_keys_type) {
+        : _name_to_index_append_buffer(nullptr), _keys_type(schema->_keys_type) {
     _fields.resize(cids.size());
     for (int i = 0; i < cids.size(); i++) {
         DCHECK_LT(cids[i], schema->_fields.size());

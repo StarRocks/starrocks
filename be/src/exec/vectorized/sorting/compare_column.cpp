@@ -232,11 +232,14 @@ private:
 
 class ColumnTieBuilder final : public ColumnVisitorAdapter<ColumnTieBuilder> {
 public:
-    explicit ColumnTieBuilder(ColumnPtr  column, Tie* tie)
+    explicit ColumnTieBuilder(ColumnPtr column, Tie* tie)
             : ColumnVisitorAdapter(this), _column(std::move(column)), _tie(tie), _nullable_column(nullptr) {}
 
-    explicit ColumnTieBuilder(ColumnPtr  column, Tie* tie, NullColumnPtr  nullable_column)
-            : ColumnVisitorAdapter(this), _column(std::move(column)), _tie(tie), _nullable_column(std::move(nullable_column)) {}
+    explicit ColumnTieBuilder(ColumnPtr column, Tie* tie, NullColumnPtr nullable_column)
+            : ColumnVisitorAdapter(this),
+              _column(std::move(column)),
+              _tie(tie),
+              _nullable_column(std::move(nullable_column)) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
         // TODO: maybe could skip compare rows that contains null

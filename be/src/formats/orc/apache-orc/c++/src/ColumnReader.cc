@@ -519,7 +519,7 @@ DoubleColumnReader::DoubleColumnReader(const Type& type, StripeStreams& stripe)
         : ColumnReader(type, stripe),
           columnKind(type.getKind()),
           bytesPerValue((type.getKind() == FLOAT) ? 4 : 8),
-          
+
           localDoubleBuffer(stripe.getMemoryPool(), 0),
           sharedBuffer(stripe.getMemoryPool(), 0) {
     inputStream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);

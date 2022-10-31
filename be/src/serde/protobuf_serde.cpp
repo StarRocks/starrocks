@@ -13,8 +13,7 @@
 
 namespace starrocks::serde {
 
-EncodeContext::EncodeContext(const int col_num, const int encode_level)
-        : _session_encode_level(encode_level) {
+EncodeContext::EncodeContext(const int col_num, const int encode_level) : _session_encode_level(encode_level) {
     for (auto i = 0; i < col_num; ++i) {
         _column_encode_level.emplace_back(_session_encode_level);
         _raw_bytes.emplace_back(0);

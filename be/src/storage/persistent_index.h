@@ -436,7 +436,7 @@ private:
 class PersistentIndex {
 public:
     // |path|: directory that contains index files
-    PersistentIndex(std::string  path);
+    PersistentIndex(std::string path);
     ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }

@@ -78,7 +78,7 @@ void RuntimeFilterCacheAction::_handle_trace(HttpRequest* req) {
         auto& allocator = root.GetAllocator();
         rapidjson::Document traces_obj;
         traces_obj.SetArray();
-        for (auto & event : events) {
+        for (auto& event : events) {
             rapidjson::Document query_obj;
             query_obj.SetObject();
             query_obj.AddMember("query_id", rapidjson::Value(event.first.c_str(), event.first.size()), allocator);

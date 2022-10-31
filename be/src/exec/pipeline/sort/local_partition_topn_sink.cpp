@@ -33,7 +33,7 @@ Status LocalPartitionTopnSinkOperator::set_finishing(RuntimeState* state) {
 }
 
 LocalPartitionTopnSinkOperatorFactory::LocalPartitionTopnSinkOperatorFactory(
-        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr  partition_topn_ctx_factory)
+        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory)
         : OperatorFactory(id, "local_partition_topn_sink", plan_node_id),
           _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
 

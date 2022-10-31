@@ -245,7 +245,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
         }
     }
 
-    for (auto & lane : _lanes) {
+    for (auto& lane : _lanes) {
         auto chunk = _pull_chunk_from_lane(state, lane, passthrough_mode);
         if (!chunk.ok() || chunk.value() != nullptr) {
             return chunk;

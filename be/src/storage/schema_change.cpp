@@ -99,8 +99,7 @@ private:
     std::unique_ptr<ChunkAggregator> _aggregator;
 };
 
-ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
-        : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr) {}
+ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr) {}
 
 ChunkSorter::~ChunkSorter() = default;
 

@@ -45,8 +45,7 @@ class BitmapUpdateContext {
     static const size_t estimate_size_threshold = 1024;
 
 public:
-    explicit BitmapUpdateContext(rowid_t rid)
-            : _roaring(Roaring::bitmapOf(1, rid)) {};
+    explicit BitmapUpdateContext(rowid_t rid) : _roaring(Roaring::bitmapOf(1, rid)){};
 
     Roaring* roaring() { return &_roaring; }
 

@@ -67,14 +67,17 @@ Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), 
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, SlotHashMap  slot_map) : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)) {
+Chunk::Chunk(Columns columns, SlotHashMap slot_map)
+        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
     _tuple_id_to_index.reserve(1);
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, SlotHashMap  slot_map, TupleHashMap  tuple_map)
-        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)), _tuple_id_to_index(std::move(tuple_map)) {
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
+        : _columns(std::move(columns)),
+          _slot_id_to_index(std::move(slot_map)),
+          _tuple_id_to_index(std::move(tuple_map)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
 

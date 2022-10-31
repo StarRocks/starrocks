@@ -509,7 +509,7 @@ LZ4F_preferences_t Lz4fBlockCompression::_s_preferences = {
 
 class SnappySlicesSource : public snappy::Source {
 public:
-    explicit SnappySlicesSource(const std::vector<Slice>& slices)  {
+    explicit SnappySlicesSource(const std::vector<Slice>& slices) {
         for (auto& slice : slices) {
             // We filter empty slice here to avoid complicated process
             if (slice.size == 0) {

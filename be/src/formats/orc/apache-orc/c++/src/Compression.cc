@@ -97,8 +97,7 @@ CompressionStreamBase::CompressionStreamBase(OutputStream* outStream, int compre
                                              uint64_t blockSize, MemoryPool& pool)
         : BufferedOutputStream(pool, outStream, capacity, blockSize),
           rawInputBuffer(pool, blockSize),
-          level(compressionLevel)
-          {
+          level(compressionLevel) {
     // PASS
 }
 
@@ -352,7 +351,7 @@ DecompressionStream::DecompressionStream(std::unique_ptr<SeekableInputStream> in
         : pool(_pool),
           input(std::move(inStream)),
           outputDataBuffer(pool, bufferSize),
-          
+
           metrics(_metrics) {}
 
 std::string DecompressionStream::getStreamName() const {

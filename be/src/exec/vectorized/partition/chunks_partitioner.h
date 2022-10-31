@@ -26,7 +26,7 @@ using ChunksPartitionerPtr = std::shared_ptr<ChunksPartitioner>;
 class ChunksPartitioner {
 public:
     ChunksPartitioner(const bool has_nullable_partition_column, const std::vector<ExprContext*>& partition_exprs,
-                      std::vector<PartitionColumnType>  partition_types);
+                      std::vector<PartitionColumnType> partition_types);
 
     Status prepare(RuntimeState* state);
 

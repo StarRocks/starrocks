@@ -441,7 +441,7 @@ void WriterImpl::writeStripe() {
     proto::StripeStatistics* stripeStats = metadata.add_stripestats();
     std::vector<proto::ColumnStatistics> colStats;
     columnWriter->getStripeStatistics(colStats);
-    for (auto & colStat : colStats) {
+    for (auto& colStat : colStats) {
         *stripeStats->add_colstats() = colStat;
     }
     // merge stripe stats into file stats and clear stripe stats
@@ -493,7 +493,7 @@ void WriterImpl::writeFileFooter() {
     // update file statistics
     std::vector<proto::ColumnStatistics> colStats;
     columnWriter->getFileStatistics(colStats);
-    for (auto & colStat : colStats) {
+    for (auto& colStat : colStats) {
         *fileFooter.add_statistics() = colStat;
     }
 

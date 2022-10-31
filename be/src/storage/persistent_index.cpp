@@ -231,7 +231,7 @@ static Status find_buckets_to_move(uint32_t pageid, size_t nbucket, size_t min_p
     auto ret = get_move_buckets(min_pack_to_move, nbucket, bucket_packs_in_page);
 
     size_t move_packs = 0;
-    for (signed char & i : ret) {
+    for (signed char& i : ret) {
         buckets_to_move->emplace_back(bucket_packs_in_page[i], pageid, i);
         move_packs += bucket_packs_in_page[i];
     }
@@ -338,7 +338,7 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
         kv_ptrs.reserve(estimated_entry_per_bucket);
         tags.reserve(estimated_entry_per_bucket);
     }
-    for (const auto & kv_ref : kv_refs) {
+    for (const auto& kv_ref : kv_refs) {
         auto h = IndexHash(kv_ref.hash);
         auto page = h.page() % npage;
         auto bucket = h.bucket() % nbucket;
@@ -2297,7 +2297,7 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
     return std::move(idx);
 }
 
-PersistentIndex::PersistentIndex(std::string  path) : _path(std::move(path)) {}
+PersistentIndex::PersistentIndex(std::string path) : _path(std::move(path)) {}
 
 PersistentIndex::~PersistentIndex() {
     if (_l1) {

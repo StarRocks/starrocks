@@ -61,7 +61,7 @@ const char* Status::copy_state_with_extra_ctx(const char* state, Slice ctx) {
     return result;
 }
 
-Status::Status(const TStatus& s)  {
+Status::Status(const TStatus& s) {
     if (s.status_code != TStatusCode::OK) {
         if (s.error_msgs.empty()) {
             _state = assemble_state(s.status_code, Slice(), Slice());
@@ -71,7 +71,7 @@ Status::Status(const TStatus& s)  {
     }
 }
 
-Status::Status(const StatusPB& s)  {
+Status::Status(const StatusPB& s) {
     TStatusCode::type code = (TStatusCode::type)s.status_code();
     if (code != TStatusCode::OK) {
         if (s.error_msgs_size() == 0) {

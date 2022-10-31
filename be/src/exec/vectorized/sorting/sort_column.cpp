@@ -137,7 +137,7 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr>  columns,
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr> columns,
                                   const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
                                   std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),

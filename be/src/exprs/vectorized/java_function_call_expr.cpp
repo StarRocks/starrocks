@@ -39,7 +39,7 @@ struct UDFFunctionCallHelper {
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
 
-        for (auto & column : columns) {
+        for (auto& column : columns) {
             if (column->only_null()) {
                 // we will handle NULL later
             } else if (column->is_constant()) {

@@ -84,7 +84,7 @@ size_t LaneArbiter::must_acquire_lane(LaneOwnerType lane_owner) {
 
 void LaneArbiter::release_lane(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
-    for (auto & _assignment : _assignments) {
+    for (auto& _assignment : _assignments) {
         if (_assignment.lane_owner == lane_owner) {
             _assignment = LANE_UNASSIGNED;
         }

@@ -33,7 +33,7 @@ using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewrit
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr>  rowsets)
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),

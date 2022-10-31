@@ -29,7 +29,7 @@ using DeltaWriterOptions = starrocks::vectorized::DeltaWriterOptions;
 
 class ReplicateChannel {
 public:
-    ReplicateChannel(const DeltaWriterOptions* opt, std::string  host, int32_t port, int64_t node_id);
+    ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id);
     ~ReplicateChannel();
 
     Status sync_segment(SegmentPB* segment, butil::IOBuf& data, bool eos,

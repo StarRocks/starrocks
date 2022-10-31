@@ -9,8 +9,7 @@
 namespace starrocks {
 namespace vectorized {
 
-OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent)
-        : _parent(parent), _runtime_state(nullptr) {}
+OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent), _runtime_state(nullptr) {}
 
 Status OlapMetaScanner::init(RuntimeState* runtime_state, const OlapMetaScannerParams& params) {
     _runtime_state = runtime_state;

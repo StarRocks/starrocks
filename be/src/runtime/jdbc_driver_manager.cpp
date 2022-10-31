@@ -20,7 +20,8 @@
 namespace starrocks {
 
 struct JDBCDriverEntry {
-    JDBCDriverEntry(std::string  name_, std::string  checksum_) : name(std::move(name_)), checksum(std::move(checksum_)) {}
+    JDBCDriverEntry(std::string name_, std::string checksum_)
+            : name(std::move(name_)), checksum(std::move(checksum_)) {}
 
     ~JDBCDriverEntry();
 

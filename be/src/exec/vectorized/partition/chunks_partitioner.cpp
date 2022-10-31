@@ -12,7 +12,7 @@ namespace starrocks::vectorized {
 
 ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
                                      const std::vector<ExprContext*>& partition_exprs,
-                                     std::vector<PartitionColumnType>  partition_types)
+                                     std::vector<PartitionColumnType> partition_types)
         : _has_nullable_partition_column(has_nullable_partition_column),
           _partition_exprs(partition_exprs),
           _partition_types(std::move(partition_types)) {

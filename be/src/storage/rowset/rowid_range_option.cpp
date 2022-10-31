@@ -9,7 +9,7 @@
 
 namespace starrocks::vectorized {
 
-RowidRangeOption::RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, SparseRange  rowid_range)
+RowidRangeOption::RowidRangeOption(const RowsetId& rowset_id, uint64_t segment_id, SparseRange rowid_range)
         : rowset_id(rowset_id), segment_id(segment_id), rowid_range(std::move(rowid_range)) {}
 
 bool RowidRangeOption::match_rowset(const Rowset* rowset) const {

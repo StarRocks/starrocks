@@ -323,7 +323,7 @@ void LongColumnPrinter::printRow(uint64_t rowId) {
 }
 
 DoubleColumnPrinter::DoubleColumnPrinter(std::string& _buffer, const Type& type)
-        : ColumnPrinter(_buffer),  isFloat(type.getKind() == FLOAT) {
+        : ColumnPrinter(_buffer), isFloat(type.getKind() == FLOAT) {
     // PASS
 }
 
@@ -388,8 +388,7 @@ void Decimal64ColumnPrinter::printRow(uint64_t rowId) {
     }
 }
 
-Decimal128ColumnPrinter::Decimal128ColumnPrinter(std::string& _buffer)
-        : ColumnPrinter(_buffer) {
+Decimal128ColumnPrinter::Decimal128ColumnPrinter(std::string& _buffer) : ColumnPrinter(_buffer) {
     // PASS
 }
 
@@ -407,8 +406,7 @@ void Decimal128ColumnPrinter::printRow(uint64_t rowId) {
     }
 }
 
-StringColumnPrinter::StringColumnPrinter(std::string& _buffer)
-        : ColumnPrinter(_buffer) {
+StringColumnPrinter::StringColumnPrinter(std::string& _buffer) : ColumnPrinter(_buffer) {
     // PASS
 }
 
@@ -456,8 +454,7 @@ void StringColumnPrinter::printRow(uint64_t rowId) {
     }
 }
 
-ListColumnPrinter::ListColumnPrinter(std::string& _buffer, const Type& type)
-        : ColumnPrinter(_buffer) {
+ListColumnPrinter::ListColumnPrinter(std::string& _buffer, const Type& type) : ColumnPrinter(_buffer) {
     elementPrinter = createColumnPrinter(buffer, type.getSubtype(0));
 }
 
@@ -514,8 +511,7 @@ void MapColumnPrinter::printRow(uint64_t rowId) {
     }
 }
 
-UnionColumnPrinter::UnionColumnPrinter(std::string& _buffer, const Type& type)
-        : ColumnPrinter(_buffer) {
+UnionColumnPrinter::UnionColumnPrinter(std::string& _buffer, const Type& type) : ColumnPrinter(_buffer) {
     for (unsigned int i = 0; i < type.getSubtypeCount(); ++i) {
         fieldPrinter.push_back(createColumnPrinter(buffer, type.getSubtype(i)));
     }
@@ -619,8 +615,7 @@ void BooleanColumnPrinter::reset(const ColumnVectorBatch& batch) {
     data = dynamic_cast<const LongVectorBatch&>(batch).data.data();
 }
 
-BinaryColumnPrinter::BinaryColumnPrinter(std::string& _buffer)
-        : ColumnPrinter(_buffer) {
+BinaryColumnPrinter::BinaryColumnPrinter(std::string& _buffer) : ColumnPrinter(_buffer) {
     // PASS
 }
 
@@ -647,8 +642,7 @@ void BinaryColumnPrinter::reset(const ColumnVectorBatch& batch) {
     length = dynamic_cast<const StringVectorBatch&>(batch).length.data();
 }
 
-TimestampColumnPrinter::TimestampColumnPrinter(std::string& _buffer)
-        : ColumnPrinter(_buffer) {
+TimestampColumnPrinter::TimestampColumnPrinter(std::string& _buffer) : ColumnPrinter(_buffer) {
     // PASS
 }
 

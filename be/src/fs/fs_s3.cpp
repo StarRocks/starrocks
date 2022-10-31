@@ -97,7 +97,7 @@ private:
     Random _rand;
 };
 
-S3ClientFactory::S3ClientFactory() :  _rand((int)::time(nullptr)) {}
+S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);

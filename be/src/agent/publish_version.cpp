@@ -69,7 +69,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
         }
     }
     std::mutex affected_dirs_lock;
-    for (auto & tablet_task : tablet_tasks) {
+    for (auto& tablet_task : tablet_tasks) {
         uint32_t retry_time = 0;
         Status st;
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
@@ -137,7 +137,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     auto& error_tablet_ids = finish_task.error_tablet_ids;
     auto& tablet_versions = finish_task.tablet_versions;
     tablet_versions.reserve(tablet_tasks.size());
-    for (auto & task : tablet_tasks) {
+    for (auto& task : tablet_tasks) {
         if (!task.st.ok()) {
             error_tablet_ids.push_back(task.tablet_id);
             if (st.ok()) {

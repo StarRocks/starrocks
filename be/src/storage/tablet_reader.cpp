@@ -30,8 +30,7 @@ TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schem
         : ChunkIterator(std::move(schema)),
           _tablet(std::move(tablet)),
           _version(version),
-          _delete_predicates_version(version)
-          {}
+          _delete_predicates_version(version) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)

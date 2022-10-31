@@ -15,7 +15,7 @@
 
 namespace starrocks {
 
-ClusterIdMgr::ClusterIdMgr(std::string  path) : _path(std::move(path)) {}
+ClusterIdMgr::ClusterIdMgr(std::string path) : _path(std::move(path)) {}
 
 Status ClusterIdMgr::init() {
     std::string cluster_id_path = _cluster_id_path();

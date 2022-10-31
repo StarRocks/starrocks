@@ -57,7 +57,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
 
     std::vector<const ColumnPredicate*> remove_list;
 
-    for (auto & i : preds) {
+    for (auto& i : preds) {
         const ColumnPredicate* pred = i;
         if (PredicateType::kEQ == pred->type()) {
             Datum value = pred->value();
@@ -199,7 +199,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_predicate(ObjectPool* pool, con
     bool load_seg_dict_vec = false;
     ColumnPtr dict_column;
     ColumnPtr code_column;
-    for (auto & i : preds) {
+    for (auto& i : preds) {
         const ColumnPredicate* pred = i;
         if (PredicateType::kExpr == pred->type()) {
             if (!load_seg_dict_vec) {

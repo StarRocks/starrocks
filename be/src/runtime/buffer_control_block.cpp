@@ -77,7 +77,7 @@ BufferControlBlock::BufferControlBlock(const TUniqueId& id, int buffer_size)
 BufferControlBlock::~BufferControlBlock() {
     cancel();
 
-    for (auto & iter : _batch_queue) {
+    for (auto& iter : _batch_queue) {
         delete iter;
         iter = NULL;
     }

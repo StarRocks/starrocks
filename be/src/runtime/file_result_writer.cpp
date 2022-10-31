@@ -68,8 +68,9 @@ Status FileResultWriter::_create_fs() {
             _fs = new_fs_posix();
         } else {
             if (_file_opts->use_broker) {
-                _fs = std::make_unique<BrokerFileSystem>(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
-                                               config::broker_write_timeout_seconds * 1000);
+                _fs = std::make_unique<BrokerFileSystem>(*_file_opts->broker_addresses.begin(),
+                                                         _file_opts->broker_properties,
+                                                         config::broker_write_timeout_seconds * 1000);
             } else {
                 ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
             }

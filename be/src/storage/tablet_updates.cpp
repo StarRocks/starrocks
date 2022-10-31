@@ -1887,7 +1887,7 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
         rowset_ids = _edit_version_infos.back()->rowsets;
         std::sort(rowset_ids.begin(), rowset_ids.end());
         rowsets.reserve(rowset_ids.size());
-        for (unsigned int & rowset_id : rowset_ids) {
+        for (unsigned int& rowset_id : rowset_ids) {
             auto it = _rowsets.find(rowset_id);
             if (it != _rowsets.end()) {
                 rowsets.push_back(it->second);

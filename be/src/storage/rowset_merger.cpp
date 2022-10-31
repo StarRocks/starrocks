@@ -376,7 +376,7 @@ private:
         }
 
         if (rowsets_mask_buffer) {
-            for (auto & i : *rowsets_mask_buffer) {
+            for (auto& i : *rowsets_mask_buffer) {
                 RETURN_IF_ERROR(i->flush());
             }
         }

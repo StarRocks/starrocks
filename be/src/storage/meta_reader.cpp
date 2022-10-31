@@ -22,7 +22,7 @@ std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_m
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
-    for (auto & support_collect_field : support_collect_fields) {
+    for (auto& support_collect_field : support_collect_fields) {
         if (item.size() <= support_collect_field.size()) {
             continue;
         }

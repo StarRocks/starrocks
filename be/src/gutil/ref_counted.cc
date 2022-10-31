@@ -14,7 +14,7 @@ RefCountedBase::RefCountedBase()
 #ifndef NDEBUG
         : in_dtor_(false)
 #endif
-= default;
+          = default;
 
 RefCountedBase::~RefCountedBase() {
 #ifndef NDEBUG

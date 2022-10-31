@@ -30,7 +30,7 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
-    for (auto & _intermediate_agg_expr_ctx : _intermediate_agg_expr_ctxs) {
+    for (auto& _intermediate_agg_expr_ctx : _intermediate_agg_expr_ctxs) {
         RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctx, state));
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
@@ -529,7 +529,7 @@ Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     std::vector<ColumnPtr> const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
-    for (auto & j : _agg_expr_ctxs[i]) {
+    for (auto& j : _agg_expr_ctxs[i]) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
         const_columns.emplace_back(std::move(col));
     }
@@ -784,7 +784,7 @@ vectorized::ChunkPtr Aggregator::_build_output_chunk(const vectorized::Columns& 
 
 void Aggregator::_reset_exprs() {
     SCOPED_TIMER(_expr_release_timer);
-    for (auto & _group_by_column : _group_by_columns) {
+    for (auto& _group_by_column : _group_by_columns) {
         _group_by_column = nullptr;
     }
 

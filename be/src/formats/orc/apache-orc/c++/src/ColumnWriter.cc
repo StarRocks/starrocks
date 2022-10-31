@@ -903,7 +903,7 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     }
 
     // do the transformation
-    for (long & i : idxBuffer) {
+    for (long& i : idxBuffer) {
         i = static_cast<int64_t>(mapping[static_cast<size_t>(i)]);
     }
 }
@@ -998,7 +998,7 @@ StringColumnWriter::StringColumnWriter(const Type& type, const StreamsFactory& f
           useCompression(options.getCompression() != CompressionKind_NONE),
           streamsFactory(factory),
           alignedBitPacking(options.getAlignedBitpacking()),
-          
+
           useDictionary(options.getEnableDictionary()),
           dictSizeThreshold(options.getDictionaryKeySizeThreshold()) {
     if (type.getKind() == TypeKind::BINARY) {

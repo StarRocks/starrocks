@@ -170,7 +170,8 @@ void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, const TUniqueId&
 #endif
 }
 
-ScopedTracer::ScopedTracer(std::string  name, std::string  category) : _name(std::move(name)), _category(std::move(category)) {
+ScopedTracer::ScopedTracer(std::string name, std::string category)
+        : _name(std::move(name)), _category(std::move(category)) {
     _start_ts = MonotonicMicros();
 }
 
