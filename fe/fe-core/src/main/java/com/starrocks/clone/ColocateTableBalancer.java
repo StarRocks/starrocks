@@ -341,7 +341,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                                             // If tablet has bad replica, `getColocateHealthStatus()` will also return
                                             // COLOCATE_MISMATCH, we need to replace the backend which owns the bad
                                             // replica.
-                                            adjustBackendSetIfReplicaBad(idx, tablet, st, groupId,
+                                            adjustBackendSetIfReplicaBad(idx, tablet, st, groupId, db.getClusterName(),
                                                     ignoreSingleReplicaCheck);
 
                                             TabletSchedCtx tabletCtx = new TabletSchedCtx(
@@ -694,7 +694,7 @@ public class ColocateTableBalancer extends MasterDaemon {
     private List<Long> getAvailableBeIds(SystemInfoService infoService) {
         // get all backends to allBackendIds, and check be availability using checkBackendAvailable
         // backend stopped for a short period of time is still considered available
-        List<Long> allBackendIds = infoService.getClusterBackendIds(cluster, false);
+        List<Long> allBackendIds = infoService.getBackendIds(false);
         List<Long> availableBeIds = Lists.newArrayList();
         for (Long backendId : allBackendIds) {
             if (checkBackendAvailable(backendId, infoService)) {
@@ -762,19 +762,27 @@ public class ColocateTableBalancer extends MasterDaemon {
     }
 
     void adjustBackendSetIfReplicaBad(int tabletOrderIdx, LocalTablet tablet, TabletStatus st, GroupId groupId,
-                                      boolean ignoreSingleReplicaCheck) {
+                                      String clusterName, boolean ignoreSingleReplicaCheck) {
         if (st != TabletStatus.COLOCATE_MISMATCH) {
             return;
         }
 
-        List<Replica> replicas = tablet.getImmutableReplicas();
+        List<Replica> replicas = tablet.getReplicas();
         if (!ignoreSingleReplicaCheck && replicas.size() <= 1) {
             return;
         }
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
-        ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getLoadStatistic();
+
+        Map<String, ClusterLoadStatistic> statisticMap = globalStateMgr.getTabletScheduler().getStatisticMap();
+        if (statisticMap == null) {
+            return;
+        }
+        ClusterLoadStatistic statistic = statisticMap.get(clusterName);
+        if (statistic == null) {
+            return;
+        }
         ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
 
         Set<Long> currentBackendsSet = colocateIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);

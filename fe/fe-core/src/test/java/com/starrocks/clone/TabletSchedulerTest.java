@@ -214,7 +214,8 @@ public class TabletSchedulerTest {
         tabletIdToCGIdForPending.put(102L, new ColocateTableIndex.GroupId(200L, 300L));
         tabletIdToCGIdForPending.put(103L, new ColocateTableIndex.GroupId(200L, 301L));
         tabletIdToCGIdForPending.forEach((k, v) -> {
-            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, 200L, 201L, 202L,
+            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, "default_cluster",
+                    200L, 201L, 202L,
                     203L, k, System.currentTimeMillis());
             ctx.setColocateGroupId(v);
             ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
@@ -226,7 +227,8 @@ public class TabletSchedulerTest {
         tabletIdToCGIdForRunning.put(105L, new ColocateTableIndex.GroupId(200L, 300L));
         tabletIdToCGIdForRunning.put(106L, new ColocateTableIndex.GroupId(200L, 301L));
         tabletIdToCGIdForRunning.forEach((k, v) -> {
-            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, 200L, 201L, 202L,
+            TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, "default_cluster",
+                    200L, 201L, 202L,
                     203L, k, System.currentTimeMillis());
             ctx.setColocateGroupId(v);
             ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
