@@ -144,22 +144,26 @@ struct SortParameters {
 
     SortParameters() = default;
 
-    static SortParameters with_limit(int limit, SortParameters params = SortParameters()) {
+    static SortParameters with_limit(int limit) {
+        SortParameters params;
         params.limit = limit;
         return params;
     }
 
-    static SortParameters with_low_card(bool low_card, SortParameters params = SortParameters()) {
+    static SortParameters with_low_card(bool low_card) {
+        SortParameters params;
         params.low_card = low_card;
         return params;
     }
 
-    static SortParameters with_nullable(bool nullable, SortParameters params = SortParameters()) {
+    static SortParameters with_nullable(bool nullable) {
+        SortParameters params;
         params.nullable = nullable;
         return params;
     }
 
-    static SortParameters with_max_buffered_chunks(int max_buffered_chunks, SortParameters params = SortParameters()) {
+    static SortParameters with_max_buffered_chunks(int max_buffered_chunks) {
+        SortParameters params;
         params.max_buffered_chunks = max_buffered_chunks;
         return params;
     }
