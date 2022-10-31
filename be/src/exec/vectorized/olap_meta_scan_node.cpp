@@ -145,4 +145,4 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> OlapMetaScanNode::decomp
                                                                            scan_ctx_factory);
     return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
-} // namespace starrocks
+} // namespace starrocks::vectorized

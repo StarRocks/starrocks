@@ -49,4 +49,4 @@ public:
 
 static ConnectorManagerInit _init;
 
-} // namespace starrocks
+} // namespace starrocks::connector

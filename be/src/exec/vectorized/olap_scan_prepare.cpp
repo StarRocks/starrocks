@@ -750,4 +750,4 @@ Status OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

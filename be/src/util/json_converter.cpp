@@ -162,9 +162,7 @@ private:
     }
 
 private:
-    static inline vpack::StringRef toStringRef(std::string_view view) {
-        return {view.data(), view.length()};
-    }
+    static inline vpack::StringRef toStringRef(std::string_view view) { return {view.data(), view.length()}; }
 };
 
 // Convert SIMD-JSON object/value to a JsonValue

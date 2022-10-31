@@ -516,4 +516,4 @@ pipeline::OperatorPtr CacheOperatorFactory::create(int32_t degree_of_parallelism
     return std::make_shared<CacheOperator>(this, driver_sequence, _cache_mgr, _cache_param);
 }
 
-} // namespace starrocks
+} // namespace starrocks::query_cache

@@ -122,4 +122,4 @@ pipeline::OperatorPtr ConjugateOperatorFactory::create(int32_t degree_of_paralle
     return std::make_shared<ConjugateOperator>(this, driver_sequence, sink_op, source_op);
 }
 
-} // namespace starrocks
+} // namespace starrocks::query_cache

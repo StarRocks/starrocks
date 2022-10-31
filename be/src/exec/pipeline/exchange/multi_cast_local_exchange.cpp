@@ -236,4 +236,4 @@ void MultiCastLocalExchangeSinkOperator::update_counter(size_t memory_usage, siz
     _peak_buffer_row_size_counter->set(buffer_row_size);
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -472,4 +472,4 @@ void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
     runtime_column->append(value);
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

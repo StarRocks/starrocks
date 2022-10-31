@@ -168,4 +168,4 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

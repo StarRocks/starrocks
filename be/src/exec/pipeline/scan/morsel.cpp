@@ -633,4 +633,4 @@ MorselQueuePtr create_empty_morsel_queue() {
     return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

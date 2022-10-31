@@ -78,4 +78,4 @@ OperatorPtr OlapMetaScanPrepareOperatorFactory::create(int32_t degree_of_paralle
                                                          _scan_ctx_factory->get_or_create(driver_sequence));
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

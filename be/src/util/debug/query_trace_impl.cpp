@@ -182,4 +182,4 @@ ScopedTracer::~ScopedTracer() {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::debug

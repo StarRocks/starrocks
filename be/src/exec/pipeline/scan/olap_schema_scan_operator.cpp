@@ -83,4 +83,4 @@ void OlapSchemaScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

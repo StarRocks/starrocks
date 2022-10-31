@@ -148,6 +148,6 @@ static void Benchmark_RuntimeFilter_Eval(benchmark::State& state) {
 
 BENCHMARK(Benchmark_RuntimeFilter_Eval)->Apply(RuntimeFilterArg1);
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 BENCHMARK_MAIN();

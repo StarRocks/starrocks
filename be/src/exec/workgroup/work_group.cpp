@@ -499,4 +499,4 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     WorkGroupManager::instance()->add_workgroup(default_wg);
 }
 
-} // namespace starrocks
+} // namespace starrocks::workgroup

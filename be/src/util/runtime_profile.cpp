@@ -899,8 +899,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
     int64_t num_sampled = 0;
     {
         std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
-        auto itr =
-                _s_periodic_counter_update_state.bucketing_counters.find(buckets);
+        auto itr = _s_periodic_counter_update_state.bucketing_counters.find(buckets);
 
         if (itr != _s_periodic_counter_update_state.bucketing_counters.end()) {
             num_sampled = itr->second.num_sampled;
@@ -938,8 +937,7 @@ void RuntimeProfile::periodic_counter_update_loop() {
 
         std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
-        for (auto it =
-                     _s_periodic_counter_update_state.rate_counters.begin();
+        for (auto it = _s_periodic_counter_update_state.rate_counters.begin();
              it != _s_periodic_counter_update_state.rate_counters.end(); ++it) {
             it->second.elapsed_ms += elapsed_ms;
             int64_t value;
@@ -955,8 +953,7 @@ void RuntimeProfile::periodic_counter_update_loop() {
             it->first->set(rate);
         }
 
-        for (auto it =
-                     _s_periodic_counter_update_state.sampling_counters.begin();
+        for (auto it = _s_periodic_counter_update_state.sampling_counters.begin();
              it != _s_periodic_counter_update_state.sampling_counters.end(); ++it) {
             ++it->second.num_sampled;
             int64_t value;

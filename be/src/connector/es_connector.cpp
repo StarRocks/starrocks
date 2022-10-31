@@ -247,4 +247,4 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

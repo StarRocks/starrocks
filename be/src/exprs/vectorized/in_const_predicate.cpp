@@ -129,4 +129,4 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

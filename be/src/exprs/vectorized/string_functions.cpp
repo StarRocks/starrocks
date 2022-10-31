@@ -3123,8 +3123,7 @@ ColumnPtr StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, Functio
 
 ColumnPtr StringFunctions::parse_url(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
-    auto* state =
-            reinterpret_cast<ParseUrlState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_pattern) {
         UrlParser::UrlPart* url_part = state->url_part.get();

@@ -94,4 +94,4 @@ void LaneArbiter::mark_processed(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
 }
 
-} // namespace starrocks
+} // namespace starrocks::query_cache

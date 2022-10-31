@@ -144,8 +144,7 @@ Status TimeFunctions::convert_tz_prepare(starrocks_udf::FunctionContext* context
 Status TimeFunctions::convert_tz_close(starrocks_udf::FunctionContext* context,
                                        starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* ctc =
-                reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+        auto* ctc = reinterpret_cast<ConvertTzCtx*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
         if (ctc != nullptr) {
             delete ctc;
         }
@@ -1240,8 +1239,7 @@ ColumnPtr TimeFunctions::from_unix_with_format_const(std::string& format_content
 ColumnPtr TimeFunctions::from_unix_to_datetime_with_format(FunctionContext* context,
                                                            const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
-    auto* state =
-            reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* state = reinterpret_cast<FromUnixState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_format) {
         std::string format_content = state->format_content;

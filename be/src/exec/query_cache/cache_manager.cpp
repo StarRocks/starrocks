@@ -55,4 +55,4 @@ void CacheManager::invalidate_all() {
     _cache.set_capacity(old_capacity);
 }
 
-} // namespace starrocks
+} // namespace starrocks::query_cache

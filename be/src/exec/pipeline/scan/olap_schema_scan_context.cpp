@@ -61,4 +61,4 @@ Status OlapSchemaScanContext::_prepare_params(RuntimeState* state) {
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -102,8 +102,7 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
 Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto* parsed_paths =
-                reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
+        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
         if (parsed_paths != nullptr) {
             delete parsed_paths;
             VLOG(10) << "close json path";

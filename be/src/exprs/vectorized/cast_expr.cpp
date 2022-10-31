@@ -498,8 +498,7 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-        auto r =
-                StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
+        auto r = StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
 
         bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
         if constexpr (AllowThrowException) {

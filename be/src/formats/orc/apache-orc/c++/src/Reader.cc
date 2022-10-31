@@ -726,8 +726,7 @@ std::unique_ptr<StripeStatistics> ReaderImpl::getStripeStatistics(uint64_t strip
     if (contents->metadata == nullptr) {
         throw std::logic_error("No stripe statistics in file");
     }
-    auto num_cols =
-            static_cast<size_t>(contents->metadata->stripestats(static_cast<int>(stripeIndex)).colstats_size());
+    auto num_cols = static_cast<size_t>(contents->metadata->stripestats(static_cast<int>(stripeIndex)).colstats_size());
     std::vector<std::vector<proto::ColumnStatistics>> indexStats(num_cols);
 
     proto::StripeInformation currentStripeInfo = footer->stripes(static_cast<int>(stripeIndex));

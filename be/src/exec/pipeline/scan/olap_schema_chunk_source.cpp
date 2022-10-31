@@ -21,8 +21,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
     if (_dest_tuple_desc == nullptr) {
         return Status::InternalError("failed to get tuple descriptor");
     }
-    const auto* schema_table =
-            static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
+    const auto* schema_table = static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
     if (schema_table == nullptr) {
         return Status::InternalError("Failed to get schema table descriptor");
     }
@@ -93,4 +92,4 @@ const workgroup::WorkGroupScanSchedEntity* OlapSchemaChunkSource::_scan_sched_en
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();
 }
-} // namespace starrocks
+} // namespace starrocks::pipeline

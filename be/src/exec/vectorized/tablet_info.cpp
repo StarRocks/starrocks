@@ -172,7 +172,7 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
         case TYPE_LARGEINT: {
             StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
             auto val = StringParser::string_to_int<__int128>(t_expr.large_int_literal.value.c_str(),
-                                                                 t_expr.large_int_literal.value.size(), &parse_result);
+                                                             t_expr.large_int_literal.value.size(), &parse_result);
             if (parse_result != StringParser::PARSE_SUCCESS) {
                 val = MAX_INT128;
             }

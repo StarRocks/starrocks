@@ -87,4 +87,4 @@ OperatorPtr HashJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, 
                                                    _hash_joiner_factory->create_builder(driver_sequence));
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

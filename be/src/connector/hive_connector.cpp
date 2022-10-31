@@ -406,4 +406,4 @@ int64_t HiveDataSource::cpu_time_spent() const {
     return _scanner->cpu_time_spent();
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

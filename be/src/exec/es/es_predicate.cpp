@@ -287,8 +287,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 col = _field_context[col];
             }
             // use TExprNodeType::IS_NULL_PRED for BooleanQueryBuilder translate
-            auto* predicate =
-                    new ExtIsNullPredicate(TExprNodeType::IS_NULL_PRED, col, slot_desc->type(), is_not_null);
+            auto* predicate = new ExtIsNullPredicate(TExprNodeType::IS_NULL_PRED, col, slot_desc->type(), is_not_null);
             _disjuncts.push_back(predicate);
         } else if (fname == "like") {
             if (conjunct->children().size() != 2) {

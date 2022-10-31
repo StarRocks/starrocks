@@ -34,4 +34,4 @@ Status ChunkAccumulateOperator::reset_state(RuntimeState* state, const std::vect
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

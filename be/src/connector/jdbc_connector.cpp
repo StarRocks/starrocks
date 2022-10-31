@@ -136,4 +136,4 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::connector

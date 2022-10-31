@@ -23,4 +23,4 @@ void HashJoinerFactory::close(RuntimeState* state) {
     Expr::close(_param._build_expr_ctxs, state);
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

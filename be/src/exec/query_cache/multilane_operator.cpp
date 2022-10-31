@@ -301,4 +301,4 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     return op;
 }
 
-} // namespace starrocks
+} // namespace starrocks::query_cache

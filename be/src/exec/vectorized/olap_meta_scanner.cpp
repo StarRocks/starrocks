@@ -85,4 +85,4 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

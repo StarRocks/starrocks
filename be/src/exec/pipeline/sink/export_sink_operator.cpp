@@ -209,4 +209,4 @@ void ExportSinkOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 }
 
-} // namespace starrocks
+} // namespace starrocks::pipeline

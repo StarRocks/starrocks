@@ -135,4 +135,4 @@ OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, 
 void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, vectorized::Columns&& columns) {
     _string_key_columns[driver_sequence] = std::move(columns);
 }
-} // namespace starrocks
+} // namespace starrocks::pipeline
