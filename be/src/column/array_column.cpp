@@ -112,7 +112,7 @@ void ArrayColumn::append_value_multiple_times(const Column& src, uint32_t index,
 }
 
 void ArrayColumn::append_value_multiple_times(const void* value, size_t count) {
-    const Datum* datum = reinterpret_cast<const Datum*>(value);
+    const auto* datum = reinterpret_cast<const Datum*>(value);
     const auto& array = datum->get<DatumArray>();
     size_t array_size = array.size();
 
@@ -263,7 +263,7 @@ MutableColumnPtr ArrayColumn::clone_empty() const {
 
 size_t ArrayColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     DCHECK_EQ(size(), to);
-    uint32_t* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
+    auto* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
     uint32_t elements_start = offsets[from];
     uint32_t elements_end = offsets[to];
     Filter element_filter(elements_end, 0);
@@ -345,7 +345,7 @@ size_t ArrayColumn::filter_range(const Column::Filter& filter, size_t from, size
 }
 
 int ArrayColumn::compare_at(size_t left, size_t right, const Column& right_column, int nan_direction_hint) const {
-    const ArrayColumn& rhs = down_cast<const ArrayColumn&>(right_column);
+    const auto& rhs = down_cast<const ArrayColumn&>(right_column);
 
     size_t lhs_offset = _offsets->get_data()[left];
     size_t lhs_size = _offsets->get_data()[left + 1] - lhs_offset;
@@ -443,7 +443,7 @@ Datum ArrayColumn::get(size_t idx) const {
     for (size_t i = 0; i < array_size; ++i) {
         res[i] = _elements->get(offset + i);
     }
-    return Datum(res);
+    return {res};
 }
 
 size_t ArrayColumn::get_element_size(size_t idx) const {
@@ -462,7 +462,7 @@ size_t ArrayColumn::element_memory_usage(size_t from, size_t size) const {
 }
 
 void ArrayColumn::swap_column(Column& rhs) {
-    ArrayColumn& array_column = down_cast<ArrayColumn&>(rhs);
+    auto& array_column = down_cast<ArrayColumn&>(rhs);
     _offsets->swap_column(*array_column.offsets_column());
     _elements->swap_column(*array_column.elements_column());
 }

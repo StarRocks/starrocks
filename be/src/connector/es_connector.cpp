@@ -11,8 +11,7 @@
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -249,5 +248,4 @@ Status ESDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk) 
     return Status::OK();
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

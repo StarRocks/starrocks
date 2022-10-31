@@ -12,8 +12,7 @@
 #include "util/starrocks_metrics.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace workgroup {
+namespace starrocks::workgroup {
 
 /// WorkGroupSchedEntity.
 template <typename Q>
@@ -500,5 +499,4 @@ DefaultWorkGroupInitialization::DefaultWorkGroupInitialization() {
     WorkGroupManager::instance()->add_workgroup(default_wg);
 }
 
-} // namespace workgroup
-} // namespace starrocks
+} // namespace starrocks::workgroup

@@ -42,7 +42,7 @@ StringPiece GenericFind(StringPiece text, StringPiece delimiter, FindPolicy find
     if (delimiter.empty() && text.length() > 0) {
         // Special case for empty string delimiters: always return a zero-length
         // StringPiece referring to the item at position 1.
-        return StringPiece(text.begin() + 1, 0);
+        return {text.begin() + 1, 0};
     }
     int found_pos = StringPiece::npos;
     StringPiece found(text.end(), 0); // By default, not found
@@ -148,7 +148,7 @@ void AppendToImpl(vector<string>* container, Splitter splitter) {
 template <typename Map, typename Splitter>
 void AppendToMap(Map* m, Splitter splitter) {
     Map tmp = splitter; // Calls implicit conversion operator.
-    for (typename Map::const_iterator it = tmp.begin(); it != tmp.end(); ++it) {
+    for (auto it = tmp.begin(); it != tmp.end(); ++it) {
         (*m)[it->first] = it->second;
     }
 }
@@ -466,7 +466,7 @@ string SplitOneStringToken(const char** source, const char* delim) {
     assert(source);
     assert(delim);
     if (!*source) {
-        return string();
+        return {};
     }
     const char* begin = *source;
     // Optimize the common case where delim is a single character.

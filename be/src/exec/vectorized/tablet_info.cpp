@@ -128,7 +128,7 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
         case TYPE_DATE: {
             DateValue v;
             if (v.from_string(t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size())) {
-                DateColumn* column = down_cast<DateColumn*>(_partition_columns[i].get());
+                auto* column = down_cast<DateColumn*>(_partition_columns[i].get());
                 column->get_data().emplace_back(v);
             } else {
                 std::stringstream ss;
@@ -140,7 +140,7 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
         case TYPE_DATETIME: {
             TimestampValue v;
             if (v.from_string(t_expr.date_literal.value.c_str(), t_expr.date_literal.value.size())) {
-                TimestampColumn* column = down_cast<TimestampColumn*>(_partition_columns[i].get());
+                auto* column = down_cast<TimestampColumn*>(_partition_columns[i].get());
                 column->get_data().emplace_back(v);
             } else {
                 std::stringstream ss;
@@ -150,33 +150,33 @@ Status OlapTablePartitionParam::_create_partition_keys(const std::vector<TExprNo
             break;
         }
         case TYPE_TINYINT: {
-            Int8Column* column = down_cast<Int8Column*>(_partition_columns[i].get());
+            auto* column = down_cast<Int8Column*>(_partition_columns[i].get());
             column->get_data().emplace_back(t_expr.int_literal.value);
             break;
         }
         case TYPE_SMALLINT: {
-            Int16Column* column = down_cast<Int16Column*>(_partition_columns[i].get());
+            auto* column = down_cast<Int16Column*>(_partition_columns[i].get());
             column->get_data().emplace_back(t_expr.int_literal.value);
             break;
         }
         case TYPE_INT: {
-            Int32Column* column = down_cast<Int32Column*>(_partition_columns[i].get());
+            auto* column = down_cast<Int32Column*>(_partition_columns[i].get());
             column->get_data().emplace_back(t_expr.int_literal.value);
             break;
         }
         case TYPE_BIGINT: {
-            Int64Column* column = down_cast<Int64Column*>(_partition_columns[i].get());
+            auto* column = down_cast<Int64Column*>(_partition_columns[i].get());
             column->get_data().emplace_back(t_expr.int_literal.value);
             break;
         }
         case TYPE_LARGEINT: {
             StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-            __int128 val = StringParser::string_to_int<__int128>(t_expr.large_int_literal.value.c_str(),
-                                                                 t_expr.large_int_literal.value.size(), &parse_result);
+            auto val = StringParser::string_to_int<__int128>(t_expr.large_int_literal.value.c_str(),
+                                                             t_expr.large_int_literal.value.size(), &parse_result);
             if (parse_result != StringParser::PARSE_SUCCESS) {
                 val = MAX_INT128;
             }
-            Int128Column* column = down_cast<Int128Column*>(_partition_columns[i].get());
+            auto* column = down_cast<Int128Column*>(_partition_columns[i].get());
             column->get_data().emplace_back(val);
             break;
         }

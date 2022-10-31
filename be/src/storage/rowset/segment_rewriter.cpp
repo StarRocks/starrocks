@@ -18,8 +18,6 @@ namespace starrocks {
 
 SegmentRewriter::SegmentRewriter() = default;
 
-SegmentRewriter::~SegmentRewriter() = default;
-
 Status SegmentRewriter::rewrite(const std::string& src_path, const std::string& dest_path, const TabletSchema& tschema,
                                 std::vector<uint32_t>& column_ids,
                                 std::vector<std::unique_ptr<vectorized::Column>>& columns, size_t segment_id,

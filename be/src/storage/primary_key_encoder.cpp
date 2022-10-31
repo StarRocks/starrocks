@@ -107,7 +107,7 @@ static bool SSEEncodeChunk(const uint8_t** srcp, uint8_t** dstp) {
     // Compare each byte of the input with '\0'. This results in a vector
     // where each byte is either \x00 or \xFF, depending on whether the
     // input had a '\x00' in the corresponding position.
-    __m128i zeros = reinterpret_cast<__m128i>(_mm_setzero_pd());
+    auto zeros = reinterpret_cast<__m128i>(_mm_setzero_pd());
     __m128i zero_bytes = _mm_cmpeq_epi8(data, zeros);
 
     // Check whether the resulting vector is all-zero.
@@ -159,8 +159,8 @@ inline void encode_slice(const Slice& s, string* dst, bool is_last) {
         size_t old_size = dst->size();
         dst->resize(old_size + s.size * 2 + 2);
 
-        const uint8_t* srcp = (const uint8_t*)s.data;
-        uint8_t* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
+        const auto* srcp = (const uint8_t*)s.data;
+        auto* dstp = reinterpret_cast<uint8_t*>(&(*dst)[old_size]);
         size_t len = s.size;
         size_t rem = len;
 
@@ -205,13 +205,13 @@ inline Status decode_slice(Slice* src, string* dest, bool is_last) {
     if (is_last) {
         dest->append(src->data, src->size);
     } else {
-        uint8_t* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
+        auto* separator = static_cast<uint8_t*>(memmem(src->data, src->size, "\0\0", 2));
         DCHECK(separator) << "bad encoded primary key, separator not found";
         if (PREDICT_FALSE(separator == nullptr)) {
             LOG(WARNING) << "bad encoded primary key, separator not found";
             return Status::InvalidArgument("bad encoded primary key, separator not found");
         }
-        uint8_t* data = (uint8_t*)src->data;
+        auto* data = (uint8_t*)src->data;
         int len = separator - data;
         for (int i = 0; i < len; i++) {
             if (i >= 1 && data[i - 1] == '\0' && data[i] == '\1') {
@@ -418,7 +418,7 @@ void PrimaryKeyEncoder::encode(const vectorized::Schema& schema, const vectorize
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         string buff;
         for (size_t i = 0; i < len; i++) {
@@ -443,7 +443,7 @@ void PrimaryKeyEncoder::encode_selective(const vectorized::Schema& schema, const
         vector<EncodeOp> ops;
         vector<const void*> datas;
         prepare_ops_datas(schema, chunk, &ops, &datas);
-        vectorized::BinaryColumn& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
+        auto& bdest = down_cast<vectorized::BinaryColumn&>(*dest);
         bdest.reserve(bdest.size() + len);
         string buff;
         for (int i = 0; i < len; i++) {

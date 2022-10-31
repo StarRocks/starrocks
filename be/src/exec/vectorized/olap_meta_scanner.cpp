@@ -6,8 +6,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 OlapMetaScanner::OlapMetaScanner(OlapMetaScanNode* parent) : _parent(parent), _runtime_state(nullptr) {}
 
@@ -86,6 +85,4 @@ Status OlapMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
     return Status::OK();
 }
 
-} // namespace vectorized
-
-} // namespace starrocks
+} // namespace starrocks::vectorized

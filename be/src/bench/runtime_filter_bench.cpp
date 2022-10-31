@@ -13,8 +13,7 @@
 #include "simd/simd.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 //   --------------------------------------------------------------------------------------------------------
 //   Benchmark                                              Time             CPU   Iterations UserCounters...
@@ -149,7 +148,6 @@ static void Benchmark_RuntimeFilter_Eval(benchmark::State& state) {
 
 BENCHMARK(Benchmark_RuntimeFilter_Eval)->Apply(RuntimeFilterArg1);
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 BENCHMARK_MAIN();

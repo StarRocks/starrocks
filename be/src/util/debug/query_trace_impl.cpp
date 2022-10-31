@@ -12,8 +12,7 @@
 #include "util/debug/query_trace.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
 QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::string& category, int64_t id, char phase,
                                         int64_t timestamp, int64_t duration, int64_t instance_id, std::uintptr_t driver,
@@ -183,5 +182,4 @@ ScopedTracer::~ScopedTracer() {
     }
 }
 
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug

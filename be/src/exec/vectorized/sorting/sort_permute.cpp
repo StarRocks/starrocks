@@ -65,7 +65,7 @@ public:
         uint32_t orig_size = dst->size();
         Columns null_columns, data_columns;
         for (auto& col : _columns) {
-            const NullableColumn* src_column = down_cast<const NullableColumn*>(col.get());
+            const auto* src_column = down_cast<const NullableColumn*>(col.get());
             null_columns.push_back(src_column->null_column());
             data_columns.push_back(src_column->data_column());
         }

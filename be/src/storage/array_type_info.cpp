@@ -98,7 +98,7 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override {
         Collection dest_value;
-        Collection src_value = unaligned_load<Collection>(src);
+        auto src_value = unaligned_load<Collection>(src);
 
         dest_value.length = src_value.length;
 
@@ -117,7 +117,7 @@ public:
         // copy item
         for (uint32_t i = 0; i < src_value.length; ++i) {
             if (dest_value.is_null_at(i)) {
-                Collection* item = reinterpret_cast<Collection*>((uint8_t*)dest_value.data + i * _item_size);
+                auto* item = reinterpret_cast<Collection*>((uint8_t*)dest_value.data + i * _item_size);
                 item->data = nullptr;
                 item->length = 0;
                 item->has_null = false;

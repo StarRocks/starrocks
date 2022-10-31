@@ -633,7 +633,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
 
         // link to parent
-        TupleDescriptorMap::iterator entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
+        auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
 
         if (entry == (*tbl)->_tuple_desc_map.end()) {
             return Status::InternalError("unknown tid in slot descriptor msg");
@@ -646,7 +646,7 @@ Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescr
 }
 
 TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
-    TableDescriptorMap::const_iterator i = _tbl_desc_map.find(id);
+    auto i = _tbl_desc_map.find(id);
     if (i == _tbl_desc_map.end()) {
         return nullptr;
     } else {
@@ -655,7 +655,7 @@ TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
 }
 
 TupleDescriptor* DescriptorTbl::get_tuple_descriptor(TupleId id) const {
-    TupleDescriptorMap::const_iterator i = _tuple_desc_map.find(id);
+    auto i = _tuple_desc_map.find(id);
     if (i == _tuple_desc_map.end()) {
         return nullptr;
     } else {
@@ -665,7 +665,7 @@ TupleDescriptor* DescriptorTbl::get_tuple_descriptor(TupleId id) const {
 
 SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     // TODO: is there some boost function to do exactly this?
-    SlotDescriptorMap::const_iterator i = _slot_desc_map.find(id);
+    auto i = _slot_desc_map.find(id);
 
     if (i == _slot_desc_map.end()) {
         return nullptr;

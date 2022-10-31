@@ -1139,7 +1139,7 @@ int Tablet::version_count() const {
 
 Version Tablet::max_version() const {
     if (_updates) {
-        return Version(0, _updates->max_version());
+        return {0, _updates->max_version()};
     } else {
         return _tablet_meta->max_version();
     }

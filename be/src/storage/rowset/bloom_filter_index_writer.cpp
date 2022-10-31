@@ -78,7 +78,7 @@ template <FieldType type>
 inline void update_bf(BloomFilter* bf, const typename CppTypeTraits<type>::CppType& v) {
     using CppType = typename CppTypeTraits<type>::CppType;
     if constexpr (is_slice_type<type>()) {
-        const Slice* s = reinterpret_cast<const Slice*>(&v);
+        const auto* s = reinterpret_cast<const Slice*>(&v);
         bf->add_bytes(s->data, s->size);
     } else {
         bf->add_bytes(reinterpret_cast<const char*>(&v), sizeof(CppType));
@@ -103,7 +103,7 @@ public:
     ~BloomFilterIndexWriterImpl() override = default;
 
     void add_values(const void* values, size_t count) override {
-        const CppType* v = (const CppType*)values;
+        const auto* v = (const CppType*)values;
         for (int i = 0; i < count; ++i) {
             if (_values.find(unaligned_load<CppType>(v)) == _values.end()) {
                 _values.insert(get_value<field_type>(v, _typeinfo, &_pool));

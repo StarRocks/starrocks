@@ -299,7 +299,7 @@ StatusOr<ChunkPtr> CSVScanner::_materialize(ChunkPtr& src_chunk) {
 
         int dest_index = ctx_index++;
         ASSIGN_OR_RETURN(auto dst_col, _dest_expr_ctx[dest_index]->evaluate(src_chunk.get()));
-        uintptr_t col_pointer = reinterpret_cast<uintptr_t>(dst_col.get());
+        auto col_pointer = reinterpret_cast<uintptr_t>(dst_col.get());
         if (column_pointers.contains(col_pointer)) {
             dst_col = dst_col->clone();
         } else {

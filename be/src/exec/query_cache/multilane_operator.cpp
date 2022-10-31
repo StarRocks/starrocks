@@ -5,8 +5,7 @@
 
 #include "util/defer_op.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,
                                      pipeline::Operators&& processors, bool can_passthrough)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
@@ -302,5 +301,4 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     return op;
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

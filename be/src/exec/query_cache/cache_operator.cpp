@@ -12,8 +12,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/time.h"
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 enum PerLaneBufferState {
     PLBS_INIT,
     PLBS_MISS,
@@ -517,5 +516,4 @@ pipeline::OperatorPtr CacheOperatorFactory::create(int32_t degree_of_parallelism
     return std::make_shared<CacheOperator>(this, driver_sequence, _cache_mgr, _cache_param);
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

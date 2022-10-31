@@ -79,7 +79,7 @@ BufferControlBlock::~BufferControlBlock() {
 
     for (auto& iter : _batch_queue) {
         delete iter;
-        iter = NULL;
+        iter = nullptr;
     }
 }
 

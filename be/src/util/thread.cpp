@@ -296,7 +296,7 @@ Status Thread::start_thread(const std::string& category, const std::string& name
 }
 
 void* Thread::supervise_thread(void* arg) {
-    Thread* t = static_cast<Thread*>(arg);
+    auto* t = static_cast<Thread*>(arg);
     int64_t system_tid = Thread::current_thread_id();
     PCHECK(system_tid != -1);
 
@@ -330,7 +330,7 @@ void* Thread::supervise_thread(void* arg) {
 }
 
 void Thread::finish_thread(void* arg) {
-    Thread* t = static_cast<Thread*>(arg);
+    auto* t = static_cast<Thread*>(arg);
 
     // We're here either because of the explicit pthread_cleanup_pop() in
     // SuperviseThread() or through pthread_exit(). In either case,

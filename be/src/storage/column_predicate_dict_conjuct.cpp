@@ -55,7 +55,7 @@ public:
 
     bool padding_zeros(size_t len) const { return false; }
 
-    Datum value() const { return Datum(); }
+    Datum value() const { return {}; }
 
     std::vector<Datum> values() const {
         std::vector<Datum> res;
