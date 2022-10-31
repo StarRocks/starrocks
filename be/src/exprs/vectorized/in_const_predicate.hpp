@@ -80,7 +80,7 @@ public:
         return Status::OK();
     }
 
-    Status merge(Predicate* predicate) {
+    Status merge(Predicate* predicate) override {
         if (auto* that = dynamic_cast<typeof(this)>(predicate)) {
             const auto& hash_set = that->hash_set();
             _hash_set.insert(hash_set.begin(), hash_set.end());

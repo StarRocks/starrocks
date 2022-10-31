@@ -66,11 +66,10 @@ public:
     // combination. buffer_size is specified in bytes and a soft limit on
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
-    Channel(DataStreamSender* parent, const RowDescriptor& row_desc, const TNetworkAddress& brpc_dest,
-            const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
+    Channel(DataStreamSender* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
+            PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
             bool send_query_statistics_with_every_batch)
             : _parent(parent),
-              _row_desc(row_desc),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
 
@@ -152,7 +151,6 @@ private:
 
     DataStreamSender* _parent;
 
-    const RowDescriptor& _row_desc;
     TUniqueId _fragment_instance_id;
     PlanNodeId _dest_node_id;
 
@@ -392,9 +390,9 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         bool is_transfer_chain = (i == 0);
         const auto& fragment_instance_id = destinations[i].fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
-            _channel_shared_ptrs.emplace_back(
-                    new Channel(this, row_desc, destinations[i].brpc_server, fragment_instance_id, sink.dest_node_id,
-                                per_channel_buffer_size, is_transfer_chain, send_query_statistics_with_every_batch));
+            _channel_shared_ptrs.emplace_back(new Channel(this, destinations[i].brpc_server, fragment_instance_id,
+                                                          sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
+                                                          send_query_statistics_with_every_batch));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channel_shared_ptrs.size() - 1});
             _channels.push_back(_channel_shared_ptrs.back().get());
         } else {

@@ -158,7 +158,7 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 }
 #endif
 
-static inline void Slow_CRC32(uint64_t* l, uint8_t const** p) {
+[[maybe_unused]] static inline void Slow_CRC32(uint64_t* l, uint8_t const** p) {
     auto c = static_cast<uint32_t>(*l ^ LE_LOAD32(*p));
     *p += 4;
     *l = table3_[c & 0xff] ^ table2_[(c >> 8) & 0xff] ^ table1_[(c >> 16) & 0xff] ^ table0_[c >> 24];
