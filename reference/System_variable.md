@@ -72,7 +72,7 @@ SET forward_to_master = concat('tr', 'u', 'e');
 
 ### 在查询语句中设置变量
 
-在一些场景中，我们可能需要对某些查询专门设置变量。通过使用SET_VAR提示可以在查询中设置仅在单个语句内生效的会话变量。举例：
+在一些场景中，我们可能需要对某些查询专门设置变量。通过使用 SET_VAR 提示可以在查询中设置仅在单个语句内生效的会话变量。举例：
 
 ```sql
 SELECT /*+ SET_VAR(exec_mem_limit = 8589934592) */ name FROM people ORDER BY name;
@@ -144,7 +144,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * force_streaming_aggregate
 
-  用于控制聚合节点是否启用流式聚合计算策略。默认为false，表示不启用该策略。
+  用于控制聚合节点是否启用流式聚合计算策略。默认为 false，表示不启用该策略。
 
 * forward_to_master
 
@@ -178,7 +178,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * hash_join_push_down_right_table
 
-  用于控制在Join查询中是否可以使用针对右表的过滤条件来过滤左表的数据，可以减少Join过程中需要处理的左表的数据量。取值为true时表示允许该操作，系统将根据实际情况决定是否能对左表进行过滤；取值为false表示禁用该操作。缺省值为true。
+  用于控制在 Join 查询中是否可以使用针对右表的过滤条件来过滤左表的数据，可以减少 Join 过程中需要处理的左表的数据量。取值为 true 时表示允许该操作，系统将根据实际情况决定是否能对左表进行过滤；取值为 false 表示禁用该操作。缺省值为 true。
 
 * init_connect
 
@@ -272,7 +272,7 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * query_timeout
 
-   用于设置查询超时，单位是「秒」。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。默认为300秒，即 5 分钟。
+   用于设置查询超时，单位是「秒」。该变量会作用于当前连接中所有的查询语句，以及 INSERT 语句。默认为 300 秒，即 5 分钟。
 
 * resource_group
 
@@ -296,13 +296,13 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * storage_engine
 
-  指定系统使用的存储引擎。StarRocks支持的引擎类型包括：
+  指定系统使用的存储引擎。StarRocks 支持的引擎类型包括：
 
-  * olap：StarRocks系统自有引擎。
-  * mysql：使用MySQL外部表。
-  * broker：通过Broker程序访问外部表。
-  * elasticsearch 或者 es：使用Elasticsearch外部表。
-  * hive：使用Hive外部表。
+  * olap：StarRocks 系统自有引擎。
+  * mysql：使用 MySQL 外部表。
+  * broker：通过 Broker 程序访问外部表。
+  * elasticsearch 或者 es：使用 Elasticsearch 外部表。
+  * hive：使用 Hive 外部表。
 
 * system_time_zone
 
@@ -323,11 +323,11 @@ SELECT /*+ SET_VAR(query_timeout = 1) */ sleep(3);
 
 * use_v2_rollup
 
-  用于控制查询使用segment v2存储格式的Rollup索引获取数据。该变量用于上线segment v2的时进行验证使用。其他情况不建议使用。
+  用于控制查询使用 segment v2 存储格式的 Rollup 索引获取数据。该变量用于上线 segment v2 的时进行验证使用。其他情况不建议使用。
 
 * vectorized_engine_enable
 
-  用于控制是否使用向量化引擎执行查询。值为true时表示使用向量化引擎，否则使用非向量化引擎。缺省值为true。
+  用于控制是否使用向量化引擎执行查询。值为 true 时表示使用向量化引擎，否则使用非向量化引擎。缺省值为 true。
 
 * version
 
