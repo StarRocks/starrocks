@@ -77,7 +77,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
                 _stats.write_cache_bytes += load_size;
             } else {
                 LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
-                return r;
+                // Failed to write cache, but we can keep processing query.
             }
         }
 
