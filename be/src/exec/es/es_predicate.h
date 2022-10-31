@@ -34,6 +34,7 @@
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "types/date_value.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -50,7 +51,8 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column) {
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column,
+                const std::string& timezone = TimezoneUtils::default_time_zone) {
         DCHECK(!column->empty());
         // We need to convert the predicate column into the corresponding string.
         // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
@@ -62,10 +64,13 @@ public:
             vectorized::ColumnViewer<TYPE_DATETIME> viewer(column);
             DCHECK(!viewer.is_null(0));
             vectorized::TimestampValue datetime_value = viewer.value(0);
-            // convert convert default timezone to UTC;
-            cctz::time_zone defaut_timezone;
-            TimezoneUtils::find_cctz_time_zone(TimezoneUtils::default_time_zone, defaut_timezone);
-            int64_t offsets = TimezoneUtils::to_utc_offset(defaut_timezone);
+            // Use timezone variable from FE
+            cctz::time_zone timezone_obj;
+            if (!TimezoneUtils::find_cctz_time_zone(timezone, timezone_obj)) {
+                // Use default +8 timezone instead.
+                TimezoneUtils::find_cctz_time_zone(TimezoneUtils::default_time_zone, timezone_obj);
+            }
+            int64_t offsets = TimezoneUtils::to_utc_offset(timezone_obj);
             _value = std::to_string((datetime_value.to_unix_second() - offsets) * 1000);
         } else if (type == TYPE_BOOLEAN) {
             vectorized::ColumnViewer<TYPE_BOOLEAN> viewer(column);
@@ -163,7 +168,7 @@ struct ExtFunction : public ExtPredicate {
 
 class EsPredicate {
 public:
-    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
+    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
     Status build_disjuncts_list(bool use_vectorized = true);
@@ -189,6 +194,7 @@ private:
     const TupleDescriptor* _tuple_desc = nullptr;
     std::vector<ExtPredicate*> _disjuncts;
     Status _es_query_status;
+    const std::string _timezone;
     ObjectPool* _pool = nullptr;
     std::map<std::string, std::string> _field_context;
 };
