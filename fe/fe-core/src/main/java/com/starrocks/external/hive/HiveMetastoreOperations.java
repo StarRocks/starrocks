@@ -7,7 +7,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.external.PartitionUtil;
-import org.apache.hadoop.hive.common.FileUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -55,8 +54,7 @@ public class HiveMetastoreOperations {
         String tblName = ((HiveMetaStoreTable) table).getTableName();
         List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
-                .map(partitionKey ->
-                        FileUtils.makePartName(partitionColumnNames, PartitionUtil.fromPartitionKey(partitionKey)))
+                .map(partitionKey -> PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
 
         return metastore.getPartitionsByNames(dbName, tblName, partitionNames);

@@ -24,6 +24,7 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import org.apache.hadoop.hive.common.FileUtils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -96,6 +97,17 @@ public class PartitionUtil {
             start = end + 1;
         }
         return resultBuilder.build();
+    }
+
+    public static String toHivePartitionName(List<String> partitionColumnNames,
+                                             PartitionKey partitionKey) {
+        List<String> partitionValues = fromPartitionKey(partitionKey);
+        return toHivePartitionName(partitionColumnNames, partitionValues);
+    }
+
+    public static String toHivePartitionName(List<String> partitionColumnNames,
+                                             List<String> partitionValues) {
+        return FileUtils.makePartName(partitionColumnNames, partitionValues);
     }
 
     public static List<String> fromPartitionKey(PartitionKey key) {
