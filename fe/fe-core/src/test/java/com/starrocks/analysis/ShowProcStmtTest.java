@@ -38,11 +38,11 @@ public class ShowProcStmtTest {
     public void testgetRedirectStatus() {
         ShowProcStmt stmt = new ShowProcStmt("/");
         Assert.assertEquals(RedirectStatus.NO_FORWARD, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/backends");
+        stmt = new ShowProcStmt("/routine_loads");
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/backends/");
+        stmt = new ShowProcStmt("/routine_loads/");
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
-        stmt = new ShowProcStmt("/backends/1");
+        stmt = new ShowProcStmt("/routine_loads/1");
         Assert.assertEquals(RedirectStatus.FORWARD_NO_SYNC, stmt.getRedirectStatus());
     }
 }
