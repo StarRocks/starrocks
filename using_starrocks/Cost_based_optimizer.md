@@ -18,7 +18,7 @@ StarRocks 会采集多种统计信息，为查询优化提供代价估算的参�
 
 StarRocks 默认定期采集如下表和列的基础信息：
 
-- row_count : 表的总行数
+- row_count: 表的总行数
 
 - data_size: 列的数据大小
 
