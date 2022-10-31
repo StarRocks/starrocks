@@ -435,8 +435,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 continue;
             }
 
-            ArrayList<DropPartitionClause> dropPartitionClauses =
-                    getDropPartitionClauseByTTL(db, olapTable, partitionColumn, ttlNumber);
+            ArrayList<DropPartitionClause> dropPartitionClauses = getDropPartitionClauseByTTL(olapTable, ttlNumber);
             String tableName = olapTable.getName();
             for (DropPartitionClause dropPartitionClause : dropPartitionClauses) {
                 db.writeLock();
