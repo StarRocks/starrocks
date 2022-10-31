@@ -182,6 +182,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             // TODO(yangzaorang): what if skip header beyond the _scan_range.ranges[_curr_file_index].size
             if (_skip_header) {
                 for (int64_t i = 0; i < _skip_header; i++) {
+                    CSVReader::Record dummy;
                     RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
                 }
             }

@@ -66,7 +66,7 @@ protected:
         params->strict_mode = true;
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
-        params->skip_header = skip_header;
+        params->__set_skip_header(skip_header);
         params->trim_space = trim_space;
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
