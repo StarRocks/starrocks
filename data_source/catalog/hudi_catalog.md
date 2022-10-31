@@ -13,7 +13,7 @@ Hudi catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 - StarRocks 支持查询如下压缩格式的 Hudi 数据文件：gzip、Zstd、LZ4 和 Snappy。
 - StarRocks 支持查询如下类型的 Hudi 数据：BOOLEAN、INT、DATE、TIME、BIGINT、FLOAT、DOUBLE、DECIMAL、CHAR 和 VARCHAR。注意查询命中不支持的数据类型（ARRAY、MAP 和 STRUCT）会报错。
 - StarRocks 支持查询 Copy on write 表。暂不支持查询 Merge on read 表。有关这两种表的详细信息，请参见 [Table & Query Types](https://hudi.apache.org/docs/table_types)。
-- StarRocks 2.4 及以上版本支持创建 Hudi catalog，以及使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hudi 表结构。查看时，不支持的数据类型会显示成`unknown`。
+- StarRocks 2.4 及以上版本支持创建 Hudi catalog，以及使用 [DESC](/sql-reference/sql-statements/Utility/DESCRIBE.md) 语句查看 Hudi 表结构。查看时，不支持的数据类型会显示成 `unknown`。
 
 ## 前提条件
 
@@ -38,7 +38,7 @@ PROPERTIES ("key"="value", ...);
 
     | **参数**            | **必选** | **说明**                                                     |
     | ------------------- | -------- | ------------------------------------------------------------ |
-    | type                | 是       | 数据源类型，取值为`hudi`。                                   |
+    | type                | 是       | 数据源类型，取值为 `hudi`。                                   |
     | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
 > 注意
@@ -54,11 +54,11 @@ StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求�
 
 如查询命中 Hudi 表的某个分区，StarRocks 会自动异步缓存该分区的元数据。缓存的元数据采用的是“懒更新策略”，即如果查询命中该分区，且距离上一次更新已经超过默认间隔时间，那么 StarRocks 会异步更新缓存分区元数据，否则不会更新。更新的默认间隔时间由`hive_meta_cache_refresh_interval_s`参数控制，默认值为 `7200`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
 
-如超过默认间隔时间，该分区元数据依旧没有更新，则默认缓存的分区元数据失效。在下次查询时，会重新缓存该分区元数据。元数据缓存失效的时间由`hive_meta_cache_ttl_s`参数控制，默认值为`86400`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
+如超过默认间隔时间，该分区元数据依旧没有更新，则默认缓存的分区元数据失效。在下次查询时，会重新缓存该分区元数据。元数据缓存失效的时间由 `hive_meta_cache_ttl_s` 参数控制，默认值为 `86400`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
 
 ### 示例
 
-有一张 Hudi 表`table1`，其包含 4 个分区：`p1`、`p2`、`p3`和`p4`。如查询命中分区 `p1`，那么 StarRocks 会自动异步缓存 `p1` 的元数据。如维护更新的间隔时间为 1 小时，则后续更新有以下几种情况：
+有一张 Hudi 表 `table1` ，其包含 4 个分区：`p1`、 `p2`、 `p3` 和 `p4`。如查询命中分区 `p1`，那么 StarRocks 会自动异步缓存 `p1` 的元数据。如维护更新的间隔时间为 1 小时，则后续更新有以下几种情况：
 
 - 如查询命中`p1`，且当前时间距离上一次更新超过 1 小时，StarRocks 会异步更新缓存的`p1`元数据。
 - 如查询命中`p1`，且当前时间距离上一次更新没有超过 1 小时，StarRocks 不会异步更新缓存的`p1`元数据。
@@ -80,7 +80,7 @@ StarRocks 需要利用 Hudi 表的元数据来进行查询规划，因此请求�
     [PARTITION ('partition_name', ...)];
     ```
 
-有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。注意只有拥有`ALTER_PRIV`权限的用户才可以手动更新元数据。
+有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。注意只有拥有 `ALTER_PRIV` 权限的用户才可以手动更新元数据。
 
 ## 下一步
 
