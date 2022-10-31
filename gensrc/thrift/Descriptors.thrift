@@ -86,6 +86,9 @@ struct TTextFileDesc {
 
     // compression type.
     5: optional Types.TCompressionType compression_type;
+
+    // specifies whether to remove white space from fields
+    6: optional bool trim_space
 }
 
 enum TSchemaTableType {

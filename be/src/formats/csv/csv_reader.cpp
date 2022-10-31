@@ -16,6 +16,23 @@
 
 namespace starrocks::vectorized {
 
+using Field = Slice;
+
+static Field trim(const char* value, int len) {
+    int32_t begin = 0;
+
+    while (begin < len && value[begin] == ' ') {
+        ++begin;
+    }
+
+    int32_t end = len - 1;
+
+    while (end > begin && value[end] == ' ') {
+        --end;
+    }
+    return Field(value + begin, end - begin + 1);
+}
+
 Status CSVReader::next_record(Record* record) {
     if (_limit > 0 && _parsed_bytes > _limit) {
         return Status::EndOfFile("Reached limit");
@@ -61,7 +78,11 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
     if (_column_separator_length == 1) {
         for (size_t i = 0; i < size; ++i, ++ptr) {
             if (*ptr == _column_separator[0]) {
-                fields->emplace_back(value, ptr - value);
+                if (_trim_space) {
+                    fields->emplace_back(trim(value, ptr - value));
+                } else {
+                    fields->emplace_back(value, ptr - value);
+                }
                 value = ptr + 1;
             }
         }
@@ -72,7 +93,11 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
             ptr = static_cast<char*>(
                     memmem(value, size - (value - base), _column_separator.data(), _column_separator_length));
             if (ptr != nullptr) {
-                fields->emplace_back(value, ptr - value);
+                if (_trim_space) {
+                    fields->emplace_back(trim(value, ptr - value));
+                } else {
+                    fields->emplace_back(value, ptr - value);
+                }
                 value = ptr + _column_separator_length;
             }
         } while (ptr != nullptr);

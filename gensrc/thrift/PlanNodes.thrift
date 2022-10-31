@@ -243,6 +243,8 @@ struct TBrokerScanRangeParams {
     23: optional i64 txn_id
     // number of lines at the start of the file to skip
     24: optional i64 skip_header
+    // specifies whether to remove white space from fields 
+    25: optional bool trim_space
 }
 
 // Broker scan range

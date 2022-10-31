@@ -36,8 +36,8 @@ class HdfsScannerCSVReader : public CSVReader {
 public:
     // |file| must outlive HdfsScannerCSVReader
     HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
-                         size_t file_length)
-            : CSVReader(row_delimiter, column_separator) {
+                         size_t file_length, bool trim_space)
+            : CSVReader(row_delimiter, column_separator, trim_space) {
         _file = file;
         _offset = 0;
         _remain_length = file_length;
@@ -144,6 +144,11 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
     _field_delimiter = text_file_desc.field_delim;
     // we should cast string to char now since csv reader only support record delimiter by char.
     _record_delimiter = text_file_desc.line_delim.front();
+    if (text_file_desc.__isset.trim_space) {
+        _trim_space = text_file_desc.trim_space;
+    } else {
+        _trim_space = false;
+    }
 
     // In Hive, users can specify collection delimiter and mapkey delimiter as string type,
     // but in fact, only the first character of the delimiter will take effect.
@@ -342,8 +347,9 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         // set current range index to the last one, so next time we reach EOF.
         _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
-        auto file_size = static_cast<size_t>(-1);
-        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size);
+        size_t file_size = static_cast<size_t>(-1);
+        _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size,
+                                                         _trim_space);
         return Status::OK();
     }
 
@@ -351,7 +357,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
     if (_current_range_index == 0) {
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,
-                                                         scan_range->file_length);
+                                                         scan_range->file_length, _trim_space);
     }
     {
         auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());

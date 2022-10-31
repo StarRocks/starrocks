@@ -75,6 +75,11 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     } else {
         _skip_header = 0;
     }
+    if (scan_range.params.__isset.trim_space) {
+        _trim_space = scan_range.params.trim_space;
+    } else {
+        _trim_space = false;
+    }
 }
 
 void CSVScanner::close() {
@@ -155,7 +160,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 return st;
             }
 
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
@@ -176,7 +181,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             }
             // TODO(yangzaorang): what if skip header beyond the _scan_range.ranges[_curr_file_index].size
             if (_skip_header) {
-                for (int64_t i = 0; i<_skip_header; i++) {
+                for (int64_t i = 0; i < _skip_header; i++) {
                     RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
                 }
             }
