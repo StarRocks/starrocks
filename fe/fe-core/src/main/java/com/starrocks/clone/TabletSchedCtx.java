@@ -25,6 +25,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.LocalTablet.TabletStatus;
@@ -204,6 +205,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     private Set<Long> colocateBackendsSet = null;
     private int tabletOrderIdx = -1;
+    // ID of colocate group that this tablet belongs to
+    private GroupId colocateGroupId = null;
+    private boolean relocationForRepair = false;
 
     private SystemInfoService infoService;
 
@@ -458,6 +462,22 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
 
     public Set<Long> getColocateBackendsSet() {
         return colocateBackendsSet;
+    }
+
+    public void setColocateGroupId(GroupId gid) {
+        colocateGroupId = gid;
+    }
+
+    public GroupId getColocateGroupId() {
+        return colocateGroupId;
+    }
+
+    public void setRelocationForRepair(boolean isRepair) {
+        relocationForRepair = isRepair;
+    }
+
+    public boolean getRelocationForRepair() {
+        return relocationForRepair;
     }
 
     public void setTabletOrderIdx(int idx) {
