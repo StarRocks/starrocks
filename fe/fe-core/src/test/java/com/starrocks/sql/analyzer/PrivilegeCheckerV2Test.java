@@ -37,6 +37,7 @@ public class PrivilegeCheckerV2Test {
         rootUser = starRocksAssert.getCtx().getCurrentUserIdentity();
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
+        privilegeManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
     }
@@ -132,9 +133,9 @@ public class PrivilegeCheckerV2Test {
                 "Access denied for user 'test' to database 'db1'");
         verifyGrantRevoke(
                 "drop table db1.tbl1",
-                "grant drop on database db1 to test",
-                "revoke drop on database db1 from test",
-                "Access denied for user 'test' to database 'db1'");
+                "grant drop on db1.tbl1 to test",
+                "revoke drop on db1.tbl1 from test",
+                "DROP command denied to user 'test'");
     }
 
     @Test
