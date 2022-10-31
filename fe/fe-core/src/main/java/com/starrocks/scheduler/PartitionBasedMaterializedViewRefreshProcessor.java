@@ -30,7 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.external.PartitionUtil;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;

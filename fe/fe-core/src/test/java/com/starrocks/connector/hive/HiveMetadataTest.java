@@ -10,22 +10,12 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.PartitionUtil;
-import com.starrocks.external.RemoteFileBlockDesc;
-import com.starrocks.external.RemoteFileDesc;
-import com.starrocks.external.RemoteFileInfo;
-import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.HiveMetastoreTest;
-import com.starrocks.external.hive.HiveRemoteFileIO;
-import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hive.MockedRemoteFileSystem;
-import com.starrocks.external.hive.Partition;
-import com.starrocks.external.hive.RemoteFileInputFormat;
+import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.PartitionUtil;
+import com.starrocks.connector.RemoteFileBlockDesc;
+import com.starrocks.connector.RemoteFileDesc;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -47,7 +37,7 @@ import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.external.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
 
 public class HiveMetadataTest {
     private HiveMetaClient client;

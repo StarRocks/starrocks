@@ -7,10 +7,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.util.Util;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.iceberg.IcebergCatalog;
-import com.starrocks.external.iceberg.IcebergCatalogType;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.external.iceberg.StarRocksIcebergException;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.iceberg.catalog.Namespace;
 import org.apache.iceberg.catalog.TableIdentifier;
@@ -26,9 +22,9 @@ import java.util.stream.Collectors;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_CATALOG_TYPE;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_IMPL;
 import static com.starrocks.catalog.IcebergTable.ICEBERG_METASTORE_URIS;
-import static com.starrocks.external.iceberg.IcebergUtil.getIcebergCustomCatalog;
-import static com.starrocks.external.iceberg.IcebergUtil.getIcebergGlueCatalog;
-import static com.starrocks.external.iceberg.IcebergUtil.getIcebergHiveCatalog;
+import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergCustomCatalog;
+import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergGlueCatalog;
+import static com.starrocks.connector.iceberg.IcebergUtil.getIcebergHiveCatalog;
 
 public class IcebergMetadata implements ConnectorMetadata {
 

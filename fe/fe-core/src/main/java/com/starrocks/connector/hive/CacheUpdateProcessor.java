@@ -7,13 +7,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.RemotePathKey;
-import com.starrocks.external.hive.HivePartitionName;
-import com.starrocks.external.hive.IHiveMetastore;
-import com.starrocks.external.hive.Partition;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

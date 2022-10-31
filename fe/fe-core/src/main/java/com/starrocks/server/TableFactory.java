@@ -12,7 +12,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.external.ColumnTypeConverter;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
