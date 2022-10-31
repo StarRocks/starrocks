@@ -531,7 +531,11 @@ public:
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~DecimalTypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual ~DecimalTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -558,7 +562,11 @@ public:
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalV3TypeConverter() = default;
+<<<<<<< HEAD
     virtual ~DecimalV3TypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~DecimalV3TypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -586,7 +594,11 @@ public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     StringToOtherTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~StringToOtherTypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~StringToOtherTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -651,7 +663,11 @@ public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     OtherToStringTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~OtherToStringTypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~OtherToStringTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -982,7 +998,11 @@ template <typename SrcType>
 class BitMapTypeConverter : public MaterializeTypeConverter {
 public:
     BitMapTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~BitMapTypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual virtual virtual virtual virtual ~BitMapTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1013,7 +1033,11 @@ template <typename SrcType>
 class HLLTypeConverter : public MaterializeTypeConverter {
 public:
     HLLTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~HLLTypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~HLLTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1040,7 +1064,11 @@ template <typename SrcType>
 class PercentileTypeConverter : public MaterializeTypeConverter {
 public:
     PercentileTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~PercentileTypeConverter() = default;
+=======
+    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~PercentileTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1066,7 +1094,11 @@ class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
     using CppType = typename CppTypeTraits<SrcType>::CppType;
     DecimalToPercentileTypeConverter() = default;
+<<<<<<< HEAD
     virtual ~DecimalToPercentileTypeConverter() = default;
+=======
+    virtual virtual virtual virtual ~DecimalToPercentileTypeConverter() = default;
+>>>>>>> f708d83e5 ([Refactor] Add use-override in clang-tidy)
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
