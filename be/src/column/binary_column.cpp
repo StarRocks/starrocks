@@ -66,11 +66,20 @@ void BinaryColumnBase<T>::append_selective(const Column& src, const uint32_t* in
     _bytes.resize(cur_byte_size);
 
     auto* dest_bytes = _bytes.data();
-    for (size_t i = 0; i < size; i++) {
-        T src_offset = src_offsets[from + i];
-        T src_length = src_offsets[from + i + 1] - src_offset;
-        T dst_offset = _offsets[cur_row_count + i];
-        strings::memcpy_inlined(dest_bytes + dst_offset, src_bytes.data() + src_offset, src_length);
+    if (from == 0 && size == src.size()) {
+        for (size_t i = 0; i < size; i++) {
+            T src_offset = src_offsets[i];
+            T src_length = src_offsets[i + 1] - src_offset;
+            T dst_offset = _offsets[cur_row_count + i];
+            strings::memcpy_inlined(dest_bytes + dst_offset, src_bytes.data() + src_offset, src_length);
+        }
+    } else {
+        for (size_t i = 0; i < size; i++) {
+            uint32_t row_idx = indexes[from + i];
+            T str_size = src_offsets[row_idx + 1] - src_offsets[row_idx];
+            strings::memcpy_inlined(dest_bytes + _offsets[cur_row_count + i], src_bytes.data() + src_offsets[row_idx],
+                                    str_size);
+        }
     }
 
     _slices_cache = false;
