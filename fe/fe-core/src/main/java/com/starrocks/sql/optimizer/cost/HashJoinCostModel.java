@@ -31,8 +31,8 @@ import java.util.List;
  * parallelism, and left and right table size. The most important thing in the model is the evaluation of the
  * probe cost for each row. When the size of the right table is greater than bottom_number, the average probe
  * cost needs to be expanded by multiply a penalty factor. The parallel computing characteristics of shuffle
- * join can offset part of the probe cost. We also set an upper limit on the probe cost to avoid cost distortion
- * caused by huge table.
+ * join can offset part of the probe cost by subtract a  parallel factor. We also set an upper limit on the
+ * penalty factor to avoid cost distortion caused by huge table.
  */
 public class HashJoinCostModel {
 
