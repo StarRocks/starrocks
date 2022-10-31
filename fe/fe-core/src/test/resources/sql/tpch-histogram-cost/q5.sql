@@ -24,7 +24,7 @@ group by
 order by
     revenue desc ;
 [fragment statistics]
-PLAN FRAGMENT 0(F14)
+PLAN FRAGMENT 0(F12)
 Output Exprs:46: N_NAME | 55: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
