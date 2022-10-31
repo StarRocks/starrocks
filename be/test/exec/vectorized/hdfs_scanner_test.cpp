@@ -18,7 +18,9 @@
 
 #include <memory>
 
+#include "column/chunk.h"
 #include "column/column_helper.h"
+#include "column/datum_tuple.h"
 #include "exec/vectorized/hdfs_scanner_orc.h"
 #include "exec/vectorized/hdfs_scanner_parquet.h"
 #include "exec/vectorized/hdfs_scanner_text.h"
@@ -50,7 +52,8 @@ protected:
     HdfsScannerParams* _create_param(const std::string& file, THdfsScanRange* range, const TupleDescriptor* tuple_desc);
     void build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc);
 
-    THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length);
+    THdfsScanRange* _create_scan_range(const std::string& file, uint64_t offset, uint64_t length,
+                                       bool trim_space = false);
     TupleDescriptor* _create_tuple_desc(SlotDesc* descs);
 
     ObjectPool _pool;
@@ -75,7 +78,8 @@ void HdfsScannerTest::_create_runtime_state(const std::string& timezone) {
     _runtime_state->init_instance_mem_tracker();
 }
 
-THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length) {
+THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uint64_t offset, uint64_t length,
+                                                    bool trim_space) {
     auto* scan_range = _pool.add(new THdfsScanRange());
     ASSIGN_OR_ABORT(uint64_t file_size, FileSystem::Default()->get_file_size(file));
     scan_range->relative_path = file;
@@ -86,6 +90,7 @@ THdfsScanRange* HdfsScannerTest::_create_scan_range(const std::string& file, uin
     scan_range->text_file_desc.line_delim = "\n";
     scan_range->text_file_desc.collection_delim = "\003";
     scan_range->text_file_desc.mapkey_delim = "\004";
+    scan_range->text_file_desc.__set_trim_space(trim_space);
     return scan_range;
 }
 
@@ -1269,6 +1274,47 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchDecodeMinMax) {
 
     status = scanner->open(_runtime_state);
     EXPECT_TRUE(!status.ok());
+    scanner->close(_runtime_state);
+}
+
+TEST_F(HdfsScannerTest, TestCSVTrimSpace) {
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                            {"action", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)},
+                            {""}};
+
+    const std::string trim_file = "./be/test/exec/test_data/csv_scanner/trim.csv";
+    Status status;
+    auto* range = _create_scan_range(trim_file, 0, 0, true);
+    auto* tuple_desc = _create_tuple_desc(csv_descs);
+    auto* param = _create_param(trim_file, range, tuple_desc);
+    build_hive_column_names(param, tuple_desc);
+    auto scanner = std::make_shared<HdfsTextScanner>();
+
+    status = scanner->init(_runtime_state, *param);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    status = scanner->open(_runtime_state);
+    ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+    auto chunk = ChunkHelper::new_chunk(*tuple_desc, 0);
+    status = scanner->get_next(_runtime_state, &chunk);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(2, chunk->num_columns());
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ("UID0", chunk->get(0)[0].get_slice());
+    EXPECT_EQ("UID1", chunk->get(1)[0].get_slice());
+    EXPECT_EQ("UID2", chunk->get(2)[0].get_slice());
+    EXPECT_EQ("UID3", chunk->get(3)[0].get_slice());
+    EXPECT_EQ("UID4", chunk->get(4)[0].get_slice());
+
+    EXPECT_EQ("ACTION0", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("ACTION1", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("ACTION2", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("ACTION3", chunk->get(3)[1].get_slice());
+    EXPECT_EQ("ACTION4", chunk->get(4)[1].get_slice());
+
     scanner->close(_runtime_state);
 }
 
