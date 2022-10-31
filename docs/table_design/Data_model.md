@@ -431,6 +431,8 @@ PROPERTIES("replication_num" = "3",
 
 - When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
 
+- Since version 2.4.0, the Primary Key model supports to build a materialized view for a one table or multiple tables.
+
 - The Primary Key model does not support materialized views.
 
 - You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).

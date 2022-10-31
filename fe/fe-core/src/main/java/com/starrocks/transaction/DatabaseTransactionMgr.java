@@ -1662,4 +1662,17 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
+    public String getTxnPublishTimeoutDebugInfo(long txnId) {
+        TransactionState transactionState;
+        readLock();
+        try {
+            transactionState = unprotectedGetTransactionState(txnId);
+        } finally {
+            readUnlock();
+        }
+        if (transactionState == null) {
+            return "";
+        }
+        return transactionState.getPublishTimeoutDebugInfo();
+    }
 }

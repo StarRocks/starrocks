@@ -32,7 +32,7 @@ Specify the Broker configuration file **conf/apache_hdfs_broker.conf**. Because 
 Run the following command to start Broker.
 
 ```bash
-sh ./apache_hdfs_broker/bin/start_broker.sh --daemon
+./apache_hdfs_broker/bin/start_broker.sh --daemon
 ```
 
 ## Add a Broker to cluster

@@ -2,6 +2,7 @@
 
 #include "formats/parquet/file_reader.h"
 
+#include <filesystem>
 #include <gtest/gtest.h>
 
 #include <filesystem>
@@ -597,6 +598,7 @@ TEST_F(FileReaderTest, TestGetNext) {
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file1_path));
+
     // init
     auto* ctx = _create_file1_base_context();
     Status status = file_reader->init(ctx);
@@ -616,6 +618,7 @@ TEST_F(FileReaderTest, TestGetNextPartition) {
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file1_path));
+
     // init
     auto* ctx = _create_context_for_partition();
     Status status = file_reader->init(ctx);
@@ -635,6 +638,7 @@ TEST_F(FileReaderTest, TestGetNextEmpty) {
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file1_path));
+
     // init
     auto* ctx = _create_context_for_not_exist();
     Status status = file_reader->init(ctx);
@@ -654,6 +658,7 @@ TEST_F(FileReaderTest, TestMinMaxConjunct) {
     auto file = _create_file(_file2_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file2_path));
+
     // init
     auto* ctx = _create_context_for_min_max();
     Status status = file_reader->init(ctx);
@@ -676,6 +681,7 @@ TEST_F(FileReaderTest, TestFilterFile) {
     auto file = _create_file(_file2_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file2_path));
+
     // init
     auto* ctx = _create_context_for_filter_file();
     Status status = file_reader->init(ctx);
@@ -693,6 +699,7 @@ TEST_F(FileReaderTest, TestGetNextDictFilter) {
     auto file = _create_file(_file2_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file2_path));
+
     // init
     auto* ctx = _create_context_for_dict_filter();
     Status status = file_reader->init(ctx);
@@ -719,6 +726,7 @@ TEST_F(FileReaderTest, TestGetNextOtherFilter) {
     auto file = _create_file(_file2_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file2_path));
+
     // init
     auto* ctx = _create_context_for_other_filter();
     Status status = file_reader->init(ctx);
@@ -746,6 +754,7 @@ TEST_F(FileReaderTest, TestSkipRowGroup) {
     auto file = _create_file(_file2_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file2_path));
+
     // c1 > 10000
     auto* ctx = _create_context_for_skip_group();
     Status status = file_reader->init(ctx);
@@ -765,6 +774,7 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     auto file = _create_file(_file3_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file3_path));
+
     // c3 = "c", c1 >= 4
     auto* ctx = _create_context_for_multi_filter();
     Status status = file_reader->init(ctx);
@@ -796,6 +806,7 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
     auto file = _create_file(_file3_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                     std::filesystem::file_size(_file3_path));
+
     // c1 >= 4080
     auto* ctx = _create_context_for_late_materialization();
     Status status = file_reader->init(ctx);
@@ -905,6 +916,39 @@ TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
+}
+
+TEST_F(FileReaderTest, TestReadStructUpperColumns) {
+    auto file = _create_file(_file4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file4_path));;
+
+	// init
+	auto* ctx = _create_context_for_struct_solumn();
+	Status status = file_reader->init(ctx);
+	ASSERT_TRUE(status.ok());
+
+	// c3 is dict filter column
+	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns.size());
+	ASSERT_EQ(1, file_reader->_row_group_readers[0]->_dict_filter_columns[0].slot_id);
+
+	// get next
+	auto chunk = _create_struct_chunk();
+	status = file_reader->get_next(&chunk);
+	ASSERT_TRUE(status.ok());
+	ASSERT_EQ(3, chunk->num_rows());
+	for (int i = 0; i < chunk->num_rows(); ++i) {
+		std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+	}
+
+    ColumnPtr int_col = chunk->get_column_by_slot_id(0);
+    int i = int_col->get(0).get_int32();
+    EXPECT_EQ(i, 3);
+
+    ColumnPtr char_col = chunk->get_column_by_slot_id(2);
+    Slice s = char_col->get(0).get_slice();
+    std::string res(s.data, s.size);
+    EXPECT_EQ(res, "C");
 }
 
 } // namespace starrocks::parquet

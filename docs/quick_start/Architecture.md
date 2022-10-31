@@ -13,7 +13,7 @@ The StarRocks cluster is composed of FE and BE, and can be accessed via MySQL cl
 * Connects to the MySQL client, parses and executes SQL statements.
 * Manages metadata, executes SQL DDL commands, and uses Catalog to record information about databases, tables, partitions, and tablet replications.
 * High-availability deployment. Use unique replication protocol to select leader and synchronize metadata.
-* FE leader node modifies metadata; FE follower node performs read operations. Metadata read and write satisfies sequential consistency.
+* The leader FE modifies metadata; follower FEs perform read operations. Metadata read and write satisfies sequential consistency.
 * The number of FE nodes is 2n+1, which can tolerate n node failures. If the FE leader node fails, one of the follower nodes gets selected as the new leader node to complete the failover.
 * FE's SQL layer parses, analyzes, and rewrites users’ SQL statements. It also performs semantic analysis and relational algebra optimization, and produces logical execution plans.
 * FE Planner is responsible for transforming logical plans into physical plans that can be distributed to BE.

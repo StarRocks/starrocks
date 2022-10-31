@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/hdfs_scanner.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "column/column_helper.h"
 #include "exec/exec_node.h"
 #include "io/compressed_input_stream.h"
@@ -108,6 +110,7 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.scan_ranges = _scanner_params.scan_ranges;
     ctx.min_max_conjunct_ctxs = _min_max_conjunct_ctxs;
     ctx.min_max_tuple_desc = _scanner_params.min_max_tuple_desc;
+    ctx.case_sensitive = _scanner_params.case_sensitive;
     ctx.timezone = _runtime_state->timezone();
     ctx.stats = &_stats;
 
@@ -235,7 +238,8 @@ void HdfsScanner::update_counter() {
 
 void HdfsScannerContext::set_columns_from_file(const std::unordered_set<std::string>& names) {
     for (auto& column : materialized_columns) {
-        if (names.find(column.col_name) == names.end()) {
+        auto col_name = column.formated_col_name(case_sensitive);
+        if (names.find(col_name) == names.end()) {
             not_existed_slots.push_back(column.slot_desc);
             SlotId slot_id = column.slot_id;
             if (conjunct_ctxs_by_slot.find(slot_id) != conjunct_ctxs_by_slot.end()) {

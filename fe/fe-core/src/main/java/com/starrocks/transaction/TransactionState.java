@@ -911,6 +911,14 @@ public class TransactionState implements Writable {
         return ret;
     }
 
+    public String getPublishTimeoutDebugInfo() {
+        if (finishChecker != null) {
+            return finishChecker.debugInfo();
+        } else {
+            return getErrMsg();
+        }
+    }
+
     public void setFinishState(TxnFinishState finishState) {
         this.finishState = finishState;
     }
