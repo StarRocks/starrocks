@@ -427,7 +427,6 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 continue;
             }
 
-            Column partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
             int ttlNumber = olapTable.getTableProperty().getPartitionTTLNumber();
             if (Objects.equals(ttlNumber, NO_TTL)) {
                 iterator.remove();
