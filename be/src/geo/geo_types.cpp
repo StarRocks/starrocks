@@ -22,13 +22,7 @@
 #include "geo/geo_types.h"
 
 #include <s2/s2cap.h>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <s2/s2cell.h>
-DIAGNOSTIC_POP
-
 #include <s2/s2earth.h>
 #include <s2/s2latlng.h>
 #include <s2/s2polygon.h>
@@ -41,6 +35,7 @@ DIAGNOSTIC_POP
 #include <memory>
 #include <sstream>
 
+#include "common/compiler_util.h"
 #include "geo/wkt_parse.h"
 
 namespace starrocks {

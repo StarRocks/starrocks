@@ -4,20 +4,16 @@
 
 #include <butil/thread_local.h>
 #include <butil/time.h> // NOLINT
+#include <bvar/bvar.h>
 
 #include <atomic>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bvar/bvar.h>
-DIAGNOSTIC_POP
 
 #include "column/binary_column.h"
 #include "column/const_column.h"
 #include "column/decimalv3_column.h"
 #include "column/fixed_length_column.h"
 #include "column/object_column.h"
+#include "common/compiler_util.h"
 #include "common/config.h"
 #include "common/type_list.h"
 #include "gutil/dynamic_annotations.h"

@@ -21,14 +21,9 @@
 
 #include "storage/tablet_meta_manager.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/writer.h>
-DIAGNOSTIC_POP
-
 #include <json2pb/json_to_pb.h>
 #include <json2pb/pb_to_json.h>
+#include <rapidjson/writer.h>
 #include <rocksdb/write_batch.h>
 
 #include <boost/algorithm/string/trim.hpp>
@@ -37,6 +32,7 @@ DIAGNOSTIC_POP
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "gen_cpp/olap_file.pb.h"

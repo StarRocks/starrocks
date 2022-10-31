@@ -1,13 +1,8 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "common/compiler_util.h"
-#include "runtime/tablets_channel.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 
 #include <chrono>
@@ -17,6 +12,7 @@ DIAGNOSTIC_POP
 
 #include "column/chunk.h"
 #include "common/closure_guard.h"
+#include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/internal_service.pb.h"
@@ -24,6 +20,7 @@ DIAGNOSTIC_POP
 #include "runtime/descriptors.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "service/backend_options.h"
 #include "storage/lake/async_delta_writer.h"

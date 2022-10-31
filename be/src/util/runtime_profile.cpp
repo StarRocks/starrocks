@@ -720,11 +720,11 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         node.child_counters_map = _child_counter_map;
     }
 
-    for (auto iter = counter_map.begin(); iter != counter_map.end(); ++iter) {
+    for (auto& iter : counter_map) {
         TCounter counter;
-        counter.name = iter->first;
-        counter.value = iter->second.first->value();
-        counter.type = iter->second.first->type();
+        counter.name = iter.first;
+        counter.value = iter.second.first->value();
+        counter.type = iter.second.first->type();
         node.counters.push_back(counter);
     }
 

@@ -101,7 +101,7 @@ Status TypeConverter::convert_column(TypeInfo* src_type, const Column& src, Type
 class DatetimeToDateTypeConverter : public TypeConverter {
 public:
     DatetimeToDateTypeConverter() = default;
-    ~DatetimeToDateTypeConverter() = default;
+    virtual ~DatetimeToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -127,7 +127,7 @@ public:
 class TimestampToDateTypeConverter : public TypeConverter {
 public:
     TimestampToDateTypeConverter() = default;
-    ~TimestampToDateTypeConverter() = default;
+    virtual ~TimestampToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -150,7 +150,7 @@ public:
 class IntToDateTypeConverter : public TypeConverter {
 public:
     IntToDateTypeConverter() = default;
-    ~IntToDateTypeConverter() = default;
+    virtual ~IntToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -178,7 +178,7 @@ public:
 class DateV2ToDateTypeConverter : public TypeConverter {
 public:
     DateV2ToDateTypeConverter() = default;
-    ~DateV2ToDateTypeConverter() = default;
+    virtual ~DateV2ToDateTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -199,7 +199,7 @@ public:
 class TimestampToDateV2TypeConverter : public TypeConverter {
 public:
     TimestampToDateV2TypeConverter() = default;
-    ~TimestampToDateV2TypeConverter() = default;
+    virtual ~TimestampToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         unaligned_store<DateValue>(dst, unaligned_load<TimestampValue>(src));
@@ -225,7 +225,7 @@ public:
 class DatetimeToDateV2TypeConverter : public TypeConverter {
 public:
     DatetimeToDateV2TypeConverter() = default;
-    ~DatetimeToDateV2TypeConverter() = default;
+    virtual ~DatetimeToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         TimestampValue timestamp{0};
@@ -255,7 +255,7 @@ public:
 class DateToDateV2TypeConverter : public TypeConverter {
 public:
     DateToDateV2TypeConverter() = default;
-    ~DateToDateV2TypeConverter() = default;
+    virtual ~DateToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -277,7 +277,7 @@ public:
 class DateToDatetimeFieldConveter : public TypeConverter {
 public:
     DateToDatetimeFieldConveter() = default;
-    ~DateToDatetimeFieldConveter() = default;
+    virtual ~DateToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -301,7 +301,7 @@ public:
 class DateV2ToDatetimeFieldConveter : public TypeConverter {
 public:
     DateV2ToDatetimeFieldConveter() = default;
-    ~DateV2ToDatetimeFieldConveter() = default;
+    virtual ~DateV2ToDatetimeFieldConveter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -324,7 +324,7 @@ public:
 class TimestampToDatetimeTypeConverter : public TypeConverter {
 public:
     TimestampToDatetimeTypeConverter() = default;
-    ~TimestampToDatetimeTypeConverter() = default;
+    virtual ~TimestampToDatetimeTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -344,7 +344,7 @@ public:
 class DateToTimestampTypeConverter : public TypeConverter {
 public:
     DateToTimestampTypeConverter() = default;
-    ~DateToTimestampTypeConverter() = default;
+    virtual ~DateToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         uint32_t src_value = unaligned_load<uint24_t>(src);
@@ -373,7 +373,7 @@ public:
 class DateV2ToTimestampTypeConverter : public TypeConverter {
 public:
     DateV2ToTimestampTypeConverter() = default;
-    ~DateV2ToTimestampTypeConverter() = default;
+    virtual ~DateV2ToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         auto src_value = unaligned_load<DateValue>(src);
@@ -404,7 +404,7 @@ public:
 class DatetimeToTimestampTypeConverter : public TypeConverter {
 public:
     DatetimeToTimestampTypeConverter() = default;
-    ~DatetimeToTimestampTypeConverter() = default;
+    virtual ~DatetimeToTimestampTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -426,7 +426,7 @@ public:
 class FloatToDoubleTypeConverter : public TypeConverter {
 public:
     FloatToDoubleTypeConverter() = default;
-    ~FloatToDoubleTypeConverter() = default;
+    virtual ~FloatToDoubleTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -449,7 +449,7 @@ public:
 class DecimalToDecimal12TypeConverter : public TypeConverter {
 public:
     DecimalToDecimal12TypeConverter() = default;
-    ~DecimalToDecimal12TypeConverter() = default;
+    virtual ~DecimalToDecimal12TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -470,7 +470,7 @@ public:
 class Decimal12ToDecimalTypeConverter : public TypeConverter {
 public:
     Decimal12ToDecimalTypeConverter() = default;
-    ~Decimal12ToDecimalTypeConverter() = default;
+    virtual ~Decimal12ToDecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -495,7 +495,7 @@ public:
     using CppType = typename CppTypeTraits<int_type>::CppType;
 
     IntegerToDateV2TypeConverter() = default;
-    ~IntegerToDateV2TypeConverter() = default;
+    virtual ~IntegerToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         auto src_value = unaligned_load<CppType>(src);
@@ -531,7 +531,7 @@ public:
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalTypeConverter() = default;
-    ~DecimalTypeConverter() = default;
+    virtual ~DecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -558,7 +558,7 @@ public:
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalV3TypeConverter() = default;
-    ~DecimalV3TypeConverter() = default;
+    virtual ~DecimalV3TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -586,7 +586,7 @@ public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     StringToOtherTypeConverter() = default;
-    ~StringToOtherTypeConverter() = default;
+    virtual ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -615,7 +615,7 @@ public:
     using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
 
     StringToOtherTypeConverter() = default;
-    ~StringToOtherTypeConverter() = default;
+    virtual ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("not supported");
@@ -651,7 +651,7 @@ public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     OtherToStringTypeConverter() = default;
-    ~OtherToStringTypeConverter() = default;
+    virtual ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -689,7 +689,7 @@ public:
     using CppType = typename CppTypeTraits<OLAP_FIELD_TYPE_JSON>::CppType;
 
     OtherToStringTypeConverter() = default;
-    ~OtherToStringTypeConverter() = default;
+    virtual ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("not supported");
@@ -982,7 +982,7 @@ template <typename SrcType>
 class BitMapTypeConverter : public MaterializeTypeConverter {
 public:
     BitMapTypeConverter() = default;
-    ~BitMapTypeConverter() = default;
+    virtual ~BitMapTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1013,7 +1013,7 @@ template <typename SrcType>
 class HLLTypeConverter : public MaterializeTypeConverter {
 public:
     HLLTypeConverter() = default;
-    ~HLLTypeConverter() = default;
+    virtual ~HLLTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1040,7 +1040,7 @@ template <typename SrcType>
 class PercentileTypeConverter : public MaterializeTypeConverter {
 public:
     PercentileTypeConverter() = default;
-    ~PercentileTypeConverter() = default;
+    virtual ~PercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1066,7 +1066,7 @@ class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
     using CppType = typename CppTypeTraits<SrcType>::CppType;
     DecimalToPercentileTypeConverter() = default;
-    ~DecimalToPercentileTypeConverter() = default;
+    virtual ~DecimalToPercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1093,7 +1093,7 @@ public:
 class CountTypeConverter : public MaterializeTypeConverter {
 public:
     CountTypeConverter() = default;
-    ~CountTypeConverter() = default;
+    virtual ~CountTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {

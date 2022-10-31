@@ -19,6 +19,8 @@ VALUE_GUARD(FieldType, InvalidFTGuard, ft_is_invalid, OLAP_FIELD_TYPE_MAX_VALUE)
 template <FieldType TYPE, typename = DecimalFTGuard<TYPE>>
 class DecimalTypeInfo final : public TypeInfo {
 public:
+    virtual ~DecimalTypeInfo() = default;
+
     using CppType = typename CppTypeTraits<TYPE>::CppType;
     using Datum = vectorized::Datum;
     DecimalTypeInfo(int precision, int scale)

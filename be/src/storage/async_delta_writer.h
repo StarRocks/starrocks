@@ -2,16 +2,12 @@
 
 #pragma once
 
+#include <bthread/execution_queue.h>
+#include <google/protobuf/service.h>
+
 #include <atomic>
 
 #include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/execution_queue.h>
-DIAGNOSTIC_POP
-
-#include <google/protobuf/service.h>
-
 #include "storage/delta_writer.h"
 
 namespace brpc {
