@@ -225,8 +225,7 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
                 }
             } else {
                 _probe_row_matched = _probe_row_matched || SIMD::contain_nonzero(*filter);
-                bool probe_row_finished = _curr_build_chunk_index >= _num_build_chunks();
-                if (!_probe_row_matched && probe_row_finished) {
+                if (!_probe_row_matched && _probe_row_finished) {
                     _permute_left_join(state, chunk, _probe_row_current, 1);
                 }
             }
@@ -271,9 +270,10 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
     _probe_row_start = _probe_row_current;
     for (; _probe_row_current < _probe_chunk->num_rows(); ++_probe_row_current) {
         // Last build chunk must permute a chunk
-        if (_curr_build_chunk_index == _num_build_chunks() - 1 && _num_build_chunks() > 1) {
+        if (!_probe_row_finished && _curr_build_chunk_index == _num_build_chunks() - 1 && _num_build_chunks() > 1) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(0);
+            _probe_row_finished = true;
             ++_probe_row_current;
             return chunk;
         }
@@ -286,6 +286,7 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
             }
         }
         _probe_row_matched = false;
+        _probe_row_finished = false;
         _move_build_chunk_index(0);
     }
     return chunk;
@@ -429,6 +430,7 @@ Status NLJoinProbeOperator::push_chunk(RuntimeState* state, const vectorized::Ch
     _probe_row_start = 0;
     _probe_row_current = 0;
     _probe_row_matched = false;
+    _probe_row_finished = false;
     _move_build_chunk_index(0);
 
     return Status::OK();
