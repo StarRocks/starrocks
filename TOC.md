@@ -140,6 +140,7 @@
       + [ALTER RESOURCE](/sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md)
       + [ANALYZE TABLE](/sql-reference/sql-statements/data-definition/ANALYZE%20TABLE.md)
       + [BACKUP](/sql-reference/sql-statements/data-definition/BACKUP.md)
+      + [CANCEL ALTER TABLE](/sql-reference/sql-statements/data-definition/CANCEL%20ALTER%20TABLE.md)
       + [CANCEL BACKUP](/sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md)
       + [CANCEL RESTORE](/sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md)
       + [CREATE ANALYZE](/sql-reference/sql-statements/data-definition/CREATE%20ANALYZE.md)
