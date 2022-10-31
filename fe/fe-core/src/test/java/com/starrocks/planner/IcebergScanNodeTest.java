@@ -106,6 +106,62 @@ public class IcebergScanNodeTest {
         }
     }
 
+    private void setUpMock(boolean isPosDelete, com.starrocks.catalog.IcebergTable table,
+                           Table iTable, Snapshot snapshot) {
+        new MockUp<IcebergUtil>() {
+            @Mock
+            public TableScan getTableScan(Table table,
+                                          Snapshot snapshot,
+                                          List<Expression> icebergPredicates) {
+                return new DataTableScan(null, iTable);
+            }
+        };
+
+
+        new MockUp<DataTableScan>() {
+            @Mock
+            public CloseableIterable<CombinedScanTask> planTasks() {
+                List<CombinedScanTask> tasks = new ArrayList<CombinedScanTask>();
+                DataFile data = DataFiles.builder(PartitionSpec.unpartitioned())
+                        .withInputFile(new LocalFileIO().newInputFile("input.orc"))
+                        .withRecordCount(1)
+                        .withFileSizeInBytes(1024)
+                        .withFormat(FileFormat.ORC)
+                        .build();
+
+                FileMetadata.Builder builder;
+                if (isPosDelete) {
+                    builder = FileMetadata.deleteFileBuilder(PartitionSpec.unpartitioned())
+                            .ofPositionDeletes();
+                } else {
+                    builder = FileMetadata.deleteFileBuilder(PartitionSpec.unpartitioned())
+                            .ofEqualityDeletes(1);
+                }
+                DeleteFile delete = builder.withPath("delete.orc")
+                            .withFileSizeInBytes(1024)
+                            .withRecordCount(1)
+                            .withFormat(FileFormat.ORC)
+                            .build();
+
+
+                FileScanTask scanTask = new TestFileScanTask(data, new DeleteFile[]{delete});
+                tasks.add(new BaseCombinedScanTask(scanTask));
+
+                return CloseableIterable.withNoopClose(tasks);
+            }
+        };
+
+        new Expectations() {
+            {
+                table.getIcebergTable();
+                result = iTable;
+
+                iTable.currentSnapshot();
+                result = snapshot;
+            }
+        };
+    }
+
     @Before
     public void setUp() {
         dbName = "db";
@@ -132,54 +188,7 @@ public class IcebergScanNodeTest {
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
         tupleDesc.setTable(table);
 
-        new MockUp<IcebergUtil>() {
-            @Mock
-            public TableScan getTableScan(Table table,
-                                          Snapshot snapshot,
-                                          List<Expression> icebergPredicates) {
-                return new DataTableScan(null, iTable);
-            }
-        };
-
-
-        new MockUp<DataTableScan>() {
-            @Mock
-            public CloseableIterable<CombinedScanTask> planTasks() {
-                List<CombinedScanTask> tasks = new ArrayList<CombinedScanTask>();
-                DataFile data = DataFiles.builder(PartitionSpec.unpartitioned())
-                        .withInputFile(new LocalFileIO().newInputFile("input.orc"))
-                        .withRecordCount(1)
-                        .withFileSizeInBytes(1024)
-                        .withFormat(FileFormat.ORC)
-                        .build();
-
-                DeleteFile delete = FileMetadata.deleteFileBuilder(PartitionSpec.unpartitioned())
-                        .ofPositionDeletes()
-                        .withPath("delete.orc")
-                        .withFileSizeInBytes(1024)
-                        .withRecordCount(1)
-                        .withFormat(FileFormat.ORC)
-                        .build();
-
-
-                FileScanTask scanTask = new TestFileScanTask(data, new DeleteFile[]{delete});
-                tasks.add(new BaseCombinedScanTask(scanTask));
-
-                return CloseableIterable.withNoopClose(tasks);
-            }
-        };
-
-        new Expectations() {
-            {
-                table.getIcebergTable();
-                result = iTable;
-
-                iTable.currentSnapshot();
-                result = snapshot;
-            }
-        };
-
-
+        setUpMock(true, table, iTable, snapshot);
 
         IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
         scanNode.getScanRangeLocations();
@@ -194,5 +203,28 @@ public class IcebergScanNodeTest {
         TIcebergDeleteFile deleteFile = hdfsScanRange.delete_files.get(0);
         Assert.assertEquals("delete.orc", deleteFile.full_path);
         Assert.assertEquals(TIcebergFileContent.POSITION_DELETES, deleteFile.file_content);
+    }
+
+    @Test
+    public void testGetScanRangeLocationsWithEquality(@Mocked GlobalStateMgr globalStateMgr,
+                                          @Mocked com.starrocks.catalog.IcebergTable table,
+                                          @Mocked Table iTable,
+                                          @Mocked Snapshot snapshot,
+                                          @Mocked TableScan scan) throws UserException {
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        tupleDesc.setTable(table);
+
+        setUpMock(false, table, iTable, snapshot);
+
+        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
+        scanNode.getScanRangeLocations();
+
+        List<TScanRangeLocations> result = scanNode.getScanRangeLocations(1);
+        TScanRange scanRange = result.get(0).scan_range;
+        THdfsScanRange hdfsScanRange = scanRange.hdfs_scan_range;
+        TIcebergDeleteFile deleteFile = hdfsScanRange.delete_files.get(0);
+        Assert.assertEquals(TIcebergFileContent.EQUALITY_DELETES, deleteFile.file_content);
     }
 }

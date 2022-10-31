@@ -2,7 +2,6 @@
 
 package com.starrocks.planner;
 
-import com.amazonaws.services.cloudfront.model.FieldLevelEncryption;
 import com.google.common.base.MoreObjects;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableCollection;
