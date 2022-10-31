@@ -191,10 +191,10 @@ public class IcebergScanNodeTest {
         TScanRange scanRange = result.get(0).scan_range;
         Assert.assertTrue(scanRange.isSetHdfs_scan_range());
         THdfsScanRange hdfsScanRange = scanRange.hdfs_scan_range;
-        Assert.assertEquals(hdfsScanRange.full_path, "input.orc");
-        Assert.assertEquals(hdfsScanRange.delete_files.size(), 1);
+        Assert.assertEquals("input.orc", hdfsScanRange.full_path);
+        Assert.assertEquals(1, hdfsScanRange.delete_files.size());
         TIcebergDeleteFile deleteFile = hdfsScanRange.delete_files.get(0);
-        Assert.assertEquals(deleteFile.full_path, "delete.orc");
-        Assert.assertEquals(deleteFile.file_content, TIcebergFileContent.POSITION_DELETES);
+        Assert.assertEquals("delete.orc", deleteFile.full_path);
+        Assert.assertEquals(TIcebergFileContent.POSITION_DELETES, deleteFile.file_content);
     }
 }
