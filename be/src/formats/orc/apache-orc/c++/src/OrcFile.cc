@@ -19,8 +19,9 @@
 #include "orc/OrcFile.hh"
 
 #include <fcntl.h>
-#include <string.h>
 #include <sys/stat.h>
+
+#include <cstring>
 
 #include "Utils.hh"
 #include "orc/Exceptions.hh"

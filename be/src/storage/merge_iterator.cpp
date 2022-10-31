@@ -30,7 +30,7 @@ static const size_t max_merge_chunk_size = 65536;
 // MergingChunk contains a chunk for merge and an index of compared row.
 class MergingChunk {
 public:
-    MergingChunk() {}
+    MergingChunk() = default;
     explicit MergingChunk(Chunk* chunk) : _chunk(chunk) {}
 
     size_t compared_row() const { return _compared_row; }
@@ -124,15 +124,15 @@ public:
 
     virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
-        for (int i = 0; i < _children.size(); ++i) {
-            RETURN_IF_ERROR(_children[i]->init_encoded_schema(dict_maps));
+        for (auto& i : _children) {
+            RETURN_IF_ERROR(i->init_encoded_schema(dict_maps));
         }
         return Status::OK();
     }
     virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         ChunkIterator::init_output_schema(unused_output_column_ids);
-        for (int i = 0; i < _children.size(); ++i) {
-            RETURN_IF_ERROR(_children[i]->init_output_schema(unused_output_column_ids));
+        for (auto& i : _children) {
+            RETURN_IF_ERROR(i->init_output_schema(unused_output_column_ids));
         }
         return Status::OK();
     }

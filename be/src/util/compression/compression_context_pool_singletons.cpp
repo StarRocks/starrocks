@@ -17,8 +17,7 @@
 
 #include "util/compression/compression_context_pool_singletons.h"
 
-#include <stdlib.h>
-
+#include <cstdlib>
 #include <memory>
 
 namespace starrocks::compression {

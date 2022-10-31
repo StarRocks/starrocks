@@ -43,7 +43,7 @@ public:
 
 private:
     size_t _idx = 0;
-    jlong* _jarr = 0;
+    jlong* _jarr = nullptr;
 };
 
 jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {

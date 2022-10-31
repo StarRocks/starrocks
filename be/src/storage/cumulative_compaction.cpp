@@ -13,7 +13,7 @@ namespace starrocks::vectorized {
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
 
-CumulativeCompaction::~CumulativeCompaction() {}
+CumulativeCompaction::~CumulativeCompaction() = default;
 
 Status CumulativeCompaction::compact() {
     if (!_tablet->init_succeeded()) {

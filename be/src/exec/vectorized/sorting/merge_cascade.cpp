@@ -240,14 +240,14 @@ Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
 }
 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
-                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output) {
+                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
     return merger.consume_all(std::move(output));
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   ChunkConsumer consumer) {
+                                   const ChunkConsumer& consumer) {
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());

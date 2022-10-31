@@ -14,7 +14,7 @@ namespace starrocks::lake {
 
 GeneralTabletWriter::GeneralTabletWriter(Tablet tablet) : _tablet(tablet) {}
 
-GeneralTabletWriter::~GeneralTabletWriter() {}
+GeneralTabletWriter::~GeneralTabletWriter() = default;
 
 // To developers: Do NOT perform any I/O in this method, because this method may be invoked
 // in a bthread.

@@ -211,10 +211,10 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         return Status::InternalError("Failed to allocate new chunk.");
     }
 
-    for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+    for (auto dest_slot_desc : dest_slot_descs) {
         ColumnPtr column =
-                vectorized::ColumnHelper::create_column(dest_slot_descs[i]->type(), dest_slot_descs[i]->is_nullable());
-        chunk_dst->append_column(std::move(column), dest_slot_descs[i]->id());
+                vectorized::ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
     while (!scanner_eos && chunk_dst->is_empty()) {

@@ -385,8 +385,8 @@ void ChunkHelper::reorder_chunk(const std::vector<SlotDescriptor*>& slots, vecto
     DCHECK(chunk->columns().size() == slots.size());
     auto reordered_chunk = vectorized::Chunk();
     auto& original_chunk = (*chunk);
-    for (std::size_t idx = 0; idx < slots.size(); idx++) {
-        auto slot_id = slots[idx]->id();
+    for (auto slot : slots) {
+        auto slot_id = slot->id();
         reordered_chunk.append_column(original_chunk.get_column_by_slot_id(slot_id), slot_id);
     }
     original_chunk.swap_chunk(reordered_chunk);

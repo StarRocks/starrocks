@@ -26,17 +26,17 @@ Status LambdaFunction::prepare(starrocks::RuntimeState* state, starrocks::ExprCo
     // remove current argument ids and duplicated ids from captured_slot_ids
     std::map<int, bool> captured_mask;
     int valid_id = 0;
-    for (int slot_id = 0; slot_id < _captured_slot_ids.size(); ++slot_id) {
-        if (!captured_mask[_captured_slot_ids[slot_id]]) { // not duplicated
+    for (int& _captured_slot_id : _captured_slot_ids) {
+        if (!captured_mask[_captured_slot_id]) { // not duplicated
             for (int arg_id = 0; arg_id < child_num - 1; ++arg_id) {
-                if (_captured_slot_ids[slot_id] == _arguments_ids[arg_id]) {
-                    captured_mask[_captured_slot_ids[slot_id]] = true;
+                if (_captured_slot_id == _arguments_ids[arg_id]) {
+                    captured_mask[_captured_slot_id] = true;
                 }
             }
-            if (!captured_mask[_captured_slot_ids[slot_id]]) { // not from arguments
-                _captured_slot_ids[valid_id++] = _captured_slot_ids[slot_id];
+            if (!captured_mask[_captured_slot_id]) { // not from arguments
+                _captured_slot_ids[valid_id++] = _captured_slot_id;
             }
-            captured_mask[_captured_slot_ids[slot_id]] = true;
+            captured_mask[_captured_slot_id] = true;
         }
     }
     // remove invalid elements at the tail

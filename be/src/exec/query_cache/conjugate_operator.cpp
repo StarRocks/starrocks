@@ -22,10 +22,10 @@ static inline std::string base_name_of_conjugate_op(const std::string& s) {
 }
 
 ConjugateOperator::ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence,
-                                     const pipeline::OperatorPtr& sink_op, const pipeline::OperatorPtr& source_op)
+                                     pipeline::OperatorPtr sink_op, pipeline::OperatorPtr source_op)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
-          _sink_op(sink_op),
-          _source_op(source_op) {}
+          _sink_op(std::move(sink_op)),
+          _source_op(std::move(source_op)) {}
 
 Status ConjugateOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));

@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "column/column_visitor_adapter.h"
@@ -127,8 +128,11 @@ private:
 class AppendWithMask : public ColumnVisitorMutableAdapter<AppendWithMask> {
 public:
     using SelMask = std::vector<uint8_t>;
-    AppendWithMask(vectorized::Column* column, const SelMask& sel_mask, size_t selected_size)
-            : ColumnVisitorMutableAdapter(this), _column(column), _sel_mask(sel_mask), _selected_size(selected_size) {}
+    AppendWithMask(vectorized::Column* column, SelMask sel_mask, size_t selected_size)
+            : ColumnVisitorMutableAdapter(this),
+              _column(column),
+              _sel_mask(std::move(sel_mask)),
+              _selected_size(selected_size) {}
 
     Status do_visit(vectorized::NullableColumn* column) {
         auto col = down_cast<vectorized::NullableColumn*>(_column);

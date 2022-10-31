@@ -17,8 +17,8 @@
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <fmt/core.h>
-#include <time.h>
 
+#include <ctime>
 #include <limits>
 
 #include "common/config.h"
@@ -90,14 +90,14 @@ private:
     constexpr static int kMaxItems = 8;
 
     std::mutex _lock;
-    int _items;
+    int _items{0};
     // _configs[i] is the client configuration of |_clients[i].
     ClientConfiguration _configs[kMaxItems];
     S3ClientPtr _clients[kMaxItems];
     Random _rand;
 };
 
-S3ClientFactory::S3ClientFactory() : _items(0), _rand((int)::time(NULL)) {}
+S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);

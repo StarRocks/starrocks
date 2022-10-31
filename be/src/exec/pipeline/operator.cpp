@@ -3,6 +3,7 @@
 #include "exec/pipeline/operator.h"
 
 #include <algorithm>
+#include <utility>
 
 #include "exec/exec_node.h"
 #include "gutil/strings/substitute.h"
@@ -19,9 +20,13 @@ const int32_t Operator::s_pseudo_plan_node_id_for_olap_table_sink = -98;
 const int32_t Operator::s_pseudo_plan_node_id_for_result_sink = -99;
 const int32_t Operator::s_pseudo_plan_node_id_upper_bound = -100;
 
-Operator::Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
+Operator::Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id,
                    int32_t driver_sequence)
-        : _factory(factory), _id(id), _name(name), _plan_node_id(plan_node_id), _driver_sequence(driver_sequence) {
+        : _factory(factory),
+          _id(id),
+          _name(std::move(name)),
+          _plan_node_id(plan_node_id),
+          _driver_sequence(driver_sequence) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     std::string profile_name;
@@ -206,8 +211,8 @@ void Operator::_init_conjuct_counters() {
     }
 }
 
-OperatorFactory::OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id)
-        : _id(id), _name(name), _plan_node_id(plan_node_id) {
+OperatorFactory::OperatorFactory(int32_t id, std::string name, int32_t plan_node_id)
+        : _id(id), _name(std::move(name)), _plan_node_id(plan_node_id) {
     std::string upper_name(_name);
     std::transform(upper_name.begin(), upper_name.end(), upper_name.begin(), ::toupper);
     _runtime_profile =

@@ -2,6 +2,8 @@
 
 #include "runtime/global_dict/decoder.h"
 
+#include <utility>
+
 #include "column/column_builder.h"
 #include "column/type_traits.h"
 #include "gutil/casts.h"
@@ -17,7 +19,7 @@ public:
     using ResultColumnType = RunTimeColumnType<result_type>;
     using ColumnType = RunTimeColumnType<type>;
 
-    GlobalDictDecoderBase(const Dict& dict) : _dict(dict) {}
+    GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
     Status decode(vectorized::Column* in, vectorized::Column* out) override;
 

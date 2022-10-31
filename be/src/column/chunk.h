@@ -29,8 +29,8 @@ public:
 
     Chunk();
     Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, const SlotHashMap& slot_map);
-    Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map);
+    Chunk(Columns columns, SlotHashMap slot_map);
+    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;

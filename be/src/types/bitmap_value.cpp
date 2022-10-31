@@ -45,7 +45,7 @@ static void get_only_value_to_set_and_common_value_to_bitmap(const phmap::flat_h
     }
 }
 
-BitmapValue::BitmapValue() {}
+BitmapValue::BitmapValue() = default;
 
 BitmapValue::BitmapValue(BitmapValue&& other) noexcept
         : _bitmap(std::move(other._bitmap)), _set(std::move(other._set)), _sv(other._sv), _type(other._type) {

@@ -15,7 +15,7 @@ MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t
     DCHECK_EQ(processors.size(), _num_lanes);
     _lanes.reserve(_num_lanes);
     for (auto i = 0; i < _num_lanes; ++i) {
-        _lanes.push_back(Lane(std::move(processors[i]), i));
+        _lanes.emplace_back(std::move(processors[i]), i);
     }
 }
 
@@ -245,8 +245,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
         }
     }
 
-    for (int i = 0; i < _lanes.size(); ++i) {
-        auto& lane = _lanes[i];
+    for (auto& lane : _lanes) {
         auto chunk = _pull_chunk_from_lane(state, lane, passthrough_mode);
         if (!chunk.ok() || chunk.value() != nullptr) {
             return chunk;

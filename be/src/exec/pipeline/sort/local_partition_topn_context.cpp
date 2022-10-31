@@ -12,7 +12,7 @@ namespace starrocks::pipeline {
 
 LocalPartitionTopnContext::LocalPartitionTopnContext(
         const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
-        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset,
+        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
         int64_t partition_limit, const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
         TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
         const RowDescriptor& parent_node_child_row_desc)
@@ -20,7 +20,7 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
           _is_null_first(std::move(is_null_first)),
-          _sort_keys(sort_keys),
+          _sort_keys(std::move(sort_keys)),
           _offset(offset),
           _partition_limit(partition_limit),
           _topn_type(topn_type),
@@ -132,7 +132,7 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_so
 LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
         const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-        const std::string& sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type,
+        std::string sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type,
         const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
         const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc)
         : _ctxs(degree_of_parallelism),
@@ -140,7 +140,7 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
           _is_null_first(std::move(is_null_first)),
-          _sort_keys(sort_keys),
+          _sort_keys(std::move(sort_keys)),
           _offset(offset),
           _partition_limit(partition_limit),
           _topn_type(topn_type),
