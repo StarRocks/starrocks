@@ -16,6 +16,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.external.ObjectStorageUtils;
 import com.starrocks.external.hive.text.TextFileFormatDesc;
+import com.starrocks.qe.ConnectContext;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -414,7 +415,7 @@ public class HiveMetaClient {
                                                                              boolean isHudiTable)
             throws DdlException {
         // calculate partition names
-        List<String> partNames = Lists.newArrayListWithCapacity(partitionKeys.size());
+        List<String> partNames = Lists.newArrayList();
         List<String> partColumnNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
         for (PartitionKey partitionKey : partitionKeys) {
             partNames.add(FileUtils.makePartName(partColumnNames, Utils.getPartitionValues(partitionKey, isHudiTable)));
@@ -425,6 +426,14 @@ public class HiveMetaClient {
         Map<String, Long> partRowNumbers = Maps.newHashMapWithExpectedSize(partNames.size());
         long tableRowNumber = 0L;
         List<Partition> partitions;
+        if (ConnectContext.get() != null) {
+            int partNameSize = partNames.size();
+            int sampleSize = ConnectContext.get().getSessionVariable().getHivePartitionStatsSampleSize();
+            if (partNameSize > sampleSize) {
+                partNames = partNames.subList(0, sampleSize);
+            }
+        }
+
         try (AutoCloseClient client = getClient()) {
             partitions = client.hiveClient.getPartitionsByNames(dbName, tableName, partNames);
         } catch (TTransportException te) {
