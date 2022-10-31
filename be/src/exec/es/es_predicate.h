@@ -25,15 +25,20 @@
 #include <vector>
 
 #include "cctz/time_zone.h"
+<<<<<<< HEAD
 #include "column/column.h"
 #include "column/column_viewer.h"
 #include "column/const_column.h"
+=======
+#include "column/vectorized_fwd.h"
+>>>>>>> 45bd77945 ([Feature] Make ES supports custom timezone. (#12662))
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "types/date_value.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -50,6 +55,7 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
+<<<<<<< HEAD
     VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column) {
         DCHECK(!column->empty());
         // We need to convert the predicate column into the corresponding string.
@@ -78,6 +84,11 @@ public:
             _value = _value_to_string(column);
         }
     }
+=======
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column,
+                const std::string& timezone = TimezoneUtils::default_time_zone);
+
+>>>>>>> 45bd77945 ([Feature] Make ES supports custom timezone. (#12662))
     VExtLiteral() = default;
     const std::string& to_string() const override { return _value; }
 
@@ -163,7 +174,7 @@ struct ExtFunction : public ExtPredicate {
 
 class EsPredicate {
 public:
-    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
+    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
     Status build_disjuncts_list(bool use_vectorized = true);
@@ -189,6 +200,7 @@ private:
     const TupleDescriptor* _tuple_desc = nullptr;
     std::vector<ExtPredicate*> _disjuncts;
     Status _es_query_status;
+    const std::string _timezone;
     ObjectPool* _pool = nullptr;
     std::map<std::string, std::string> _field_context;
 };
