@@ -15,13 +15,13 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 ## 前提条件
 
-在创建 Hive catalog 前，您需要StarRocks 中进行相应的配置，以便能够访问 Hive 的存储系统和元数据服务。StarRocks 当前支持的 Hive 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hive 元数据服务为 Hive metastore。
+在创建 Hive catalog 前，您需要 StarRocks 中进行相应的配置，以便能够访问 Hive 的存储系统和元数据服务。StarRocks 当前支持的 Hive 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hive 元数据服务为 Hive metastore。
 
 ### HDFS
 
 如使用 HDFS 作为存储系统，则需要在 StarRocks 中做如下配置。
 
-- （可选）设置 StarRocks 访问 HDFS 和 Hive metastore 的用户名。 您可以在每个 FE 的**fe/conf/hadoop_env.sh** 和每个 BE 的 **be/conf/hadoop_env.sh** 文件中通过配置`HADOOP_USERNAME`来设置该用户名，设置后重启各个 FE 和 BE 生效。如不设置，则默认使用 FE 和 BE 进程的用户名进行访问。
+- （可选）设置 StarRocks 访问 HDFS 和 Hive metastore 的用户名。 您可以在每个 FE 的 **fe/conf/hadoop_env.sh** 和每个 BE 的 **be/conf/hadoop_env.sh** 文件中通过配置 `HADOOP_USERNAME` 来设置该用户名，设置后重启各个 FE 和 BE 生效。如不设置，则默认使用 FE 和 BE 进程的用户名进行访问。
 
   > 注意：一个 StarRocks 集群仅支持配置一个用户名。
 
@@ -36,7 +36,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 如 HDFS 或 Hive metastore 开启了 Kerberos 认证，则需要在 StarRocks 中做如下配置。
 
 - 在每个 FE 和 每个 BE 机器上执行 `kinit -kt keytab_path principal` 命令从 Key Distribution Center (KDC) 获取到 Ticket Granting Ticket。注意使用该命令访问 KDC 具有时效性，所以需要使用 cron 定期执行该命令。执行命令的用户需要有访问 Hive metastore 和 HDFS 的权限。
-- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中设置`JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可修改。
+- 在每个 FE 的 **$FE_HOME/conf/fe.conf** 和每个 BE 的 **$BE_HOME/conf/be.conf** 文件中设置 `JAVA_OPTS="-Djava.security.krb5.conf=/etc/krb5.conf"`。其中 `/etc/krb5.conf` 是 **krb5.conf** 文件的路径，可修改。
 
 ### Amazon S3
 
@@ -88,9 +88,9 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
       | **配置项**                       | **说明**                                                     |
       | -------------------------------- | ------------------------------------------------------------ |
-      | object_storage_access_key_id     | AWS 根用户或 IAM 用户的 access key ID，取值和`fs.s3a.access.key`相同。 |
-      | object_storage_secret_access_key | AWS 根用户或 IAM 用户的 secret access key，取值和`fs.s3a.secret.key`相同。 |
-      | object_storage_endpoint          | Amazon S3 服务所在地域的 endpoint，取值和`fs.s3a.endpoint`相同。 |
+      | object_storage_access_key_id     | AWS 根用户或 IAM 用户的 access key ID，取值和 `fs.s3a.access.key` 相同。 |
+      | object_storage_secret_access_key | AWS 根用户或 IAM 用户的 secret access key，取值和 `fs.s3a.secret.key` 相同。 |
+      | object_storage_endpoint          | Amazon S3 服务所在地域的 endpoint，取值和 `fs.s3a.endpoint` 相同。 |
 
 4. 重启所有 FE 和 BE。
 
@@ -144,9 +144,9 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
       | **配置项**                       | **说明**                                                     |
       | -------------------------------- | ------------------------------------------------------------ |
-      | object_storage_access_key_id     | COS 永久密钥的 SecretId，取值和`fs.s3a.access.key`相同。     |
-      | object_storage_secret_access_key | COS 永久密钥的 SecretKey，取值和`fs.s3a.secret.key`相同。   |
-      | object_storage_endpoint          | COS 存储桶所在地域对应的 endpoint，取值和`fs.s3a.endpoint`相同。 |
+      | object_storage_access_key_id     | COS 永久密钥的 SecretId，取值和 `fs.s3a.access.key` 相同。     |
+      | object_storage_secret_access_key | COS 永久密钥的 SecretKey，取值和 `fs.s3a.secret.key` 相同。   |
+      | object_storage_endpoint          | COS 存储桶所在地域对应的 endpoint，取值和 `fs.s3a.endpoint` 相同。 |
       | object_storage_region            | COS 存储桶所在的地域简称。详细说明，请参见[地域和访问域名](https://cloud.tencent.com/document/product/436/6224)。 |
 
 4. 重启所有 FE 和 BE。
@@ -219,7 +219,7 @@ PROPERTIES ("key"="value", ...);
 
     | **参数**            | **必选** | **说明**                                                     |
     | ------------------- | -------- | ------------------------------------------------------------ |
-    | type                | 是       | 数据源类型，取值为`hive`。                                   |
+    | type                | 是       | 数据源类型，取值为 `hive`。                                   |
     | hive.metastore.uris | 是       | Hive metastore 的 URI。格式为 `thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
 > 注意
@@ -238,16 +238,16 @@ StarRocks 需要利用 Hive 表的元数据来进行查询规划，因此请求�
 
 #### 原理
 
-如查询命中 Hive 表的某个分区，StarRocks 会自动异步缓存该分区的元数据。缓存的元数据采用的是“懒更新策略”，即如果查询命中该分区，且距离上一次更新已经超过默认间隔时间，那么 StarRock 会异步更新缓存分区元数据，否则不会更新。更新的默认间隔时间由`hive_meta_cache_refresh_interval_s`参数控制，默认值为 `7200`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
+如查询命中 Hive 表的某个分区，StarRocks 会自动异步缓存该分区的元数据。缓存的元数据采用的是“懒更新策略”，即如果查询命中该分区，且距离上一次更新已经超过默认间隔时间，那么 StarRock 会异步更新缓存分区元数据，否则不会更新。更新的默认间隔时间由 `hive_meta_cache_refresh_interval_s` 参数控制，默认值为 `7200`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
 
-如超过默认间隔时间，该分区元数据依旧没有更新，则默认缓存的分区元数据失效。在下次查询时，会重新缓存该分区元数据。元数据缓存失效的时间由`hive_meta_cache_ttl_s`参数控制，默认值为`86400`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
+如超过默认间隔时间，该分区元数据依旧没有更新，则默认缓存的分区元数据失效。在下次查询时，会重新缓存该分区元数据。元数据缓存失效的时间由 `hive_meta_cache_ttl_s` 参数控制，默认值为 `86400`，单位：秒。您可在每个 FE 的 **fe.conf** 文件中设置该参数，设置后重启各个 FE 生效。
 
 #### 示例
 
-有一张 Hive 表`table1`，其包含 4 个分区：`p1`、`p2`、`p3`和`p4`。如查询命中分区 `p1`，那么 StarRocks 会自动异步缓存 `p1` 的元数据。如维护更新的间隔时间为 1 小时，则后续更新有以下几种情况：
+有一张 Hive 表 `table1`，其包含 4 个分区：`p1`、`p2`、`p3` 和 `p4`。如查询命中分区 `p1`，那么 StarRocks 会自动异步缓存 `p1` 的元数据。如维护更新的间隔时间为 1 小时，则后续更新有以下几种情况：
 
-- 如查询命中`p1`，且当前时间距离上一次更新超过 1 小时，StarRock 会异步更新缓存的`p1`元数据。
-- 如查询命中`p1`，且当前时间距离上一次更新没有超过 1 小时，StarRock 不会异步更新缓存的`p1`元数据。
+- 如查询命中 `p1`，且当前时间距离上一次更新超过 1 小时，StarRock 会异步更新缓存的 `p1` 元数据。
+- 如查询命中 `p1`，且当前时间距离上一次更新没有超过 1 小时，StarRock 不会异步更新缓存的 `p1` 元数据。
 
 #### 手动更新
 
@@ -266,7 +266,7 @@ StarRocks 需要利用 Hive 表的元数据来进行查询规划，因此请求�
     [PARTITION ('partition_name', ...)];
     ```
 
-有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。注意只有拥有`ALTER_PRIV`权限的用户才可以手动更新元数据。
+有关 REFRESH EXTERNAL TABEL 语句的参数说明和示例，请参见 [REFRESH EXTERNAL TABEL](/sql-reference/sql-statements/data-definition/REFRESH%20EXTERNAL%20TABLE.md)。注意只有拥有 `ALTER_PRIV` 权限的用户才可以手动更新元数据。
 
 ### 元数据自动增量更新
 
@@ -318,10 +318,10 @@ Event listener 可以对 Hive metastore 中的 event（例如增减分区、增�
 | **参数**                           | **说明**                                                    |
 | ---------------------------------- | ----------------------------------------------------------- |
 | enable_hms_events_incremental_sync | 是否开启元数据自动增量同步功能，取值包括：<ul><li>`TRUE`：表示开启，为默认值。</li> <li>`FALSE`：表示未开启。</li></ul>|
-| hms_events_polling_interval_ms     | StarRocks 读取 event 的间隔时间，默认值为`5`，单位：秒。    |
-| hms_events_batch_size_per_rpc      | StarRocks 每次读取 event 的最大数量，默认值为`500`。        |
+| hms_events_polling_interval_ms     | StarRocks 读取 event 的间隔时间，默认值为 `5`，单位：秒。    |
+| hms_events_batch_size_per_rpc      | StarRocks 每次读取 event 的最大数量，默认值为 `500`。        |
 | enable_hms_parallel_process_evens  | 是否并行处理读取的 event ，取值包括：<ul><li>`TRUE`：表示并行处理，为默认值。</li><li>`FALSE`：表示不并行处理。</li></ul>  |
-| hms_process_events_parallel_num    | 每次处理 event 的并发数，默认值为`4`。                      |
+| hms_process_events_parallel_num    | 每次处理 event 的并发数，默认值为 `4`。                      |
 
 ## 下一步
 
