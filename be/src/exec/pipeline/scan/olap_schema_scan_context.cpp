@@ -13,6 +13,7 @@ namespace pipeline {
 Status OlapSchemaScanContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(&_obj_pool, _tnode.conjuncts, &_conjunct_ctxs));
     RETURN_IF_ERROR(Expr::prepare(_conjunct_ctxs, state));
+    RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
     RETURN_IF_ERROR(_prepare_params(state));
     return Status::OK();
 }
