@@ -10,7 +10,7 @@
 
 1. 连接 StarRocks。
    - 如从 MySQL 客户端连接到 StarRocks。连接后，默认进入到 `default_catalog`。
-   - 如使用 JDBC 连接到 StarRocks，连接时即可通过`default_catalog.db_name`的方式指定要连接的数据库。
+   - 如使用 JDBC 连接到 StarRocks，连接时即可通过 `default_catalog.db_name` 的方式指定要连接的数据库。
 
 2. （可选）执行以下语句查看当前 StarRocks 集群中的所有 catalog 并找到指定的 external catalog。有关返回值说明，请参见 [SHOW CATALOGS](/sql-reference/sql-statements/data-manipulation/SHOW%20CATALOGS.md)。
 
@@ -34,15 +34,15 @@
 
 ## 示例
 
-创建一个名为`hive1`的 Hive catalog 。如需通过`hive1`查询 Apache Hive™ 集群中`hive_db.hive_table`的数据，操作如下：
+创建一个名为 `hive1` 的 Hive catalog 。如需通过 `hive1` 查询 Apache Hive™ 集群中 `hive_db.hive_table` 的数据，操作如下：
 
-1. 将当前会话切换到`hive1.hive_db`。
+1. 将当前会话切换到 `hive1.hive_db`。
 
     ```SQL
     USE hive1.hive_db;
     ```
 
-2. 查询`hive_tabel`表中的数据。
+2. 查询 `hive_tabel` 表中的数据。
 
     ```SQL
     SELECT * FROM hive_table limit 1;
