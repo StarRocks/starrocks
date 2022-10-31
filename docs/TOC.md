@@ -47,7 +47,7 @@
   + Index
     + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
     + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
-  + Count distinct
+  + Computing the Number of Distinct Values
     + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
     + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Administration
