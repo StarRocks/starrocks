@@ -195,7 +195,6 @@ private:
     Status _es_query_status;
     const std::string _timezone;
     ObjectPool* _pool;
-    ObjectPool* _pool = nullptr;
     std::map<std::string, std::string> _field_context;
 };
 
