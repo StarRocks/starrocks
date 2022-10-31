@@ -450,36 +450,36 @@ HdfsScannerContext* FileReaderTest::_create_file6_base_context() {
 }
 
 HdfsScannerContext* FileReaderTest::_create_file_map_base_context() {
-        auto ctx = _create_scan_context();
+    auto ctx = _create_scan_context();
 
-        TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
-        type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-        type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
 
-        TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
-        type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-        type_map_map.children.emplace_back(type_map);
+    TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
+    type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_map.children.emplace_back(type_map);
 
-        TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
-        type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
-        TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
-        type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
-        type_map_array.children.emplace_back(type_array);
+    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
+    type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_array.children.emplace_back(type_array);
 
-        // tuple desc
-        SlotDesc slot_descs[] = {
-                {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
-                {"c2", type_map},
-                {"c3", type_map_map},
-                {"c4", type_map_array},
-                {""},
-        };
-        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
-        ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
+    // tuple desc
+    SlotDesc slot_descs[] = {
+            {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+            {"c2", type_map},
+            {"c3", type_map_map},
+            {"c4", type_map_array},
+            {""},
+    };
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
 
-        return ctx;
-    }
+    return ctx;
+}
 
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
@@ -945,7 +945,6 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     EXPECT_EQ(chunk->debug_row(4), "[5, [[1, 2, 3], [4, 5]]]");
 }
 
-
 TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
     auto file = _create_file(_file6_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
@@ -1016,7 +1015,8 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     }
     EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->0, 'k2'->1], ['e1'->['f1'->1, 'f2'->2]], ['g1'->[1, 2]]]");
     EXPECT_EQ(chunk->debug_row(1),
-              "[2, ['k1'->1, 'k3'->2, 'k4'->3], ['e1'->['f1'->1, 'f2'->2], 'e2'->['f1'->1, 'f2'->2]], ['g1'->[1], 'g3'->[2]]]");
+              "[2, ['k1'->1, 'k3'->2, 'k4'->3], ['e1'->['f1'->1, 'f2'->2], 'e2'->['f1'->1, 'f2'->2]], ['g1'->[1], "
+              "'g3'->[2]]]");
     EXPECT_EQ(chunk->debug_row(2),
               "[3, ['k2'->2, 'k3'->3, 'k5'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g1'->[1, 2, 3]]]");
     EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->3, 'k2'->4, 'k3'->5], ['e2'->['f2'->2]], ['g1'->[1]]]");

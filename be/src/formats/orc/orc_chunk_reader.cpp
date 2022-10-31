@@ -1248,7 +1248,12 @@ Status OrcChunkReader::_init_position_in_orc() {
 
         if (slot_desc == nullptr) continue;
         auto it = _name_to_column_id.find(slot_desc->col_name());
-        DCHECK(it != _name_to_column_id.end());
+        if (it == _name_to_column_id.end()) {
+            auto s = strings::Substitute(
+                    "OrcChunkReader::init_position_in_orc. failed to find position. col_name = $0, file = $1",
+                    slot_desc->col_name(), _current_file_name);
+            return Status::NotFound(s);
+        }
         int col_id = it->second;
         auto it2 = column_id_to_pos.find(col_id);
         if (it2 == column_id_to_pos.end()) {
