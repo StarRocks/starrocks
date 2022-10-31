@@ -220,11 +220,13 @@ public:
         }
 
         if (_sync_on_close) {
-            Status sync_status = sync();
-            if (!sync_status.ok()) {
-                LOG(ERROR) << "Unable to Sync " << _filename << ": " << sync_status.to_string();
-                if (s.ok()) {
-                    s = sync_status;
+            if (config::sync_tablet_meta) {
+                Status sync_status = sync();
+                if (!sync_status.ok()) {
+                    LOG(ERROR) << "Unable to Sync " << _filename << ": " << sync_status.to_string();
+                    if (s.ok()) {
+                        s = sync_status;
+                    }
                 }
             }
         }
@@ -261,9 +263,7 @@ public:
     Status sync() override {
         if (_pending_sync) {
             _pending_sync = false;
-            if (config::sync_tablet_meta) {
-                RETURN_IF_ERROR(do_sync(_fd, _filename));
-            }
+            RETURN_IF_ERROR(do_sync(_fd, _filename));
         }
         return Status::OK();
     }
