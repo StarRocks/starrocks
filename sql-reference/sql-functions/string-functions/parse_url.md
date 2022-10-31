@@ -14,7 +14,7 @@ parse_url(expr1,expr2);
 
 `expr1`: 支持的数据类型为 VARCHAR。
 
-`expr2`: 支持的数据类型为 VARCHAR，可为 PROTOCOL、HOST、 PATH、 REF、 AUTHORITY、 FILE、 USERINFO、 QUERY(不支持返回 QUERY 里面的特定参数)。
+`expr2`: 支持的数据类型为 VARCHAR，可为 PROTOCOL、HOST、 PATH、 REF、 AUTHORITY、 FILE、 USERINFO、 QUERY（不支持返回 QUERY 里面的特定参数）。
 
 ## 返回值说明
 
