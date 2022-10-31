@@ -15,7 +15,7 @@ Roaring Bitmap 实现，细节可以参考：[具体论文和实现](https://git
 
 1. Bitmap index 和 Bitmap 去重二者虽然都使用 Bitmap 技术， 但引入动机和解决的问题完全不同。前者用于低基数的枚举型列的等值条件过滤，后者则用于计算一组数据行的指标列的不重复元素的个数。
 2. 从2.3版本开始，所有数据模型的指标列均支持 BITMAP，但是所有模型的排序键还不支持 BITMAP。
-3. 创建表时指定指标列的数据类型为 ·BITMAP， 聚合函数为 BITMAP_UNION。
+3. 创建表时指定指标列的数据类型为 BITMAP， 聚合函数为 BITMAP_UNION。
 4. 当在 Bitmap 类型列上使用 count distinct 时，StarRocks 会自动转化为 BITMAP_UNION_COUNT 计算。
 
 具体操作函数参见 [Bitmap函数](../sql-reference/sql-functions/bitmap-functions/bitmap_and.md)。
