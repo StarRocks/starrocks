@@ -96,11 +96,10 @@ private:
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;
-    bool _probe_row_matched = false;         // For multi build-chunk, whether this probe row matched any join conjuncts
-    bool _probe_row_finished = false;        // For multi build-chunk, whether this probe row is the last
-    bool _probe_row_semianti_emited = false; // Guarantee emit probe row only once for semi-join
-    size_t _probe_row_start = 0;             // Start index of current chunk
-    size_t _probe_row_current = 0;           // End index of current chunk
+    bool _probe_row_matched = false;  // For multi build-chunk, whether this probe row matched any join conjuncts
+    bool _probe_row_finished = false; // For multi build-chunk, whether this probe row is the last
+    size_t _probe_row_start = 0;      // Start index of current chunk
+    size_t _probe_row_current = 0;    // End index of current chunk
 
     // Counters
     RuntimeProfile::Counter* _permute_rows_counter = nullptr;
