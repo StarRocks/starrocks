@@ -30,8 +30,9 @@ import java.util.List;
  * Therefore, our join execution cost calculation model should consider parameters such as join execution mode,
  * parallelism, and left and right table size. The most important thing in the model is the evaluation of the
  * probe cost for each row. When the size of the right table is greater than bottom_number, the average probe
- * cost needs to be expanded. The parallel computing characteristics of shuffle join can offset part of the
- * probe cost. We also set an upper limit on the probe cost to avoid cost distortion caused by huge table.
+ * cost needs to be expanded by multiply a penalty factor. The parallel computing characteristics of shuffle
+ * join can offset part of the probe cost. We also set an upper limit on the probe cost to avoid cost distortion
+ * caused by huge table.
  */
 public class HashJoinCostModel {
 
@@ -111,23 +112,23 @@ public class HashJoinCostModel {
                 keySize += context.getChildStatistics(1).getColumnStatistic(rightCol).getAverageRowSize();
             }
         }
-        double degradeRatio;
+        double cachePenaltyFactor;
         int parallelFactor = Math.max(ConnectContext.get().getAliveBackendNumber(),
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 
         if (JoinExecMode.BROADCAST == execMode) {
-            degradeRatio = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
+            cachePenaltyFactor = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
             // normalize ration when it hits the limit
-            degradeRatio = Math.min(BROADCAST_MAT_RATIO, degradeRatio);
+            cachePenaltyFactor = Math.min(BROADCAST_MAT_RATIO, cachePenaltyFactor);
         } else {
-            degradeRatio = Math.max(1, (Math.log(mapSize / BOTTOM_NUMBER) -
+            cachePenaltyFactor = Math.max(1, (Math.log(mapSize / BOTTOM_NUMBER) -
                     Math.log(parallelFactor) / Math.log(2)));
             // normalize ration when it hits the limit
-            degradeRatio = Math.min(SHUFFLE_MAX_RATIO, degradeRatio);
+            cachePenaltyFactor = Math.min(SHUFFLE_MAX_RATIO, cachePenaltyFactor);
         }
-        LOG.debug("execMode: {}, degradeRatio: {}", execMode, degradeRatio);
-        return degradeRatio;
+        LOG.debug("execMode: {}, cachePenaltyFactor: {}", execMode, cachePenaltyFactor);
+        return cachePenaltyFactor;
     }
 
     private JoinExecMode deriveJoinExecMode() {
