@@ -101,5 +101,31 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         } catch (NoSuchElementException e) {
             Assert.assertTrue(false);
         }
+
+        CallOperator countStar = new CallOperator(FunctionSet.COUNT, Type.BIGINT, Lists.newArrayList());
+        aggregates.clear();
+        ColumnRefOperator countStarkey = tmpRefFactory.create("countStar", Type.BIGINT, false);
+        aggregates.put(countStarkey, countStar);
+        LogicalAggregationOperator aggregationOperator2 = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
+        OptExpression aggExpr2 = OptExpression.create(aggregationOperator2);
+        MaterializedViewRewriter rewriter2 = new MaterializedViewRewriter();
+        try {
+            rewriter2.rewrite(aggExpr2, rewriteContext);
+        } catch (NoSuchElementException e) {
+            Assert.assertTrue(false);
+        }
+
+        CallOperator sumDs = new CallOperator(FunctionSet.SUM, Type.BIGINT, arguments);
+        aggregates.clear();
+        ColumnRefOperator sumKey = tmpRefFactory.create("sumKey", Type.BIGINT, false);
+        aggregates.put(sumKey, sumDs);
+        LogicalAggregationOperator aggregationOperator3 = new LogicalAggregationOperator(AggType.GLOBAL, groupKeys, aggregates);
+        OptExpression aggExpr3 = OptExpression.create(aggregationOperator3);
+        MaterializedViewRewriter rewriter3 = new MaterializedViewRewriter();
+        try {
+            rewriter3.rewrite(aggExpr3, rewriteContext);
+        } catch (NoSuchElementException e) {
+            Assert.assertTrue(false);
+        }
     }
 }
