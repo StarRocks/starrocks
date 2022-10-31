@@ -117,7 +117,7 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, std::string  timezone,
+EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, std::string timezone,
                          ObjectPool* pool)
         : _context(context),
           _tuple_desc(tuple_desc),

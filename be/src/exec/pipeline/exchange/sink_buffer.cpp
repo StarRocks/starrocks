@@ -2,12 +2,9 @@
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
-#include <chrono>
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <chrono>
 
 #include "fmt/core.h"
 #include "util/time.h"

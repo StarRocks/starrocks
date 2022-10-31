@@ -21,16 +21,14 @@
 
 #pragma once
 
+#include <rapidjson/document.h>
+
 #include <string>
 #include <vector>
 
 #include "common/compiler_util.h"
 #include "common/status.h"
 #include "exec/es/es_predicate.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/document.h>
-DIAGNOSTIC_POP
 
 namespace starrocks {
 

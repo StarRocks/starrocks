@@ -2,14 +2,11 @@
 
 #include "udf/java/utils.h"
 
+#include <bthread/bthread.h>
+
 #include <memory>
 
 #include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/bthread.h>
-DIAGNOSTIC_POP
-
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "runtime/current_thread.h"

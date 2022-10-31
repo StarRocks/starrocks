@@ -495,7 +495,7 @@ public:
     using CppType = typename CppTypeTraits<int_type>::CppType;
 
     IntegerToDateV2TypeConverter() = default;
-    virtual virtual ~IntegerToDateV2TypeConverter() = default;
+    virtual ~IntegerToDateV2TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         auto src_value = unaligned_load<CppType>(src);
@@ -531,7 +531,7 @@ public:
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalTypeConverter() = default;
-    virtual virtual virtual virtual virtual ~DecimalTypeConverter() = default;
+    virtual ~DecimalTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -558,7 +558,7 @@ public:
     using DstCppType = typename CppTypeTraits<DstType>::CppType;
 
     DecimalV3TypeConverter() = default;
-    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~DecimalV3TypeConverter() = default;
+    virtual ~DecimalV3TypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -586,7 +586,7 @@ public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     StringToOtherTypeConverter() = default;
-    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~StringToOtherTypeConverter() = default;
+    virtual ~StringToOtherTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -651,7 +651,7 @@ public:
     using CppType = typename CppTypeTraits<Type>::CppType;
 
     OtherToStringTypeConverter() = default;
-    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~OtherToStringTypeConverter() = default;
+    virtual ~OtherToStringTypeConverter() = default;
 
     Status convert(void* dst, const void* src, MemPool* memPool) const override {
         return Status::InternalError("missing implementation");
@@ -982,7 +982,7 @@ template <typename SrcType>
 class BitMapTypeConverter : public MaterializeTypeConverter {
 public:
     BitMapTypeConverter() = default;
-    virtual virtual virtual virtual virtual virtual virtual virtual virtual ~BitMapTypeConverter() = default;
+    virtual ~BitMapTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1013,7 +1013,7 @@ template <typename SrcType>
 class HLLTypeConverter : public MaterializeTypeConverter {
 public:
     HLLTypeConverter() = default;
-    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~HLLTypeConverter() = default;
+    virtual ~HLLTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1040,7 +1040,7 @@ template <typename SrcType>
 class PercentileTypeConverter : public MaterializeTypeConverter {
 public:
     PercentileTypeConverter() = default;
-    virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual virtual ~PercentileTypeConverter() = default;
+    virtual ~PercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {
@@ -1066,7 +1066,7 @@ class DecimalToPercentileTypeConverter : public MaterializeTypeConverter {
 public:
     using CppType = typename CppTypeTraits<SrcType>::CppType;
     DecimalToPercentileTypeConverter() = default;
-    virtual virtual virtual virtual ~DecimalToPercentileTypeConverter() = default;
+    virtual ~DecimalToPercentileTypeConverter() = default;
 
     Status convert_materialized(ColumnPtr src_col, ColumnPtr dst_col, TypeInfo* src_type) const override {
         for (size_t row_index = 0; row_index < src_col->size(); ++row_index) {

@@ -2,16 +2,13 @@
 
 #include "storage/lake/tablet_manager.h"
 
-#include <variant>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <variant>
 
 #include "agent/agent_server.h"
 #include "agent/master_info.h"
+#include "common/compiler_util.h"
 #include "fmt/format.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"

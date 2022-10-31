@@ -10,7 +10,7 @@ namespace starrocks {
 
 class ArrayTypeInfo final : public TypeInfo {
 public:
-virtual ~ArrayTypeInfo() = default;
+    virtual ~ArrayTypeInfo() = default;
     explicit ArrayTypeInfo(const TypeInfoPtr& item_type_info)
             : _item_type_info(item_type_info), _item_size(item_type_info->size()) {}
 

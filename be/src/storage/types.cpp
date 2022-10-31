@@ -90,7 +90,7 @@ int TypeInfo::cmp(const Datum& left, const Datum& right) const {
 
 class ScalarTypeInfo final : public TypeInfo {
 public:
-virtual ~ScalarTypeInfo() = default;
+    virtual ~ScalarTypeInfo() = default;
     bool equal(const void* left, const void* right) const override { return _equal(left, right); }
 
     int cmp(const void* left, const void* right) const override { return _cmp(left, right); }
