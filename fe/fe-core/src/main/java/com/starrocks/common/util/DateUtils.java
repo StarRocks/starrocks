@@ -13,34 +13,21 @@ import java.time.temporal.ChronoField;
 import java.time.temporal.TemporalAccessor;
 
 public class DateUtils {
-    public static final String DATEKEY_FORMAT = "yyyyMMdd";
-    public static final String DATE_FORMAT = "yyyy-MM-dd";
-    public static final String DATE_TIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
-    public static final String SECOND_FORMAT = "yyyyMMddHHmmss";
-    public static final String MINUTE_FORMAT = "yyyyMMddHHmm";
-    public static final String HOUR_FORMAT = "yyyyMMddHH";
-    public static final String MONTH_FORMAT = "yyyyMM";
-    public static final String QUARTER_FORMAT = "yyyy'Q'q";
-    public static final String YEAR_FORMAT = "yyyy";
-
-    public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern(DATE_FORMAT);
-    public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern(DATEKEY_FORMAT);
-    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern(DATE_TIME_FORMAT);
-    public static final DateTimeFormatter SECOND_FORMATTER = DateTimeFormatter.ofPattern(SECOND_FORMAT);
-    public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern(MINUTE_FORMAT);
-    public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern(HOUR_FORMAT);
-    public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern(YEAR_FORMAT);
-    public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern(QUARTER_FORMAT);
-    public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern(MONTH_FORMAT);
+    public static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd");
+    public static final DateTimeFormatter DATEKEY_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
+    public static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+    public static final DateTimeFormatter MINUTE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
+    public static final DateTimeFormatter HOUR_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMddHH");
+    public static final DateTimeFormatter YEAR_FORMATTER = DateTimeFormatter.ofPattern("yyyy");
+    public static final DateTimeFormatter QUARTER_FORMATTER = DateTimeFormatter.ofPattern("yyyy'Q'q");
+    public static final DateTimeFormatter MONTH_FORMATTER = DateTimeFormatter.ofPattern("yyyyMM");
 
     public static final DateTimeFormatter DATE_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d").toFormatter();
     public static final DateTimeFormatter DATE_TIME_FORMATTER_UNIX =
             DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s").toFormatter();
-    public static final DateTimeFormatter DATEKEY_FORMATTER_UNIX =
-            DateUtils.unixDatetimeFormatBuilder("%Y%m%d").toFormatter();
-    public static final DateTimeFormatter DATETIMEKEY_FORMATTER_UNIX =
-            DateUtils.unixDatetimeFormatBuilder("%Y%m%d%H%i%s").toFormatter();
+    public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX =
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f").toFormatter();
 
     public static DateTimeFormatter probeFormat(String dateTimeStr) throws AnalysisException {
         if (dateTimeStr.length() == 8) {
@@ -71,7 +58,7 @@ public class DateUtils {
         return unixDatetimeFormatBuilder(pattern, true);
     }
 
-    public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern, boolean padMs) {
+    public static DateTimeFormatterBuilder unixDatetimeFormatBuilder(String pattern, boolean isOutputFormat) {
         DateTimeFormatterBuilder builder = new DateTimeFormatterBuilder();
         boolean escaped = false;
         for (int i = 0; i < pattern.length(); i++) {
@@ -82,10 +69,18 @@ public class DateUtils {
                         builder.appendValue(ChronoField.MONTH_OF_YEAR, 1, 2, SignStyle.NORMAL);
                         break;
                     case 'm': // %m Month, numeric (00..12)
-                        builder.appendValue(ChronoField.MONTH_OF_YEAR, 2);
+                        if (isOutputFormat) {
+                            builder.appendValue(ChronoField.MONTH_OF_YEAR, 2);
+                        } else {
+                            builder.appendValue(ChronoField.MONTH_OF_YEAR, 1, 2, SignStyle.NORMAL);
+                        }
                         break;
                     case 'd': // %d Day of the month, numeric (00..31)
-                        builder.appendValue(ChronoField.DAY_OF_MONTH, 2);
+                        if (isOutputFormat) {
+                            builder.appendValue(ChronoField.DAY_OF_MONTH, 2);
+                        } else {
+                            builder.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NORMAL);
+                        }
                         break;
                     case 'e': // %e Day of the month, numeric (0..31)
                         builder.appendValue(ChronoField.DAY_OF_MONTH, 1, 2, SignStyle.NORMAL);
@@ -131,7 +126,7 @@ public class DateUtils {
                                 .parseDefaulting(ChronoField.ERA, 1);
                         break;
                     case 'f': // %f Microseconds (000000..999999)
-                        if (padMs) {
+                        if (isOutputFormat) {
                             builder.padNext(6, '0');
                         }
                         builder.appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL);
