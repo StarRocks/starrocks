@@ -5,73 +5,61 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/sum.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType pt>
-using DistinctStateTrait = DistinctAggregateState<pt, SumResultPT<pt>>;
-template <PrimitiveType pt>
-inline constexpr PrimitiveType CountResult = TYPE_BIGINT;
-
-template <PrimitiveType pt>
-struct DistinctBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeCountDistinctAggregateFunction<pt>(); }
-};
-template <PrimitiveType pt>
-struct DistinctSumBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeSumDistinctAggregateFunction<pt>(); }
-};
-
-template <PrimitiveType pt>
-using DistinctState2Trait = DistinctAggregateStateV2<pt, SumResultPT<pt>>;
-
-template <PrimitiveType pt>
-struct DistinctBuilder2 {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeCountDistinctAggregateFunctionV2<pt>(); }
-};
-template <PrimitiveType pt>
-struct DistinctSumBuilder2 {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeSumDistinctAggregateFunctionV2<pt>(); }
+struct SumDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_decimal<pt>) {
+            resolver->add_decimal_mapping<pt, TYPE_DECIMAL128, true>("decimal_sum");
+        } else if constexpr (pt_is_numeric<pt> || pt_is_decimalv2<pt>) {
+            using SumState = SumAggregateState<RunTimeCppType<SumResultPT<pt>>>;
+            resolver->add_aggregate_mapping<pt, SumResultPT<pt>, SumState>(
+                    "sum", true, AggregateFactory::MakeSumAggregateFunction<pt>());
+        }
+    }
 };
 
-template <PrimitiveType pt>
-using SumStateTrait = SumAggregateState<RunTimeCppType<SumResultPT<pt>>>;
-template <PrimitiveType pt>
-using SumResultTrait = RunTimeCppType<SumResultPT<pt>>;
-template <PrimitiveType pt>
-struct SumBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeSumAggregateFunction<pt>(); }
+struct DistinctDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_binary<pt>) {
+            using DistinctState = DistinctAggregateState<pt, SumResultPT<pt>>;
+            using DistinctState2 = DistinctAggregateStateV2<pt, SumResultPT<pt>>;
+            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, DistinctState>(
+                    "multi_distinct_count", false, AggregateFactory::MakeCountDistinctAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, DistinctState2>(
+                    "multi_distinct_count2", false, AggregateFactory::MakeCountDistinctAggregateFunctionV2<pt>());
+
+            resolver->add_aggregate_mapping<pt, SumResultPT<pt>, DistinctState>(
+                    "multi_distinct_sum", false, AggregateFactory::MakeSumDistinctAggregateFunction<pt>());
+            resolver->add_aggregate_mapping<pt, SumResultPT<pt>, DistinctState2>(
+                    "multi_distinct_sum2", false, AggregateFactory::MakeSumDistinctAggregateFunctionV2<pt>());
+        }
+    }
 };
 
 void AggregateFuncResolver::register_sumcount() {
-    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("sum", true, SumResultPT, SumStateTrait, SumBuilder);
-    add_aggregate_mapping<TYPE_DECIMAL32, SumResultPT<TYPE_DECIMAL32>, SumStateTrait, SumBuilder>("sum", true);
-    add_aggregate_mapping<TYPE_DECIMAL64, SumResultPT<TYPE_DECIMAL64>, SumStateTrait, SumBuilder>("sum", true);
-    add_aggregate_mapping<TYPE_DECIMAL128, SumResultPT<TYPE_DECIMAL128>, SumStateTrait, SumBuilder>("sum", true);
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, SumDispatcher(), this);
+    }
 
-    add_aggregate_mapping<TYPE_BIGINT, TYPE_BIGINT, true>("count");
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, false),
+                           AggregateFactory::MakeCountAggregateFunction<false>());
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, false),
+                           AggregateFactory::MakeCountAggregateFunction<true>());
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, false, true),
+                           AggregateFactory::MakeCountNullableAggregateFunction<false>());
+    _infos_mapping.emplace(std::make_tuple("count", TYPE_BIGINT, TYPE_BIGINT, true, true),
+                           AggregateFactory::MakeCountNullableAggregateFunction<true>());
 }
 
 void AggregateFuncResolver::register_distinct() {
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("multi_distinct_count", false, CountResult, DistinctStateTrait, DistinctBuilder);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_BIGINT, DistinctStateTrait, DistinctBuilder>("multi_distinct_count", false);
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_BIGINT, DistinctStateTrait, DistinctBuilder>("multi_distinct_count",
-                                                                                          false);
-
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("multi_distinct_count2", false, CountResult, DistinctState2Trait, DistinctBuilder2);
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_BIGINT, DistinctState2Trait, DistinctBuilder2>("multi_distinct_count2",
-                                                                                            false);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_BIGINT, DistinctState2Trait, DistinctBuilder2>("multi_distinct_count2",
-                                                                                         false);
-
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("multi_distinct_sum", false, SumResultPT, DistinctStateTrait, DistinctSumBuilder);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_CHAR, DistinctStateTrait, DistinctSumBuilder>("multi_distinct_sum", false);
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, DistinctStateTrait, DistinctSumBuilder>("multi_distinct_sum",
-                                                                                              false);
-
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("multi_distinct_sum2", false, SumResultPT, DistinctState2Trait, DistinctSumBuilder2);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_CHAR, DistinctState2Trait, DistinctSumBuilder2>("multi_distinct_sum2", false);
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_VARCHAR, DistinctState2Trait, DistinctSumBuilder2>("multi_distinct_sum2",
-                                                                                                false);
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, DistinctDispatcher(), this);
+    }
 }
+
 } // namespace starrocks::vectorized
