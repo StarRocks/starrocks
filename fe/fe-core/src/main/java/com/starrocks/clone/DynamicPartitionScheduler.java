@@ -453,8 +453,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
         }
     }
 
-    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(Database db, OlapTable olapTable,
-                                                                       Column partitionColumn, int ttlNumber) {
+    private ArrayList<DropPartitionClause> getDropPartitionClauseByTTL(OlapTable olapTable, int ttlNumber) {
         ArrayList<DropPartitionClause> dropPartitionClauses = new ArrayList<>();
         RangePartitionInfo info = (RangePartitionInfo) (olapTable.getPartitionInfo());
 
