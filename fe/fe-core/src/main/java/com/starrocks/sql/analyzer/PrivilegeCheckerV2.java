@@ -80,7 +80,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
-            checkDbAction(session, statement.getTbl(), PrivilegeTypes.DbActions.DROP);
+            checkTableAction(session, statement.getTbl(), PrivilegeTypes.TableActions.DROP);
             return null;
         }
 
