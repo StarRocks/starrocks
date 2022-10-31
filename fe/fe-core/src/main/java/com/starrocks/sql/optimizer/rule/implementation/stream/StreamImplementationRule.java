@@ -1,11 +1,12 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-package com.starrocks.sql.optimizer.rule.implementation;
+package com.starrocks.sql.optimizer.rule.implementation.stream;
 
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.implementation.ImplementationRule;
 
 public abstract class StreamImplementationRule extends ImplementationRule {
 
@@ -17,4 +18,5 @@ public abstract class StreamImplementationRule extends ImplementationRule {
     public boolean check(final OptExpression input, OptimizerContext context) {
         return context.getSessionVariable().isMVPlanner();
     }
+
 }
