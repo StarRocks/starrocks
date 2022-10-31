@@ -8,6 +8,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -35,12 +36,6 @@ import java.util.List;
 public class HashJoinCostModel {
 
     private static final Logger LOG = LogManager.getLogger(HashJoinCostModel.class);
-    private static final String EMPTY = "EMPTY";
-
-    private static final String BROADCAST = "BROADCAST";
-
-    private static final String SHUFFLE = "SHUFFLE";
-
     private static final int BOTTOM_NUMBER = 100000;
 
     private static final double SHUFFLE_MAX_RATIO = 3;
@@ -67,7 +62,7 @@ public class HashJoinCostModel {
     }
 
     public double getCpuCost() {
-        String execMode = deriveJoinExecMode();
+        JoinExecMode execMode = deriveJoinExecMode();
         double buildCost;
         double probeCost;
         double leftOutput = leftStatistics.getOutputSize(context.getChildOutputColumns(0));
@@ -91,12 +86,12 @@ public class HashJoinCostModel {
     }
 
     public double getMemCost() {
-        String execMode = deriveJoinExecMode();
+        JoinExecMode execMode = deriveJoinExecMode();
         double rightOutput = rightStatistics.getOutputSize(context.getChildOutputColumns(1));
         double memCost;
         int beNum = Math.max(1, ConnectContext.get().getAliveBackendNumber());
 
-        if (BROADCAST.equals(execMode)) {
+        if (JoinExecMode.BROADCAST == execMode) {
             memCost = rightOutput * beNum;
         } else {
             memCost = rightOutput;
@@ -105,7 +100,7 @@ public class HashJoinCostModel {
     }
 
     private double getAvgProbeCost() {
-        String execMode = deriveJoinExecMode();
+        JoinExecMode execMode = deriveJoinExecMode();
         double keySize = 0;
         for (BinaryPredicateOperator predicateOperator : eqOnPredicates) {
             ColumnRefOperator leftCol = (ColumnRefOperator) predicateOperator.getChild(0);
@@ -121,7 +116,7 @@ public class HashJoinCostModel {
                 ConnectContext.get().getSessionVariable().getDegreeOfParallelism()) * 2;
         double mapSize = Math.min(1, keySize) * rightStatistics.getOutputRowCount();
 
-        if (BROADCAST.equals(execMode)) {
+        if (JoinExecMode.BROADCAST == execMode) {
             degradeRatio = Math.max(1, Math.log(mapSize / BOTTOM_NUMBER));
             // normalize ration when it hits the limit
             degradeRatio = Math.min(BROADCAST_MAT_RATIO, degradeRatio);
@@ -135,14 +130,27 @@ public class HashJoinCostModel {
         return degradeRatio;
     }
 
-    private String deriveJoinExecMode() {
-        if (inputProperties == null) {
-            return EMPTY;
+    private JoinExecMode deriveJoinExecMode() {
+        if (CollectionUtils.isEmpty(inputProperties)) {
+            return JoinExecMode.EMPTY;
         } else if (inputProperties.get(1).getDistributionProperty().isBroadcast()) {
-            return BROADCAST;
+            return JoinExecMode.BROADCAST;
         } else {
-            return SHUFFLE;
+            return JoinExecMode.SHUFFLE;
         }
     }
+
+    private enum JoinExecMode {
+        // no child input property info, use the original evaluation mode.
+        EMPTY,
+
+        // right child with broadcast info, use the broadcast join evaluation mode.
+        BROADCAST,
+
+        // right child without broadcast info, use the shuffle join evaluation mode.
+        SHUFFLE
+    }
+
+
 
 }

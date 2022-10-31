@@ -3,6 +3,7 @@
 package com.starrocks.sql.optimizer.cost;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,7 +53,7 @@ public class CostModel {
     }
 
     private static double calculateCost(ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(null);
+        CostEstimator costEstimator = new CostEstimator(ImmutableList.of());
         CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
         double realCost = getRealCost(costEstimate);
         LOG.debug("operator: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
@@ -64,7 +65,7 @@ public class CostModel {
     }
 
     public static CostEstimate calculateCostEstimate(ExpressionContext expressionContext) {
-        CostEstimator costEstimator = new CostEstimator(null);
+        CostEstimator costEstimator = new CostEstimator(ImmutableList.of());
         return expressionContext.getOp().accept(costEstimator, expressionContext);
     }
 
