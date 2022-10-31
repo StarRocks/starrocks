@@ -55,6 +55,7 @@ private:
 
     HdfsScannerContext* _create_file5_base_context();
     HdfsScannerContext* _create_file6_base_context();
+    HdfsScannerContext* _create_file_map_base_context();
 
     void _create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                    std::vector<ExprContext*>* conjunct_ctxs);
@@ -142,6 +143,19 @@ private:
 
     // Description: A parquet file contains required array columns
     std::string _file6_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet6";
+
+    // Description: A complex parquet file contains contains map
+    //
+    //c1    | c2                            |  c3                                                   | c4
+    // 1    | {'k1': 0, 'k2': 1}            |  {'e1': {'f1': 1, 'f2': 2}}                           | {'g1': [1, 2]}
+    // 2    | {'k1': 1, 'k3': 2, 'k4': 3}   |  {'e1': {'f1': 1, 'f2': 2}, 'e2': {'f1': 1, 'f2': 2}} | {'g2': [1], 'g3': [2]}
+    // 3    | {'k2': 2, 'k3': 3, 'k5': 4}   |  {'e1': {'f1': 1, 'f2': 2, 'f3': 3}}                  | {'g1': [1, 2, 3]}
+    // 4    | {'k1': 3, 'k2': 4, 'k3': 5}   |  {'e2': {'f2': 2}}                                    | {'g1': [1]}
+    // 5    | {'k3': 4}                     |  {'e2': {'f2': 2}}                                    | {'g1': [null]}
+    // 6    | {'k1': null}                  |  {'e2': {'f2': null}}                                 | {'g1': [1]}
+    // 7    | {'k1': 1, 'k2': 2}            |  {'e2': {'f2': 2}}                                    | {'g1': [1, 2, 3]}
+    // 8    | {'k3': 4}                     |  {'e1': {'f1': 1, 'f2': 2, 'f3': 3}}                  | {'g2': [1], 'g3': [2]}
+    std::string _file_map_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test_map.parquet";
 
     std::shared_ptr<RowDescriptor> _row_desc = nullptr;
     RuntimeState* _runtime_state = nullptr;
@@ -434,6 +448,38 @@ HdfsScannerContext* FileReaderTest::_create_file6_base_context() {
 
     return ctx;
 }
+
+HdfsScannerContext* FileReaderTest::_create_file_map_base_context() {
+        auto ctx = _create_scan_context();
+
+        TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+        type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+        TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
+        type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        type_map_map.children.emplace_back(type_map);
+
+        TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+        type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+        TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
+        type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+        type_map_array.children.emplace_back(type_array);
+
+        // tuple desc
+        SlotDesc slot_descs[] = {
+                {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
+                {"c2", type_map},
+                {"c3", type_map_map},
+                {"c4", type_map_array},
+                {""},
+        };
+        ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        ctx->scan_ranges.emplace_back(_create_scan_range(_file_map_path));
+
+        return ctx;
+    }
 
 void FileReaderTest::_create_int_conjunct_ctxs(TExprOpcode::type opcode, SlotId slot_id, int value,
                                                std::vector<ExprContext*>* conjunct_ctxs) {
@@ -899,6 +945,7 @@ TEST_F(FileReaderTest, TestReadArray2dColumn) {
     EXPECT_EQ(chunk->debug_row(4), "[5, [[1, 2, 3], [4, 5]]]");
 }
 
+
 TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
     auto file = _create_file(_file6_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
@@ -917,6 +964,66 @@ TEST_F(FileReaderTest, TestReadRequiredArrayColumns) {
     for (int i = 0; i < chunk->num_rows(); ++i) {
         std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     }
+}
+
+TEST_F(FileReaderTest, TestReadMapColumn) {
+    auto file = _create_file(_file_map_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file_map_path));
+
+    //init
+    auto* ctx = _create_file_map_base_context();
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+
+    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+    std::vector<SharedBufferedInputStream::IORange> ranges;
+    int64_t end_offset = 0;
+    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+
+    // c1, c2.key, c2.value, c3.key, c3.value.key, c3.value.value, c4.key. c4.value
+    EXPECT_EQ(ranges.size(), 8);
+
+    EXPECT_EQ(file_reader->_file_metadata->num_rows(), 8);
+    TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
+    type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_map.children.emplace_back(type_map);
+
+    TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
+    type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
+    type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    type_map_array.children.emplace_back(type_array);
+
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+    auto c = vectorized::ColumnHelper::create_column(type_map, true);
+    chunk->append_column(c, chunk->num_columns());
+    auto c_map_map = vectorized::ColumnHelper::create_column(type_map_map, true);
+    chunk->append_column(c_map_map, chunk->num_columns());
+    auto c_map_array = vectorized::ColumnHelper::create_column(type_map_array, true);
+    chunk->append_column(c_map_array, chunk->num_columns());
+
+    status = file_reader->get_next(&chunk);
+    ASSERT_TRUE(status.ok());
+    EXPECT_EQ(chunk->num_rows(), 8);
+    for (int i = 0; i < chunk->num_rows(); ++i) {
+        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
+    }
+    EXPECT_EQ(chunk->debug_row(0), "[1, ['k1'->0, 'k2'->1], ['e1'->['f1'->1, 'f2'->2]], ['g1'->[1, 2]]]");
+    EXPECT_EQ(chunk->debug_row(1),
+              "[2, ['k1'->1, 'k3'->2, 'k4'->3], ['e1'->['f1'->1, 'f2'->2], 'e2'->['f1'->1, 'f2'->2]], ['g1'->[1], 'g3'->[2]]]");
+    EXPECT_EQ(chunk->debug_row(2),
+              "[3, ['k2'->2, 'k3'->3, 'k5'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g1'->[1, 2, 3]]]");
+    EXPECT_EQ(chunk->debug_row(3), "[4, ['k1'->3, 'k2'->4, 'k3'->5], ['e2'->['f2'->2]], ['g1'->[1]]]");
+    EXPECT_EQ(chunk->debug_row(4), "[5, ['k3'->4], ['e2'->['f2'->2]], ['g1'->[NULL]]]");
+    EXPECT_EQ(chunk->debug_row(5), "[6, ['k1'->NULL], ['e2'->['f2'->NULL]], ['g1'->[1]]]");
+    EXPECT_EQ(chunk->debug_row(6), "[7, ['k1'->1, 'k2'->2], ['e2'->['f2'->2]], ['g1'->[1, 2, 3]]]");
+    EXPECT_EQ(chunk->debug_row(7), "[8, ['k3'->4], ['e1'->['f1'->1, 'f2'->2, 'f3'->3]], ['g2'->[1], 'g3'->[2]]]");
 }
 
 } // namespace starrocks::parquet
