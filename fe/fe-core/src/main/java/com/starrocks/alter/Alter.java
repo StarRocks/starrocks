@@ -274,7 +274,7 @@ public class Alter {
             task = TaskBuilder.buildMvTask(materializedView, dbName);
         }
 
-        TaskBuilder.updateTaskInfo(task, refreshSchemeDesc);
+        TaskBuilder.updateTaskInfo(task, refreshSchemeDesc, materializedView);
 
 
         taskManager.createTask(task, false);
@@ -291,7 +291,9 @@ public class Alter {
             if (intervalLiteral != null) {
                 final IntLiteral step = (IntLiteral) intervalLiteral.getValue();
                 final MaterializedView.AsyncRefreshContext asyncRefreshContext = refreshScheme.getAsyncRefreshContext();
-                asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                if (asyncRefreshSchemeDesc.isDefineStartTime()) {
+                    asyncRefreshContext.setStartTime(Utils.getLongFromDateTime(asyncRefreshSchemeDesc.getStartTime()));
+                }
                 asyncRefreshContext.setStep(step.getLongValue());
                 asyncRefreshContext.setTimeUnit(intervalLiteral.getUnitIdentifier().getDescription());
             }
