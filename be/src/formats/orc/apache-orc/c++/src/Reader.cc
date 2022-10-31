@@ -207,9 +207,9 @@ void ColumnSelector::updateSelectedByName(std::vector<bool>& selectedColumns, co
         bool first = true;
         std::ostringstream ss;
         ss << "Invalid column selected " << fieldName << ". Valid names are ";
-        for (auto it = nameIdMap.begin(); it != nameIdMap.end(); ++it) {
+        for (auto& it : nameIdMap) {
             if (!first) ss << ", ";
-            ss << it->first;
+            ss << it.first;
             first = false;
         }
         throw ParseError(ss.str());

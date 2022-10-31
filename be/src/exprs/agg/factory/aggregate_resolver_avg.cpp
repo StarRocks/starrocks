@@ -6,34 +6,40 @@
 #include "exprs/agg/avg.h"
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType pt>
-using AvgStateTrait = AvgAggregateState<RunTimeCppType<ImmediateAvgResultPT<pt>>>;
-
-template <PrimitiveType pt>
-inline constexpr PrimitiveType ArrayResult = TYPE_ARRAY;
-
-template <PrimitiveType pt>
-struct AvgBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeAvgAggregateFunction<pt>(); }
+struct AvgDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_aggregate<pt>) {
+            auto func = AggregateFactory::MakeAvgAggregateFunction<pt>();
+            using AvgState = AvgAggregateState<RunTimeCppType<ImmediateAvgResultPT<pt>>>;
+            resolver->add_aggregate_mapping<pt, AvgResultPT<pt>, AvgState>("avg", true, func);
+        }
+    }
 };
 
-template <PrimitiveType pt>
-using ArrayAggStateTrait = ArrayAggAggregateState<pt>;
-
-template <PrimitiveType pt>
-struct ArrayAggBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeArrayAggAggregateFunction<pt>(); }
+struct ArrayAggDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_binary<pt>) {
+            auto func = AggregateFactory::MakeArrayAggAggregateFunction<pt>();
+            using AggState = ArrayAggAggregateState<pt>;
+            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState>("array_agg", false, func);
+        }
+    }
 };
 
 void AggregateFuncResolver::register_avg() {
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("avg", true, AvgResultPT, AvgStateTrait, AvgBuilder);
-
-    AGGREGATE_ALL_TYPE_FROM_TRAIT("array_agg", false, ArrayResult, ArrayAggStateTrait, ArrayAggBuilder);
-    add_aggregate_mapping<TYPE_CHAR, TYPE_ARRAY, ArrayAggStateTrait, ArrayAggBuilder>("array_agg", false);
-    add_aggregate_mapping<TYPE_VARCHAR, TYPE_ARRAY, ArrayAggStateTrait, ArrayAggBuilder>("array_agg", false);
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, AvgDispatcher(), this);
+        type_dispatch_all(type, ArrayAggDispatcher(), this);
+    }
+    add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_avg");
+    add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");
 }
 
 } // namespace starrocks::vectorized

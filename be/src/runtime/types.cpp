@@ -33,7 +33,7 @@
 
 namespace starrocks {
 
-TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) : len(-1), precision(-1), scale(-1) {
+TypeDescriptor::TypeDescriptor(const std::vector<TTypeNode>& types, int* idx) {
     DCHECK_GE(*idx, 0);
     DCHECK_LT(*idx, types.size());
     const TTypeNode& node = types[*idx];
@@ -156,8 +156,7 @@ void TypeDescriptor::to_protobuf(PTypeDesc* proto_type) const {
     }
 }
 
-TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx)
-        : len(-1), precision(-1), scale(-1) {
+TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNode>& types, int* idx) {
     DCHECK_GE(*idx, 0);
     DCHECK_LT(*idx, types.size());
 

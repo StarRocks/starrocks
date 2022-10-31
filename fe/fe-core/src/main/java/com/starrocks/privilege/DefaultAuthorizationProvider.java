@@ -73,6 +73,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case DATABASE:
                 return DbPEntryObject.generate(allTypes, restrictType, restrictName);
 
+            case USER:
+                return UserPEntryObject.generate(allTypes, restrictType, restrictName);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }

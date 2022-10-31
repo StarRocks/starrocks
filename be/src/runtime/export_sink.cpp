@@ -45,8 +45,7 @@ ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const st
           _profile(nullptr),
           _bytes_written_counter(nullptr),
           _rows_written_counter(nullptr),
-          _write_timer(nullptr),
-          _closed(false) {}
+          _write_timer(nullptr) {}
 
 Status ExportSink::init(const TDataSink& t_sink) {
     RETURN_IF_ERROR(DataSink::init(t_sink));

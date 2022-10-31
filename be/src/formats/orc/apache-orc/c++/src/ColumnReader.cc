@@ -383,8 +383,8 @@ private:
     std::unique_ptr<SeekableInputStream> inputStream;
     TypeKind columnKind;
     const uint64_t bytesPerValue;
-    const char* bufferPointer;
-    const char* bufferEnd;
+    const char* bufferPointer{nullptr};
+    const char* bufferEnd{nullptr};
     DataBuffer<double> localDoubleBuffer;
     // this shared buffer is just for testing
     // in prod environment, sharedBufferPtr is a pointer to sharedBuffer in Reader
@@ -519,8 +519,7 @@ DoubleColumnReader::DoubleColumnReader(const Type& type, StripeStreams& stripe)
         : ColumnReader(type, stripe),
           columnKind(type.getKind()),
           bytesPerValue((type.getKind() == FLOAT) ? 4 : 8),
-          bufferPointer(nullptr),
-          bufferEnd(nullptr),
+
           localDoubleBuffer(stripe.getMemoryPool(), 0),
           sharedBuffer(stripe.getMemoryPool(), 0) {
     inputStream = stripe.getStream(columnId, proto::Stream_Kind_DATA, true);

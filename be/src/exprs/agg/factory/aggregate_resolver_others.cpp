@@ -11,13 +11,12 @@
 namespace starrocks::vectorized {
 
 void AggregateFuncResolver::register_others() {
-    add_object_mapping<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx",
-                                                 AggregateFactory::MakePercentileApproxAggregateFunction());
-    add_object_mapping<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx",
-                                                 AggregateFactory::MakePercentileApproxAggregateFunction());
-
-    add_object_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, false, PercentileValue>(
-            "percentile_union", AggregateFactory::MakePercentileUnionAggregateFunction());
+    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx", false,
+                                                            AggregateFactory::MakePercentileApproxAggregateFunction());
+    add_aggregate_mapping_notnull<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx", false,
+                                                            AggregateFactory::MakePercentileApproxAggregateFunction());
+    add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
+            "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
 
     add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileContState<TYPE_DOUBLE>>(
             "percentile_cont", false, AggregateFactory::MakePercentileContAggregateFunction<TYPE_DOUBLE>());
@@ -35,12 +34,6 @@ void AggregateFuncResolver::register_others() {
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");
 
     // sum, avg, distinct_sum use decimal128 as intermediate or result type to avoid overflow
-    add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_avg");
-    add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_avg");
-    add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_avg");
-    add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128, true>("decimal_sum");
-    add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128, true>("decimal_sum");
-    add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128, true>("decimal_sum");
     add_decimal_mapping<TYPE_DECIMAL32, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL64, TYPE_DECIMAL128>("decimal_multi_distinct_sum");
     add_decimal_mapping<TYPE_DECIMAL128, TYPE_DECIMAL128>("decimal_multi_distinct_sum");

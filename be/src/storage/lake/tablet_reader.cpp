@@ -2,6 +2,8 @@
 
 #include "storage/lake/tablet_reader.h"
 
+#include <utility>
+
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gutil/stl_util.h"
@@ -31,12 +33,12 @@ using ZonemapPredicatesRewriter = starrocks::vectorized::ZonemapPredicatesRewrit
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema)
         : ChunkIterator(std::move(schema)), _tablet(tablet), _version(version) {}
 
-TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, const std::vector<RowsetPtr>& rowsets)
+TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets)
         : ChunkIterator(std::move(schema)),
           _tablet(tablet),
           _version(version),
           _rowsets_inited(true),
-          _rowsets(rowsets) {}
+          _rowsets(std::move(rowsets)) {}
 
 TabletReader::TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),

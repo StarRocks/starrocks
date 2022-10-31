@@ -4,11 +4,11 @@ package com.starrocks.connector.delta;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.connector.ReentrantExecutor;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.connector.hive.IHiveMetastore;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;

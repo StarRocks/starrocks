@@ -12,8 +12,8 @@
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream)
-        : _filename(filename), _stream(std::move(stream)), _offset(0) {
+CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<SeekableInputStream> stream)
+        : _filename(std::move(filename)), _stream(std::move(stream)), _offset(0) {
     _size = _stream->get_size().value();
 #ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;
@@ -77,7 +77,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
                 _stats.write_cache_bytes += load_size;
             } else {
                 LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
-                return r;
+                // Failed to write cache, but we can keep processing query.
             }
         }
 

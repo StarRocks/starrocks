@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/column_helper.h"
@@ -308,13 +309,13 @@ ChunkPtr JsonScanner::_cast_chunk(const starrocks::vectorized::ChunkPtr& src_chu
 
 JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::vectorized::ScannerCounter* counter,
                        JsonScanner* scanner, std::shared_ptr<SequentialFile> file, bool strict_mode,
-                       const std::vector<SlotDescriptor*>& slot_descs)
+                       std::vector<SlotDescriptor*> slot_descs)
         : _state(state),
           _counter(counter),
           _scanner(scanner),
           _strict_mode(strict_mode),
           _file(std::move(file)),
-          _slot_descs(slot_descs) {
+          _slot_descs(std::move(slot_descs)) {
 #if BE_TEST
     raw::RawVector<char> buf(_buf_size);
     std::swap(buf, _buf);

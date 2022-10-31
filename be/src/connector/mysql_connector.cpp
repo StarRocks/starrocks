@@ -94,8 +94,7 @@ Status MySQLDataSource::open(RuntimeState* state) {
 
     // In Filter have been put into _conjunct_ctxs,
     // so we iterate all ExprContext to use it.
-    for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        ExprContext* ctx = _conjunct_ctxs[i];
+    for (auto ctx : _conjunct_ctxs) {
         const Expr* root_expr = ctx->root();
         if (root_expr == nullptr) {
             continue;

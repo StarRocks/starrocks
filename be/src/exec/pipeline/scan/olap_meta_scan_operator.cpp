@@ -29,7 +29,7 @@ OlapMetaScanOperator::OlapMetaScanOperator(OperatorFactory* factory, int32_t id,
                                            ScanNode* meta_scan_node, OlapMetaScanContextPtr ctx)
         : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(std::move(ctx)) {}
 
-OlapMetaScanOperator::~OlapMetaScanOperator() {}
+OlapMetaScanOperator::~OlapMetaScanOperator() = default;
 
 bool OlapMetaScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished()) {

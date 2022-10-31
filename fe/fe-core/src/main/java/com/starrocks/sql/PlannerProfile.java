@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static com.starrocks.external.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
+import static com.starrocks.connector.hive.HiveMetastoreOperations.BACKGROUND_THREAD_NAME_PREFIX;
 
 /**
  * To timing a function or a piece of code, you could

@@ -11,12 +11,9 @@ import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.external.RemoteFileInfo;
-import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hive.Partition;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -29,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-import static com.starrocks.external.PartitionUtil.toHivePartitionName;
+import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public class HiveMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HiveMetadata.class);

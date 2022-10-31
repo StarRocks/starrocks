@@ -154,8 +154,8 @@ Status BinaryDictPageBuilder::get_last_value(void* value) const {
 }
 
 bool BinaryDictPageBuilder::is_valid_global_dict(const vectorized::GlobalDictMap* global_dict) const {
-    for (auto it = _dictionary.begin(); it != _dictionary.end(); ++it) {
-        if (auto iter = global_dict->find(it->first); iter == global_dict->end()) {
+    for (const auto& it : _dictionary) {
+        if (auto iter = global_dict->find(it.first); iter == global_dict->end()) {
             return false;
         }
     }

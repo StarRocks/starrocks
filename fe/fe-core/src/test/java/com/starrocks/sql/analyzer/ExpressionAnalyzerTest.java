@@ -2,10 +2,12 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.CollectionElementExpr;
+import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
@@ -114,5 +116,54 @@ public class ExpressionAnalyzerTest {
         Assert.assertThrows(SemanticException.class,
                 () -> visitor.visitCollectionElementExpr(collectionElementExpr,
                         new Scope(RelationId.anonymous(), new RelationFields())));
+    }
+
+    @Test
+    public void testMapFunctionsAnalyzer() throws Exception {
+        Type keyType = ScalarType.createType(PrimitiveType.INT);
+        Type valueType = ScalarType.createCharType(10);
+        Type mapType = new MapType(keyType, valueType);
+
+        String mapKeys = "map_keys";
+        String mapValues = "map_values";
+        String mapSize = "map_size";
+        Type[] argumentTypes = { mapType };
+
+        Function fnMapKeys = Expr.getBuiltinFunction(mapKeys, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertEquals(fnMapKeys.functionName(), "map_keys");
+        Assert.assertTrue(fnMapKeys.getReturnType().isArrayType());
+        Assert.assertEquals(((ArrayType) fnMapKeys.getReturnType()).getItemType(), keyType);
+
+        Function fnMapValues = Expr.getBuiltinFunction(mapValues, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertEquals(fnMapValues.functionName(), "map_values");
+        Assert.assertTrue(fnMapValues.getReturnType().isArrayType());
+        Assert.assertEquals(((ArrayType) fnMapValues.getReturnType()).getItemType(), valueType);
+
+
+        Function fnMapSize = Expr.getBuiltinFunction(mapSize, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertEquals(fnMapSize.functionName(), "map_size");
+        Assert.assertEquals(fnMapSize.getReturnType(), Type.INT);
+
+        Type[] argumentTypesErrorNum = { mapType, keyType };
+        Function fnKeysErrorNum = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorNum,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertTrue(fnKeysErrorNum == null);
+        Function fnValuesErrorNum = Expr.getBuiltinFunction(mapValues, argumentTypesErrorNum,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertTrue(fnKeysErrorNum == null);
+        Function fnSizeErrorNum = Expr.getBuiltinFunction(mapSize, argumentTypesErrorNum,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertTrue(fnKeysErrorNum == null);
+
+        Type[] argumentTypesErrorType = { keyType };
+        Function fnKeysErrorType = Expr.getBuiltinFunction(mapKeys, argumentTypesErrorType,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertTrue(fnKeysErrorType == null);
+        Function fnValuesErrorType = Expr.getBuiltinFunction(mapValues, argumentTypesErrorType,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertTrue(fnValuesErrorType == null);
+        Function fnSizeErrorType = Expr.getBuiltinFunction(mapSize, argumentTypesErrorType,
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+        Assert.assertTrue(fnSizeErrorType == null);
     }
 }

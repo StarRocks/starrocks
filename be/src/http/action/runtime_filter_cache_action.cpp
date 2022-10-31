@@ -78,13 +78,13 @@ void RuntimeFilterCacheAction::_handle_trace(HttpRequest* req) {
         auto& allocator = root.GetAllocator();
         rapidjson::Document traces_obj;
         traces_obj.SetArray();
-        for (auto it = events.begin(); it != events.end(); ++it) {
+        for (auto& event : events) {
             rapidjson::Document query_obj;
             query_obj.SetObject();
-            query_obj.AddMember("query_id", rapidjson::Value(it->first.c_str(), it->first.size()), allocator);
+            query_obj.AddMember("query_id", rapidjson::Value(event.first.c_str(), event.first.size()), allocator);
             rapidjson::Document query_events;
             query_events.SetArray();
-            for (auto& s : it->second) {
+            for (auto& s : event.second) {
                 query_events.PushBack(rapidjson::Value(s.c_str(), s.size()), allocator);
             }
             query_obj.AddMember("events", query_events, allocator);

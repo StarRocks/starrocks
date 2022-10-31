@@ -29,7 +29,7 @@ AggregateFuncResolver::AggregateFuncResolver() {
     register_others();
 }
 
-AggregateFuncResolver::~AggregateFuncResolver() {}
+AggregateFuncResolver::~AggregateFuncResolver() = default;
 
 AggregateFunctionPtr AggregateFactory::MakeBitmapUnionAggregateFunction() {
     return std::make_shared<BitmapUnionAggregateFunction>();
