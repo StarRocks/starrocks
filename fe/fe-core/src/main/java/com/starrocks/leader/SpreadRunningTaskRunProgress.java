@@ -61,7 +61,7 @@ public class SpreadRunningTaskRunProgress extends LeaderDaemon {
         }
         if (!jobProgressMap.isEmpty()) {
             GlobalStateMgr.getCurrentState().getEditLog().
-                    logUpdateRunningTaskRunProgress(new RunningTaskRunProgressInfo(jobProgressMap));
+                    logAlterRunningTaskRunProgress(new RunningTaskRunProgressInfo(jobProgressMap));
         }
     }
 }

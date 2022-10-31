@@ -692,7 +692,7 @@ public class EditLog {
                 }
                 case OperationType.OP_ALTER_TASK_RUNS_PROGRESS:
                     RunningTaskRunProgressInfo runningTaskRunProgressInfo = (RunningTaskRunProgressInfo) journal.getData();
-                    globalStateMgr.getTaskManager().replayUpdateRunningTaskRunProgress(
+                    globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
                             runningTaskRunProgressInfo.getTaskRunProgressMap());
                     break;
                 case OperationType.OP_CREATE_SMALL_FILE: {
@@ -1091,7 +1091,7 @@ public class EditLog {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
     }
 
-    public void logUpdateRunningTaskRunProgress(RunningTaskRunProgressInfo info) {
+    public void logAlterRunningTaskRunProgress(RunningTaskRunProgressInfo info) {
         logEdit(OperationType.OP_ALTER_TASK_RUNS_PROGRESS, info);
     }
 
