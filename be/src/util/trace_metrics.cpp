@@ -57,7 +57,7 @@ const char* TraceMetrics::InternName(const string& name) {
         g_intern_map = new InternMap();
     }
 
-    InternMap::iterator it = g_intern_map->find(name);
+    auto it = g_intern_map->find(name);
     if (it != g_intern_map->end()) {
         return it->second;
     }

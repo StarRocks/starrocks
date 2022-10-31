@@ -12,8 +12,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 /// Morsel.
 void PhysicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
@@ -634,5 +633,4 @@ MorselQueuePtr create_empty_morsel_queue() {
     return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
 }
 
-} // namespace pipeline
 } // namespace starrocks

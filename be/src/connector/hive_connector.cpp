@@ -10,8 +10,7 @@
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -407,5 +406,4 @@ int64_t HiveDataSource::cpu_time_spent() const {
     return _scanner->cpu_time_spent();
 }
 
-} // namespace connector
 } // namespace starrocks

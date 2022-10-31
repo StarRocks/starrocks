@@ -72,7 +72,7 @@ VectorizedLiteral::VectorizedLiteral(const TExprNode& node) : Expr(node) {
         DCHECK_EQ(node.node_type, TExprNodeType::LARGE_INT_LITERAL);
 
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-        int128_t data = StringParser::string_to_int<__int128>(node.large_int_literal.value.c_str(),
+        auto data = StringParser::string_to_int<__int128>(node.large_int_literal.value.c_str(),
                                                               node.large_int_literal.value.size(), &parse_result);
         if (parse_result != StringParser::PARSE_SUCCESS) {
             data = MAX_INT128;

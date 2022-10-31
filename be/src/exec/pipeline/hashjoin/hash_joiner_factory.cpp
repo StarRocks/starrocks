@@ -2,8 +2,7 @@
 
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 Status HashJoinerFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::prepare(_param._build_expr_ctxs, state));
@@ -24,5 +23,4 @@ void HashJoinerFactory::close(RuntimeState* state) {
     Expr::close(_param._build_expr_ctxs, state);
 }
 
-} // namespace pipeline
 } // namespace starrocks

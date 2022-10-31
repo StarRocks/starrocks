@@ -93,7 +93,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
 
-    const SchemaTableDescriptor* schema_table =
+    const auto* schema_table =
             static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
 
     if (nullptr == schema_table) {

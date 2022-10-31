@@ -81,7 +81,7 @@ void gc_memory(void* arg_this) {
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
 
-    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
         sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)

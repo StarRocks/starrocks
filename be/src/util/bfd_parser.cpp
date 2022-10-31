@@ -45,7 +45,7 @@ std::mutex BfdParser::_bfd_mutex;
 bool BfdParser::_is_bfd_inited = false;
 
 static void find_addr_in_section(bfd* abfd, asection* sec, void* arg) {
-    BfdFindCtx* ctx = (BfdFindCtx*)arg;
+    auto* ctx = (BfdFindCtx*)arg;
     if (ctx->found) {
         return;
     }
@@ -79,7 +79,7 @@ static void find_addr_in_section(bfd* abfd, asection* sec, void* arg) {
 }
 
 static void section_print(bfd* bfd, asection* sec, void* arg) {
-    std::string* str = (std::string*)arg;
+    auto* str = (std::string*)arg;
     str->append(sec->name);
     str->push_back('\n');
 }

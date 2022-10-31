@@ -163,7 +163,7 @@ private:
 
 private:
     static inline vpack::StringRef toStringRef(std::string_view view) {
-        return vpack::StringRef(view.data(), view.length());
+        return {view.data(), view.length()};
     }
 };
 

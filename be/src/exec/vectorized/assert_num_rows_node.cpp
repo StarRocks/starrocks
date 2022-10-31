@@ -113,7 +113,7 @@ Status AssertNumRowsNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* e
 
         if (!assert_res) {
             auto to_string_lamba = [](TAssertion::type assertion) {
-                std::map<int, const char*>::const_iterator it = _TAssertion_VALUES_TO_NAMES.find(assertion);
+                auto it = _TAssertion_VALUES_TO_NAMES.find(assertion);
 
                 if (it == _TAggregationOp_VALUES_TO_NAMES.end()) {
                     return "NULL";

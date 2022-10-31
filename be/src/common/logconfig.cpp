@@ -167,7 +167,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
             const char* sizecstr = sizestr.c_str();
             int64_t ret64 = strtoll(sizecstr, &end, 10);
             if ((errno == 0) && (end == sizecstr + strlen(sizecstr))) {
-                int32_t retval = static_cast<int32_t>(ret64);
+                auto retval = static_cast<int32_t>(ret64);
                 if (retval == ret64) {
                     FLAGS_max_log_size = retval;
                     ok = true;

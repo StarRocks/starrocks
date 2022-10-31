@@ -267,7 +267,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
     for (auto field_index : char_column_indexes) {
         vectorized::Column* column = chunk->get_column_by_index(field_index).get();
         vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-        vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+        auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
 
         vectorized::Offsets& offset = binary->get_offset();
         vectorized::Bytes& bytes = binary->get_bytes();

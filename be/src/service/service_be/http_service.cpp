@@ -66,7 +66,7 @@ Status HttpServiceBE::start() {
     add_default_path_handlers(_web_page_handler.get(), _env->process_mem_tracker());
 
     // register load
-    StreamLoadAction* stream_load_action = new StreamLoadAction(_env);
+    auto* stream_load_action = new StreamLoadAction(_env);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/{db}/{table}/_stream_load", stream_load_action);
     _http_handlers.emplace_back(stream_load_action);
 
@@ -80,12 +80,12 @@ Status HttpServiceBE::start() {
     // PrepreTransaction:   POST /api/transaction/prepare
     //
     // ListTransactions:    POST /api/transaction/list
-    TransactionManagerAction* transaction_manager_action = new TransactionManagerAction(_env);
+    auto* transaction_manager_action = new TransactionManagerAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/transaction/{txn_op}", transaction_manager_action);
     _http_handlers.emplace_back(transaction_manager_action);
 
     // LoadData:            PUT /api/transaction/load
-    TransactionStreamLoadAction* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
+    auto* transaction_stream_load_action = new TransactionStreamLoadAction(_env);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/transaction/load", transaction_stream_load_action);
     _http_handlers.emplace_back(transaction_stream_load_action);
 
@@ -94,24 +94,24 @@ Status HttpServiceBE::start() {
     for (auto& path : _env->store_paths()) {
         allow_paths.emplace_back(path.path);
     }
-    DownloadAction* download_action = new DownloadAction(_env, allow_paths);
+    auto* download_action = new DownloadAction(_env, allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_download_load", download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_download_load", download_action);
     _http_handlers.emplace_back(download_action);
 
-    DownloadAction* tablet_download_action = new DownloadAction(_env, allow_paths);
+    auto* tablet_download_action = new DownloadAction(_env, allow_paths);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_tablet/_download", tablet_download_action);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_tablet/_download", tablet_download_action);
     _http_handlers.emplace_back(tablet_download_action);
 
-    DownloadAction* error_log_download_action =
+    auto* error_log_download_action =
             new DownloadAction(_env, _env->load_path_mgr()->get_load_error_file_dir());
     _ev_http_server->register_handler(HttpMethod::GET, "/api/_load_error_log", error_log_download_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/api/_load_error_log", error_log_download_action);
     _http_handlers.emplace_back(error_log_download_action);
 
     // Register BE health action
-    HealthAction* health_action = new HealthAction(_env);
+    auto* health_action = new HealthAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/health", health_action);
     _http_handlers.emplace_back(health_action);
 
@@ -120,31 +120,31 @@ Status HttpServiceBE::start() {
         fs::create_directories(config::pprof_profile_dir);
     }
 
-    HeapAction* heap_action = new HeapAction();
+    auto* heap_action = new HeapAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/heap", heap_action);
     _http_handlers.emplace_back(heap_action);
 
-    GrowthAction* growth_action = new GrowthAction();
+    auto* growth_action = new GrowthAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/growth", growth_action);
     _http_handlers.emplace_back(growth_action);
 
-    ProfileAction* profile_action = new ProfileAction();
+    auto* profile_action = new ProfileAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/profile", profile_action);
     _http_handlers.emplace_back(profile_action);
 
-    PmuProfileAction* pmu_profile_action = new PmuProfileAction();
+    auto* pmu_profile_action = new PmuProfileAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/pmuprofile", pmu_profile_action);
     _http_handlers.emplace_back(pmu_profile_action);
 
-    ContentionAction* contention_action = new ContentionAction();
+    auto* contention_action = new ContentionAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/contention", contention_action);
     _http_handlers.emplace_back(contention_action);
 
-    CmdlineAction* cmdline_action = new CmdlineAction();
+    auto* cmdline_action = new CmdlineAction();
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/cmdline", cmdline_action);
     _http_handlers.emplace_back(cmdline_action);
 
-    SymbolAction* symbol_action = new SymbolAction(_env->bfd_parser());
+    auto* symbol_action = new SymbolAction(_env->bfd_parser());
     _ev_http_server->register_handler(HttpMethod::GET, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::HEAD, "/pprof/symbol", symbol_action);
     _ev_http_server->register_handler(HttpMethod::POST, "/pprof/symbol", symbol_action);
@@ -157,69 +157,69 @@ Status HttpServiceBE::start() {
         _http_handlers.emplace_back(action);
     }
 
-    MetaAction* meta_action = new MetaAction(HEADER);
+    auto* meta_action = new MetaAction(HEADER);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/meta/header/{tablet_id}", meta_action);
     _http_handlers.emplace_back(meta_action);
 
 #ifndef BE_TEST
     // Register BE checksum action
-    ChecksumAction* checksum_action = new ChecksumAction(_env);
+    auto* checksum_action = new ChecksumAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/checksum", checksum_action);
     _http_handlers.emplace_back(checksum_action);
 
     // Register BE reload tablet action
-    ReloadTabletAction* reload_tablet_action = new ReloadTabletAction(_env);
+    auto* reload_tablet_action = new ReloadTabletAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/reload_tablet", reload_tablet_action);
     _http_handlers.emplace_back(reload_tablet_action);
 
-    RestoreTabletAction* restore_tablet_action = new RestoreTabletAction(_env);
+    auto* restore_tablet_action = new RestoreTabletAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/restore_tablet", restore_tablet_action);
     _http_handlers.emplace_back(restore_tablet_action);
 
     // Register BE snapshot action
-    SnapshotAction* snapshot_action = new SnapshotAction(_env);
+    auto* snapshot_action = new SnapshotAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/snapshot", snapshot_action);
     _http_handlers.emplace_back(snapshot_action);
 #endif
 
     // 2 compaction actions
-    CompactionAction* show_compaction_action = new CompactionAction(CompactionActionType::SHOW_INFO);
+    auto* show_compaction_action = new CompactionAction(CompactionActionType::SHOW_INFO);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/show", show_compaction_action);
     _http_handlers.emplace_back(show_compaction_action);
 
-    CompactionAction* run_compaction_action = new CompactionAction(CompactionActionType::RUN_COMPACTION);
+    auto* run_compaction_action = new CompactionAction(CompactionActionType::RUN_COMPACTION);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/compact", run_compaction_action);
     _http_handlers.emplace_back(run_compaction_action);
 
-    CompactionAction* show_repair_action = new CompactionAction(CompactionActionType::SHOW_REPAIR);
+    auto* show_repair_action = new CompactionAction(CompactionActionType::SHOW_REPAIR);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/compaction/show_repair", show_repair_action);
     _http_handlers.emplace_back(show_repair_action);
 
-    CompactionAction* submit_repair_action = new CompactionAction(CompactionActionType::SUBMIT_REPAIR);
+    auto* submit_repair_action = new CompactionAction(CompactionActionType::SUBMIT_REPAIR);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/compaction/submit_repair", submit_repair_action);
     _http_handlers.emplace_back(submit_repair_action);
 
-    UpdateConfigAction* update_config_action = new UpdateConfigAction(_env);
+    auto* update_config_action = new UpdateConfigAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/update_config", update_config_action);
     _http_handlers.emplace_back(update_config_action);
 
-    RuntimeFilterCacheAction* runtime_filter_cache_action = new RuntimeFilterCacheAction(_env);
+    auto* runtime_filter_cache_action = new RuntimeFilterCacheAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/runtime_filter_cache/{action}",
                                       runtime_filter_cache_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/runtime_filter_cache/{action}",
                                       runtime_filter_cache_action);
     _http_handlers.emplace_back(runtime_filter_cache_action);
 
-    CompactRocksDbMetaAction* compact_rocksdb_meta_action = new CompactRocksDbMetaAction(_env);
+    auto* compact_rocksdb_meta_action = new CompactRocksDbMetaAction(_env);
     _ev_http_server->register_handler(HttpMethod::POST, "/api/compact_rocksdb_meta", compact_rocksdb_meta_action);
     _http_handlers.emplace_back(compact_rocksdb_meta_action);
 
-    QueryCacheAction* query_cache_action = new QueryCacheAction(_env);
+    auto* query_cache_action = new QueryCacheAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/query_cache/{action}", query_cache_action);
     _ev_http_server->register_handler(HttpMethod::PUT, "/api/query_cache/{action}", query_cache_action);
     _http_handlers.emplace_back(query_cache_action);
 
-    PipelineBlockingDriversAction* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
+    auto* pipeline_driver_poller_action = new PipelineBlockingDriversAction(_env);
     _ev_http_server->register_handler(HttpMethod::GET, "/api/pipeline_blocking_drivers/{action}",
                                       pipeline_driver_poller_action);
     _http_handlers.emplace_back(pipeline_driver_poller_action);

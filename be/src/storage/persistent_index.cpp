@@ -1974,7 +1974,7 @@ Status ImmutableIndex::_get_fixlen_kvs_for_shard(std::vector<std::vector<KVRef>>
             const uint8_t* kvs = bucket_pos + pad(nele, kPackSize);
             for (size_t i = 0; i < nele; i++) {
                 const uint8_t* kv = kvs + (shard_info.key_size + shard_info.value_size) * i;
-                IndexHash hash = IndexHash(key_index_hash(kv, shard_info.key_size));
+                auto hash = IndexHash(key_index_hash(kv, shard_info.key_size));
                 kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash,
                                                                   shard_info.key_size + shard_info.value_size);
             }
@@ -1998,7 +1998,7 @@ Status ImmutableIndex::_get_varlen_kvs_for_shard(std::vector<std::vector<KVRef>>
                 auto kv_offset = UNALIGNED_LOAD16(offsets + sizeof(uint16_t) * i);
                 auto kv_size = UNALIGNED_LOAD16(offsets + sizeof(uint16_t) * (i + 1)) - kv_offset;
                 const uint8_t* kv = bucket_pos + kv_offset;
-                IndexHash hash = IndexHash(key_index_hash(kv, kv_size - shard_info.value_size));
+                auto hash = IndexHash(key_index_hash(kv, kv_size - shard_info.value_size));
                 kvs_by_shard[hash.shard(shard_bits)].emplace_back(kv, hash.hash, kv_size);
             }
         }
@@ -2036,7 +2036,7 @@ Status ImmutableIndex::_get_in_fixlen_shard(size_t shard_idx, size_t n, const Sl
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
         auto key_idx = keys_info.key_idxes[i];
-        const uint8_t* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
+        const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
@@ -2068,7 +2068,7 @@ Status ImmutableIndex::_get_in_varlen_shard(size_t shard_idx, size_t n, const Sl
         auto nele = bucket_info.size;
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
         auto key_idx = keys_info.key_idxes[i];
-        const uint8_t* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
+        const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
         values[key_idx] = NullIndexValue;
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
@@ -2118,7 +2118,7 @@ Status ImmutableIndex::_check_not_exist_in_fixlen_shard(size_t shard_idx, size_t
         auto nele = bucket_info.size;
         auto key_idx = keys_info.key_idxes[i];
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const uint8_t* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
+        const auto* fixed_key_probe = (const uint8_t*)keys[key_idx].data;
         auto kv_pos = bucket_pos + pad(nele, kPackSize);
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
             auto idx = candidate_idxes[candidate_idx];
@@ -2146,7 +2146,7 @@ Status ImmutableIndex::_check_not_exist_in_varlen_shard(size_t shard_idx, size_t
         auto nele = bucket_info.size;
         auto key_idx = keys_info.key_idxes[i];
         auto ncandidates = get_matched_tag_idxes(bucket_pos, nele, h.tag(), candidate_idxes);
-        const uint8_t* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
+        const auto* key_probe = reinterpret_cast<const uint8_t*>(keys[key_idx].data);
         auto offset_pos = bucket_pos + pad(nele, kPackSize);
         for (size_t candidate_idx = 0; candidate_idx < ncandidates; candidate_idx++) {
             auto idx = candidate_idxes[candidate_idx];

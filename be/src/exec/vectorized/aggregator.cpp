@@ -810,7 +810,7 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
-                vectorized::ConstColumn* const_column =
+                auto* const_column =
                         static_cast<vectorized::ConstColumn*>(_group_by_columns[i].get());
                 const_column->data_column()->assign(chunk->num_rows(), 0);
                 _group_by_columns[i] = const_column->data_column();

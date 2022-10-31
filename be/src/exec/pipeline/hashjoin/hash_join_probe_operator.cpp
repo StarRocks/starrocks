@@ -2,8 +2,7 @@
 
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 HashJoinProbeOperator::HashJoinProbeOperator(OperatorFactory* factory, int32_t id, const string& name,
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_prober,
@@ -88,5 +87,4 @@ OperatorPtr HashJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, 
                                                    _hash_joiner_factory->create_builder(driver_sequence));
 }
 
-} // namespace pipeline
 } // namespace starrocks

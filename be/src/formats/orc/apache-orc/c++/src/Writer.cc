@@ -507,7 +507,7 @@ void WriterImpl::writePostscript() {
     if (!postScript.SerializeToZeroCopyStream(bufferedStream.get())) {
         throw std::logic_error("Failed to write post script.");
     }
-    unsigned char psLength = static_cast<unsigned char>(bufferedStream->flush());
+    auto psLength = static_cast<unsigned char>(bufferedStream->flush());
     outStream->write(&psLength, sizeof(unsigned char));
 }
 

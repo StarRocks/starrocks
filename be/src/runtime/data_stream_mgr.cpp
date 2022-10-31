@@ -84,7 +84,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
             return sub_iter->second;
         }
     }
-    return std::shared_ptr<DataStreamRecvr>();
+    return {};
 }
 
 Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done) {

@@ -166,7 +166,7 @@ void TypeImpl::setIds(uint64_t _columnId, uint64_t _maxColumnId) {
 }
 
 void TypeImpl::addChildType(std::unique_ptr<Type> childType) {
-    TypeImpl* child = dynamic_cast<TypeImpl*>(childType.get());
+    auto* child = dynamic_cast<TypeImpl*>(childType.get());
     subTypes.push_back(std::move(childType));
     if (child != nullptr) {
         child->parent = this;
@@ -308,7 +308,7 @@ std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity, M
         return std::unique_ptr<ColumnVectorBatch>(new TimestampVectorBatch(capacity, memoryPool));
 
     case STRUCT: {
-        StructVectorBatch* result = new StructVectorBatch(capacity, memoryPool);
+        auto* result = new StructVectorBatch(capacity, memoryPool);
         std::unique_ptr<ColumnVectorBatch> return_value = std::unique_ptr<ColumnVectorBatch>(result);
         for (uint64_t i = 0; i < getSubtypeCount(); ++i) {
             result->fields.push_back(getSubtype(i)->createRowBatch(capacity, memoryPool, encoded).release());
@@ -317,7 +317,7 @@ std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity, M
     }
 
     case LIST: {
-        ListVectorBatch* result = new ListVectorBatch(capacity, memoryPool);
+        auto* result = new ListVectorBatch(capacity, memoryPool);
         std::unique_ptr<ColumnVectorBatch> return_value = std::unique_ptr<ColumnVectorBatch>(result);
         if (getSubtype(0) != nullptr) {
             result->elements = getSubtype(0)->createRowBatch(capacity, memoryPool, encoded);
@@ -326,7 +326,7 @@ std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity, M
     }
 
     case MAP: {
-        MapVectorBatch* result = new MapVectorBatch(capacity, memoryPool);
+        auto* result = new MapVectorBatch(capacity, memoryPool);
         std::unique_ptr<ColumnVectorBatch> return_value = std::unique_ptr<ColumnVectorBatch>(result);
         if (getSubtype(0) != nullptr) {
             result->keys = getSubtype(0)->createRowBatch(capacity, memoryPool, encoded);
@@ -346,7 +346,7 @@ std::unique_ptr<ColumnVectorBatch> TypeImpl::createRowBatch(uint64_t capacity, M
     }
 
     case UNION: {
-        UnionVectorBatch* result = new UnionVectorBatch(capacity, memoryPool);
+        auto* result = new UnionVectorBatch(capacity, memoryPool);
         std::unique_ptr<ColumnVectorBatch> return_value = std::unique_ptr<ColumnVectorBatch>(result);
         for (uint64_t i = 0; i < getSubtypeCount(); ++i) {
             result->children.push_back(getSubtype(i)->createRowBatch(capacity, memoryPool, encoded).release());
@@ -376,14 +376,14 @@ std::unique_ptr<Type> createStructType() {
 }
 
 std::unique_ptr<Type> createListType(std::unique_ptr<Type> elements) {
-    TypeImpl* result = new TypeImpl(LIST);
+    auto* result = new TypeImpl(LIST);
     std::unique_ptr<Type> return_value = std::unique_ptr<Type>(result);
     result->addChildType(std::move(elements));
     return return_value;
 }
 
 std::unique_ptr<Type> createMapType(std::unique_ptr<Type> key, std::unique_ptr<Type> value) {
-    TypeImpl* result = new TypeImpl(MAP);
+    auto* result = new TypeImpl(MAP);
     std::unique_ptr<Type> return_value = std::unique_ptr<Type>(result);
     result->addChildType(std::move(key));
     result->addChildType(std::move(value));
@@ -425,7 +425,7 @@ std::unique_ptr<Type> convertType(const proto::Type& type, const proto::Footer& 
     case proto::Type_Kind_LIST:
     case proto::Type_Kind_MAP:
     case proto::Type_Kind_UNION: {
-        TypeImpl* result = new TypeImpl(static_cast<TypeKind>(type.kind()));
+        auto* result = new TypeImpl(static_cast<TypeKind>(type.kind()));
         ret = std::unique_ptr<Type>(result);
         if (type.kind() == proto::Type_Kind_LIST && type.subtypes_size() != 1)
             throw ParseError("Illegal LIST type that doesn't contain one subtype");
@@ -440,7 +440,7 @@ std::unique_ptr<Type> convertType(const proto::Type& type, const proto::Footer& 
     }
 
     case proto::Type_Kind_STRUCT: {
-        TypeImpl* result = new TypeImpl(STRUCT);
+        auto* result = new TypeImpl(STRUCT);
         ret = std::unique_ptr<Type>(result);
         if (type.subtypes_size() > type.fieldnames_size())
             throw ParseError("Illegal STRUCT type that contains less fieldnames than subtypes");
@@ -470,7 +470,7 @@ std::unique_ptr<Type> convertType(const proto::Type& type, const proto::Footer& 
    */
 std::unique_ptr<Type> buildSelectedType(const Type* fileType, const std::vector<bool>& selected) {
     if (fileType == nullptr || !selected[fileType->getColumnId()]) {
-        return std::unique_ptr<Type>();
+        return {};
     }
 
     TypeImpl* result;
@@ -553,7 +553,7 @@ ORC_UNIQUE_PTR<Type> Type::buildTypeFromString(const std::string& input) {
 }
 
 std::unique_ptr<Type> TypeImpl::parseArrayType(const std::string& input, size_t start, size_t end) {
-    TypeImpl* arrayType = new TypeImpl(LIST);
+    auto* arrayType = new TypeImpl(LIST);
     std::unique_ptr<Type> return_value = std::unique_ptr<Type>(arrayType);
     if (input[start] != '<') {
         throw std::logic_error("Missing < after array.");
@@ -567,7 +567,7 @@ std::unique_ptr<Type> TypeImpl::parseArrayType(const std::string& input, size_t 
 }
 
 std::unique_ptr<Type> TypeImpl::parseMapType(const std::string& input, size_t start, size_t end) {
-    TypeImpl* mapType = new TypeImpl(MAP);
+    auto* mapType = new TypeImpl(MAP);
     std::unique_ptr<Type> return_value = std::unique_ptr<Type>(mapType);
     if (input[start] != '<') {
         throw std::logic_error("Missing < after map.");
@@ -623,7 +623,7 @@ std::pair<std::string, size_t> TypeImpl::parseName(const std::string& input, con
 }
 
 std::unique_ptr<Type> TypeImpl::parseStructType(const std::string& input, size_t start, size_t end) {
-    TypeImpl* structType = new TypeImpl(STRUCT);
+    auto* structType = new TypeImpl(STRUCT);
     std::unique_ptr<Type> return_value = std::unique_ptr<Type>(structType);
     size_t pos = start + 1;
     if (input[start] != '<') {
@@ -648,7 +648,7 @@ std::unique_ptr<Type> TypeImpl::parseStructType(const std::string& input, size_t
 }
 
 std::unique_ptr<Type> TypeImpl::parseUnionType(const std::string& input, size_t start, size_t end) {
-    TypeImpl* unionType = new TypeImpl(UNION);
+    auto* unionType = new TypeImpl(UNION);
     std::unique_ptr<Type> return_value = std::unique_ptr<Type>(unionType);
     size_t pos = start + 1;
     if (input[start] != '<') {

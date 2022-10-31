@@ -20,7 +20,7 @@ class Column;
 class SegmentRewriter {
 public:
     SegmentRewriter();
-    ~SegmentRewriter();
+    ~SegmentRewriter() = default;
 
     // rewrite a segment file, add/replace some of it's columns
     // read from src, write to dest

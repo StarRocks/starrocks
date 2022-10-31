@@ -323,7 +323,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         // set current range index to the last one, so next time we reach EOF.
         _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
-        size_t file_size = static_cast<size_t>(-1);
+        auto file_size = static_cast<size_t>(-1);
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size);
         return Status::OK();
     }
@@ -335,7 +335,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
                                                          scan_range->file_length);
     }
     {
-        HdfsScannerCSVReader* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+        auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
         RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
         if (scan_range->offset != 0) {
             // Always skip first record of scan range with non-zero offset.

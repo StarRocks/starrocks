@@ -70,7 +70,7 @@ size_t GCHelper::_backlog_bytes_limit() {
     for (unsigned i = 0; i < SMOOTHSTEP_NSTEPS; i++) {
         sum += _backlog[i] * get_smoothstep_at(i);
     }
-    size_t bytes = (size_t)(sum >> SMOOTHSTEP_BFP);
+    auto bytes = (size_t)(sum >> SMOOTHSTEP_BFP);
     return bytes;
 }
 

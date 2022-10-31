@@ -200,7 +200,7 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
 
 #ifdef USE_JEMALLOC
 void malloc_stats_write_cb(void* opaque, const char* data) {
-    std::string* buf = static_cast<std::string*>(opaque);
+    auto* buf = static_cast<std::string*>(opaque);
     buf->append(data);
 }
 #endif

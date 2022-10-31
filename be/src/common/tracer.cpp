@@ -139,7 +139,7 @@ SpanContext Tracer::from_trace_parent(const std::string& trace_parent) {
     HexToBinary(fields[2], span_id_buf, 8);
     uint8_t flags;
     HexToBinary(fields[3], &flags, 1);
-    return SpanContext(trace::TraceId(trace_id_buf), trace::SpanId(span_id_buf), trace::TraceFlags(flags), true);
+    return {trace::TraceId(trace_id_buf), trace::SpanId(span_id_buf), trace::TraceFlags(flags), true};
 }
 
 std::string Tracer::to_trace_parent(const SpanContext& context) {

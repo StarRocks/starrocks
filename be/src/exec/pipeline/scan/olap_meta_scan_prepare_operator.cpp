@@ -12,8 +12,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                          int32_t driver_sequence,
@@ -79,5 +78,4 @@ OperatorPtr OlapMetaScanPrepareOperatorFactory::create(int32_t degree_of_paralle
                                                          _scan_ctx_factory->get_or_create(driver_sequence));
 }
 
-} // namespace pipeline
 } // namespace starrocks

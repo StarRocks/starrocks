@@ -4,8 +4,7 @@
 
 #include <utility>
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 
 static inline std::string base_name_of_conjugate_op(const std::string& s) {
     std::string lc;
@@ -123,5 +122,4 @@ pipeline::OperatorPtr ConjugateOperatorFactory::create(int32_t degree_of_paralle
     return std::make_shared<ConjugateOperator>(this, driver_sequence, sink_op, source_op);
 }
 
-} // namespace query_cache
 } // namespace starrocks

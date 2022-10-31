@@ -5,8 +5,7 @@
 #include "exec/pipeline/query_context.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 HashJoinBuildOperator::HashJoinBuildOperator(OperatorFactory* factory, int32_t id, const string& name,
                                              int32_t plan_node_id, int32_t driver_sequence, HashJoinerPtr join_builder,
@@ -136,5 +135,4 @@ OperatorPtr HashJoinBuildOperatorFactory::create(int32_t degree_of_parallelism, 
 void HashJoinBuildOperatorFactory::retain_string_key_columns(int32_t driver_sequence, vectorized::Columns&& columns) {
     _string_key_columns[driver_sequence] = std::move(columns);
 }
-} // namespace pipeline
 } // namespace starrocks

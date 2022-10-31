@@ -7,8 +7,7 @@
 #include "exprs/vectorized/in_const_predicate.hpp"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 #define APPLY_FOR_NUMERICAL_TYPE(M, APPEND_TO_SQL) \
     M(TYPE_TINYINT, APPEND_TO_SQL)                 \
     M(TYPE_BOOLEAN, APPEND_TO_SQL)                 \
@@ -469,9 +468,8 @@ template <PrimitiveType PT, typename CppType>
 void MySQLDataSource::append_value_to_column(Column* column, CppType& value) {
     using ColumnType = typename vectorized::RunTimeColumnType<PT>;
 
-    ColumnType* runtime_column = down_cast<ColumnType*>(column);
+    auto* runtime_column = down_cast<ColumnType*>(column);
     runtime_column->append(value);
 }
 
-} // namespace connector
 } // namespace starrocks

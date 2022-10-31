@@ -759,7 +759,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
     TQueryPlanInfo t_query_plan_info;
-    const uint8_t* buf = (const uint8_t*)query_plan_info.data();
+    const auto* buf = (const uint8_t*)query_plan_info.data();
     uint32_t len = query_plan_info.size();
     // deserialize TQueryPlanInfo
     auto st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_query_plan_info);

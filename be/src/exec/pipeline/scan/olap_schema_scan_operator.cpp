@@ -10,8 +10,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 OlapSchemaScanOperatorFactory::OlapSchemaScanOperatorFactory(int32_t id, ScanNode* schema_scan_node, size_t dop,
                                                              const TPlanNode& t_node,
@@ -84,5 +83,4 @@ void OlapSchemaScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
 
-} // namespace pipeline
 } // namespace starrocks

@@ -279,7 +279,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
             auto value = viewer.value(row);
-            int32_t r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
@@ -301,7 +301,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
             }
 
             auto value = viewer.value(row);
-            int32_t r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
@@ -430,7 +430,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
         auto slice = input->get_slice(0);
-        RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+        auto r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
         if (result != StringParser::PARSE_SUCCESS) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -443,9 +443,9 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
-        NullableColumn* input_column = down_cast<NullableColumn*>(column.get());
+        auto* input_column = down_cast<NullableColumn*>(column.get());
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        BinaryColumn* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
@@ -463,7 +463,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     } else {
         NullColumnPtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
-        BinaryColumn* data_column = down_cast<BinaryColumn*>(column.get());
+        auto* data_column = down_cast<BinaryColumn*>(column.get());
 
         bool has_null = false;
         for (int i = 0; i < sz; ++i) {
@@ -498,7 +498,7 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-        RunTimeCppType<ToType> r =
+        auto r =
                 StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
 
         bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
@@ -940,7 +940,7 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                     builder.append_null();
                 } else {
                     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-                    uint64_t int_value = StringParser::string_to_unsigned_int<uint64_t>(
+                    auto int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
                         if constexpr (AllowThrowException) {
@@ -1424,7 +1424,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                                                     array_field_type_cast_to.debug_string());
                 return nullptr;
             }
-            ColumnRef* child = new ColumnRef(cast);
+            auto* child = new ColumnRef(cast);
             cast_element_expr->add_child(child);
             if (pool) {
                 pool->add(cast_element_expr);
@@ -1470,7 +1470,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         if (cast_element_expr == nullptr) {
             return nullptr;
         }
-        ColumnRef* child = new ColumnRef(cast);
+        auto* child = new ColumnRef(cast);
         cast_element_expr->add_child(child);
         if (pool) {
             pool->add(cast_element_expr);
@@ -1615,7 +1615,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;
         }
-        ColumnRef* child = new ColumnRef(node);
+        auto* child = new ColumnRef(node);
         cast_element_expr->add_child(child);
 
         pool->add(child);

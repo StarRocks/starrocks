@@ -11,8 +11,7 @@
 #include "storage/chunk_helper.h"
 #include "util/slice.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -137,5 +136,4 @@ Status JDBCDataSource::_create_scanner(RuntimeState* state) {
     return Status::OK();
 }
 
-} // namespace connector
 } // namespace starrocks

@@ -25,7 +25,7 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     }
 
     // chunk_holder was shared ownership by itself
-    detail::ChunkHolder* chunk_holder = new detail::ChunkHolder(std::make_shared<DataSegment>(_sort_exprs, chunk));
+    auto* chunk_holder = new detail::ChunkHolder(std::make_shared<DataSegment>(_sort_exprs, chunk));
     chunk_holder->ref();
     DeferOp defer([&] { chunk_holder->unref(); });
     int row_sz = chunk_holder->value()->chunk->num_rows();
