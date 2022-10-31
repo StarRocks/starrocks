@@ -78,11 +78,11 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t degree_of_paralleli
         if (_limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             chunks_sorter = std::make_unique<HeapChunkSorter>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+                    _sort_keys, 0, _limit + _offset, SIZE_OF_CHUNK_FOR_TOPN);
         } else {
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
+                    _sort_keys, 0, _limit + _offset, SIZE_OF_CHUNK_FOR_TOPN);
         }
     } else {
         chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(
