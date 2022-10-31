@@ -328,7 +328,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             continue;
         }
 
-        if (LIKELY(config::sync_tablet_data)) {
+        if (config::sync_tablet_meta) {
             std::filesystem::path schema_hash_path(new_tablet->schema_hash_path());
             std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
             Status st = fs::sync_dir(tablet_id_path.string());
