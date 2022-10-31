@@ -2610,6 +2610,7 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
             } // end for partitions
+            DynamicPartitionUtil.registerOrRemovePartitionTTLTable(dbId, materializedView);
         }
     }
 
@@ -3242,12 +3243,15 @@ public class LocalMetastore implements ConnectorMetadata {
         TStorageType baseIndexStorageType = TStorageType.COLUMN;
         materializedView.setIndexMeta(baseIndexId, mvName, baseSchema, schemaVersion, schemaHash,
                 shortKeyColumnCount, baseIndexStorageType, stmt.getKeysType());
-        // set replication_num
+
         Map<String, String> properties = stmt.getProperties();
+        if (properties == null) {
+            properties = Maps.newHashMap();
+        }
+        // set replication_num
         short replicationNum = FeConstants.default_replication_num;
         try {
-            boolean isReplicationNumSet =
-                    properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
+            boolean isReplicationNumSet = properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM);
             replicationNum = PropertyAnalyzer.analyzeReplicationNum(properties, replicationNum);
             if (isReplicationNumSet) {
                 materializedView.setReplicationNum(replicationNum);
@@ -3269,13 +3273,10 @@ public class LocalMetastore implements ConnectorMetadata {
             }
         }
 
-        // set storage medium
         DataProperty dataProperty;
         try {
-            boolean hasMedium = false;
-            if (properties != null) {
-                hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
-            }
+            // set storage medium
+            boolean hasMedium = properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM);
             dataProperty = PropertyAnalyzer.analyzeDataProperty(properties,
                     DataProperty.DEFAULT_DATA_PROPERTY);
             if (hasMedium && dataProperty.getStorageMedium() == TStorageMedium.SSD) {
@@ -3286,13 +3287,20 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME,
                                 String.valueOf(dataProperty.getCooldownTimeMs()));
             }
-            if (properties != null && !properties.isEmpty()) {
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+                int number = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionTTLNumber(number);
+            }
+            if (!properties.isEmpty()) {
                 // here, all properties should be checked
                 throw new DdlException("Unknown properties: " + properties);
             }
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage(), e);
         }
+
         boolean createMvSuccess;
         Set<Long> tabletIdSet = new HashSet<>();
         // process single partition info
@@ -3337,6 +3345,7 @@ public class LocalMetastore implements ConnectorMetadata {
 
         // NOTE: The materialized view has been added to the database, and the following procedure cannot throw exception.
         createTaskForMaterializedView(dbName, materializedView, optHints);
+        DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), materializedView);
     }
 
     private void createTaskForMaterializedView(String dbName, MaterializedView materializedView,
