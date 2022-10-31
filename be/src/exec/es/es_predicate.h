@@ -51,7 +51,8 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column, const std::string& timezone = TimezoneUtils::default_time_zone) {
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column,
+                const std::string& timezone = TimezoneUtils::default_time_zone) {
         DCHECK(!column->empty());
         // We need to convert the predicate column into the corresponding string.
         // Some types require special handling, because the default behavior of Datum may not match the behavior of ES.
