@@ -21,7 +21,7 @@ public class SpreadRunningTaskRunProgress extends LeaderDaemon {
     private TaskRunManager taskRunManager;
 
     public SpreadRunningTaskRunProgress() {
-        super("SpreadRunningTaskRunProgress", FeConstants.default_spread_running_task_run_progress_ms);
+        super("SpreadRunningTaskRunProgress", FeConstants.sync_task_runs_state_interval);
         taskRunManager = GlobalStateMgr.getCurrentState().getTaskManager().getTaskRunManager();
         runningTaskRunProgressMap = new HashMap<>();
         for (Map.Entry<Long, TaskRun> entry : taskRunManager.getRunningTaskRunMap().entrySet()) {

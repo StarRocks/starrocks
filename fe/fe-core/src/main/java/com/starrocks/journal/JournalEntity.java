@@ -544,7 +544,7 @@ public class JournalEntity implements Writable {
                 data = DropTaskRunsLog.read(in);
                 isRead = true;
                 break;
-            case OperationType.OP_UPDATE_RUNNING_TASK_RUN_PROGRESS:
+            case OperationType.OP_ALTER_TASK_RUNS_PROGRESS:
                 data = RunningTaskRunProgressInfo.read(in);
                 isRead = true;
                 break;

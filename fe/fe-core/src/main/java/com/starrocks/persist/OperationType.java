@@ -236,7 +236,7 @@ public class OperationType {
     public static final short OP_CREATE_TASK_RUN = 10081;
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
-    public static final short OP_UPDATE_RUNNING_TASK_RUN_PROGRESS = 10084;
+    public static final short OP_ALTER_TASK_RUNS_PROGRESS = 10084;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;

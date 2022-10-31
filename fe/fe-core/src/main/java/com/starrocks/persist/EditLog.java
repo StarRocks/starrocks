@@ -690,7 +690,7 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
-                case OperationType.OP_UPDATE_RUNNING_TASK_RUN_PROGRESS:
+                case OperationType.OP_ALTER_TASK_RUNS_PROGRESS:
                     RunningTaskRunProgressInfo runningTaskRunProgressInfo = (RunningTaskRunProgressInfo) journal.getData();
                     globalStateMgr.getTaskManager().replayUpdateRunningTaskRunProgress(
                             runningTaskRunProgressInfo.getTaskRunProgressMap());
@@ -1092,7 +1092,7 @@ public class EditLog {
     }
 
     public void logUpdateRunningTaskRunProgress(RunningTaskRunProgressInfo info) {
-        logEdit(OperationType.OP_UPDATE_RUNNING_TASK_RUN_PROGRESS, info);
+        logEdit(OperationType.OP_ALTER_TASK_RUNS_PROGRESS, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {
