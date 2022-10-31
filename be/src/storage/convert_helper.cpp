@@ -242,9 +242,9 @@ public:
         }
         auto src_value = src.get_int64();
         int64_t part1 = (src_value / 1000000L);
-        int32_t year = static_cast<int32_t>((part1 / 10000L) % 10000);
-        int32_t mon = static_cast<int32_t>((part1 / 100) % 100);
-        int32_t day = static_cast<int32_t>(part1 % 100);
+        auto year = static_cast<int32_t>((part1 / 10000L) % 10000);
+        auto mon = static_cast<int32_t>((part1 / 100) % 100);
+        auto day = static_cast<int32_t>(part1 % 100);
         DateValue date_v2;
         date_v2.from_date(year, mon, day);
         dst->set_date(date_v2);

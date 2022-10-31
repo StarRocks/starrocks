@@ -257,7 +257,7 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
         uint32_t n = idx_end - idx_begin;
@@ -311,7 +311,7 @@ public:
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                 uint32_t idx_end, DeletesMap* deletes) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -361,7 +361,7 @@ public:
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -405,7 +405,7 @@ public:
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -448,7 +448,7 @@ public:
     }
 
     void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
@@ -487,7 +487,7 @@ public:
 
     void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
              std::vector<uint64_t>* rowids) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];

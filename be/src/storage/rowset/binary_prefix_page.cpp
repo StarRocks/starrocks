@@ -44,7 +44,7 @@ size_t BinaryPrefixPageBuilder::add(const uint8_t* vals, size_t add_count) {
         return 0;
     }
 
-    const Slice* src = reinterpret_cast<const Slice*>(vals);
+    const auto* src = reinterpret_cast<const Slice*>(vals);
     if (_count == 0) {
         _first_entry.assign_copy(reinterpret_cast<const uint8_t*>(src->get_data()), src->get_size());
     }

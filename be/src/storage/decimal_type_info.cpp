@@ -162,7 +162,7 @@ public:
     }
 
     Status from_string(void* buf, const std::string& scan_key) const override {
-        CppType* data_ptr = reinterpret_cast<CppType*>(buf);
+        auto* data_ptr = reinterpret_cast<CppType*>(buf);
         // Decimal strings in some predicates use decimal_precision_limit as precision,
         // when converted into decimal values, a smaller precision is used, DecimalTypeInfo::from_string
         // fail to convert these decimal strings and report errors; so use decimal_precision_limit
@@ -176,17 +176,17 @@ public:
     }
 
     std::string to_string(const void* src) const override {
-        const CppType* data_ptr = reinterpret_cast<const CppType*>(src);
+        const auto* data_ptr = reinterpret_cast<const CppType*>(src);
         return DecimalV3Cast::to_string<CppType>(*data_ptr, _precision, _scale);
     }
 
     void set_to_max(void* buf) const override {
-        CppType* data = reinterpret_cast<CppType*>(buf);
+        auto* data = reinterpret_cast<CppType*>(buf);
         *data = get_scale_factor<CppType>(_precision) - 1;
     }
 
     void set_to_min(void* buf) const override {
-        CppType* data = reinterpret_cast<CppType*>(buf);
+        auto* data = reinterpret_cast<CppType*>(buf);
         *data = 1 - get_scale_factor<CppType>(_precision);
     }
 
@@ -204,8 +204,8 @@ public:
 
 protected:
     int _datum_cmp_impl(const Datum& left, const Datum& right) const override {
-        const CppType& lhs = left.get<CppType>();
-        const CppType& rhs = right.get<CppType>();
+        const auto& lhs = left.get<CppType>();
+        const auto& rhs = right.get<CppType>();
         return (lhs < rhs) ? -1 : (lhs > rhs) ? 1 : 0;
     }
 

@@ -95,7 +95,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
 
     // deal with nullable.
     if (bits->is_nullable()) {
-        NullableColumn* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
         uint8_t* null_value = null_column->null_column_data().data();
         uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
         for (uint16_t i = from; i < to; i++) {

@@ -202,7 +202,7 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
             ret[i] = 0;
         }
     }
-    return std::string();
+    return {};
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,

@@ -365,7 +365,7 @@ std::string toDecimalString(int64_t value, int32_t scale) {
     }
     buffer << value;
     std::string str = buffer.str();
-    int32_t len = static_cast<int32_t>(str.length());
+    auto len = static_cast<int32_t>(str.length());
     if (len > scale) {
         return sign + str.substr(0, static_cast<size_t>(len - scale)) + "." +
                str.substr(static_cast<size_t>(len - scale), static_cast<size_t>(scale));
@@ -486,7 +486,7 @@ MapColumnPrinter::MapColumnPrinter(std::string& _buffer, const Type& type) : Col
 
 void MapColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    const MapVectorBatch& myBatch = dynamic_cast<const MapVectorBatch&>(batch);
+    const auto& myBatch = dynamic_cast<const MapVectorBatch&>(batch);
     offsets = myBatch.offsets.data();
     keyPrinter->reset(*myBatch.keys);
     elementPrinter->reset(*myBatch.elements);
@@ -519,7 +519,7 @@ UnionColumnPrinter::UnionColumnPrinter(std::string& _buffer, const Type& type) :
 
 void UnionColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    const UnionVectorBatch& unionBatch = dynamic_cast<const UnionVectorBatch&>(batch);
+    const auto& unionBatch = dynamic_cast<const UnionVectorBatch&>(batch);
     tags = unionBatch.tags.data();
     offsets = unionBatch.offsets.data();
     for (size_t i = 0; i < fieldPrinter.size(); ++i) {
@@ -550,7 +550,7 @@ StructColumnPrinter::StructColumnPrinter(std::string& _buffer, const Type& type)
 
 void StructColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    const StructVectorBatch& structBatch = dynamic_cast<const StructVectorBatch&>(batch);
+    const auto& structBatch = dynamic_cast<const StructVectorBatch&>(batch);
     for (size_t i = 0; i < fieldPrinter.size(); ++i) {
         fieldPrinter[i]->reset(*(structBatch.fields[i]));
     }
@@ -652,7 +652,7 @@ void TimestampColumnPrinter::printRow(uint64_t rowId) {
         writeString(buffer, "null");
     } else {
         int64_t nanos = nanoseconds[rowId];
-        time_t secs = static_cast<time_t>(seconds[rowId]);
+        auto secs = static_cast<time_t>(seconds[rowId]);
         struct tm tmValue;
         gmtime_r(&secs, &tmValue);
         char timeBuffer[20];
@@ -679,7 +679,7 @@ void TimestampColumnPrinter::printRow(uint64_t rowId) {
 
 void TimestampColumnPrinter::reset(const ColumnVectorBatch& batch) {
     ColumnPrinter::reset(batch);
-    const TimestampVectorBatch& ts = dynamic_cast<const TimestampVectorBatch&>(batch);
+    const auto& ts = dynamic_cast<const TimestampVectorBatch&>(batch);
     seconds = ts.data.data();
     nanoseconds = ts.nanoseconds.data();
 }

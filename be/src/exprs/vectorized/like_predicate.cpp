@@ -154,7 +154,7 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
     }
 
     // @todo: should replace to mem pool
-    LikePredicateState* state = new LikePredicateState();
+    auto* state = new LikePredicateState();
     context->set_function_state(scope, state);
 
     state->function = &regex_fn;
@@ -197,8 +197,7 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
 Status LikePredicate::regex_close(starrocks_udf::FunctionContext* context,
                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        LikePredicateState* state =
-                reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+        auto* state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete state;
     }
     return Status::OK();

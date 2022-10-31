@@ -1041,7 +1041,7 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
     if (itr == _rowsets.end()) {
         // TODO: _rowsets will act as a cache in the future
         // need to load rowset from rowsetdb, currently just return null
-        return RowsetSharedPtr();
+        return {};
     }
     return itr->second;
 }
@@ -1946,7 +1946,7 @@ void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     const int64_t cost_record_write = 1;
     const int64_t cost_record_read = 4;
     // use double to prevent overflow
-    int64_t delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
+    auto delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
     stats->compaction_score = _compaction_cost_seek + (cost_record_read + cost_record_write) * delete_bytes -
                               cost_record_write * stats->byte_size;
 }

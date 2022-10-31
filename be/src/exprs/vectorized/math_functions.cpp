@@ -202,7 +202,7 @@ DEFINE_MATH_UNARY_FN(degrees, TYPE_DOUBLE, TYPE_DOUBLE);
 
 // bin
 DEFINE_STRING_UNARY_FN_WITH_IMPL(binImpl, v) {
-    uint64_t n = static_cast<uint64_t>(v);
+    auto n = static_cast<uint64_t>(v);
     const size_t max_bits = sizeof(uint64_t) * 8;
     char result[max_bits];
     uint32_t index = max_bits;
@@ -633,9 +633,9 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
         bool negative = data_ptr[digit_start_offset] == '-';
         digit_start_offset += negative;
         StringParser::ParseResult parse_res;
-        uint64_t decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
-                                                                       string_value.size - digit_start_offset,
-                                                                       std::abs(src_base_value), &parse_res);
+        auto decimal64_num = StringParser::string_to_int<uint64_t>(data_ptr + digit_start_offset,
+                                                                   string_value.size - digit_start_offset,
+                                                                   std::abs(src_base_value), &parse_res);
         if (parse_res == StringParser::PARSE_SUCCESS) {
             if (is_signed) {
                 if (negative && decimal64_num > 0ull - std::numeric_limits<int64_t>::min()) {

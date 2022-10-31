@@ -86,7 +86,7 @@ ColumnPtr StringFunctions::split(FunctionContext* context, const starrocks::vect
     array_offsets->reserve(row_nums + 1);
 
     //Array Binary
-    BinaryColumn* haystack_columns = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[0].get()));
+    auto* haystack_columns = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[0].get()));
     BinaryColumn::Ptr array_binary_column = BinaryColumn::create();
 
     auto state = reinterpret_cast<SplitState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));

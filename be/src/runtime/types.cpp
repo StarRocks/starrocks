@@ -161,7 +161,7 @@ TypeDescriptor::TypeDescriptor(const google::protobuf::RepeatedPtrField<PTypeNod
     DCHECK_LT(*idx, types.size());
 
     const PTypeNode& node = types.Get(*idx);
-    TTypeNodeType::type node_type = static_cast<TTypeNodeType::type>(node.type());
+    auto node_type = static_cast<TTypeNodeType::type>(node.type());
     switch (node_type) {
     case TTypeNodeType::SCALAR: {
         DCHECK(node.has_scalar_type());

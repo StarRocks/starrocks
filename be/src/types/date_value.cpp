@@ -146,7 +146,7 @@ std::string DateValue::month_name() const {
 std::string DateValue::day_name() const {
     int day = weekday();
     if (day < 0 || day >= 7) {
-        return std::string();
+        return {};
     }
     return s_day_name[day];
 }

@@ -45,7 +45,7 @@ public:
             uint32_t curr = offsets[i];
             DCHECK_GE(curr, prev);
             // cast negative subscript to large integer.
-            uint32_t subscript = (uint32_t)subscripts[i - 1];
+            auto subscript = (uint32_t)subscripts[i - 1];
             null_flags[i - 1] = (subscript > (curr - prev)) | (subscript == 0);
             prev = curr;
         }

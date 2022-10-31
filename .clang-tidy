@@ -30,5 +30,12 @@ Checks: >
     modernize-replace-random-shuffle,
     modernize-deprecated-headers,
     modernize-deprecated-ios-base-aliases,
-    modernize-shrink-to-fit
+    modernize-shrink-to-fit,
+    modernize-use-bool-literals,
+    modernize-unary-static-assert,
+    modernize-replace-disallow-copy-and-assign-macro,
+    modernize-use-auto,
+    modernize-use-uncaught-exceptions,
+    modernize-return-braced-init-list,
+    modernize-concat-nested-namespaces
 

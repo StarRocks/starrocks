@@ -353,7 +353,7 @@ std::string GeoPolygon::as_wkt() const {
 bool GeoPolygon::contains(const GeoShape* rhs) const {
     switch (rhs->type()) {
     case GEO_SHAPE_POINT: {
-        const GeoPoint* point = (const GeoPoint*)rhs;
+        const auto* point = (const GeoPoint*)rhs;
         return _polygon->Contains(*point->point());
 #if 0
         if (_polygon->Contains(point->point())) {
@@ -363,11 +363,11 @@ bool GeoPolygon::contains(const GeoShape* rhs) const {
 #endif
     }
     case GEO_SHAPE_LINE_STRING: {
-        const GeoLine* line = (const GeoLine*)rhs;
+        const auto* line = (const GeoLine*)rhs;
         return _polygon->Contains(*line->polyline());
     }
     case GEO_SHAPE_POLYGON: {
-        const GeoPolygon* other = (const GeoPolygon*)rhs;
+        const auto* other = (const GeoPolygon*)rhs;
         return _polygon->Contains(other->polygon());
     }
 #if 0
@@ -424,7 +424,7 @@ GeoParseStatus GeoCircle::init(double lng, double lat, double radius_meter) {
 bool GeoCircle::contains(const GeoShape* rhs) const {
     switch (rhs->type()) {
     case GEO_SHAPE_POINT: {
-        const GeoPoint* point = (const GeoPoint*)rhs;
+        const auto* point = (const GeoPoint*)rhs;
         return _cap->Contains(*point->point());
 #if 0
         if (_polygon->Contains(point->point())) {

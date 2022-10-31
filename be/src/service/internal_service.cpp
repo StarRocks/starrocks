@@ -98,8 +98,8 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
     // transmit_data(), which will cause a dirty memory access.
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    PTransmitChunkParams* req = const_cast<PTransmitChunkParams*>(request);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* req = const_cast<PTransmitChunkParams*>(request);
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
     if (cntl->request_attachment().size() > 0) {
@@ -235,7 +235,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
-        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
@@ -255,7 +255,7 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
-        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()));
     }
@@ -385,8 +385,8 @@ template <typename T>
 void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cntl_base,
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    GetResultBatchCtx* ctx = new GetResultBatchCtx(cntl, result, done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
 }
 

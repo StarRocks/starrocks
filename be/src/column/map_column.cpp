@@ -123,7 +123,7 @@ void MapColumn::append_value_multiple_times(const Column& src, uint32_t index, u
 }
 
 void MapColumn::append_value_multiple_times(const void* value, size_t count) {
-    const Datum* datum = reinterpret_cast<const Datum*>(value);
+    const auto* datum = reinterpret_cast<const Datum*>(value);
     const auto& map = datum->get<DatumMap>();
 
     for (size_t c = 0; c < count; ++c) {
@@ -277,7 +277,7 @@ MutableColumnPtr MapColumn::clone_empty() const {
 
 size_t MapColumn::filter_range(const Column::Filter& filter, size_t from, size_t to) {
     DCHECK_EQ(size(), to);
-    uint32_t* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
+    auto* offsets = reinterpret_cast<uint32_t*>(_offsets->mutable_raw_data());
     uint32_t elements_start = offsets[from];
     uint32_t elements_end = offsets[to];
     Filter element_filter(elements_end, 0);
@@ -455,7 +455,7 @@ Datum MapColumn::get(size_t idx) const {
             res[_keys->get(offset + i).convert2DatumKey()] = _values->get(offset + i);
         }
     }
-    return Datum(res);
+    return {res};
 }
 
 size_t MapColumn::get_map_size(size_t idx) const {
@@ -475,7 +475,7 @@ size_t MapColumn::element_memory_usage(size_t from, size_t size) const {
 }
 
 void MapColumn::swap_column(Column& rhs) {
-    MapColumn& map_column = down_cast<MapColumn&>(rhs);
+    auto& map_column = down_cast<MapColumn&>(rhs);
     _offsets->swap_column(*map_column.offsets_column());
     _keys->swap_column(*map_column.keys_column());
     _values->swap_column(*map_column.values_column());

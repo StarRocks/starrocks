@@ -91,7 +91,7 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
     } catch (const boost::escaped_list_error& e) {
         return Status::InvalidArgument(strings::Substitute("Illegal json path: $0", e.what()));
     }
-    std::vector<SimpleJsonPath>* parsed_paths = new std::vector<SimpleJsonPath>();
+    auto* parsed_paths = new std::vector<SimpleJsonPath>();
     _get_parsed_paths(path_exprs, parsed_paths);
 
     context->set_function_state(scope, parsed_paths);
@@ -102,8 +102,7 @@ Status JsonFunctions::json_path_prepare(starrocks_udf::FunctionContext* context,
 Status JsonFunctions::json_path_close(starrocks_udf::FunctionContext* context,
                                       starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        std::vector<SimpleJsonPath>* parsed_paths =
-                reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
+        auto* parsed_paths = reinterpret_cast<std::vector<SimpleJsonPath>*>(context->get_function_state(scope));
         if (parsed_paths != nullptr) {
             delete parsed_paths;
             VLOG(10) << "close json path";
@@ -370,7 +369,7 @@ ColumnPtr JsonFunctions::_json_string_unescaped(FunctionContext* context, const 
 //////////////////////////// User visiable functions /////////////////////////////////
 
 static StatusOr<JsonPath*> get_prepared_or_parse(FunctionContext* context, Slice slice, JsonPath* out) {
-    JsonPath* prepared = reinterpret_cast<JsonPath*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* prepared = reinterpret_cast<JsonPath*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
     if (prepared != nullptr) {
         return prepared;
     }
@@ -390,7 +389,7 @@ Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* c
     Slice path_value = ColumnHelper::get_const_value<TYPE_VARCHAR>(path_column);
     auto json_path = JsonPath::parse(path_value);
     RETURN_IF(!json_path.ok(), json_path.status());
-    JsonPath* state = new JsonPath(std::move(json_path.value()));
+    auto* state = new JsonPath(std::move(json_path.value()));
     context->set_function_state(scope, state);
 
     VLOG(10) << "prepare json path: " << path_value;
@@ -400,7 +399,7 @@ Status JsonFunctions::native_json_path_prepare(starrocks_udf::FunctionContext* c
 Status JsonFunctions::native_json_path_close(starrocks_udf::FunctionContext* context,
                                              starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        JsonPath* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<JsonPath*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
@@ -434,7 +433,7 @@ static Status _convert_json_slice(const vpack::Slice& slice, vectorized::ColumnB
         double num = slice.getNumber<int64_t>();
         result.append(num);
     } else if constexpr (ResultType == TYPE_DOUBLE) {
-        double num = slice.getNumber<double>();
+        auto num = slice.getNumber<double>();
         result.append(num);
     } else {
         CHECK(false) << "unsupported";

@@ -758,7 +758,7 @@ void RuntimeFilterWorker::_deliver_broadcast_runtime_filter_local(PTransmitRunti
 
 void RuntimeFilterWorker::execute() {
     LOG(INFO) << "RuntimeFilterWorker start working.";
-    RuntimeFilterRpcClosure* rpc_closure = new RuntimeFilterRpcClosure();
+    auto* rpc_closure = new RuntimeFilterRpcClosure();
     rpc_closure->ref();
     DeferOp deferop([&] { rpc_closure->Run(); });
 
