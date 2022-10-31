@@ -40,7 +40,6 @@ namespace starrocks {
 ExportSink::ExportSink(ObjectPool* pool, const RowDescriptor& row_desc, const std::vector<TExpr>& t_exprs)
         : _state(nullptr),
           _pool(pool),
-          _row_desc(row_desc),
           _t_output_expr(t_exprs),
           _profile(nullptr),
           _bytes_written_counter(nullptr),

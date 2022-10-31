@@ -77,13 +77,15 @@ void EventBuffer::add(QueryTraceEvent&& event) {
     _buffer.emplace_back(std::move(event));
 }
 
-QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
+QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
     if (_is_enable) {
         _start_ts = MonotonicMicros();
     }
-#endif
 }
+#else
+QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) {}
+#endif
 
 void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE

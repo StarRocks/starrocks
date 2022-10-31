@@ -297,14 +297,6 @@ static inline ArrowStatusCode convert_status_code(StarRocksStatusCode code) {
     }
 }
 
-static inline ArrowStatus convert_status(const StarRocksStatus& status) {
-    if (LIKELY(status.ok())) {
-        return ArrowStatus::OK();
-    } else {
-        return ArrowStatus(convert_status_code(status.code()), status.get_error_msg());
-    }
-}
-
 ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
         : _file(std::move(file)), _pos(pos) {}
 

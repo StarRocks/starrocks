@@ -431,8 +431,6 @@ private:
     pipeline::QueryContext* _query_ctx = nullptr;
 
     bool _enable_pipeline_engine = false;
-
-    bool _use_sorted_agg = false;
 };
 
 #define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
