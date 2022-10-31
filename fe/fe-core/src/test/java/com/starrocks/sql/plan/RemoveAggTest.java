@@ -11,6 +11,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.stream.Stream;
 
 public class RemoveAggTest extends PlanTestBase {
@@ -26,6 +27,7 @@ public class RemoveAggTest extends PlanTestBase {
     void removeAggTest(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
         assertNotContains(plan, "AGGREGATE");
+        assertContains(plan.toLowerCase(Locale.ROOT), "predicates");
         assertContains(plan, "PREAGGREGATION: OFF");
     }
 
@@ -40,7 +42,6 @@ public class RemoveAggTest extends PlanTestBase {
 
     private static Stream<Arguments> removeAggSqlCases() {
         List<String> sqlList = Lists.newArrayList();
-        sqlList.add("select max(v1) from test_agg group by k1, k2, k3;");
         sqlList.add("select max(v1) from test_agg group by k1, k2, k3 having(max(v1) = 1)");
         sqlList.add("select max(v1), min(v2) from test_agg group by k1, k2, k3 " +
                 "having (max(v1) > min(v2) or abs(max(v1)) is null)");
@@ -49,6 +50,7 @@ public class RemoveAggTest extends PlanTestBase {
         sqlList.add("select max(v1) + min(v2) from test_agg group by k1, k2, k3 " +
                 "having ((max(v1) + min(v2)) is not null or k1 > 4)");
         sqlList.add("select k1, k2 from test_agg group by k1, k2, k3 having k1 > 1");
+        sqlList.add("select k1, k2 from test_agg group by k1, k2, k3 having k1 > 1 and k2 < 1 and k1 + k2 >3");
         return sqlList.stream().map(e -> Arguments.of(e));
     }
 
