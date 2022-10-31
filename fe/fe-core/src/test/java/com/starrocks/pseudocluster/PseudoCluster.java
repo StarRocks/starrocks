@@ -1,10 +1,14 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.pseudocluster;
 
+import avro.shaded.com.google.common.collect.Sets;
 import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.ibm.icu.impl.Assert;
+import com.staros.proto.ObjectStorageInfo;
+import com.staros.proto.ShardInfo;
+import com.staros.proto.ShardStorageInfo;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -13,6 +17,9 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.ClientPool;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.UserException;
+import com.starrocks.lake.StarOSAgent;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.PBackendService;
@@ -34,10 +41,14 @@ import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.SQLSyntaxErrorException;
 import java.sql.Statement;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 public class PseudoCluster {
@@ -107,6 +118,82 @@ public class PseudoCluster {
             Preconditions.checkNotNull(getBackendByHost(address.getHostname()));
             Preconditions.checkState(false, "not implemented");
             return null;
+        }
+    }
+
+    private static class PseudoStarOSAgent extends StarOSAgent {
+        private class Worker {
+            long backendId;
+            long workerId;
+            String hostAndPort;
+
+            Worker(long backendId, long workerId, String hostAndPort) {
+                this.backendId = backendId;
+                this.workerId = workerId;
+                this.hostAndPort = hostAndPort;
+            }
+        }
+
+        private long nextId = 65535;
+        private final List<Worker> workers = new ArrayList<>();
+        private final List<ShardInfo> shardInfos = new ArrayList<>();
+
+        @Override
+        public ShardStorageInfo getServiceShardStorageInfo() throws DdlException {
+            ObjectStorageInfo objectStorageInfo = ObjectStorageInfo.newBuilder()
+                    .setObjectUri("s3://bucket")
+                    .setAccessKey("testaccesskey")
+                    .setAccessKeySecret("testaccesskeysecret")
+                    .setEndpoint("http://127.0.0.1")
+                    .build();
+            return ShardStorageInfo.newBuilder().setObjectStorageInfo(objectStorageInfo).build();
+        }
+
+        @Override
+        public void addWorker(long backendId, String hostAndPort) {
+            workers.add(new Worker(backendId, nextId++, hostAndPort));
+        }
+
+        @Override
+        public void removeWorker(String hostAndPort) throws DdlException {
+            workers.removeIf(w -> Objects.equals(w.hostAndPort, hostAndPort));
+        }
+
+        @Override
+        public long getWorkerIdByBackendId(long backendId) {
+            Optional<Worker> worker = workers.stream().filter(w -> w.backendId == backendId).findFirst();
+            return worker.map(value -> value.workerId).orElse(-1L);
+        }
+
+        @Override
+        public void createShardGroup(long groupId) throws DdlException {
+        }
+
+        @Override
+        public List<Long> createShards(int numShards, ShardStorageInfo shardStorageInfo, long groupId) throws DdlException {
+            List<Long> shardIds = new ArrayList<>();
+            for (int i = 0; i < numShards; i++) {
+                long id = nextId++;
+                shardIds.add(id);
+                ShardInfo shardInfo = ShardInfo.newBuilder().setShardStorageInfo(shardStorageInfo).setShardId(id).build();
+                shardInfos.add(shardInfo);
+            }
+            return shardIds;
+        }
+
+        @Override
+        public void deleteShards(Set<Long> shardIds) throws DdlException {
+            shardInfos.removeIf(s -> shardIds.contains(s.getShardId()));
+        }
+
+        @Override
+        public long getPrimaryBackendIdByShard(long shardId) throws UserException {
+            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
+        }
+
+        @Override
+        public Set<Long> getBackendIdsByShard(long shardId) throws UserException {
+            return Sets.newHashSet(getPrimaryBackendIdByShard(shardId));
         }
     }
 
@@ -266,9 +353,12 @@ public class PseudoCluster {
         ClientPool.backendPool = cluster.backendThriftPool;
         BrpcProxy.setInstance(cluster.brpcProxy);
 
+        GlobalStateMgr.getCurrentState().setStarOSAgent(new PseudoStarOSAgent());
+
         // statistics affects table read times counter, so disable it
         Config.enable_statistic_collect = false;
         Config.plugin_dir = runDir + "/plugins";
+        Config.use_staros = true;
         Map<String, String> feConfMap = Maps.newHashMap();
         feConfMap.put("tablet_create_timeout_second", "10");
         feConfMap.put("query_port", Integer.toString(queryPort));
@@ -293,6 +383,8 @@ public class PseudoCluster {
             cluster.backends.put(backend.getHost(), backend);
             cluster.backendIdToHost.put(beId, backend.getHost());
             GlobalStateMgr.getCurrentSystemInfo().addBackend(backend.be);
+            GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .addWorker(beId, String.format("%s:%d", backend.getHost(), port - 1));
             LOG.info("add PseudoBackend {} {}", beId, host);
         }
         int retry = 0;
@@ -369,8 +461,8 @@ public class PseudoCluster {
 
         public String build() {
             return String.format("create table %s (id bigint not null, name varchar(64) not null, age int null) " +
-                    "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
-                    "PROPERTIES(\"write_quorum\" = \"%s\", \"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")",
+                            "primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS %d " +
+                            "PROPERTIES(\"write_quorum\" = \"%s\", \"replication_num\" = \"%d\", \"storage_medium\" = \"%s\")",
                     tableName,
                     buckets, quorum, replication,
                     ssd ? "SSD" : "HDD");
