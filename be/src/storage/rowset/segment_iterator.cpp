@@ -100,7 +100,7 @@ protected:
 
 private:
     struct ScanContext {
-        ScanContext() {}
+        ScanContext() = default;
 
         ~ScanContext() = default;
 
@@ -307,8 +307,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, vectorized::S
         : ChunkIterator(std::move(schema), options.chunk_size),
           _segment(std::move(segment)),
           _opts(std::move(options)),
-          _predicate_columns(_opts.predicates.size()),
-          _context_switch_next_time(false) {}
+          _predicate_columns(_opts.predicates.size()) {}
 
 Status SegmentIterator::_init() {
     SCOPED_RAW_TIMER(&_opts.stats->segment_init_ns);

@@ -59,21 +59,21 @@ NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(paren
 }
 
 NodeChannel::~NodeChannel() {
-    for (size_t i = 0; i < _open_closures.size(); i++) {
-        if (_open_closures[i] != nullptr) {
-            if (_open_closures[i]->unref()) {
-                delete _open_closures[i];
+    for (auto& _open_closure : _open_closures) {
+        if (_open_closure != nullptr) {
+            if (_open_closure->unref()) {
+                delete _open_closure;
             }
-            _open_closures[i] = nullptr;
+            _open_closure = nullptr;
         }
     }
 
-    for (size_t i = 0; i < _add_batch_closures.size(); i++) {
-        if (_add_batch_closures[i] != nullptr) {
-            if (_add_batch_closures[i]->unref()) {
-                delete _add_batch_closures[i];
+    for (auto& _add_batch_closure : _add_batch_closures) {
+        if (_add_batch_closure != nullptr) {
+            if (_add_batch_closure->unref()) {
+                delete _add_batch_closure;
             }
-            _add_batch_closures[i] = nullptr;
+            _add_batch_closure = nullptr;
         }
     }
 

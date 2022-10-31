@@ -64,7 +64,7 @@ void HeapAction::handle(HttpRequest* req) {
     std::stringstream tmp_prof_file_name;
     tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
     const char* file_name = tmp_prof_file_name.str().c_str();
-    if (je_mallctl("prof.dump", NULL, NULL, &file_name, sizeof(const char*)) == 0) {
+    if (je_mallctl("prof.dump", nullptr, nullptr, &file_name, sizeof(const char*)) == 0) {
         std::ifstream f(file_name);
         str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     } else {

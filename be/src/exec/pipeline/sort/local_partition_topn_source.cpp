@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/sort/local_partition_topn_source.h"
 
+#include <utility>
+
 namespace starrocks::pipeline {
 
 LocalPartitionTopnSourceOperator::LocalPartitionTopnSourceOperator(OperatorFactory* factory, int32_t id,
@@ -23,9 +25,9 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSourceOperator::pull_chunk(Runt
 }
 
 LocalPartitionTopnSourceOperatorFactory::LocalPartitionTopnSourceOperatorFactory(
-        int32_t id, int32_t plan_node_id, const LocalPartitionTopnContextFactoryPtr& partition_topn_ctx_factory)
+        int32_t id, int32_t plan_node_id, LocalPartitionTopnContextFactoryPtr partition_topn_ctx_factory)
         : SourceOperatorFactory(id, "local_partition_topn_source", plan_node_id),
-          _partition_topn_ctx_factory(partition_topn_ctx_factory) {}
+          _partition_topn_ctx_factory(std::move(partition_topn_ctx_factory)) {}
 OperatorPtr LocalPartitionTopnSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<LocalPartitionTopnSourceOperator>(this, _id, _plan_node_id, driver_sequence,
                                                               _partition_topn_ctx_factory->create(driver_sequence));

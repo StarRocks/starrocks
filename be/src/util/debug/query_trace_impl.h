@@ -93,7 +93,7 @@ private:
 
 class ScopedTracer {
 public:
-    ScopedTracer(const std::string& name, const std::string& category);
+    ScopedTracer(std::string name, std::string category);
     ~ScopedTracer();
 
 private:

@@ -33,7 +33,7 @@ void Tracer::init(const std::string& service_name) {
             return;
         }
         opts.endpoint = host_port[0];
-        long port = strtol(host_port[1].c_str(), NULL, 10);
+        long port = strtol(host_port[1].c_str(), nullptr, 10);
         if (port > 0 && port <= USHRT_MAX) {
             opts.server_port = (uint16_t)port;
         }

@@ -62,7 +62,7 @@ public:
 
     // Write the contents of |chunk| to ChunkPB
     static StatusOr<ChunkPB> serialize(const vectorized::Chunk& chunk,
-                                       std::shared_ptr<EncodeContext> context = nullptr);
+                                       const std::shared_ptr<EncodeContext>& context = nullptr);
 
     // Like `serialize()` but leave the following fields of ChunkPB unfilled:
     //  - slot_id_map()

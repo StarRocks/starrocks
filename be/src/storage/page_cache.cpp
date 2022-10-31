@@ -72,7 +72,7 @@ StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
     init_metrics();
 }
 
-StoragePageCache::~StoragePageCache() {}
+StoragePageCache::~StoragePageCache() = default;
 
 void StoragePageCache::set_capacity(size_t capacity) {
 #ifndef BE_TEST

@@ -61,7 +61,7 @@ static GoogleOnceType once = GOOGLE_ONCE_INIT;
 // auditing. Used only by Thread.
 class ThreadMgr {
 public:
-    ThreadMgr() {}
+    ThreadMgr() = default;
 
     ~ThreadMgr() {
         std::lock_guard lock(_lock);

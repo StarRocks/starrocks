@@ -2,6 +2,7 @@
 
 #include "storage/primary_index.h"
 
+#include <memory>
 #include <mutex>
 
 #include "common/tracer.h"
@@ -720,7 +721,7 @@ private:
             CASE_LEN(39)
         default: {
             auto& p = _maps[0];
-            if (!p) p.reset(new SliceHashIndex());
+            if (!p) p = std::make_unique<SliceHashIndex>();
             return p.get();
         }
         }
@@ -733,9 +734,9 @@ public:
 
     size_t size() const override {
         size_t ret = 0;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                ret += _maps[i]->size();
+        for (const auto& _map : _maps) {
+            if (_map) {
+                ret += _map->size();
             }
         }
         return ret;
@@ -743,9 +744,9 @@ public:
 
     size_t capacity() const override {
         size_t ret = 0;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                ret += _maps[i]->capacity();
+        for (const auto& _map : _maps) {
+            if (_map) {
+                ret += _map->capacity();
             }
         }
         return ret;
@@ -847,9 +848,9 @@ public:
 
     std::size_t memory_usage() const final {
         size_t ret = 0;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                ret += _maps[i]->memory_usage();
+        for (const auto& _map : _maps) {
+            if (_map) {
+                ret += _map->memory_usage();
             }
         }
         return ret;
@@ -1187,8 +1188,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
     _persistent_index->upsert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()),
                               reinterpret_cast<IndexValue*>(old_values.data()));
-    for (uint32_t i = 0; i < old_values.size(); ++i) {
-        uint64_t old = old_values[i];
+    for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
         }
@@ -1206,8 +1206,7 @@ void PrimaryIndex::_erase_persistent_index(const vectorized::Column& key_col, De
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
     }
-    for (uint32_t i = 0; i < old_values.size(); ++i) {
-        uint64_t old = old_values[i];
+    for (unsigned long old : old_values) {
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }

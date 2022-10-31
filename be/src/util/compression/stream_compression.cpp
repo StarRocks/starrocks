@@ -230,8 +230,7 @@ class Lz4FrameStreamCompression : public StreamCompression {
 public:
     Lz4FrameStreamCompression()
             : StreamCompression(CompressionTypePB::LZ4_FRAME),
-              _decompress_context(std::move(compression::LZ4F_DCtx_Pool::get_default())),
-              _expect_dec_buf_size(-1) {}
+              _decompress_context(std::move(compression::LZ4F_DCtx_Pool::get_default())) {}
 
     ~Lz4FrameStreamCompression() override { _decompress_context.reset(); }
 
@@ -242,7 +241,7 @@ public:
         return ss.str();
     }
 
-    size_t get_block_size(const LZ4F_frameInfo_t* info) {
+    ssize_t get_block_size(const LZ4F_frameInfo_t* info) {
         switch (info->blockSizeID) {
         case LZ4F_default:
         case LZ4F_max64KB:
@@ -266,7 +265,7 @@ public:
 
 private:
     compression::LZ4F_DCtx_Pool::Ref _decompress_context;
-    size_t _expect_dec_buf_size;
+    ssize_t _expect_dec_buf_size{-1};
 
     const static unsigned STARROCKS_LZ4F_VERSION;
 };

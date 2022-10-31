@@ -984,21 +984,21 @@ StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* me
         auto& versions = segment.second;
         bool del = false;
         bool added = false;
-        for (size_t i = 0; i < versions.size(); i++) {
+        for (long i : versions) {
             if (del) {
-                std::string key = encode_del_vector_key(tablet_id, segment.first, versions[i]);
+                std::string key = encode_del_vector_key(tablet_id, segment.first, i);
                 rocksdb::Status st = batch.Delete(cf_handle, key);
                 if (!st.ok()) {
                     return to_status(st);
                 }
                 num_delete++;
                 if (!added) {
-                    vlog_delvec_maplist << " " << segment.first << ":" << versions[i];
+                    vlog_delvec_maplist << " " << segment.first << ":" << i;
                     added = true;
                 } else {
-                    vlog_delvec_maplist << "," << versions[i];
+                    vlog_delvec_maplist << "," << i;
                 }
-            } else if (versions[i] <= version) {
+            } else if (i <= version) {
                 // versions after this version can be deleted
                 del = true;
             }

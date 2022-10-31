@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <utility>
 
 #include "common/config.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -43,11 +44,9 @@ QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const 
 }
 
 static const char* kSimpleEventFormat =
-        "{\"cat\":\"%s\",\"name\":\"%s\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"id\":\"%ld\",\"ts\":%ld,\"ph\":\"%c\","
-        "\"args\":%s}";
+        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"ph":"%c","args":%s})";
 static const char* kCompleteEventFormat =
-        "{\"cat\":\"%s\",\"name\":\"%s\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"id\":\"%ld\",\"ts\":%ld,\"dur\":%ld,\"ph\":"
-        "\"%c\",\"args\":%s}";
+        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"dur":%ld,"ph":"%c","args":%s})";
 
 std::string QueryTraceEvent::to_string() {
     std::string args_str = args_to_string();
@@ -66,9 +65,9 @@ std::string QueryTraceEvent::args_to_string() {
     }
     std::ostringstream oss;
     oss << "{";
-    oss << fmt::sprintf("\"%s\":\"%s\"", args[0].first.c_str(), args[0].second.c_str());
+    oss << fmt::sprintf(R"("%s":"%s")", args[0].first.c_str(), args[0].second.c_str());
     for (size_t i = 1; i < args.size(); i++) {
-        oss << fmt::sprintf(",\"%s\":\"%s\"", args[i].first.c_str(), args[i].second.c_str());
+        oss << fmt::sprintf(R"(,"%s":"%s")", args[i].first.c_str(), args[i].second.c_str());
     }
     oss << "}";
     return oss.str();
@@ -171,7 +170,8 @@ void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, const TUniqueId&
 #endif
 }
 
-ScopedTracer::ScopedTracer(const std::string& name, const std::string& category) : _name(name), _category(category) {
+ScopedTracer::ScopedTracer(std::string name, std::string category)
+        : _name(std::move(name)), _category(std::move(category)) {
     _start_ts = MonotonicMicros();
 }
 

@@ -147,7 +147,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   ChunkConsumer consumer);
+                                   const ChunkConsumer& consumer);
 
 // Merge in rowwise, which is slow and used only in benchmark
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,

@@ -916,7 +916,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
     }
 }
 
-RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() {}
+RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() = default;
 
 RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
     if (_s_periodic_counter_update_state.update_thread != nullptr) {
@@ -1076,8 +1076,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             int64_t min_value = std::numeric_limits<int64_t>::max();
             int64_t max_value = std::numeric_limits<int64_t>::min();
             bool already_merged = false;
-            for (auto j = 0; j < profiles.size(); j++) {
-                auto* profile = profiles[j];
+            for (auto profile : profiles) {
                 auto* counter = profile->get_counter(name);
 
                 // Allow some counters which only attach to one of the isomorphic profiles

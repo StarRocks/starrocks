@@ -7,7 +7,7 @@ namespace starrocks::vectorized {
 class TimedChunkIterator final : public ChunkIterator {
 public:
     TimedChunkIterator(ChunkIteratorPtr iter, RuntimeProfile::Counter* counter)
-            : ChunkIterator(iter->schema(), iter->chunk_size()), _iter(std::move(iter)), _cost(0), _counter(counter) {}
+            : ChunkIterator(iter->schema(), iter->chunk_size()), _iter(std::move(iter)), _counter(counter) {}
 
     ~TimedChunkIterator() override = default;
 
@@ -48,7 +48,7 @@ private:
     }
 
     ChunkIteratorPtr _iter;
-    int64_t _cost;
+    int64_t _cost{0};
     RuntimeProfile::Counter* _counter;
 };
 

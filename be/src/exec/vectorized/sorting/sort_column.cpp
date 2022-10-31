@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <algorithm>
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -30,7 +31,7 @@ public:
               _sort_desc(sort_desc),
               _permutation(permutation),
               _tie(tie),
-              _range(range),
+              _range(std::move(range)),
               _build_tie(build_tie) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
@@ -136,16 +137,16 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr> columns,
                                   const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
                                   std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
-              _vertical_columns(columns),
+              _vertical_columns(std::move(columns)),
               _permutation(permutation),
               _tie(tie),
-              _range(range),
+              _range(std::move(range)),
               _build_tie(build_tie),
               _limit(limit),
               _pruned_limit(permutation.size()) {}

@@ -6,6 +6,7 @@
 #include <sys/stat.h>
 
 #include <fstream>
+#include <utility>
 
 #include "common/version.h"
 #include "gutil/strings/substitute.h"
@@ -14,7 +15,7 @@
 
 namespace starrocks {
 
-ClusterIdMgr::ClusterIdMgr(const std::string& path) : _path(path) {}
+ClusterIdMgr::ClusterIdMgr(std::string path) : _path(std::move(path)) {}
 
 Status ClusterIdMgr::init() {
     std::string cluster_id_path = _cluster_id_path();
