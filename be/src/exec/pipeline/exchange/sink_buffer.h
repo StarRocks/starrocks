@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
+
 #include <algorithm>
 #include <future>
 #include <list>
@@ -9,13 +11,8 @@
 #include <queue>
 #include <unordered_set>
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/mutex.h>
-DIAGNOSTIC_POP
-
 #include "column/chunk.h"
+#include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"

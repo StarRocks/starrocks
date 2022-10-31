@@ -2,15 +2,12 @@
 
 #include "service/service_be/lake_service.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 
 #include "agent/agent_server.h"
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "fs/fs_util.h"
 #include "gutil/macros.h"

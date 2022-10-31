@@ -21,10 +21,7 @@
 
 #include "storage/tablet_manager.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 #include <re2/re2.h>
 
