@@ -1312,7 +1312,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, nullable);
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = src.size();
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
