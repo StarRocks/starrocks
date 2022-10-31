@@ -104,7 +104,11 @@ void CSVReader::split_record(const Record& record, Fields* fields) const {
 
         ptr = record.data + size;
     }
-    fields->emplace_back(value, ptr - value);
+    if (_trim_space) {
+        fields->emplace_back(trim(value, ptr - value));
+    } else {
+        fields->emplace_back(value, ptr - value);
+    }
 }
 
 } // namespace starrocks::vectorized

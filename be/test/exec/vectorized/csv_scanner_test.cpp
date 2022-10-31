@@ -67,7 +67,7 @@ protected:
         params->dest_tuple_id = 0;
         params->src_tuple_id = 0;
         params->__set_skip_header(skip_header);
-        params->trim_space = trim_space;
+        params->__set_trim_space(trim_space);
         for (int i = 0; i < types.size(); i++) {
             params->expr_of_dest_slot[i] = TExpr();
             params->expr_of_dest_slot[i].nodes.emplace_back(TExprNode());
@@ -570,11 +570,11 @@ TEST_F(CSVScannerTest, test_trim_space) {
     EXPECT_EQ(7, chunk->get(3)[0].get_int32());
     EXPECT_EQ(9, chunk->get(4)[0].get_int32());
 
-    EXPECT_EQ(2, chunk->get(0)[1].get_int32());
-    EXPECT_EQ(4, chunk->get(1)[1].get_int32());
-    EXPECT_EQ(6, chunk->get(2)[1].get_int32());
-    EXPECT_EQ(8, chunk->get(3)[1].get_int32());
-    EXPECT_EQ(0, chunk->get(4)[1].get_int32());
+    EXPECT_EQ("aa", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("bb", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
+    EXPECT_EQ("ee", chunk->get(4)[1].get_slice());
 }
 
 TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
