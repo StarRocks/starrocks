@@ -210,7 +210,7 @@ int StringPiece::find_last_not_of(char c, size_type pos) const {
 StringPiece StringPiece::substr(size_type pos, size_type n) const {
     if (pos > length_) pos = length_;
     if (n > length_ - pos) n = length_ - pos;
-    return StringPiece(ptr_ + pos, n);
+    return {ptr_ + pos, n};
 }
 
 const StringPiece::size_type StringPiece::npos = size_type(-1);

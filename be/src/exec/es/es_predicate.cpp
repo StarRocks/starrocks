@@ -25,6 +25,7 @@
 
 #include <map>
 #include <sstream>
+#include <utility>
 
 #include "column/column.h"
 #include "column/column_viewer.h"
@@ -116,12 +117,12 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone,
+EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, std::string  timezone,
                          ObjectPool* pool)
         : _context(context),
           _tuple_desc(tuple_desc),
           _es_query_status(Status::OK()),
-          _timezone(timezone),
+          _timezone(std::move(timezone)),
           _pool(pool) {}
 
 EsPredicate::~EsPredicate() {

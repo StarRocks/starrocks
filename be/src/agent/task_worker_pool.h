@@ -57,7 +57,7 @@ public:
     typedef void* (*CALLBACK_FUNCTION)(void*);
 
     TaskWorkerPool(ExecEnv* env, int worker_num);
-    ~TaskWorkerPool();
+    virtual virtual virtual ~TaskWorkerPool();
 
     // start the task worker callback thread
     void start();
