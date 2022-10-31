@@ -14,13 +14,13 @@ bool StructColumn::is_struct() const {
 const uint8_t* StructColumn::raw_data() const {
     // TODO(SmithCruise)
     DCHECK(false) << "Don't support struct column raw_data";
-    return 0;
+    return nullptr;
 }
 
 uint8_t* StructColumn::mutable_raw_data() {
     // TODO(SmithCruise)
     DCHECK(false) << "Don't support struct column raw_data";
-    return 0;
+    return nullptr;
 }
 size_t StructColumn::size() const {
     return _fields.at(0)->size();
@@ -426,7 +426,7 @@ Columns& StructColumn::fields_column() {
     return _fields;
 }
 
-ColumnPtr StructColumn::field_column(std::string field_name) {
+ColumnPtr StructColumn::field_column(const std::string& field_name) {
     for (size_t i = 0; i < _field_names->size(); i++) {
         if (field_name == _field_names->get_slice(i)) {
             return _fields.at(i);

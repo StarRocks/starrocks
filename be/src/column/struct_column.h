@@ -143,7 +143,7 @@ public:
 
     Columns& fields_column();
 
-    ColumnPtr field_column(std::string field_name);
+    ColumnPtr field_column(const std::string& field_name);
 
     const BinaryColumn& field_names() const;
 

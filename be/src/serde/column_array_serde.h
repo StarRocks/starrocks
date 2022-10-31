@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 namespace starrocks {
-class TypeDescriptor;
+struct TypeDescriptor;
 }
 
 namespace starrocks::vectorized {
