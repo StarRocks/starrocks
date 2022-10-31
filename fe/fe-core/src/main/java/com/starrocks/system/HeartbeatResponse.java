@@ -44,6 +44,10 @@ public class HeartbeatResponse implements Writable {
         OK, BAD
     }
 
+    public enum AliveStatus {
+        ALIVE, NOT_ALIVE
+    }
+
     @SerializedName(value = "type")
     protected Type type;
     protected boolean isTypeRead = false;
@@ -56,6 +60,9 @@ public class HeartbeatResponse implements Writable {
 
     @SerializedName(value = "hbTime")
     protected long hbTime;
+
+    @SerializedName(value = "aliveStatus")
+    public AliveStatus aliveStatus;
 
     public HeartbeatResponse(Type type) {
         this.type = type;
