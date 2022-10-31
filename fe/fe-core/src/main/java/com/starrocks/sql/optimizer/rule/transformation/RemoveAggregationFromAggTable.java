@@ -137,10 +137,11 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
             ScalarOperator newPredicate = rewriter.rewrite(aggregationOperator.getPredicate());
             LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) newChildOpt.getOp();
             LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
-            List<ScalarOperator> pushDownPredicates = Lists.newArrayList(newPredicate);
+            List<ScalarOperator> pushDownPredicates = Lists.newArrayList();
             if (scanOperator.getPredicate() != null) {
                 pushDownPredicates.add(scanOperator.getPredicate());
             }
+            pushDownPredicates.add(newPredicate);
             scanOperator = builder.withOperator(scanOperator)
                     .setPredicate(Utils.compoundAnd(pushDownPredicates))
                     .build();

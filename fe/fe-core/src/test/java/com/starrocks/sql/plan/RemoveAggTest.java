@@ -25,6 +25,7 @@ public class RemoveAggTest extends PlanTestBase {
     @MethodSource("removeAggSqlCases")
     void removeAggTest(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
+        System.out.println(plan);
         assertNotContains(plan, "AGGREGATE");
         assertContains(plan, "PREDICATES");
         assertContains(plan, "PREAGGREGATION: OFF");
