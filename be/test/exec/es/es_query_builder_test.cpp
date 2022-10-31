@@ -33,7 +33,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/string_value.h"
-#include "runtime/timestamp_value.h"
+#include "types/timestamp_value.h"
 #include "util/debug/leakcheck_disabler.h"
 
 namespace starrocks {
