@@ -35,7 +35,7 @@ public:
 
     const Stats& stats() { return _stats; }
 
-    void enable_populate_cache(bool v) { _enable_populate_cache = v; }
+    void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
 
 private:
     std::string _cache_key;
