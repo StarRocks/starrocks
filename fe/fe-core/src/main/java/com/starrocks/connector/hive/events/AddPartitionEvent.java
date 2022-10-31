@@ -4,6 +4,10 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AddPartitionEvent.java
+=======
+import com.starrocks.catalog.Column;
+>>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AddPartitionEvent.java
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
 import org.apache.hadoop.hive.common.FileUtils;

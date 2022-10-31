@@ -446,8 +446,25 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return cache.getIfPresent(key) != null;
     }
 
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/CachingHiveMetastore.java
     public long getCurrentEventId() {
         return metastore.getCurrentEventId();
+=======
+    public boolean partitionExistInCache(Object hivePartitionName, String catalogName) {
+        boolean exist = existInCache(partitionCache, hivePartitionName);
+        if (!isResourceMappingCatalog(catalogName)) {
+            boolean connectorTableExist = existInCache(tableCache,
+                    HiveTableName.of(((HivePartitionName) hivePartitionName).getDatabaseName(),
+                            ((HivePartitionName) hivePartitionName).getTableName()));
+            return exist && connectorTableExist;
+        }
+        return exist;
+    }
+
+
+    public long getBaseHmsEventId() {
+        return metastore.getBaseHmsEventId();
+>>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/CachingHiveMetastore.java
     }
 
     public NotificationEventResponse getNextEventResponse(long lastSyncedEventId, String catalogName,

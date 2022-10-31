@@ -116,7 +116,11 @@ public class AlterTableEvent extends MetastoreTableEvent {
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
             LOG.warn("Table [{}.{}.{}] doesn't exist in cache on event id: [{}]",
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/AlterTableEvent.java
                     catalogName, getDbName(), getTblName(), getEventId());
+=======
+                    cache.getCatalogName(), getDbName(), getTblName(), getEventId());
+>>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/AlterTableEvent.java
             return;
         }
 

@@ -77,7 +77,12 @@ public class MetastoreEventFactory implements EventFactory {
                         catalogName, event.getDbName(), event.getTableName(), event);
                 continue;
             }
+<<<<<<< HEAD:fe/fe-core/src/main/java/com/starrocks/connector/hive/events/MetastoreEventFactory.java
             metastoreEvents.addAll(get(event, cacheProcessor, catalogName));
+=======
+            metastoreEvents.addAll(
+                    get(event, metaCache, (HiveTable) (metaCache.getTable(event.getDbName(), event.getTableName()))));
+>>>>>>> bc43ed9ba (refactor hive meta incremental sync by events):fe/fe-core/src/main/java/com/starrocks/external/hive/events/MetastoreEventFactory.java
         }
 
         List<MetastoreEvent> tobeProcessEvents = metastoreEvents.stream()
