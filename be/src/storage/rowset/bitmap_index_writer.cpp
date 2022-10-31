@@ -46,7 +46,7 @@ class BitmapUpdateContext {
 
 public:
     explicit BitmapUpdateContext(rowid_t rid)
-            : _roaring(Roaring::bitmapOf(1, rid)), _previous_size(0), _element_count(1), _size_changed(false){};
+            : _roaring(Roaring::bitmapOf(1, rid)) {};
 
     Roaring* roaring() { return &_roaring; }
 
@@ -98,9 +98,9 @@ public:
 
 private:
     Roaring _roaring;
-    uint64_t _previous_size;
-    uint32_t _element_count;
-    bool _size_changed;
+    uint64_t _previous_size{0};
+    uint32_t _element_count{1};
+    bool _size_changed{false};
 };
 
 template <typename CppType>
@@ -132,7 +132,7 @@ public:
     using CppType = typename CppTypeTraits<field_type>::CppType;
     using MemoryIndexType = typename BitmapIndexTraits<CppType>::MemoryIndexType;
 
-    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)), _reverted_index_size(0) {}
+    explicit BitmapIndexWriterImpl(TypeInfoPtr type_info) : _typeinfo(std::move(type_info)) {}
 
     ~BitmapIndexWriterImpl() override = default;
 

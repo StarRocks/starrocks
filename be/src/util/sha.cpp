@@ -21,8 +21,8 @@ void SHA224Digest::digest() {
     SHA224_Final(hash, &_sha224_ctx);
 
     std::stringstream ss;
-    for (int i = 0; i < SHA224_DIGEST_LENGTH; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    for (unsigned char i : hash) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
     }
 
     _hex.assign(ss.str());
@@ -41,8 +41,8 @@ void SHA256Digest::digest() {
     SHA256_Final(hash, &_sha256_ctx);
 
     std::stringstream ss;
-    for (int i = 0; i < SHA256_DIGEST_LENGTH; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    for (unsigned char i : hash) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
     }
 
     _hex.assign(ss.str());
@@ -61,8 +61,8 @@ void SHA384Digest::digest() {
     SHA384_Final(hash, &_sha384_ctx);
 
     std::stringstream ss;
-    for (int i = 0; i < SHA384_DIGEST_LENGTH; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    for (unsigned char i : hash) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
     }
 
     _hex.assign(ss.str());
@@ -81,8 +81,8 @@ void SHA512Digest::digest() {
     SHA512_Final(hash, &_sha512_ctx);
 
     std::stringstream ss;
-    for (int i = 0; i < SHA512_DIGEST_LENGTH; i++) {
-        ss << std::hex << std::setw(2) << std::setfill('0') << (int)hash[i];
+    for (unsigned char i : hash) {
+        ss << std::hex << std::setw(2) << std::setfill('0') << (int)i;
     }
 
     _hex.assign(ss.str());

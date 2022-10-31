@@ -83,7 +83,7 @@ public:
      */
     ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                  const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
-                 const std::string& sort_keys, const bool is_topn);
+                 std::string  sort_keys, const bool is_topn);
     virtual ~ChunksSorter();
 
     static StatusOr<vectorized::ChunkPtr> materialize_chunk_before_sort(vectorized::Chunk* chunk,

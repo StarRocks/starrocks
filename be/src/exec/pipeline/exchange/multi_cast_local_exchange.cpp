@@ -13,7 +13,7 @@ MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, si
         : _runtime_state(runtime_state),
           _mutex(),
           _consumer_number(consumer_number),
-          _current_accumulated_row_size(0),
+          
           _progress(consumer_number),
           _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();

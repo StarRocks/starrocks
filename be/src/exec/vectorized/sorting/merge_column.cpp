@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <numeric>
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/chunk.h"
@@ -25,7 +26,7 @@ struct EqualRange {
     Range left_range;
     Range right_range;
 
-    EqualRange(Range left, Range right) : left_range(left), right_range(right) {}
+    EqualRange(Range left, Range right) : left_range(std::move(left)), right_range(std::move(right)) {}
 };
 
 // MergeTwoColumn incremental merge two columns
@@ -485,7 +486,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
     }
 
     ChunkConsumer consumer = [&](ChunkUniquePtr chunk) {
-        output->chunks.push_back(SortedRun(ChunkPtr(chunk.release()), sort_exprs));
+        output->chunks.emplace_back(ChunkPtr(chunk.release()), sort_exprs);
         return Status::OK();
     };
     return merge_sorted_cursor_cascade(descs, std::move(cursors), consumer);

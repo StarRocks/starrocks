@@ -28,8 +28,8 @@ using ConjugateOperatorFactoryPtr = std::shared_ptr<ConjugateOperatorFactory>;
 //  AggregateBlockSinkOperator.
 class ConjugateOperator : public pipeline::Operator {
 public:
-    ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, const pipeline::OperatorPtr& sink_op,
-                      const pipeline::OperatorPtr& source_op);
+    ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, pipeline::OperatorPtr  sink_op,
+                      pipeline::OperatorPtr  source_op);
     ~ConjugateOperator() = default;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

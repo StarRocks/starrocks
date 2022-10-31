@@ -8,6 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <utility>
 
 #include "common/config.h"
 #include "exec/pipeline/exchange/shuffler.h"
@@ -709,7 +710,7 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
         std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through, bool enable_exchange_perf,
-        FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
+        FragmentContext* const fragment_ctx, std::vector<int32_t>  output_columns)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
@@ -722,7 +723,7 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _enable_exchange_pass_through(enable_exchange_pass_through),
           _enable_exchange_perf(enable_exchange_perf),
           _fragment_ctx(fragment_ctx),
-          _output_columns(output_columns) {}
+          _output_columns(std::move(output_columns)) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<ExchangeSinkOperator>(

@@ -400,7 +400,7 @@ Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
 }
 
 Slice JVMFunctionHelper::sliceVal(jstring jstr) {
-    return Slice(_env->GetStringUTFChars(jstr, NULL));
+    return Slice(_env->GetStringUTFChars(jstr, nullptr));
 }
 
 std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {

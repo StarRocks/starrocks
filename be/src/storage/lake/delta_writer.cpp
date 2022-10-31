@@ -5,6 +5,8 @@
 DIAGNOSTIC_PUSH
 DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
+
+#include <memory>
 DIAGNOSTIC_POP
 
 #include "column/chunk.h"
@@ -132,10 +134,10 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _schema_initialized = true;
     }
     if (_slots != nullptr) {
-        _mem_table.reset(new MemTable(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker));
+        _mem_table = std::make_unique<MemTable>(_tablet_id, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker);
     } else {
-        _mem_table.reset(
-                new MemTable(_tablet_id, &_vectorized_schema, _mem_table_sink.get(), _max_buffer_size, _mem_tracker));
+        _mem_table = std::make_unique<MemTable>(
+                _tablet_id, &_vectorized_schema, _mem_table_sink.get(), _max_buffer_size, _mem_tracker);
     }
     return Status::OK();
 }

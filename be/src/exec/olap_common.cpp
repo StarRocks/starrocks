@@ -597,7 +597,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
 }
 
 template <class T>
-ColumnValueRange<T>::ColumnValueRange() {}
+ColumnValueRange<T>::ColumnValueRange() = default;
 
 template <class T>
 ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)

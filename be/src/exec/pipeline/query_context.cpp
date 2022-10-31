@@ -312,8 +312,8 @@ bool QueryContextManager::remove(const TUniqueId& query_id) {
 void QueryContextManager::clear() {
     std::vector<std::unique_lock<std::shared_mutex>> locks;
     locks.reserve(_mutexes.size());
-    for (int i = 0; i < _mutexes.size(); ++i) {
-        locks.emplace_back(_mutexes[i]);
+    for (auto & _mutexe : _mutexes) {
+        locks.emplace_back(_mutexe);
     }
     _second_chance_maps.clear();
     _context_maps.clear();

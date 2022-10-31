@@ -340,10 +340,10 @@ void StorageEngine::_start_disk_stat_monitor() {
     static time_t last_sweep_time = 0;
     static const int32_t valid_sweep_interval = 30;
     for (auto& it : _store_map) {
-        if (difftime(time(NULL), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
+        if (difftime(time(nullptr), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
             std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
             _trash_sweeper_cv.notify_one();
-            last_sweep_time = time(NULL);
+            last_sweep_time = time(nullptr);
         }
     }
 }

@@ -142,7 +142,7 @@ struct SortParameters {
     bool nullable = false;
     int max_buffered_chunks = ChunksSorterTopn::kDefaultBufferedChunks;
 
-    SortParameters() {}
+    SortParameters() = default;
 
     static SortParameters with_limit(int limit, SortParameters params = SortParameters()) {
         params.limit = limit;
@@ -214,19 +214,19 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Primiti
 
         switch (sorter_algo) {
         case FullSort: {
-            sorter.reset(new ChunksSorterFullSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, ""));
+            sorter = std::make_unique<ChunksSorterFullSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "");
             expected_rows = total_rows;
             break;
         }
         case HeapSort: {
-            sorter.reset(new ChunksSorterHeapSort(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                                  limit_rows));
+            sorter = std::make_unique<ChunksSorterHeapSort>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
+                                                  limit_rows);
             expected_rows = limit_rows;
             break;
         }
         case MergeSort: {
-            sorter.reset(new ChunksSorterTopn(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
-                                              limit_rows, TTopNType::ROW_NUMBER, params.max_buffered_chunks));
+            sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first, "", 0,
+                                              limit_rows, TTopNType::ROW_NUMBER, params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;
         }

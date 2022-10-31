@@ -30,7 +30,7 @@ class LocalPartitionTopnContext {
 public:
     LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-                              const std::string& sort_keys, int64_t offset, int64_t partition_limit,
+                              std::string  sort_keys, int64_t offset, int64_t partition_limit,
                               const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
                               TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
                               const RowDescriptor& parent_node_child_row_desc);
@@ -94,7 +94,7 @@ class LocalPartitionTopnContextFactory {
 public:
     LocalPartitionTopnContextFactory(const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
                                      const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
-                                     std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset,
+                                     std::vector<bool> is_null_first, std::string  sort_keys, int64_t offset,
                                      int64_t partition_limit, const TTopNType::type topn_type,
                                      const std::vector<OrderByType>& order_by_types,
                                      TupleDescriptor* materialized_tuple_desc,

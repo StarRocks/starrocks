@@ -14,7 +14,7 @@
 namespace starrocks::serde {
 
 EncodeContext::EncodeContext(const int col_num, const int encode_level)
-        : _session_encode_level(encode_level), _times(0) {
+        : _session_encode_level(encode_level) {
     for (auto i = 0; i < col_num; ++i) {
         _column_encode_level.emplace_back(_session_encode_level);
         _raw_bytes.emplace_back(0);
@@ -89,7 +89,7 @@ int64_t ProtobufChunkSerde::max_serialized_size(const vectorized::Chunk& chunk,
 }
 
 StatusOr<ChunkPB> ProtobufChunkSerde::serialize(const vectorized::Chunk& chunk,
-                                                std::shared_ptr<EncodeContext> context) {
+                                                const std::shared_ptr<EncodeContext>& context) {
     StatusOr<ChunkPB> res = serialize_without_meta(chunk, std::move(context));
     if (!res.ok()) return res.status();
 

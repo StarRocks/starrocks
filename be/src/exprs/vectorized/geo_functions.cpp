@@ -11,7 +11,7 @@
 namespace starrocks::vectorized {
 
 struct StConstructState {
-    StConstructState() {}
+    StConstructState() = default;
     ~StConstructState() = default;
 
     bool is_null{false};

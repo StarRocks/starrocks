@@ -21,8 +21,7 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
-
+#include <csignal>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -69,7 +68,7 @@ public:
 private:
     ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk;
-    size_t _max_allocated_rows;
+    size_t _max_allocated_rows{0};
 };
 
 // TODO: optimize it with vertical sort
@@ -101,7 +100,7 @@ private:
 };
 
 ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
-        : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr), _max_allocated_rows(0) {}
+        : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr) {}
 
 ChunkSorter::~ChunkSorter() = default;
 

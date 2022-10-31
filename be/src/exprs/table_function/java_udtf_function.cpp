@@ -29,7 +29,7 @@ class JavaUDTFState : public TableFunctionState {
 public:
     JavaUDTFState(std::string libpath, std::string symbol, const TTypeDesc& desc)
             : _libpath(std::move(libpath)), _symbol(std::move(symbol)), _ret_type(TypeDescriptor::from_thrift(desc)) {}
-    ~JavaUDTFState() {}
+    ~JavaUDTFState() = default;
 
     Status open();
     void close();

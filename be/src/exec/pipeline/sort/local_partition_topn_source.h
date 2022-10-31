@@ -36,7 +36,7 @@ private:
 class LocalPartitionTopnSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalPartitionTopnSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                            const LocalPartitionTopnContextFactoryPtr& partition_topn_ctx_factory);
+                                            LocalPartitionTopnContextFactoryPtr  partition_topn_ctx_factory);
 
     ~LocalPartitionTopnSourceOperatorFactory() override = default;
 

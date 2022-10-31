@@ -32,12 +32,12 @@ public:
 private:
     const HdfsScannerParams& _scanner_params;
     const HdfsScannerContext& _scanner_ctx;
-    uint64_t _current_stripe_index;
-    bool _init_use_dict_filter_slots;
+    uint64_t _current_stripe_index{0};
+    bool _init_use_dict_filter_slots{false};
     std::vector<pair<SlotDescriptor*, uint64_t>> _use_dict_filter_slots;
     friend class HdfsOrcScanner;
     std::unordered_map<SlotId, FilterPtr> _dict_filter_eval_cache;
-    bool _can_do_filter_on_orc_cvb; // cvb: column vector batch.
+    bool _can_do_filter_on_orc_cvb{true}; // cvb: column vector batch.
     // key: end of range.
     // value: start of range.
     // ranges are not overlapped.
@@ -66,9 +66,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, 
                                        OrcChunkReader* reader)
         : _scanner_params(scanner_params),
           _scanner_ctx(scanner_ctx),
-          _current_stripe_index(0),
-          _init_use_dict_filter_slots(false),
-          _can_do_filter_on_orc_cvb(true),
+          
           _reader(reader),
           _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {

@@ -22,6 +22,7 @@
 #include "storage/rowset/segment_writer.h"
 
 #include <memory>
+#include <utility>
 
 #include "column/chunk.h"
 #include "column/datum_tuple.h"
@@ -44,12 +45,12 @@ const char* const k_segment_magic = "D0R1";
 const uint32_t k_segment_magic_length = 4;
 
 SegmentWriter::SegmentWriter(std::unique_ptr<WritableFile> wfile, uint32_t segment_id,
-                             const TabletSchema* tablet_schema, const SegmentWriterOptions& opts)
-        : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(opts), _wfile(std::move(wfile)) {
+                             const TabletSchema* tablet_schema, SegmentWriterOptions  opts)
+        : _segment_id(segment_id), _tablet_schema(tablet_schema), _opts(std::move(opts)), _wfile(std::move(wfile)) {
     CHECK_NOTNULL(_wfile.get());
 }
 
-SegmentWriter::~SegmentWriter() {}
+SegmentWriter::~SegmentWriter() = default;
 
 std::string SegmentWriter::segment_path() const {
     return _wfile->filename();

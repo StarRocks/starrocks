@@ -73,9 +73,7 @@ public:
               _row_desc(row_desc),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _num_data_bytes_sent(0),
-              _request_seq(0),
-              _need_close(false),
+              
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
               _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {}
@@ -159,13 +157,13 @@ private:
     PlanNodeId _dest_node_id;
 
     // the number of TRowBatch.data bytes sent successfully
-    int64_t _num_data_bytes_sent;
-    int64_t _request_seq;
+    int64_t _num_data_bytes_sent{0};
+    int64_t _request_seq{0};
 
     std::unique_ptr<vectorized::Chunk> _chunk;
     bool _is_first_chunk = true;
 
-    bool _need_close;
+    bool _need_close{false};
 
     TNetworkAddress _brpc_dest_addr;
 

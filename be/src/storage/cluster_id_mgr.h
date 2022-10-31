@@ -14,7 +14,7 @@ namespace starrocks {
 // Cluster id will be checked while staring to avoid wrong data directory.
 class ClusterIdMgr {
 public:
-    ClusterIdMgr(const std::string& path);
+    ClusterIdMgr(std::string  path);
     Status init();
     Status set_cluster_id(int32_t cluster_id);
     int32_t cluster_id() const { return _cluster_id; }

@@ -39,7 +39,7 @@ private:
 class MemoryWritableFile final : public WritableFile {
 public:
     MemoryWritableFile(std::string path, InodePtr inode)
-            : _path(std::move(path)), _inode(std::move(inode)), _closed(false) {}
+            : _path(std::move(path)), _inode(std::move(inode)) {}
 
     Status append(const Slice& data) override {
         if (_closed) return Status::IOError(fmt::format("{} has been closed", _path));
@@ -76,7 +76,7 @@ public:
 private:
     std::string _path;
     InodePtr _inode;
-    bool _closed;
+    bool _closed{false};
 };
 
 class EnvMemoryImpl {

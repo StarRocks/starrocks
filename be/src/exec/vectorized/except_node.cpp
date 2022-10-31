@@ -44,9 +44,9 @@ Status ExceptNode::prepare(RuntimeState* state) {
     _erase_duplicate_row_timer = ADD_TIMER(runtime_profile(), "EraseDuplicateRowTime");
     _get_result_timer = ADD_TIMER(runtime_profile(), "GetResultTime");
 
-    for (size_t i = 0; i < _child_expr_lists.size(); ++i) {
-        RETURN_IF_ERROR(Expr::prepare(_child_expr_lists[i], state));
-        DCHECK_EQ(_child_expr_lists[i].size(), _tuple_desc->slots().size());
+    for (auto & _child_expr_list : _child_expr_lists) {
+        RETURN_IF_ERROR(Expr::prepare(_child_expr_list, state));
+        DCHECK_EQ(_child_expr_list.size(), _tuple_desc->slots().size());
     }
 
     size_t size_column_type = _tuple_desc->slots().size();

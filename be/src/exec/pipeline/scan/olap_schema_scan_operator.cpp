@@ -35,7 +35,7 @@ OlapSchemaScanOperator::OlapSchemaScanOperator(OperatorFactory* factory, int32_t
                                                int32_t dop, ScanNode* scan_node, OlapSchemaScanContextPtr ctx)
         : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(std::move(ctx)) {}
 
-OlapSchemaScanOperator::~OlapSchemaScanOperator() {}
+OlapSchemaScanOperator::~OlapSchemaScanOperator() = default;
 
 Status OlapSchemaScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();

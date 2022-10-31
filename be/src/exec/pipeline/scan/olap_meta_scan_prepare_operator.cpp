@@ -23,7 +23,7 @@ OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factor
           _scan_node(scan_node),
           _scan_ctx(std::move(scan_ctx)) {}
 
-OlapMetaScanPrepareOperator::~OlapMetaScanPrepareOperator() {}
+OlapMetaScanPrepareOperator::~OlapMetaScanPrepareOperator() = default;
 
 Status OlapMetaScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));

@@ -242,7 +242,7 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     return 0;
 }
 
-TabletColumn::TabletColumn() {}
+TabletColumn::TabletColumn() = default;
 
 TabletColumn::TabletColumn(FieldAggregationMethod agg, FieldType type) : _aggregation(agg), _type(type) {}
 

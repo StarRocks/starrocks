@@ -71,7 +71,7 @@ private:
 class SortContextFactory {
 public:
     SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging, int64_t offset,
-                       int64_t limit, int32_t num_right_sinkers, const std::vector<ExprContext*>& sort_exprs,
+                       int64_t limit, int32_t num_right_sinkers, std::vector<ExprContext*>  sort_exprs,
                        const std::vector<bool>& _is_asc_order, const std::vector<bool>& is_null_first);
 
     SortContextPtr create(int32_t idx);

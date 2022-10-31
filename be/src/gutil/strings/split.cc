@@ -743,7 +743,7 @@ namespace {
 // Helper class used by SplitStructuredLineInternal.
 class ClosingSymbolLookup {
 public:
-    explicit ClosingSymbolLookup(const char* symbol_pairs) : closing_(), valid_closing_() {
+    explicit ClosingSymbolLookup(const char* symbol_pairs)  {
         // Initialize the opening/closing arrays.
         for (const char* symbol = symbol_pairs; *symbol != 0; ++symbol) {
             unsigned char opening = *symbol;
@@ -767,9 +767,9 @@ public:
 private:
     // Maps an opening character to its closing. If the entry contains 0,
     // the character is not in the opening set.
-    char closing_[256];
+    char closing_[256]{};
     // Valid closing characters.
-    bool valid_closing_[256];
+    bool valid_closing_[256]{};
 
     ClosingSymbolLookup(const ClosingSymbolLookup&) = delete;
     const ClosingSymbolLookup& operator=(const ClosingSymbolLookup&) = delete;

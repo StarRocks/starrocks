@@ -146,7 +146,7 @@ private:
     std::mutex _status_lock;
     Status _exec_status;
 
-    int _timeout_second;
+    int _timeout_second{-1};
 };
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
@@ -157,8 +157,8 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
           _exec_env(exec_env),
           _coord_addr(coord_addr),
           _executor(exec_env, std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this,
-                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
-          _timeout_second(-1) {
+                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3))
+          {
     _start_time = DateTimeValue::local_time();
 }
 

@@ -192,8 +192,8 @@ void ColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
                 positions.push_back(entry->positions(j));
             }
             entry->clear_positions();
-            for (size_t j = 0; j != positions.size(); ++j) {
-                entry->add_positions(positions[j]);
+            for (unsigned long position : positions) {
+                entry->add_positions(position);
             }
         }
     }
@@ -816,7 +816,7 @@ public:
         size_t length;
     };
 
-    SortedStringDictionary() {}
+    SortedStringDictionary() = default;
 
     // insert a new string into dictionary, return its insertion order
     size_t insert(const char* data, size_t len);
@@ -903,8 +903,8 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     }
 
     // do the transformation
-    for (size_t i = 0; i != idxBuffer.size(); ++i) {
-        idxBuffer[i] = static_cast<int64_t>(mapping[static_cast<size_t>(idxBuffer[i])]);
+    for (long & i : idxBuffer) {
+        i = static_cast<int64_t>(mapping[static_cast<size_t>(i)]);
     }
 }
 
@@ -982,7 +982,7 @@ protected:
      */
     SortedStringDictionary dictionary;
     // whether or not dictionary checking is done
-    bool doneDictionaryCheck;
+    bool doneDictionaryCheck{false};
     // whether or not it should be used
     bool useDictionary;
     // keys in the dictionary should not exceed this ratio
@@ -998,7 +998,7 @@ StringColumnWriter::StringColumnWriter(const Type& type, const StreamsFactory& f
           useCompression(options.getCompression() != CompressionKind_NONE),
           streamsFactory(factory),
           alignedBitPacking(options.getAlignedBitpacking()),
-          doneDictionaryCheck(false),
+          
           useDictionary(options.getEnableDictionary()),
           dictSizeThreshold(options.getDictionaryKeySizeThreshold()) {
     if (type.getKind() == TypeKind::BINARY) {
@@ -1259,9 +1259,9 @@ void StringColumnWriter::fallbackToDirectEncoding() {
 
     // store each length of the data into a vector
     const SortedStringDictionary::DictEntry* dictEntry = nullptr;
-    for (uint64_t i = 0; i != dictionary.idxInDictBuffer.size(); ++i) {
+    for (long i : dictionary.idxInDictBuffer) {
         // write one row data in direct encoding
-        dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer[i])];
+        dictEntry = entries[static_cast<size_t>(i)];
         directDataStream->write(dictEntry->data, dictEntry->length);
         directLengthEncoder->write(static_cast<int64_t>(dictEntry->length));
     }

@@ -69,7 +69,7 @@ private:
 class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
-               bool strict_mode, const std::vector<SlotDescriptor*>& slot_descs);
+               bool strict_mode, std::vector<SlotDescriptor*>  slot_descs);
 
     ~JsonReader();
 

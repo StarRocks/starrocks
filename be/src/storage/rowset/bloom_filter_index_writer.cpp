@@ -98,7 +98,7 @@ public:
     using ValueDict = typename BloomFilterTraits<CppType>::ValueDict;
 
     explicit BloomFilterIndexWriterImpl(const BloomFilterOptions& bf_options, TypeInfoPtr typeinfo)
-            : _bf_options(bf_options), _typeinfo(std::move(typeinfo)), _has_null(false), _bf_buffer_size(0) {}
+            : _bf_options(bf_options), _typeinfo(std::move(typeinfo)) {}
 
     ~BloomFilterIndexWriterImpl() override = default;
 
@@ -163,8 +163,8 @@ private:
     BloomFilterOptions _bf_options;
     TypeInfoPtr _typeinfo;
     MemPool _pool;
-    bool _has_null;
-    uint64_t _bf_buffer_size;
+    bool _has_null{false};
+    uint64_t _bf_buffer_size{0};
     // distinct values
     ValueDict _values;
     std::vector<std::unique_ptr<BloomFilter>> _bfs;

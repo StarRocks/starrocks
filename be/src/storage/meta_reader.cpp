@@ -22,15 +22,15 @@ std::vector<std::string> SegmentMetaCollecter::support_collect_fields = {"dict_m
 
 Status SegmentMetaCollecter::parse_field_and_colname(const std::string& item, std::string* field,
                                                      std::string* col_name) {
-    for (size_t i = 0; i < support_collect_fields.size(); i++) {
-        if (item.size() <= support_collect_fields[i].size()) {
+    for (auto & support_collect_field : support_collect_fields) {
+        if (item.size() <= support_collect_field.size()) {
             continue;
         }
 
-        if (item.find(support_collect_fields[i]) != std::string::npos &&
-            item.substr(0, support_collect_fields[i].size()) == support_collect_fields[i]) {
-            *field = support_collect_fields[i];
-            *col_name = item.substr(support_collect_fields[i].size() + 1);
+        if (item.find(support_collect_field) != std::string::npos &&
+            item.substr(0, support_collect_field.size()) == support_collect_field) {
+            *field = support_collect_field;
+            *col_name = item.substr(support_collect_field.size() + 1);
             return Status::OK();
         }
     }
@@ -229,7 +229,7 @@ bool MetaReader::has_more() {
 
 SegmentMetaCollecter::SegmentMetaCollecter(SegmentSharedPtr segment) : _segment(std::move(segment)) {}
 
-SegmentMetaCollecter::~SegmentMetaCollecter() {}
+SegmentMetaCollecter::~SegmentMetaCollecter() = default;
 
 Status SegmentMetaCollecter::init(const SegmentMetaCollecterParams* params) {
     _params = params;

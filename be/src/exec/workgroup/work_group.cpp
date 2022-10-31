@@ -2,6 +2,8 @@
 
 #include "exec/workgroup/work_group.h"
 
+#include <utility>
+
 #include "common/config.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "glog/logging.h"
@@ -28,9 +30,9 @@ template class WorkGroupSchedEntity<pipeline::DriverQueue>;
 template class WorkGroupSchedEntity<ScanTaskQueue>;
 
 ///WorkGroup.
-WorkGroup::WorkGroup(const std::string& name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
+WorkGroup::WorkGroup(std::string  name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
                      size_t concurrency, WorkGroupType type)
-        : _name(name),
+        : _name(std::move(name)),
           _id(id),
           _version(version),
           _type(type),
@@ -194,9 +196,9 @@ void WorkGroup::copy_metrics(const WorkGroup& rhs) {
 }
 
 /// WorkGroupManager.
-WorkGroupManager::WorkGroupManager() {}
+WorkGroupManager::WorkGroupManager() = default;
 
-WorkGroupManager::~WorkGroupManager() {}
+WorkGroupManager::~WorkGroupManager() = default;
 void WorkGroupManager::destroy() {
     std::unique_lock write_lock(_mutex);
 
@@ -471,8 +473,8 @@ std::vector<TWorkGroup> WorkGroupManager::list_all_workgroups() {
     {
         std::shared_lock read_lock(_mutex);
         workgroups.reserve(_workgroups.size());
-        for (auto it = _workgroups.begin(); it != _workgroups.end(); ++it) {
-            const auto& wg = it->second;
+        for (auto & _workgroup : _workgroups) {
+            const auto& wg = _workgroup.second;
             auto twg = wg->to_thrift_verbose();
             workgroups.push_back(twg);
         }

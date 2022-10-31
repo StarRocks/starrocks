@@ -2,6 +2,8 @@
 
 #include "storage/row_source_mask.h"
 
+#include <utility>
+
 #include "common/config.h"
 #include "common/logging.h"
 #include "common/status.h"
@@ -10,10 +12,10 @@
 
 namespace starrocks::vectorized {
 
-RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, const std::string& storage_root_path)
+RowSourceMaskBuffer::RowSourceMaskBuffer(int64_t tablet_id, std::string  storage_root_path)
         : _mask_column(std::move(UInt16Column::create_mutable())),
           _tablet_id(tablet_id),
-          _storage_root_path(storage_root_path) {}
+          _storage_root_path(std::move(storage_root_path)) {}
 
 RowSourceMaskBuffer::~RowSourceMaskBuffer() {
     _reset_mask_column();

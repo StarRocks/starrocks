@@ -73,7 +73,7 @@ using WorkGroupScanSchedEntity = WorkGroupSchedEntity<ScanTaskQueue>;
 // the user issues a query, then the corresponding WorkGroup is chosen to manage the query.
 class WorkGroup {
 public:
-    WorkGroup(const std::string& name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
+    WorkGroup(std::string  name, int64_t id, int64_t version, size_t cpu_limit, double memory_limit,
               size_t concurrency, WorkGroupType type);
     WorkGroup(const TWorkGroup& twg);
     ~WorkGroup() = default;

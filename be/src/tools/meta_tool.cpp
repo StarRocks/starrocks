@@ -501,9 +501,9 @@ void check_meta_consistency(DataDir* data_dir) {
                     const auto& column_pb = footer.columns(ordinal);
                     columns_in_footer.emplace(column_pb.unique_id(), std::make_pair(ordinal, column_pb.type()));
                 }
-                for (uint32_t col_id = 0; col_id < columns.size(); ++col_id) {
-                    uint32_t unique_id = columns[col_id].unique_id();
-                    starrocks::FieldType type = columns[col_id].type();
+                for (const auto & column : columns) {
+                    uint32_t unique_id = column.unique_id();
+                    starrocks::FieldType type = column.type();
                     auto iter = columns_in_footer.find(unique_id);
                     if (iter == columns_in_footer.end()) {
                         continue;
@@ -518,7 +518,7 @@ void check_meta_consistency(DataDir* data_dir) {
                     // if type is varchar, check length
                     if (type == starrocks::FieldType::OLAP_FIELD_TYPE_VARCHAR) {
                         const auto& column_pb = footer.columns(iter->second.first);
-                        if (columns[col_id].length() != column_pb.length()) {
+                        if (column.length() != column_pb.length()) {
                             tablet_ids.emplace_back(tablet_id);
                             return true;
                         }
@@ -532,8 +532,8 @@ void check_meta_consistency(DataDir* data_dir) {
     if (tablet_ids.size() > 0) {
         std::cout << "inconsistency tablet:";
     }
-    for (size_t i = 0; i < tablet_ids.size(); ++i) {
-        std::cout << "," << tablet_ids[i];
+    for (long tablet_id : tablet_ids) {
+        std::cout << "," << tablet_id;
     }
     return;
 }

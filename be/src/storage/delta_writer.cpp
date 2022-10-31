@@ -2,6 +2,8 @@
 
 #include "storage/delta_writer.h"
 
+#include <utility>
+
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/memtable.h"
@@ -24,9 +26,9 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
     return std::move(writer);
 }
 
-DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
+DeltaWriter::DeltaWriter(DeltaWriterOptions  opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
         : _state(kUninitialized),
-          _opt(opt),
+          _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),

@@ -285,7 +285,7 @@ void FutureRuleImpl::print(std::ostream& out) const {
 class FutureRuleParser {
 public:
     FutureRuleParser(const std::string& str, FutureRuleImpl* rule)
-            : ruleString(str), length(str.size()), position(0), output(*rule) {
+            : ruleString(str), length(str.size()),  output(*rule) {
         output.ruleString = str;
         if (position != length) {
             parseName(output.standard.name);
@@ -313,7 +313,7 @@ public:
 private:
     const std::string& ruleString;
     size_t length;
-    size_t position;
+    size_t position{0};
     FutureRuleImpl& output;
 
     void throwError(const char* msg) {

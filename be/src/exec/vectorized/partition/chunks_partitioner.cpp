@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/partition/chunks_partitioner.h"
 
+#include <utility>
+
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "runtime/primitive_type.h"
@@ -10,10 +12,10 @@ namespace starrocks::vectorized {
 
 ChunksPartitioner::ChunksPartitioner(const bool has_nullable_partition_column,
                                      const std::vector<ExprContext*>& partition_exprs,
-                                     const std::vector<PartitionColumnType>& partition_types)
+                                     std::vector<PartitionColumnType>  partition_types)
         : _has_nullable_partition_column(has_nullable_partition_column),
           _partition_exprs(partition_exprs),
-          _partition_types(partition_types) {
+          _partition_types(std::move(partition_types)) {
     _partition_columns.resize(partition_exprs.size());
 }
 

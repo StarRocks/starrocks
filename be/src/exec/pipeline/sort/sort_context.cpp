@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
@@ -105,7 +107,7 @@ Status SortContext::_init_merger() {
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                                        int64_t offset, int64_t limit, int32_t num_right_sinkers,
-                                       const std::vector<ExprContext*>& sort_exprs,
+                                       std::vector<ExprContext*>  sort_exprs,
                                        const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
         : _state(state),
           _topn_type(topn_type),
@@ -114,7 +116,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::typ
           _offset(offset),
           _limit(limit),
           _num_right_sinkers(num_right_sinkers),
-          _sort_exprs(sort_exprs),
+          _sort_exprs(std::move(sort_exprs)),
           _sort_descs(is_asc_order, is_null_first) {}
 
 SortContextPtr SortContextFactory::create(int32_t idx) {
