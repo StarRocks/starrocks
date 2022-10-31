@@ -2,168 +2,151 @@
 
 ## 功能
 
-该语句用于操作一个系统内的节点。（仅管理员使用！）
+管理 StarRocks 集群中的 FE、BE 和 Broker。仅 root 用户有权限使用该语句。
 
-## 语法
+## 语法和参数说明
 
-### 增加节点(不使用多租户功能则按照此方法添加)
+### FE
 
-```sql
-ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-ALTER SYSTEM ADD COMPUTE NODE "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-```
+- 添加 Follower FE。添加后，可使用 `SHOW PROC '/frontends'\G;` 命令查看新增FE 的状态。
 
-BE 节点增加成功后可通过 [Show Backends](../Administration/SHOW%20BACKENDS.md) 章节描述命令查看。
-CN 节点增加成功后可通过 [Show Compute Nodes](../Administration/SHOW%20COMPUTE%20NODES.md) 章节描述命令查看。
+   ```SQL
+    ALTER SYSTEM ADD FOLLOWER "host:edit_log_port"[, ...];
+    ```
 
-### 增加空闲节点(即添加不属于任何 cluster 的 BACKEND)
+- 删除 Follower FE。
 
-```sql
-ALTER SYSTEM ADD FREE BACKEND "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-```
+    ```SQL
+    ALTER SYSTEM DROP FOLLOWER "host:edit_log_port"[, ...];
+    ```
 
-### 增加节点到某个 cluster
+- 添加 Observer FE。添加后，可通过 `SHOW PROC '/frontends'\G;` 命令查看新增FE 的状态。
 
-```sql
-ALTER SYSTEM ADD BACKEND TO cluster_name "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-```
+    ```SQL
+    ALTER SYSTEM ADD OBSERVER "host:edit_log_port"[, ...];
+    ```
 
-### 删除节点
+- 删除 Observer FE。
 
-```sql
-ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-ALTER SYSTEM DROP COMPUTE NODES "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-```
+    ```SQL
+    ALTER SYSTEM DROP OBSERVER "host:edit_log_port"[, ...];
+    ```
 
-### 节点下线
+     参数说明如下：
 
-```sql
-ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_service_port"[,"host:heartbeat_service_port"...];
-```
+    | **参数**           | **必选** | **说明**                                                     |
+    | ------------------ | -------- | ------------------------------------------------------------ |
+    | host:edit_log_port | 是       | <ul><li>`host`：FE 机器的主机名或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`edit_log_port`：FE 上的 BDB JE 通信端口，默认为 `9010`。</li></ul> |
 
-### 增加 Broker
+### BE
 
-```sql
-ALTER SYSTEM ADD BROKER broker_name "host:port"[,"host:port"...];
-```
+- 添加 BE。 添加后，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 查看新增 BE 的状态。
 
-Broker 增加成功后可通过 [Show Backends](../Administration/SHOW%20BROKER.md) 章节描述命令查看。
+    ```SQL
+    ALTER SYSTEM ADD BACKEND "host:heartbeat_service_port"[, ...];
+    ```
 
-### 减少 Broker
+- 删除 BE。如果有表是单副本且该表的部分 tablet 分布在要删除的 BE 上，则不允许删除该 BE。
 
-```sql
-ALTER SYSTEM DROP BROKER broker_name "host:port"[,"host:port"...];
-```
+    ```SQL
+    ALTER SYSTEM DROP BACKEND "host:heartbeat_service_port"[, ...];
+    ```
 
-### 删除所有 Broker
+- 下线 BE。
 
-```sql
-ALTER SYSTEM DROP ALL BROKER broker_name
-```
+    ```SQL
+    ALTER SYSTEM DECOMMISSION BACKEND "host:heartbeat_service_port"[, ...];
+    ```
 
-### 设置一个 Load error hub，用于集中展示导入时的错误信息
+    下线前，该 BE 上的数据会迁移到其他 BE 上，过程中不影响数据导入和查询。下线 BE 为异步操作，可通过 [SHOW BACKENDS](../Administration/SHOW%20BACKENDS.md) 语句查看是否下线成功，如下线成功，该 BE 不会在 SHOW BACKENDS 返回的信息中显示。您可以手动撤销下线操作，详情参见 [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md)。
 
-```sql
-ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES ("key" = "value"[, ...]);
-```
+    参数说明如下：
 
-说明：
+    | **参数**                    | **必选** | **说明**                                                     |
+    | --------------------------- | -------- | ------------------------------------------------------------ |
+    | host:heartbeat_service_port | 是       |<ul><li> `host`：BE 机器的主机名或 IP 地址。如果机器存在多个 IP 地址，则该参数取值应为 `priority_networks` 配置项下设定的唯一通信 IP 地址。</li><li>`heartbeat_service_port`：BE 的心跳端口，用于接收来自 FE 的心跳，默认为 `9050`。</li></ul> |
 
-1. host 可以是主机名或者 ip 地址。
-2. heartbeat_service_port 为该节点的 **心跳端口**，默认 9050。
-3. 增加和删除节点为 **同步** 操作。这两种操作不考虑节点上已有的数据，节点直接从元数据中删除，请谨慎使用。
-4. 节点下线操作用于安全下线节点。该操作为 **异步** 操作。如果成功，节点最终会从元数据中删除。如果失败，则不会完成下线。
-5. 可以手动取消节点下线操作。详见 [CANCEL DECOMMISSION](../Administration/CANCEL%20DECOMMISSION.md)。
-6. Load error hub:
+### Broker
 
-    当前支持两种类型的 Hub：Mysql 和 Broker。需在 PROPERTIES 中指定 "type" = "mysql" 或 "type" = "broker"。
-    如果需要删除当前的 load error hub，可以将 type 设为 null。
+- 添加 Broker。添加后，您可以使用 Broker Load 将 HDFS 或外部云存储系统中的数据导入到 StarRocks 中。详情参见[从 HDFS 或外部云存储系统导入数据](../../../loading/BrokerLoad.md)。
 
-    1. 当使用 Mysql 类型时，导入时产生的错误信息将会插入到指定的 mysql 库表中，之后可以通过 `show load warnings` 语句直接查看错误信息。
+    ```SQL
+    ALTER SYSTEM ADD BROKER broker_name "host:port"[, ...];
+    ```
 
-        Mysql 类型的 Hub 需指定以下参数：
+    在一条 SQL 语句中，如同时添加多个 Broker（一个`host:port`为一个 Broker），那么这些 Broker 共用同一个 `broker_name`。添加后，可通过 [SHOW BROKER](../Administration/SHOW%20BROKER.md) 语句查看 Broker 的详细信息。
 
-        ```plain text
-        host：mysql host
-        port：mysql port
-        user：mysql user
-        password：mysql password
-        database：mysql database
-        table：mysql table
-        ```
+- 删除 Broker。注意如一个 Broker 上有正在执行的导入任务，那么删除该 Broker 会导致该任务中断。
 
-    2. 当使用 Broker 类型时，导入时产生的错误信息会形成一个文件，通过 broker，写入到指定的远端存储系统中。须确保已经部署对应的 broker。
+  - 删除 `broker_name` 下的一个或多个 Broker。
 
-        Broker 类型的 Hub 需指定以下参数：
+      ```SQL
+      ALTER SYSTEM DROP BROKER broker_name "host:broker_ipc_port"[, ...];
+      ```
 
-        ```plain text
-        broker: broker 的名称
-        path: 远端存储路径
-        other properties: 其他访问远端存储所必须的信息，比如认证信息等。
-        ```
+  - 删除所有名为 `broker_name` 下的 Broker。
+
+      ```SQL
+      ALTER SYSTEM DROP ALL BROKER broker_name;
+      ```
+
+     参数说明如下：
+
+    | **参数**             | **必选** | **说明**                                                     |
+    | -------------------- | -------- | ------------------------------------------------------------ |
+    | broker_name          | 是       | 一个 Broker 的名称或多个 Broker 共用的名称。                 |
+    | host:broker_ipc_port | 是       | <ul><li>`host`：Broker 机器的主机名或 IP 地址。</li><li>`broker_ipc_port`：Broker 上的 thrift server 端口，用于接受 FE 或 BE 的请求，默认为 `8000`。</li></ul> |
+
+## 使用说明
+
+添加和删除 FE、添加和删除 BE 以及添加和删除 Broker 均为同步操作。执行删除语句后，FE、BE 或 Broker 会直接删除，不可手动撤销该操作。
 
 ## 示例
 
-1. 增加一个节点。
+示例一：添加一个 Follower FE。
 
-    ```sql
-    ALTER SYSTEM ADD BACKEND "host:port";
-    ```
+```SQL
+ALTER SYSTEM ADD FOLLOWER "x.x.x.x:9010";
+```
 
-2. 增加一个空闲节点。
+示例二：同时删除两个 Observer FE。
 
-    ```sql
-    ALTER SYSTEM ADD FREE BACKEND "host:port";
-    ```
+```SQL
+ALTER SYSTEM DROP OBSERVER "x.x.x.x:9010","x.x.x.x:9010";
+```
 
-3. 删除两个节点。
+示例三：添加一个 BE。
 
-    ```sql
-    ALTER SYSTEM DROP BACKEND "host1:port", "host2:port";
-    ```
+```SQL
+ALTER SYSTEM ADD BACKEND "x.x.x.x:9050";
+```
 
-4. 下线两个节点。
+示例四：同时删除两个 BE。
 
-    ```sql
-    ALTER SYSTEM DECOMMISSION BACKEND "host1:port", "host2:port";
-    ```
+```SQL
+ALTER SYSTEM DROP BACKEND "x.x.x.x:9050", "x.x.x.x:9050";
+```
 
-5. 增加两个 HDFS Broker。
+示例五：同时下线两个 BE。
 
-    ```sql
-    ALTER SYSTEM ADD BROKER hdfs "host1:port", "host2:port";
-    ```
+```SQL
+ALTER SYSTEM DECOMMISSION BACKEND "x.x.x.x:9050", "x.x.x.x:9050";
+```
 
-6. 添加一个 Mysql 类型的 load error hub。
+示例六：同时添加两个名为 `hdfs` 的 Broker。
 
-    ```sql
-    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
-    ("type"= "mysql",
-    "host" = "192.168.1.17"
-    "port" = "3306",
-    "user" = "my_name",
-    "password" = "my_passwd",
-    "database" = "starrocks_load",
-    "table" = "load_errors"
-    );
-    ```
+```SQL
+ALTER SYSTEM ADD BROKER hdfs "x.x.x.x:8000", "x.x.x.x:8000";
+```
 
-7. 添加一个 Broker 类型的 load error hub。
+示例七：删除 `amazon_s3` 下的两个 Broker。
 
-    ```sql
-    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
-    ("type"= "broker",
-    "name" = "oss",
-    "path" = "oss://backup-cmy/logs",
-    "fs.oss.accessKeyId" = "xxx",
-    "fs.oss.accessKeySecret" = "yyy",
-    "fs.oss.endpoint" = "oss-cn-beijing.aliyuncs.com"
-    );
-    ```
+```SQL
+ALTER SYSTEM DROP BROKER amazon_s3 "x.x.x.x:8000", "x.x.x.x:8000";
+```
 
-8. 删除当前的 load error hub。
+示例八：删除 `amazon_s3` 下的所有 Broker。
 
-    ```sql
-    ALTER SYSTEM SET LOAD ERRORS HUB PROPERTIES
-    ("type"= "null");
-    ```
+```SQL
+ALTER SYSTEM DROP ALL BROKER amazon_s3;
+```
