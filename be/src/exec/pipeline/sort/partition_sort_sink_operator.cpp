@@ -71,12 +71,12 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
         if (_topn_type == TTopNType::ROW_NUMBER && _limit <= ChunksSorter::USE_HEAP_SORTER_LIMIT_SZ) {
             chunks_sorter = std::make_unique<ChunksSorterHeapSort>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, _offset, _limit);
+                    _sort_keys, 0, _limit + _offset);
         } else {
             size_t max_buffered_chunks = ChunksSorterTopn::tunning_buffered_chunks(_limit);
             chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     runtime_state(), &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first,
-                    _sort_keys, _offset, _limit, _topn_type, max_buffered_chunks);
+                    _sort_keys, 0, _limit + _offset, _topn_type, max_buffered_chunks);
         }
     } else {
         chunks_sorter = std::make_unique<vectorized::ChunksSorterFullSort>(runtime_state(),
