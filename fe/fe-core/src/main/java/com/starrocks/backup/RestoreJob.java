@@ -838,7 +838,7 @@ public class RestoreJob extends AbstractJob {
                 long newTabletId = globalStateMgr.getNextId();
                 LocalTablet newTablet = new LocalTablet(newTabletId);
                 // add tablet to index, but not add to TabletInvertedIndex
-                remoteIdx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+                remoteIdx.addTablet(newTablet, null /* tablet meta */, false/* update inverted index */);
 
                 // replicas
                 List<Long> beIds =
@@ -854,7 +854,7 @@ public class RestoreJob extends AbstractJob {
                     long newReplicaId = globalStateMgr.getNextId();
                     Replica newReplica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                             visibleVersion, schemaHash);
-                    newTablet.addReplica(newReplica, true /* is restore */);
+                    newTablet.addReplica(newReplica, false /* update inverted index */);
                 }
             }
         }

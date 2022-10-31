@@ -281,6 +281,7 @@ public class Optimizer {
             CTEUtils.collectCteOperators(memo, context);
         }
 
+        ruleRewriteIterative(memo, rootTaskContext, new PruneEmptyWindowRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(memo, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(memo, rootTaskContext, new ReorderIntersectRule());

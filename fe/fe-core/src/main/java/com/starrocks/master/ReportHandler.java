@@ -552,26 +552,13 @@ public class ReportHandler extends Daemon {
                                     ((metaVersion < backendVersion) ||
                                             (metaVersion == backendVersion && replica.isBad()))) {
 
-                                // This is just a optimization for the old compatibility
-                                // The init version in FE is (1-0), in BE is (2-0)
-                                // If the BE report version is (2-0), we just update the replica's version in
-                                // Master FE,
-                                // and no need to write edit log, to save some time.
-                                // TODO(cmy): This will be removed later.
-                                boolean isInitVersion = metaVersion == 1 && backendVersion == 2;
-
-                                if (backendReportVersion < GlobalStateMgr.getCurrentSystemInfo()
-                                        .getBackendReportVersion(backendId)) {
-                                    continue;
-                                }
-
                                 // happens when
                                 // 1. PUSH finished in BE but failed or not yet report to FE
                                 // 2. repair for VERSION_INCOMPLETE finished in BE, but failed or not yet report
                                 // to FE
                                 replica.updateRowCount(backendVersion, dataSize, rowCount);
 
-                                if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
+                                if (replica.getLastFailedVersion() < 0) {
                                     // last failed version < 0 means this replica becomes health after sync,
                                     // so we write an edit log to sync this operation
                                     replica.setBad(false);

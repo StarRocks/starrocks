@@ -388,3 +388,235 @@ When a query is executed with a materialized view, the original query statement 
 - When using ALTER TABLE DROP COLUMN to drop a specific column in a base table, you need to ensure that all materialized views of the base table contain the dropped column, otherwise the drop operation cannot be performed. If you have to drop the column, you need to first drop all materialized views that do not contain the column, and then drop the column.
 
 - Creating too many materialized views for a table will affect the data load efficiency. When data is being loaded to the base table, the data in materialized view and base table will be updated synchronously. If a base table contains `n` materialized views, the efficiency of loading data into the base table is about the same as the efficiency of loading data into `n` tables.
+<<<<<<< HEAD
+=======
+
+## Model data warehouse with materialized view
+
+> **CAUTION**
+>
+> StarRocks prior to 2.4 does not support the functions demonstrated below.
+
+StarRocks 2.4 supports creating asynchronous materialized views for multiple base tables to allow modeling data warehouse. Asynchronous materialized views support all [Data Models](../table_design/Data_model.md).
+
+As for the current version, multi-table materialized views support two refresh strategies:
+
+- **Async refresh**
+  Async refresh strategy allows materialized views refresh through asynchronous tasks, and does not guarantee strict consistency between the base table and its subordinate materialized views. Async refresh strategy is supported on materialized view for multiple base tables.
+
+- **Manual refresh**
+  With manual refresh strategy, you can trigger a refresh task for a materialized view by running a SQL command. It does not guarantee strict consistency between the base table and its subordinate materialized views.
+
+### Preparation
+
+#### Enable async materialized view
+
+To use the async materialized view feature, you need to set the configuration item `enable_experimental_mv` as `true` in the FE configuration file **fe.conf**, and restart the cluster to allow the configuration take effect.
+
+#### Create base tables
+
+The following examples involve two base tables:
+
+- Table `goods` records the item ID `item_id1`, item name `item_name`, and item price `price`.
+
+- Table `order_list` records the order ID ``, client ID ``, item ID `item_id2`, and order date `order_date`.
+
+Column `item_id1` is equivalent to column `item_id2`.
+
+Follow these steps to create the tables and insert data into them:
+
+```SQL
+CREATE TABLE goods(
+    item_id1          INT,
+    item_name         STRING,
+    price             FLOAT
+) DISTRIBUTED BY HASH(item_id1);
+
+INSERT INTO goods
+VALUES
+    (1001,"apple",6.5),
+    (1002,"pear",8.0),
+    (1003,"potato",2.2);
+
+CREATE TABLE order_list(
+    order_id          INT,
+    client_id         INT,
+    item_id2          INT,
+    order_date        DATE
+) DISTRIBUTED BY HASH(order_id);
+
+INSERT INTO order_list
+VALUES
+    (10001,101,1001,"2022-03-13"),
+    (10001,101,1002,"2022-03-13"),
+    (10002,103,1002,"2022-03-13"),
+    (10002,103,1003,"2022-03-14"),
+    (10003,102,1003,"2022-03-14"),
+    (10003,102,1001,"2022-03-14");
+```
+
+The business scenario of this example demands frequent analyses on the total of each order. Because each query requires JOIN operation on the two base tables, two base tables should be joined a wide table. Besides, the business scenario demands the data refresh at an interval of one day.
+
+The query statement is as follows:
+
+```SQL
+SELECT
+    order_id,
+    sum(goods.price) as total
+FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
+GROUP BY order_id;
+```
+
+### Create a materialized view
+
+You can create a materialized view based on a specific query statement by using the following SQL command.
+
+```SQL
+CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
+[distribution_desc]
+[REFRESH refresh_scheme_desc]
+[primary_expression]
+[COMMENT ""]
+[PROPERTIES ("key"="value", ...)]
+AS (query);
+```
+
+For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
+
+Based on the table `goods`, `order_list` and the query statement mentioned above, the following example creates the materialized view `order_mv` to analyze the total of each order. The materialized view is set to refresh asynchronously at an interval of one day.
+
+```SQL
+CREATE MATERIALIZED VIEW order_mv
+DISTRIBUTED BY HASH(`order_id`) BUCKETS 12
+REFRESH ASYNC START('2022-09-01 10:00:00') EVERY (interval 1 day)
+AS SELECT
+    order_list.order_id,
+    sum(goods.price) as total
+FROM order_list INNER JOIN goods ON goods.item_id1 = order_list.item_id2
+GROUP BY order_id;
+```
+
+### Query with the materialized view
+
+The materialized view you created contains the complete set of pre-computed results in accordance with the query statement. **You can directly query an async materialized view**.
+
+```Plain
+MySQL > SELECT * FROM order_mv;
++----------+--------------------+
+| order_id | total              |
++----------+--------------------+
+|    10001 |               14.5 |
+|    10002 | 10.200000047683716 |
+|    10003 |  8.700000047683716 |
++----------+--------------------+
+3 rows in set (0.01 sec)
+```
+
+### Rename a materialized view
+
+You can rename a materialized view via ALTER MATERIALIZED VIEW command.
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv RENAME order_total;
+```
+
+### Alter the refresh strategy of a materialized view
+
+You can also alter the refresh strategy of a materialized view via ALTER MATERIALIZED VIEW command.
+
+```SQL
+ALTER MATERIALIZED VIEW order_mv REFRESH ASYNC EVERY(INTERVAL 2 DAY);
+```
+
+### Check materialized views
+
+You can check materialized views in your database in the following ways:
+
+- Check all materialized views in your database.
+
+```SQL
+SHOW MATERIALIZED VIEW;
+```
+
+- Check a specific materialized view.
+
+```SQL
+SHOW MATERIALIZED VIEW WHERE NAME = order_mv;
+```
+
+- Check specific materialized views by matching the name.
+
+```SQL
+SHOW MATERIALIZED VIEW WHERE NAME LIKE "order%";
+```
+
+- Check all materialized views via `information_schema`.
+
+```SQL
+SELECT * FROM information_schema.materialized_views;
+```
+
+### Check the definition of a materialized view
+
+You can check the SQL statement used to create a materialized view via SHOW CREATE MATERIALIZED VIEW command.
+
+```SQL
+SHOW CREATE MATERIALIZED VIEW order_mv;
+```
+
+### Check the refresh tasks of single-table sync materialized views
+
+You can check the refresh tasks of all single-table sync materialized views in the database.
+
+```SQL
+SHOW ALTER MATERIALIZED VIEW;
+```
+
+### Manually refresh an async materialized view
+
+You can manually refresh an async materialized view via REFRESH MATERIALIZED VIEW command.
+
+```SQL
+REFRESH MATERIALIZED VIEW order_mv;
+```
+
+> **CAUTION**
+>
+> You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
+
+You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) statement.
+
+### Check the execution status of a multi-table materialized view
+
+You can check the execution status of a multi-table materialized view via the following ways.
+
+```SQL
+SELECT * FROM INFORMATION_SCHEMA.tasks;
+SELECT * FROM INFORMATION_SCHEMA.task_runs;
+```
+
+> **NOTE**
+>
+> Async refresh materialized views rely on the Task framework to refresh data, so you can check refresh tasks by querying the `tasks` and `task_runs` metadata tables provided by the Task framework.
+
+### Drop a materialized view
+
+You can drop a materialized view via [DROP MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/DROP%20MATERIALIZED%20VIEW.md) command.
+
+```SQL
+DROP MATERIALIZED VIEW order_mv;
+```
+
+### Caution
+
+- Async refresh materialized views have the following features:
+  - You can directly query a async refresh materialized view, but the result may be inconsistent with that from the base tables.
+  - You can set different partitioning and bucketing strategies for a async refresh materialized view from that of the base tables.
+  - Async refresh materialized views support dynamic partitioning strategy in a longer span. For example, if the base table is partitioned at an interval of one day, you can set the materialized view to be partitioned at an interval of one month.
+
+- You can build a multi-table materialized view under async or manual refresh strategies.
+
+- Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
+
+- The query statement does not support random functions, including rand((), random(), uuid()), and sleep().
+>>>>>>> 50060d4cf ([Doc] add date functions and update other docs (#12589))

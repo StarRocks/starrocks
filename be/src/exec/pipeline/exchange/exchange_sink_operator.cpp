@@ -219,8 +219,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const 
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
-        auto delta_statistic = state->intermediate_query_statistic();
-        delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
+        if (auto delta_statistic = state->intermediate_query_statistic()) {
+            delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
+        }
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
@@ -243,8 +244,9 @@ Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PT
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
 
-    auto delta_statistic = state->intermediate_query_statistic();
-    delta_statistic->to_pb(chunk_request->mutable_query_statistics());
+    if (auto delta_statistic = state->intermediate_query_statistic()) {
+        delta_statistic->to_pb(chunk_request->mutable_query_statistics());
+    }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               attachment_physical_bytes};

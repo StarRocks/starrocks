@@ -26,7 +26,7 @@ Before you set up an FE, configure the `meta_dir` parameter and the communicatio
 After you complete the previous configurations, perform the following steps to start the FE:
 
 1. Navigate to the deployment directory of the FE.
-2. Run `sh bin/start_fe.sh --daemon` to start the FE.
+2. Run `./bin/start_fe.sh --daemon` to start the FE.
 
 You can deploy multiple FEs to ensure high availability. Typically, you can deploy three FEs: one leader FE and two follower FEs.
 
@@ -63,9 +63,9 @@ After you set up the BEs and FEs of a cluster, you need to check the statuses of
 
 To stop a cluster, you need to stop all the FEs and BEs in the cluster:
 
-- Go to the deployment directory of each FE and run `sh bin/stop_fe.sh`.
+- Go to the deployment directory of each FE and run `./bin/stop_fe.sh`.
 
-- Go to the deployment directory of each BE and run `sh bin/stop_be.sh`.
+- Go to the deployment directory of each BE and run `./bin/stop_be.sh`.
 
 ### Upgrade a cluster
 
@@ -91,7 +91,7 @@ StarRocks can perform a rolling upgrade, which allows you to first upgrade the B
 ```Plain%20Text
 cd be_work_dir
 
-sh bin/stop_be.sh
+./bin/stop_be.sh
 
 mv lib lib.bak 
 
@@ -101,7 +101,7 @@ cp -r /tmp/StarRocks-SE-x.x.x/be/lib  .
 
 cp -r /tmp/StarRocks-SE-x.x.x/be/bin  .  
 
-sh bin/start_be.sh --daemon
+./bin/start_be.sh --daemon
 
 ps aux | grep starrocks_be
 ```
@@ -111,7 +111,7 @@ ps aux | grep starrocks_be
 ```Plain%20Text
 cd fe_work_dir
 
-sh bin/stop_fe.sh
+./bin/stop_fe.sh
 
 mv lib lib.bak 
 
@@ -121,7 +121,7 @@ cp -r /tmp/StarRocks-SE-x.x.x/fe/lib  .
 
 cp -r /tmp/StarRocks-SE-x.x.x/fe/bin  .
 
-sh bin/start_fe.sh --daemon
+./bin/start_fe.sh --daemon
 
 ps aux | grep StarRocksFE
 ```
@@ -139,9 +139,9 @@ cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/lib  .
 
 cp -r /tmp/StarRocks-SE-x.x.x/apache_hdfs_broker/bin  .
 
-sh bin/stop_broker.sh
+./bin/stop_broker.sh
 
-sh bin/start_broker.sh --daemon
+./bin/start_broker.sh --daemon
 
 ps aux | grep broker
 ```
@@ -178,9 +178,9 @@ mv lib.bak lib
 
 mv bin.bak bin 
 
-sh bin/stop_fe.sh
+./bin/stop_fe.sh
 
-sh bin/start_fe.sh --daemon
+./bin/start_fe.sh --daemon
 
 ps aux | grep StarRocksFe
 ```
@@ -198,9 +198,9 @@ mv lib.bak lib
 
 mv bin.bak bin
 
-sh bin/stop_be.sh
+./bin/stop_be.sh
 
-sh bin/start_be.sh --daemon
+./bin/start_be.sh --daemon
 
 ps aux | grep starrocks_be
 ```
@@ -218,9 +218,9 @@ mv lib.bak lib
 
 mv bin.bak bin
 
-sh bin/stop_broker.sh
+./bin/stop_broker.sh
 
-sh bin/start_broker.sh --daemon
+./bin/start_broker.sh --daemon
 
 ps aux | grep broker
 ```
@@ -281,8 +281,8 @@ The FE metadata is critical and an abnormal upgrade may cause data loss. We reco
 4. Set `metadata_failure_recovery` in the **fe.conf** file to `true`.
 5. Copy the metadata directory of the leader FE in the production environment to your test environment.
 6. Set the `cluster_id` configuration item in the **meta/image/VERSION** file to 123456.
-7. In your test environment, run `sh bin/start_fe.sh` to start the test FE.
+7. In your test environment, run `./bin/start_fe.sh` to start the test FE.
 8. View the **fe.log** file of the test FE to check whether the restart is successful.
-9. If the restart is successful, run `sh bin/stop_fe.sh` to stop the test FE.
+9. If the restart is successful, run `./bin/stop_fe.sh` to stop the test FE.
 
 The step 2 through 6 aim to prevent the test FE from connecting to the production environment after a restart.
