@@ -39,8 +39,12 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.StarRocksAssert;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -227,7 +231,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend3.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_repair_delay_factor_second * 1000 * 20;
+                result = System.currentTimeMillis() - Config.tablet_repair_delay_factor_second * 1000 * 20;
                 minTimes = 0;
 
                 // backend4 not available, and dead for a short time
@@ -589,7 +593,7 @@ public class ColocateTableBalancerTest {
         List<Long> clusterBackendIds = Lists.newArrayList(1L, 2L, 3L, 4L, 5L);
         new Expectations() {
             {
-                infoService.getClusterBackendIds("cluster1", false);
+                infoService.getBackendIds(false);
                 result = clusterBackendIds;
                 minTimes = 0;
 
@@ -649,7 +653,8 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds", "cluster1", infoService);
+        List<Long> availableBeIds = Deencapsulation.invoke(balancer, "getAvailableBeIds", infoService);
+        System.out.println(availableBeIds);
         Assert.assertArrayEquals(new long[] {2L, 4L}, availableBeIds.stream().mapToLong(i -> i).sorted().toArray());
     }
 
@@ -727,7 +732,7 @@ public class ColocateTableBalancerTest {
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex materializedIndex = partition.getBaseIndex();
             for (Tablet tablet : materializedIndex.getTablets()) {
-                TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
+                TabletSchedCtx ctx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR, "default_cluster",
                         database.getId(),
                         table.getId(),
                         partition.getId(),
@@ -751,9 +756,10 @@ public class ColocateTableBalancerTest {
                         "distributed by hash(`id`) buckets 3 " +
                         "properties('replication_num' = '1', 'colocate_with' = 'group1');");
 
-        Database database = GlobalStateMgr.getCurrentState().getDb("db1");
+        GlobalStateMgr.getCurrentState().getTabletScheduler().runAfterCatalogReady();
+        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1");
         OlapTable table = (OlapTable) database.getTable("tbl");
-        addTabletsToScheduler("db1", "tbl", false);
+        addTabletsToScheduler("default_cluster:db1", "tbl", false);
 
         ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
         List<List<Long>> bl = Lists.newArrayList();
@@ -776,7 +782,7 @@ public class ColocateTableBalancerTest {
                 .withTable("CREATE TABLE db2.tbl2(id INT NOT NULL) " +
                         "distributed by hash(`id`) buckets 3 " +
                         "properties('replication_num' = '1', 'colocate_with' = 'group2');");
-        addTabletsToScheduler("db2", "tbl2", true);
+        addTabletsToScheduler("default_cluster:db2", "tbl2", true);
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         TabletSchedulerStat stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
 
@@ -797,7 +803,7 @@ public class ColocateTableBalancerTest {
                         "distributed by hash(`id`) buckets 1 " +
                         "properties('replication_num' = '1', 'colocate_with' = 'group3');");
 
-        Database database = GlobalStateMgr.getCurrentState().getDb("db3");
+        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:db3");
         OlapTable table = (OlapTable) database.getTable("tbl3");
         ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
 
@@ -808,11 +814,11 @@ public class ColocateTableBalancerTest {
 
         List<Partition> partitions = Lists.newArrayList(table.getPartitions());
         LocalTablet tablet = (LocalTablet) partitions.get(0).getBaseIndex().getTablets().get(0);
-        tablet.getImmutableReplicas().get(0).setBad(true);
+        tablet.getReplicas().get(0).setBad(true);
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
-        long oldVal = Config.tablet_sched_repair_delay_factor_second;
+        long oldVal = Config.tablet_repair_delay_factor_second;
         try {
-            Config.tablet_sched_repair_delay_factor_second = -1;
+            Config.tablet_repair_delay_factor_second = -1;
             // the created pseudo min cluster can only have backend on the same host, so we can only create table with
             // single replica, we need to open this test switch to test the behavior of bad replica balance
             ColocateTableBalancer.ignoreSingleReplicaCheck = true;
@@ -827,7 +833,7 @@ public class ColocateTableBalancerTest {
             // backend set changed because of bad replica
             Assert.assertNotEquals(backendListBefore, backendListAfter);
         } finally {
-            Config.tablet_sched_repair_delay_factor_second = oldVal;
+            Config.tablet_repair_delay_factor_second = oldVal;
         }
 
     }
@@ -893,7 +899,7 @@ public class ColocateTableBalancerTest {
                 result = false;
                 minTimes = 0;
                 myBackend5.getLastUpdateMs();
-                result = System.currentTimeMillis() - Config.tablet_sched_repair_delay_factor_second * 1000 * 20;
+                result = System.currentTimeMillis() - Config.tablet_repair_delay_factor_second * 1000 * 20;
                 minTimes = 0;
                 myBackend5.getHost();
                 result = "192.168.0.115";
