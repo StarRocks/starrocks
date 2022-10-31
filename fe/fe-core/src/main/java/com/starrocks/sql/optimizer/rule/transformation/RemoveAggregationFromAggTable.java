@@ -13,9 +13,9 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -135,8 +135,16 @@ public class RemoveAggregationFromAggTable extends TransformationRule {
         if (aggregationOperator.getPredicate() != null) {
             // rewrite the having predicate. replace the aggFunc by the columnRef
             ScalarOperator newPredicate = rewriter.rewrite(aggregationOperator.getPredicate());
-            LogicalFilterOperator filterOperator = new LogicalFilterOperator(newPredicate);
-            newChildOpt = OptExpression.create(filterOperator, newChildOpt);
+            LogicalOlapScanOperator scanOperator = (LogicalOlapScanOperator) newChildOpt.getOp();
+            LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
+            List<ScalarOperator> pushDownPredicates = Lists.newArrayList(newPredicate);
+            if (scanOperator.getPredicate() != null) {
+                pushDownPredicates.add(scanOperator.getPredicate());
+            }
+            scanOperator = builder.withOperator(scanOperator)
+                    .setPredicate(Utils.compoundAnd(pushDownPredicates))
+                    .build();
+            newChildOpt = OptExpression.create(scanOperator, newChildOpt.getInputs());
         }
 
         if (aggregationOperator.getProjection() != null) {
