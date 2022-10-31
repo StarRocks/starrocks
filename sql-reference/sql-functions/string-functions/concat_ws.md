@@ -21,7 +21,7 @@ VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
 
 ### 示例
 
-示例1：使用`r`作为分隔符，返回`starrocks`。
+示例1：使用 `r` 作为分隔符，返回 `starrocks`。
 
 ```Plain Text
 MySQL > select concat_ws("r", "sta", "rocks");
@@ -32,7 +32,7 @@ MySQL > select concat_ws("r", "sta", "rocks");
 +--------------------------------+
 ```
 
-示例2：使用`NULL`作为分隔符，返回 NULL。
+示例2：使用 `NULL` 作为分隔符，返回 NULL。
 
 ```Plain Text
 MySQL > select concat_ws(NULL, "star", "rocks");
@@ -43,7 +43,7 @@ MySQL > select concat_ws(NULL, "star", "rocks");
 +----------------------------------+
 ```
 
-示例3：使用`r`作为分隔符，跳过 NULL 值。
+示例3：使用 `r` 作为分隔符，跳过 NULL 值。
 
 ```Plain Text
 MySQL > select concat_ws("r", "sta", NULL,"rocks");
