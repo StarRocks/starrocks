@@ -31,27 +31,27 @@ StarRocks 2.3 及以上版本支持 catalog（数据目录）功能，方便您�
 
 ### 跨 catalog 查询数据
 
-如想在一个 catalog 中查询其他 catalog 中数据，可通过 `catalog_name.db_name` 或`catalog_name.db_name.table_name` 的格式来引用目标数据。举例：
+如想在一个 catalog 中查询其他 catalog 中数据，可通过 `catalog_name.db_name` 或 `catalog_name.db_name.table_name` 的格式来引用目标数据。举例：
 
-- 在`default_catalog.olap_db`下查询 `hive_catalog` 中的`hive_table`。
+- 在 `default_catalog.olap_db` 下查询 `hive_catalog` 中的 `hive_table`。
 
   ```SQL
   SELECT * FROM hive_catalog.hive_db.hive_table;
   ```
 
-- 在`hive_catalog.hive_db`下查询 `default_catalog` 中的`olap_table`。
+- 在 `hive_catalog.hive_db` 下查询 `default_catalog` 中的 `olap_table`。
 
   ```SQL
   SELECT * FROM default_catalog.olap_db.olap_table;
   ```
 
-- 在`hive_catalog.hive_db`中，对`hive_table`和 `default_catalog` 中的`olap_table`进行联邦查询。
+- 在 `hive_catalog.hive_db` 中，对 `hive_table` 和 `default_catalog` 中的 `olap_table` 进行联邦查询。
 
   ```SQL
   SELECT * FROM hive_table h JOIN default_catalog.olap_db.olap_table o WHERE h.id = o.id;
   ```
 
-- 在其他目录下，对`hive_catalog`中的`hive_table`和`default_catalog`中的`olap_table`进行联邦查询。
+- 在其他目录下，对 `hive_catalog` 中的 `hive_table` 和 `default_catalog` 中的 `olap_table` 进行联邦查询。
 
   ```SQL
   SELECT * FROM hive_catalog.hive_db.hive_table h JOIN default_catalog.olap_db.olap_table o WHERE h.id = o.id;
