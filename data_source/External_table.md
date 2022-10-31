@@ -35,12 +35,12 @@ PROPERTIES
 
 参数说明：
 
-* **host**：MySQL 的连接地址
-* **port**：MySQL 的连接端口号
-* **user**：MySQL 登录的用户名
-* **password**：MySQL 登录的密码
-* **database**：MySQL 相关数据库名
-* **table**：MySQL 相关数据表名
+* **host**：MySQL 连接地址
+* **port**：MySQL 连接端口号
+* **user**：MySQL 登录用户名
+* **password**：MySQL 登录密码
+* **database**：MySQL 数据库名
+* **table**：MySQL 数据库表名
 
 <br/>
 
@@ -97,19 +97,19 @@ insert into external_t select * from other_table;
 
 其中：
 
-* **EXTERNAL**：该关键字指定创建的是 StarRocks 外表.
-* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址.
-* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值.
-* **user**：该属性描述目标表所属 StarRocks 集群的访问用户名.
-* **password**：该属性描述目标表所属 StarRocks 集群的访问密码.
-* **database**：该属性描述目标表所属数据库名称.
-* **table**：该属性描述目标表名称.
+* **EXTERNAL**：该关键字指定创建的是 StarRocks 外表。
+* **host**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 IP 地址。
+* **port**：该属性描述目标表所属 StarRocks 集群 Leader FE 的 RPC 访问端口，该值可参考配置 fe/fe.conf 中的 rpc_port 配置取值。
+* **user**：该属性描述目标表所属 StarRocks 集群的访问用户名。
+* **password**：该属性描述目标表所属 StarRocks 集群的访问密码。
+* **database**：该属性描述目标表所属数据库名称。
+* **table**：该属性描述目标表名称。
 
 目前 StarRocks 外表使用上有以下限制：
 
-* 仅可以在外表上执行 insert into 和 show create table 操作，不支持其他数据写入方式，也不支持查询和 DDL.
-* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致.
-* 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上.
+* 仅可以在外表上执行 insert into 和 show create table 操作，不支持其他数据写入方式，也不支持查询和 DDL。
+* 创建外表语法和创建普通表一致，但其中的列名等信息请保持同其对应的目标表一致。
+* 外表会周期性从目标表同步元信息（同步周期为 10 秒），在目标表执行的 DDL 操作可能会延迟一定时间反应在外表上。
 
 ## Elasticsearch 外部表
 
@@ -296,13 +296,13 @@ properties (
 
 * `type`：资源类型，固定取值为 `jdbc`。
 
-* `user`：目标数据库的用户名。
+* `user`：目标数据库用户名。
 
-* `password`：目标数据库用户的登录密码。
+* `password`：目标数据库用户登录密码。
 
 * `jdbc_uri`：JDBC 驱动程序连接目标数据库的 URI，需要满足目标数据库 URI 的语法。常见的目标数据库 URI，请参见 [MySQL](https://dev.mysql.com/doc/connector-j/8.0/en/connector-j-reference-jdbc-url-format.html)、[Oracle](https://docs.oracle.com/en/database/oracle/oracle-database/21/jjdbc/data-sources-and-URLs.html#GUID-6D8EFA50-AB0F-4A2B-88A0-45B4A67C361E)、[PostgreSQL](https://jdbc.postgresql.org/documentation/head/connect.html)、[SQL Server](https://docs.microsoft.com/en-us/sql/connect/jdbc/building-the-connection-url?view=sql-server-ver16) 官网文档。
 
-> 说明：目标数据库 URI 中必须指定具体数据库的名称，如上示例中的`jdbc_test`。
+> 说明：目标数据库 URI 中必须指定具体数据库的名称，如上示例中的 `jdbc_test`。
 
 * `driver_url`：用于下载 JDBC 驱动程序 JAR 包的 URL，支持使用 HTTP 协议 或者 file 协议。例如`https://repo1.maven.org/maven2/org/postgresql/postgresql/42.3.3/postgresql-42.3.3.jar`，`file:///home/disk1/postgresql-42.3.3.jar`。
 
@@ -369,7 +369,7 @@ properties (
 
 * `resource`：所使用 JDBC 资源的名称，必填项。
 
-* `table`：目标数据库的表名，必填项。
+* `table`：目标数据库表名，必填项。
 
 支持的数据类型以及与 StarRocks 的数据类型映射关系，请参见[数据类型映射](#数据类型映射)。
 > 说明：
@@ -553,7 +553,7 @@ PROPERTIES (
 | ------------- | ------------------------------------------------------------ |
 | INT/INTEGER | INT                                                          |
 | BIGINT        | BIGINT                                                       |
-| TIMESTAMP     | DATETIME <br />注意 TIMESTAMP 转成 DATETIME会损失精度和时区信息，并根据 sessionVariable 中的时区转成无时区 DATETIME。 |
+| TIMESTAMP     | DATETIME <br />注意 TIMESTAMP 转成 DATETIME 会损失精度和时区信息，并根据 sessionVariable 中的时区转成无时区 DATETIME。 |
 | STRING        | VARCHAR                                                      |
 | VARCHAR       | VARCHAR                                                      |
 | CHAR          | CHAR                                                         |
@@ -581,19 +581,19 @@ select count(*) from profile_wos_p7;
 
 ### 配置
 
-* fe 配置文件路径为$FE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
-* be 配置文件路径为$BE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
+* fe 配置文件路径为 $FE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
+* be 配置文件路径为 $BE_HOME/conf，如果需要自定义 hadoop 集群的配置可以在该目录下添加配置文件，例如：hdfs 集群采用了高可用的 nameservice，需要将 hadoop 集群中的 hdfs-site.xml 放到该目录下，如果 hdfs 配置了 viewfs，需要将 core-site.xml 放到该目录下。
 * be 所在的机器也需要配置 JAVA_HOME，一定要配置成 jdk 环境，不能配置成 jre 环境
 * kerberos 支持
   1. 在所有的 fe/be 机器上用 `kinit -kt keytab_path principal` 登录，该用户需要有访问 hive 和 hdfs 的权限。kinit 命令登录是有实效性的，需要将其放入 crontab 中定期执行。
-  2. 把 hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到$FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到$BE_HOME/conf 下。
-  3. 在$FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9 选项加上 -Djava.security.krb5.conf=/etc/krb5.conf，/etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
-  4. 在$BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
-  5. resource 中的 uri 地址一定要使用域名，并且相应的 hive 和 hdfs 的域名与 ip 的映射都需要配置到/etc/hosts 中。
+  2. 把 hadoop 集群中的 hive-site.xml/core-site.xml/hdfs-site.xml 放到 $FE_HOME/conf 下，把 core-site.xml/hdfs-site.xml 放到 $BE_HOME/conf 下。
+  3. 在 $FE_HOME/conf/fe.conf 文件中的 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9 选项加上 -Djava.security.krb5.conf=/etc/krb5.conf，/etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
+  4. 在 $BE_HOME/conf/be.conf 文件增加选项 JAVA_OPTS/JAVA_OPTS_FOR_JDK_9="-Djava.security.krb5.conf=/etc/krb5.conf"，其中 /etc/krb5.conf 是 krb5.conf 文件的路径，可以根据自己的系统调整。
+  5. resource 中的 uri 地址一定要使用域名，并且相应的 hive 和 hdfs 的域名与 ip 的映射都需要配置到 /etc/hosts 中。
 
 #### AWS S3/Tencent Cloud COS支持
 
-一. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并添加到$FE_HOME/lib/路径下。
+一. 下载[依赖库](https://cdn-thirdparty.starrocks.com/hive_s3_jar.tar.gz)并添加到 $FE_HOME/lib/ 路径下。
 
 二. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
 
@@ -631,18 +631,18 @@ select count(*) from profile_wos_p7;
 * `fs.s3a.endpoint` 指定 aws 的区域
 * `fs.s3a.connection.maximum` 配置最大链接数，如果查询过程中有报错 `Timeout waiting for connection from poll`，可以适当调高该参数
 
-二. 在$BE_HOME/conf/be.conf 中加入如下配置。
+二. 在 $BE_HOME/conf/be.conf 中加入如下配置。
 
 * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.s3a.access.key` 相同
 * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.s3a.secret.key` 相同
 * `object_storage_endpoint` 与 FE 端 core-site.xml 配置 `fs.s3a.endpoint` 相同
-* `object_storage_region` 只有腾讯COS需要额外添加该配置项。如：ap-beijing****
+* `object_storage_region` 只有腾讯 COS 需要额外添加该配置项。如：ap-beijing****
 
 三. 重启 FE，BE。
 
 #### Aliyun OSS 支持
 
-一. 在$FE_HOME/conf/core-site.xml 中加入如下配置。
+一. 在 $FE_HOME/conf/core-site.xml 中加入如下配置。
 
 ~~~xml
 <configuration>
@@ -678,7 +678,7 @@ select count(*) from profile_wos_p7;
   * 根据 Endpoint 与地域的对应关系进行查找，请参见 [访问域名和数据中心](https://help.aliyun.com/document_detail/31837.htm#concept-zt4-cvy-5db)。
   * 您可以登录 [阿里云 OSS 管理控制台](https://oss.console.aliyun.com/index?spm=a2c4g.11186623.0.0.11d24772leoEEg#/)，进入 Bucket 概览页，Bucket 域名 examplebucket.oss-cn-hangzhou.aliyuncs.com 的后缀部分 oss-cn-hangzhou.aliyuncs.com，即为该 Bucket 的外网 Endpoint。
 
-二. 在$BE_HOME/conf/be.conf 中加入如下配置。
+二. 在 $BE_HOME/conf/be.conf 中加入如下配置。
 
 * `object_storage_access_key_id` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeyId` 相同
 * `object_storage_secret_access_key` 与 FE 端 core-site.xml 配置 `fs.oss.accessKeySecret` 相同
@@ -688,7 +688,7 @@ select count(*) from profile_wos_p7;
 
 ### 缓存更新
 
-Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可以缓存到 StarRocks FE 中，缓存的内存结构为 Guava LoadingCache。您可以在 fe.conf 文件中通过设置`hive_meta_cache_refresh_interval_s`参数修改缓存自动刷新的间隔时间（默认值为`7200`，单位：秒），也可以通过设置`hive_meta_cache_ttl_s`参数修改缓存的失效时间（默认值为`86400`，单位：秒）。修改后需重启 FE 生效。
+Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可以缓存到 StarRocks FE 中，缓存的内存结构为 Guava LoadingCache。您可以在 fe.conf 文件中通过设置 `hive_meta_cache_refresh_interval_s` 参数修改缓存自动刷新的间隔时间（默认值为 `7200`，单位：秒），也可以通过设置 `hive_meta_cache_ttl_s` 参数修改缓存的失效时间（默认值为 `86400`，单位：秒）。修改后需重启 FE 生效。
 
 #### 手动更新元数据缓存
 
@@ -703,7 +703,7 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 
 * Hive Metastore 开启 event 机制
 
-   用户需要在$HiveMetastore/conf/hive-site.xml 中添加如下配置，并重启 Hive Metastore. 以下配置为 Hive Metastore 3.1.2 版本的配置，用户可以将以下配置先拷贝到 hive-site.xml 中进行验证，因为在 Hive Metastore 中配置不存在的参数只会提示 WARN 信息，不会抛出任何异常。
+   用户需要在 $HiveMetastore/conf/hive-site.xml 中添加如下配置，并重启 Hive Metastore. 以下配置为 Hive Metastore 3.1.2 版本的配置，用户可以将以下配置先拷贝到 hive-site.xml 中进行验证，因为在 Hive Metastore 中配置不存在的参数只会提示 WARN 信息，不会抛出任何异常。
 
 ~~~xml
 <property>
@@ -738,8 +738,8 @@ Hive Table 的 Partition 统计信息以及 Partition 下面的文件信息可�
 
 * StarRocks 开启自动增量元数据同步
 
-    用户需要在$FE_HOME/conf/fe.conf 中添加如下配置并重启 FE.
-    `enable_hms_events_incremental_sync=true`
+    用户需要在 $FE_HOME/conf/fe.conf 中添加如下配置并重启 FE。
+     `enable_hms_events_incremental_sync=true`
     自动增量元数据同步相关配置如下，如无特殊需求，无需修改。
 
    | 参数值                             | 说明                                      | 默认值 |
@@ -936,9 +936,9 @@ StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助�
 ### 注意事项
 
 * Hudi 外表是只读的，只能用于查询操作。
-* 当前支持 Hudi 的表类型为 Copy on write(下文简称 COW)，暂不支持 Merge on read(下文简称 MOR)表类型。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
+* 当前支持 Hudi 的表类型为 Copy on write (下文简称 COW)，暂不支持 Merge on read (下文简称 MOR)表类型。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
 * 支持 Hudi 文件的压缩格式为 GZIP（默认值），ZSTD，LZ4 和 SNAPPY。
-* StarRocks 暂不⽀持同步 Hudi 表结构。如果 Hudi 表结构发生变化，您需要在 StarRocks 中删除相应的外部表并重新创建。
+* StarRocks 暂不支持同步 Hudi 表结构。如果 Hudi 表结构发生变化，您需要在 StarRocks 中删除相应的外部表并重新创建。
 
 ### 操作步骤
 
@@ -1049,12 +1049,12 @@ SELECT COUNT(*) FROM hudi_tbl;
 
 SQL 错误 [1064] [42000]: data cannot be inserted into table with empty partition.Use `SHOW PARTITIONS FROM external_t` to see the currently partitions of this table.
 
-查看Partitions时提示另一错误：SHOW PARTITIONS FROM external_t
+查看 Partitions 时提示另一错误：SHOW PARTITIONS FROM external_t
 SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE table
 
 **解决方法**：
 
-建外部表时端口不对，正确的端口是"port"="9020"，不是9931。
+建外部表时端口不对，正确的端口是 "port"="9020"，不是9931。
 
 **提示问题**：
 
