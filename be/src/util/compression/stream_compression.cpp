@@ -230,7 +230,7 @@ class Lz4FrameStreamCompression : public StreamCompression {
 public:
     Lz4FrameStreamCompression()
             : StreamCompression(CompressionTypePB::LZ4_FRAME),
-              _decompress_context(std::move(compression::LZ4F_DCtx_Pool::get_default())) {}
+              _decompress_context(compression::LZ4F_DCtx_Pool::get_default()) {}
 
     ~Lz4FrameStreamCompression() override { _decompress_context.reset(); }
 
@@ -358,7 +358,7 @@ class ZstandardStreamCompression : public StreamCompression {
 public:
     ZstandardStreamCompression()
             : StreamCompression(CompressionTypePB::ZSTD),
-              _decompress_context(std::move(compression::ZSTD_DCtx_Pool::get_default())) {}
+              _decompress_context(compression::ZSTD_DCtx_Pool::get_default()) {}
 
     ~ZstandardStreamCompression() override { _decompress_context.reset(); }
 

@@ -38,10 +38,7 @@ struct JDBCScannerProfile {
 class JDBCScanner {
 public:
     JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
-            : _scan_ctx(context),
-              _tuple_desc(tuple_desc),
-              _slot_descs(tuple_desc->slots()),
-              _runtime_profile(runtime_profile) {}
+            : _scan_ctx(context), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner() = default;
 
@@ -75,8 +72,6 @@ private:
     Status _close_jdbc_scanner();
 
     JDBCScanContext _scan_ctx;
-    // result tuple desc
-    const TupleDescriptor* _tuple_desc;
     // result column slot desc
     std::vector<SlotDescriptor*> _slot_descs;
     // java class name for each result column

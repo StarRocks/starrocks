@@ -68,9 +68,6 @@ struct RowIdPack4 {
 };
 #pragma pack(pop)
 
-static const size_t large_mem_alloc_threhold = 2 * 1024 * 1024 * 1024UL;
-static const size_t phmap_hash_table_shard = 16;
-
 template <class T>
 class TraceAlloc {
 public:
@@ -931,7 +928,7 @@ void PrimaryIndex::_set_schema(const vectorized::Schema& pk_schema) {
     }
     _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
-    _pkey_to_rssid_rowid = std::move(create_hash_index(_enc_pk_type, _key_size));
+    _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
 Status PrimaryIndex::load(Tablet* tablet) {

@@ -7,8 +7,7 @@
 namespace starrocks {
 
 GCHelper::GCHelper(const size_t period, const size_t interval, const MonoTime& now)
-        : _period(period),
-          _interval(interval * period * 1000 * 1000 * 1000 / SMOOTHSTEP_NSTEPS),
+        : _interval(interval * period * 1000 * 1000 * 1000 / SMOOTHSTEP_NSTEPS),
           _epoch(now),
           _bytes_limit(0),
           _remained_bytes(0) {

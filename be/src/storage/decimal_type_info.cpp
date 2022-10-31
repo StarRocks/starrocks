@@ -151,7 +151,7 @@ public:
     }
 
     //convert and deep copy value from other type's source
-    Status convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
+    Status convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const override {
         switch (src_type->type()) {
         case OLAP_FIELD_TYPE_DECIMAL32:
         case OLAP_FIELD_TYPE_DECIMAL64:

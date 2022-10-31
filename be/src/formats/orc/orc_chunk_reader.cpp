@@ -722,9 +722,6 @@ static inline void orc_date_to_native_date(JulianDate* jd, int64_t value) {
 static inline int64_t native_date_to_orc_date(const DateValue& dv) {
     return dv._julian - date::UNIX_EPOCH_JULIAN;
 }
-static inline int64_t native_date_to_orc_date(const JulianDate& jd) {
-    return jd - date::UNIX_EPOCH_JULIAN;
-}
 
 static void fill_date_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                              const TypeDescriptor& type_desc, void* ctx) {
