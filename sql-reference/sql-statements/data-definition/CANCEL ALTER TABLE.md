@@ -2,45 +2,44 @@
 
 ## 功能
 
-该语句用于撤销一个执行中的 ALTER 操作。
+取消指定表的以下变更 (Alter) 操作：
+
+- 表结构：增加列，删除列，调整列顺序和修改列类型。
+- Rollup 索引: 创建 rollup 索引和删除 rollup 索引。
+
+该语句为同步操作，只有拥有该表 `ALTER_PRIV` 权限的用户才可以使用。
 
 ## 语法
 
-1、撤销 ALTER TABLE COLUMN 操作：
+- 取消表结构变更操作。
 
-```SQL
-CANCEL ALTER TABLE COLUMN FROM [database.]table;
-```
+    ```SQL
+    CANCEL ALTER TABLE COLUMN FROM [db_name.]table_name;
+    ```
 
-2、撤销 ALTER TABLE ROLLUP 操作：
+- 取消 rollup 索引变更操作。
 
-```SQL
-CANCEL ALTER TABLE ROLLUP FROM [database.]table;
-```
+    ```SQL
+    CANCEL ALTER TABLE ROLLUP FROM [db_name.]table_name;
+    ```
 
-3、根据 `job id` 批量撤销 ROLLUP 操作：
+## 参数说明
 
-```sql
-CANCEL ALTER TABLE ROLLUP FROM [database.]table (jobid,...);
---注意：该命令为异步操作，具体是否执行成功需要使用`show alter table rollup`查看任务状态确认。
-```
+| **参数**   | **必选** | **说明**                                         |
+| ---------- | -------- | ------------------------------------------------ |
+| db_name    | 否       | 表所在的数据库名称。如不指定，默认为当前数据库。 |
+| table_name | 是       | 表名。                                           |
 
 ## 示例
 
-1、撤销针对 `example_db.table1` 的 ALTER COLUMN 操作：
+示例一：取消数据库 `example_db` 中，`example_table` 的表结构变更操作。
 
-```sql
-CANCEL ALTER TABLE COLUMN FROM example_db.table1;
+```SQL
+CANCEL ALTER TABLE COLUMN FROM example_db.example_table;
 ```
 
-2、撤销 `example_db.table2` 下的 ADD ROLLUP 操作：
+示例二：取消当前数据库中，`example_table` 的 rollup 索引变更操作。
 
-```sql
-CANCEL ALTER TABLE ROLLUP FROM example_db.table2;
-```
-
-3、根据 `job id` 撤销 `example_db.table3` 下的 ADD ROLLUP 操作：
-
-```sql
-CANCEL ALTER TABLE ROLLUP FROM example_db.table3 (12138,12333);
+```SQL
+CANCEL ALTER TABLE ROLLUP FROM example_table;
 ```
