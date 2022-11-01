@@ -62,8 +62,8 @@ public:
         return pair->second.get();
     }
 
-    template <PrimitiveType ArgType, PrimitiveType RetType>
-    void add_aggregate_mapping_notnull(const std::string& name, bool is_window, AggregateFunctionPtr fun) {
+    template <PrimitiveType ArgType, PrimitiveType RetType, typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_aggregate_mapping_notnull(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), fun);
         if (is_window) {
@@ -72,8 +72,9 @@ public:
         }
     }
 
-    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType>
-    void add_aggregate_mapping(const std::string& name, bool is_window, AggregateFunctionPtr fun) {
+    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_aggregate_mapping(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         auto nullable_agg = AggregateFactory::MakeNullableAggregateFunctionUnary<StateType, false>(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), nullable_agg);
@@ -85,8 +86,9 @@ public:
         }
     }
 
-    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType>
-    void add_aggregate_mapping_variadic(const std::string& name, bool is_window, AggregateFunctionPtr fun) {
+    template <PrimitiveType ArgType, PrimitiveType RetType, class StateType,
+              typename SpecificAggFunctionPtr = AggregateFunctionPtr>
+    void add_aggregate_mapping_variadic(const std::string& name, bool is_window, SpecificAggFunctionPtr fun) {
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, false), fun);
         auto variadic_agg = AggregateFactory::MakeNullableAggregateFunctionVariadic<StateType>(fun);
         _infos_mapping.emplace(std::make_tuple(name, ArgType, RetType, false, true), variadic_agg);
@@ -183,10 +185,11 @@ public:
         return nullptr;
     }
 
-private:
-    std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
     AggregateFuncResolver(const AggregateFuncResolver&) = delete;
     const AggregateFuncResolver& operator=(const AggregateFuncResolver&) = delete;
+
+private:
+    std::unordered_map<AggregateFuncKey, AggregateFunctionPtr, AggregateFuncMapHash> _infos_mapping;
 };
 
 } // namespace starrocks::vectorized
