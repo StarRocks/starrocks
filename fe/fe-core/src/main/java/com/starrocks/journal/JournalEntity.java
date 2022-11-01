@@ -105,6 +105,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.staros.StarMgrJournal;
@@ -537,6 +538,11 @@ public class JournalEntity implements Writable {
                 break;
             case OperationType.OP_UPDATE_TASK_RUN:
                 data = TaskRunStatusChange.read(in);
+                isRead = true;
+                break;
+                // only update the progress of task run
+            case OperationType.OP_UPDATE_TASK_RUN_STATE:
+                data = TaskRunPeriodStatusChange.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_DROP_TASK_RUNS:
