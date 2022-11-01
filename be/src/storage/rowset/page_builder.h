@@ -60,7 +60,7 @@ public:
     // Return the number of elements actually added, which may less than |count| if the page is full.
     //
     // vals size should be decided according to the page build type
-    virtual size_t add(const uint8_t* vals, size_t count) = 0;
+    virtual uint32_t add(const uint8_t* vals, uint32_t count) = 0;
 
     // Finish building the current page and return the encoded data.
     // NOTE: the returned buffer will be invalidated by `reset`, so
@@ -80,7 +80,7 @@ public:
     virtual void reset() = 0;
 
     // Return the number of entries that have been added to the page.
-    virtual size_t count() const = 0;
+    virtual uint32_t count() const = 0;
 
     // Return the total bytes of pageBuilder that have been added to the page.
     virtual uint64_t size() const = 0;
