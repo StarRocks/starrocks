@@ -10,10 +10,11 @@
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(
-        const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
-        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
-        int64_t partition_limit, const TTopNType::type topn_type)
+LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs,
+                                                     const std::vector<ExprContext*>& sort_exprs,
+                                                     std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+                                                     std::string sort_keys, int64_t offset, int64_t partition_limit,
+                                                     const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -143,9 +144,9 @@ LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driv
     DCHECK_LT(driver_sequence, _ctxs.size());
 
     if (_ctxs[driver_sequence] == nullptr) {
-        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(
-                _t_partition_exprs, _sort_exprs, _is_asc_order, _is_null_first, _sort_keys, _offset, _partition_limit,
-                _topn_type);
+        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs,
+                                                                             _is_asc_order, _is_null_first, _sort_keys,
+                                                                             _offset, _partition_limit, _topn_type);
     }
 
     return _ctxs[driver_sequence].get();
