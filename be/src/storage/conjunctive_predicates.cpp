@@ -8,15 +8,15 @@ namespace starrocks::vectorized {
 
 // NOTE: No short-circuit.
 Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection) const {
-    return evaluate(chunk, selection, 0, chunk->num_rows());
+    return evaluate(chunk, selection, 0, static_cast<uint16_t>(chunk->num_rows()));
 }
 
 Status ConjunctivePredicates::evaluate_and(const Chunk* chunk, uint8_t* selection) const {
-    return evaluate_and(chunk, selection, 0, chunk->num_rows());
+    return evaluate_and(chunk, selection, 0, static_cast<uint16_t>(chunk->num_rows()));
 }
 
 Status ConjunctivePredicates::evaluate_or(const Chunk* chunk, uint8_t* selection) const {
-    return evaluate_or(chunk, selection, 0, chunk->num_rows());
+    return evaluate_or(chunk, selection, 0, static_cast<uint16_t>(chunk->num_rows()));
 }
 
 Status ConjunctivePredicates::evaluate(const Chunk* chunk, uint8_t* selection, uint16_t from, uint16_t to) const {

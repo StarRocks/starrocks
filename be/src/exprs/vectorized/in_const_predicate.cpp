@@ -5,8 +5,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/primitive_type_infra.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 ExprContext* VectorizedInConstPredicateBuilder::_create() {
     Expr* probe_expr = _expr;
@@ -130,5 +129,4 @@ Status VectorizedInConstPredicateBuilder::add_values(const ColumnPtr& column, si
     return Status::OK();
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

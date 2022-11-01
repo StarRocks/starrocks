@@ -82,6 +82,8 @@ public:
 
     virtual bool is_map() const { return false; }
 
+    virtual bool is_struct() const { return false; }
+
     virtual bool low_cardinality() const { return false; }
 
     virtual const uint8_t* raw_data() const = 0;
@@ -116,7 +118,7 @@ public:
 
     virtual void resize(size_t n) = 0;
 
-    // If the column has already overflow, upgrade to one larger Column type,
+    // If the column has already overflowed, upgrade to one larger Column type,
     // Return internal error if upgrade failed.
     // Return null, if the column is not overflow.
     // Return the new larger column, if upgrade success

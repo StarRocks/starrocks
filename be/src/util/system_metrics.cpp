@@ -372,7 +372,7 @@ void SystemMetrics::_update_memory_metrics() {
 
 void SystemMetrics::_install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices) {
     for (auto& disk : devices) {
-        DiskMetrics* metrics = new DiskMetrics();
+        auto* metrics = new DiskMetrics();
 #define REGISTER_DISK_METRIC(name) \
     registry->register_metric("disk_" #name, MetricLabels().add("device", disk), &metrics->name)
         REGISTER_DISK_METRIC(reads_completed);

@@ -73,7 +73,7 @@ CompressionKind convertCompressionKind(const proto::PostScript& ps) {
 
 std::string ColumnSelector::toDotColumnPath() {
     if (columns.empty()) {
-        return std::string();
+        return {};
     }
     std::ostringstream columnStream;
     std::copy(columns.begin(), columns.end(), std::ostream_iterator<std::string>(columnStream, "."));
@@ -89,7 +89,7 @@ WriterVersion getWriterVersionImpl(const FileContents* contents) {
 }
 
 void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Type& type) {
-    size_t id = static_cast<size_t>(type.getColumnId());
+    auto id = static_cast<size_t>(type.getColumnId());
     if (!selectedColumns[id]) {
         selectedColumns[id] = true;
         for (size_t c = id; c <= type.getMaximumColumnId(); ++c) {
@@ -103,7 +103,7 @@ void ColumnSelector::selectChildren(std::vector<bool>& selectedColumns, const Ty
    * @return true if any child was selected.
    */
 bool ColumnSelector::selectParents(std::vector<bool>& selectedColumns, const Type& type) {
-    size_t id = static_cast<size_t>(type.getColumnId());
+    auto id = static_cast<size_t>(type.getColumnId());
     bool result = selectedColumns[id];
     uint64_t numSubtypeSelected = 0;
     for (uint64_t c = 0; c < type.getSubtypeCount(); ++c) {
@@ -351,7 +351,7 @@ void RowReaderImpl::seekToRow(uint64_t rowNumber) {
     // Implement this by setting previousRow to the number of rows in the file.
 
     // seeking past lastStripe
-    uint64_t num_stripes = static_cast<uint64_t>(footer->stripes_size());
+    auto num_stripes = static_cast<uint64_t>(footer->stripes_size());
     if ((lastStripe == num_stripes && rowNumber >= footer->numberofrows()) ||
         (lastStripe < num_stripes && rowNumber >= firstRowOfStripe[lastStripe])) {
         currentStripe = num_stripes;
@@ -387,7 +387,7 @@ void RowReaderImpl::seekToRow(uint64_t rowNumber) {
             if (rowIndexes.empty()) {
                 loadStripeIndex();
             }
-            uint32_t rowGroupId = static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride());
+            auto rowGroupId = static_cast<uint32_t>(currentRowInStripe / footer->rowindexstride());
             rowsToSkip -= static_cast<uint64_t>(rowGroupId) * footer->rowindexstride();
 
             if (rowGroupId != 0) {
@@ -675,8 +675,8 @@ void ReaderImpl::getRowIndexStatistics(const proto::StripeInformation& stripeInf
     uint64_t indexEnd = stripeInfo.offset() + stripeInfo.indexlength();
     for (int i = 0; i < num_streams; i++) {
         const proto::Stream& stream = currentStripeFooter.streams(i);
-        StreamKind streamKind = static_cast<StreamKind>(stream.kind());
-        uint64_t length = static_cast<uint64_t>(stream.length());
+        auto streamKind = static_cast<StreamKind>(stream.kind());
+        auto length = static_cast<uint64_t>(stream.length());
         if (streamKind == StreamKind::StreamKind_ROW_INDEX) {
             if (offset + length > indexEnd) {
                 std::stringstream msg;
@@ -696,7 +696,7 @@ void ReaderImpl::getRowIndexStatistics(const proto::StripeInformation& stripeInf
                 throw ParseError("Failed to parse RowIndex from stripe footer");
             }
             int num_entries = rowIndex.entry_size();
-            size_t column = static_cast<size_t>(stream.column());
+            auto column = static_cast<size_t>(stream.column());
             for (int j = 0; j < num_entries; j++) {
                 const proto::RowIndexEntry& entry = rowIndex.entry(j);
                 (*indexStats)[column].push_back(entry.statistics());
@@ -726,8 +726,7 @@ std::unique_ptr<StripeStatistics> ReaderImpl::getStripeStatistics(uint64_t strip
     if (contents->metadata == nullptr) {
         throw std::logic_error("No stripe statistics in file");
     }
-    size_t num_cols =
-            static_cast<size_t>(contents->metadata->stripestats(static_cast<int>(stripeIndex)).colstats_size());
+    auto num_cols = static_cast<size_t>(contents->metadata->stripestats(static_cast<int>(stripeIndex)).colstats_size());
     std::vector<std::vector<proto::ColumnStatistics>> indexStats(num_cols);
 
     proto::StripeInformation currentStripeInfo = footer->stripes(static_cast<int>(stripeIndex));
@@ -1460,11 +1459,11 @@ std::map<uint32_t, BloomFilterIndex> ReaderImpl::getBloomFilters(uint32_t stripe
     const proto::StripeFooter currentStripeFooter = getStripeFooter(currentStripeInfo, *contents);
 
     // iterate stripe footer to get stream of bloomfilter
-    uint64_t offset = static_cast<uint64_t>(currentStripeInfo.offset());
+    auto offset = static_cast<uint64_t>(currentStripeInfo.offset());
     for (int i = 0; i < currentStripeFooter.streams_size(); i++) {
         const proto::Stream& stream = currentStripeFooter.streams(i);
-        uint32_t column = static_cast<uint32_t>(stream.column());
-        uint64_t length = static_cast<uint64_t>(stream.length());
+        auto column = static_cast<uint32_t>(stream.column());
+        auto length = static_cast<uint64_t>(stream.length());
 
         // a bloom filter stream from a selected column is found
         if (stream.kind() == proto::Stream_Kind_BLOOM_FILTER_UTF8 &&

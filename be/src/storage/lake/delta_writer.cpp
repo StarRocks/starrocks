@@ -2,12 +2,9 @@
 
 #include "storage/lake/delta_writer.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
 
 #include <memory>
-DIAGNOSTIC_POP
 
 #include "column/chunk.h"
 #include "column/column.h"

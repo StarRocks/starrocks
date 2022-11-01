@@ -12,8 +12,7 @@
 #include "util/debug/query_trace.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
 QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::string& category, int64_t id, char phase,
                                         int64_t timestamp, int64_t duration, int64_t instance_id, std::uintptr_t driver,
@@ -78,13 +77,15 @@ void EventBuffer::add(QueryTraceEvent&& event) {
     _buffer.emplace_back(std::move(event));
 }
 
-QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
+QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
     if (_is_enable) {
         _start_ts = MonotonicMicros();
     }
-#endif
 }
+#else
+QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) {}
+#endif
 
 void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
@@ -183,5 +184,4 @@ ScopedTracer::~ScopedTracer() {
     }
 }
 
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug

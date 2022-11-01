@@ -647,13 +647,13 @@ const char* getTimezoneDirectory() {
 const Timezone& getTimezoneByFilename(const std::string& filename) {
     // ORC-110
     std::lock_guard<std::mutex> timezone_lock(timezone_mutex);
-    std::map<std::string, std::shared_ptr<Timezone> >::iterator itr = timezoneCache.find(filename);
+    auto itr = timezoneCache.find(filename);
     if (itr != timezoneCache.end()) {
         return *itr->second;
     }
     try {
         ORC_UNIQUE_PTR<InputStream> file = readFile(filename);
-        size_t size = static_cast<size_t>(file->getLength());
+        auto size = static_cast<size_t>(file->getLength());
         std::vector<unsigned char> buffer(size);
         file->read(&buffer[0], size, 0);
         timezoneCache[filename] = std::shared_ptr<Timezone>(new TimezoneImpl(filename, buffer));

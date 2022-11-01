@@ -4,16 +4,15 @@ package com.starrocks.connector.hudi;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ReentrantExecutor;
-import com.starrocks.external.CachingRemoteFileConf;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.IHiveMetastore;
-import com.starrocks.external.hudi.HudiRemoteFileIO;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastore;
+import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;

@@ -371,7 +371,7 @@ public:
                                 }
                             }
                         } else {
-                            if (!f_data[i] & !selection[i]) {
+                            if (!f_data[i] && !selection[i]) {
                                 this->data(states[i] + state_offset).is_null = false;
                                 this->nested_function->update(ctx, &data_column,
                                                               this->data(states[i] + state_offset).mutable_nest_state(),
@@ -397,7 +397,7 @@ public:
                         }
                     }
                 } else {
-                    if (!f_data[i] & !selection[i]) {
+                    if (!f_data[i] && !selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
                         this->nested_function->update(ctx, &data_column,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);

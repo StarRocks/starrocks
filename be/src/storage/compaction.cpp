@@ -76,7 +76,7 @@ Status Compaction::do_compaction_impl() {
                                                   config::vertical_compaction_max_columns_per_group, &_column_groups);
     }
 
-    int64_t max_rows_per_segment =
+    uint32_t max_rows_per_segment =
             CompactionUtils::get_segment_max_rows(config::max_segment_file_size, _input_row_num, _input_rowsets_size);
 
     LOG(INFO) << "start " << compaction_name() << ". tablet=" << _tablet->tablet_id()

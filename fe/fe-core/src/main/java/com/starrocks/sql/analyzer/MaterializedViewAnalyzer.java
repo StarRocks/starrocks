@@ -35,6 +35,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,6 +49,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -58,6 +60,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
 import org.apache.iceberg.PartitionSpec;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -517,7 +521,7 @@ public class MaterializedViewAnalyzer {
             if (db == null) {
                 throw new SemanticException("Can not find database:" + mvName.getDb());
             }
-            Table table = db.getTable(mvName.getTbl());
+            OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
             }
@@ -527,7 +531,62 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException(
                         "Refresh materialized view failed because " + mv.getName() + " is not active.");
             }
+            if (statement.getPartitionRangeDesc() == null) {
+                return null;
+            }
+            if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
+                throw new SemanticException("Not support refresh by partition for single partition mv.");
+            }
+            Column partitionColumn =
+                    ((RangePartitionInfo) table.getPartitionInfo()).getPartitionColumns().get(0);
+            if (partitionColumn.getType().isDateType()) {
+                validateDateTypePartition(statement.getPartitionRangeDesc());
+            } else if (partitionColumn.getType().isIntegerType()) {
+                validateNumberTypePartition(statement.getPartitionRangeDesc());
+            } else {
+                throw new SemanticException("Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+            }
             return null;
+        }
+
+        private void validateNumberTypePartition(PartitionRangeDesc partitionRangeDesc)
+                throws SemanticException {
+            String start = partitionRangeDesc.getPartitionStart();
+            String end = partitionRangeDesc.getPartitionEnd();
+            long startNum;
+            long endNum;
+            try {
+                startNum = Long.parseLong(start);
+                endNum = Long.parseLong(end);
+            } catch (NumberFormatException ex) {
+                throw new SemanticException("Batch build partition EVERY is number type " +
+                        "but START or END does not type match.");
+            }
+            if (startNum >= endNum) {
+                throw new SemanticException("Batch build partition start value should less then end value.");
+            }
+        }
+
+        private void validateDateTypePartition(PartitionRangeDesc partitionRangeDesc)
+                throws SemanticException {
+            String start = partitionRangeDesc.getPartitionStart();
+            String end = partitionRangeDesc.getPartitionEnd();
+            LocalDateTime startTime;
+            LocalDateTime endTime;
+            DateTimeFormatter startDateTimeFormat;
+            DateTimeFormatter endDateTimeFormat;
+            try {
+                startDateTimeFormat = DateUtils.probeFormat(start);
+                endDateTimeFormat = DateUtils.probeFormat(end);
+                startTime = DateUtils.parseStringWithDefaultHSM(start, startDateTimeFormat);
+                endTime = DateUtils.parseStringWithDefaultHSM(end, endDateTimeFormat);
+            } catch (Exception ex) {
+                throw new SemanticException("Batch build partition EVERY is date type " +
+                        "but START or END does not type match.");
+            }
+            if (!startTime.isBefore(endTime)) {
+                throw new SemanticException("Batch build partition start date should less than end date.");
+            }
         }
 
         @Override

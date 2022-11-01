@@ -202,7 +202,7 @@ Status StorageEngine::_init_store_map() {
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();

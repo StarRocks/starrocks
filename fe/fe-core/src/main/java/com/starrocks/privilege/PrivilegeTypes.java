@@ -10,7 +10,7 @@ public enum PrivilegeTypes {
     TABLE(TableActions.values(), "TABLES"),
     DATABASE(DbActions.values(), "DATABASES"),
     SYSTEM(SystemActions.values(), null),
-    USER(UserActions.values(), null);
+    USER(UserActions.values(), "USERS");
 
     private final List<String> validActions;
 
@@ -33,8 +33,9 @@ public enum PrivilegeTypes {
      * Below defines all validate actions of a certain type
      */
     public enum TableActions {
-        INSERT,
         DELETE,
+        DROP,
+        INSERT,
         SELECT,
         SHOW
     }
@@ -46,8 +47,8 @@ public enum PrivilegeTypes {
     }
 
     public enum SystemActions {
-        ADMIN,
-        GRANT  // AND MORE...
+        GRANT,
+        NODE  // AND MORE...
     }
 
     public enum UserActions {

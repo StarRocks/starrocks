@@ -438,5 +438,3 @@ struct StatusInstance {
             return ret;               \
         }                             \
     } while (0)
-
-#define WARN_UNUSED_RESULT __attribute__((warn_unused_result))

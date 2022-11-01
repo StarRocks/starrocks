@@ -51,8 +51,8 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
-    ConnectorScanOperatorFactory* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
                                                   std::move(morsel), this, scan_node, factory->get_chunk_buffer());
 }
@@ -145,7 +145,7 @@ ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProf
           _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-    ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
+    auto* scan_morsel = (ScanMorsel*)_morsel.get();
     TScanRange* scan_range = scan_morsel->get_scan_range();
 
     if (scan_range->__isset.broker_scan_range) {

@@ -52,7 +52,7 @@ SargsApplier::SargsApplier(const Type& type, const SearchArgument* searchArgumen
           mHasEvaluatedFileStats(false),
           mFileStatsEvalResult(true),
           mMetrics(metrics) {
-    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
+    const auto* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
 
     // find the mapping from predicate leaves to columns
     const std::vector<PredicateLeaf>& leaves = sargs->getLeaves();
@@ -147,7 +147,7 @@ bool SargsApplier::pickRowGroups(uint64_t rowsInStripe, const std::unordered_map
 }
 
 bool SargsApplier::evaluateColumnStatistics(const PbColumnStatistics& colStats) const {
-    const SearchArgumentImpl* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
+    const auto* sargs = dynamic_cast<const SearchArgumentImpl*>(mSearchArgument);
     if (sargs == nullptr) {
         throw InvalidArgument("Failed to cast to SearchArgumentImpl");
     }

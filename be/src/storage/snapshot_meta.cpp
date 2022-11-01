@@ -72,7 +72,7 @@ Status SnapshotMeta::serialize_to_file(WritableFile* file) {
         return Status::IOError("fail to serialize tablet meta to file");
     }
 
-    int64_t footer_offset = static_cast<int64_t>(stream.size());
+    auto footer_offset = static_cast<int64_t>(stream.size());
     if (!footer.SerializeToOstream(&stream)) {
         return Status::IOError("fail to serialize footer to file");
     }

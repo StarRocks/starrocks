@@ -25,6 +25,7 @@
 
 #include <map>
 #include <sstream>
+#include <utility>
 
 #include "column/column.h"
 #include "column/column_viewer.h"
@@ -116,12 +117,12 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone,
+EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, std::string timezone,
                          ObjectPool* pool)
         : _context(context),
           _tuple_desc(tuple_desc),
           _es_query_status(Status::OK()),
-          _timezone(timezone),
+          _timezone(std::move(timezone)),
           _pool(pool) {}
 
 EsPredicate::~EsPredicate() {
@@ -279,7 +280,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             // conjunct->get_child(0)->node_type() == TExprNodeType::FUNCTION_CALL, at present doris on es can not support push down function
             RETURN_ERROR_IF_EXPR_IS_NOT_SLOTREF(conjunct->get_child(0));
 
-            ColumnRef* column_ref = const_cast<ColumnRef*>(
+            auto* column_ref = const_cast<ColumnRef*>(
                     down_cast<const ColumnRef*>(Expr::expr_without_cast(conjunct->get_child(0))));
 
             const SlotDescriptor* slot_desc = get_slot_desc(column_ref->slot_id());
@@ -293,8 +294,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
                 col = _field_context[col];
             }
             // use TExprNodeType::IS_NULL_PRED for BooleanQueryBuilder translate
-            ExtIsNullPredicate* predicate =
-                    new ExtIsNullPredicate(TExprNodeType::IS_NULL_PRED, col, slot_desc->type(), is_not_null);
+            auto* predicate = new ExtIsNullPredicate(TExprNodeType::IS_NULL_PRED, col, slot_desc->type(), is_not_null);
             _disjuncts.push_back(predicate);
         } else if (fname == "like") {
             if (conjunct->children().size() != 2) {
@@ -379,7 +379,7 @@ Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
         }
 
         std::vector<ExtLiteral*> in_pred_values;
-        const Predicate* pred = static_cast<const Predicate*>(conjunct);
+        const auto* pred = static_cast<const Predicate*>(conjunct);
 
         const Expr* expr = Expr::expr_without_cast(pred->get_child(0));
         if (expr->node_type() != TExprNodeType::SLOT_REF) {
@@ -450,7 +450,7 @@ Status EsPredicate::_build_compound_predicate(const Expr* conjunct, bool* handle
                     return Status::InternalError("build COMPOUND_AND conjuncts failed");
                 }
             }
-            ExtCompPredicates* compound_predicate = new ExtCompPredicates(TExprOpcode::COMPOUND_AND, conjuncts);
+            auto* compound_predicate = new ExtCompPredicates(TExprOpcode::COMPOUND_AND, conjuncts);
             _disjuncts.push_back(compound_predicate);
             return Status::OK();
         } else if (conjunct->op() == TExprOpcode::COMPOUND_NOT) {

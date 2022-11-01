@@ -197,6 +197,8 @@ struct TQueryOptions {
   67: optional bool enable_pipeline_query_statistic = false;
 
   68: optional i32 transmission_encode_level;
+  
+  69: optional bool enable_populate_block_cache;
 }
 
 

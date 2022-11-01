@@ -42,9 +42,6 @@ public:
             pipeline::PipelineBuilderContext* context) override;
 
 private:
-    // true if last get_next() call on child signalled eos
-    bool _child_eos;
-
     RuntimeProfile::Counter* _conjunct_evaluate_timer = nullptr;
 };
 

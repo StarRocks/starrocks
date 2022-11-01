@@ -7,8 +7,7 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 OlapSchemaChunkSource::OlapSchemaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
                                              MorselPtr&& morsel, const OlapSchemaScanContextPtr& ctx)
@@ -22,8 +21,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
     if (_dest_tuple_desc == nullptr) {
         return Status::InternalError("failed to get tuple descriptor");
     }
-    const SchemaTableDescriptor* schema_table =
-            static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
+    const auto* schema_table = static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
     if (schema_table == nullptr) {
         return Status::InternalError("Failed to get schema table descriptor");
     }
@@ -94,5 +92,4 @@ const workgroup::WorkGroupScanSchedEntity* OlapSchemaChunkSource::_scan_sched_en
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

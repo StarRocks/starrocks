@@ -19,7 +19,6 @@ public class ShowProcStmt extends ShowStmt {
 
     static {
         NEED_FORWARD_PATH_ROOT = new ImmutableSet.Builder<String>()
-                .add("backends")
                 .add("cluster_balance")
                 .add("routine_loads")
                 .add("transactions")

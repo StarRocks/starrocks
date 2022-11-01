@@ -58,11 +58,11 @@ bool BinaryDictPageBuilder::is_page_full() {
     return _encoding_type == DICT_ENCODING && _dict_builder->is_page_full();
 }
 
-size_t BinaryDictPageBuilder::add(const uint8_t* vals, size_t count) {
+uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
     if (_encoding_type == DICT_ENCODING) {
         DCHECK(!_finished);
         DCHECK_GT(count, 0);
-        const Slice* src = reinterpret_cast<const Slice*>(vals);
+        const auto* src = reinterpret_cast<const Slice*>(vals);
         uint32_t value_code = -1;
         // Manually devirtualization.
         auto* code_page = down_cast<BitshufflePageBuilder<OLAP_FIELD_TYPE_INT>*>(_data_page_builder.get());
@@ -115,7 +115,7 @@ void BinaryDictPageBuilder::reset() {
     _finished = false;
 }
 
-size_t BinaryDictPageBuilder::count() const {
+uint32_t BinaryDictPageBuilder::count() const {
     return _data_page_builder->count();
 }
 
@@ -201,7 +201,7 @@ Status BinaryDictPageDecoder<Type>::init() {
 }
 
 template <FieldType Type>
-Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
+Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     return _data_page_decoder->seek_to_position_in_page(pos);
 }
 
@@ -223,7 +223,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) 
         *n = 0;
         return Status::OK();
     }
-    Slice* out = reinterpret_cast<Slice*>(dst->data());
+    auto* out = reinterpret_cast<Slice*>(dst->data());
     _batch->resize(*n);
 
     ColumnBlock column_block(_batch.get(), dst->column_block()->pool());
@@ -249,7 +249,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) 
 template <FieldType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin;
@@ -273,7 +273,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(const vectorized::SparseRange& ra
     RETURN_IF_ERROR(_data_page_decoder->next_batch(range, _vec_code_buf.get()));
     size_t nread = _vec_code_buf->size();
     using cast_type = CppTypeTraits<OLAP_FIELD_TYPE_INT>::CppType;
-    const cast_type* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
+    const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
     std::vector<Slice> slices;
     slices.reserve(nread);
     if constexpr (Type == OLAP_FIELD_TYPE_CHAR) {

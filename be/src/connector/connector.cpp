@@ -9,8 +9,7 @@
 #include "connector/lake_connector.h"
 #include "connector/mysql_connector.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 
 static ConnectorManager _global_default_instance;
 
@@ -50,5 +49,4 @@ public:
 
 static ConnectorManagerInit _init;
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

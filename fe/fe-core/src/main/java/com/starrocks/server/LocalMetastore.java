@@ -136,6 +136,8 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.scheduler.TaskRun;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -162,12 +164,14 @@ import com.starrocks.sql.ast.ListPartitionDesc;
 import com.starrocks.sql.ast.MultiItemListPartitionDesc;
 import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.RangePartitionDesc;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.RecoverPartitionStmt;
 import com.starrocks.sql.ast.RecoverTableStmt;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.RefreshSchemeDesc;
 import com.starrocks.sql.ast.ReplacePartitionClause;
 import com.starrocks.sql.ast.RollupRenameClause;
@@ -3212,6 +3216,15 @@ public class LocalMetastore implements ConnectorMetadata {
                 asyncRefreshContext.setTimeUnit(
                         asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
             }
+            // task which type is EVENT_TRIGGERED can not use external table as base table now.
+            if (asyncRefreshContext.getTimeUnit() == null) {
+                // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
+                Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(stmt.getQueryStatement());
+                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isOlapTable())) {
+                    throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
+                            "external table");
+                }
+            }
         } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
             mvRefreshScheme.setType(MaterializedView.RefreshType.SYNC);
@@ -3411,24 +3424,12 @@ public class LocalMetastore implements ConnectorMetadata {
 
     @Override
     public void refreshMaterializedView(String dbName, String mvName, int priority) throws DdlException, MetaNotFoundException {
-        Database db = this.getDb(dbName);
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-        MaterializedView materializedView = null;
-        db.readLock();
-        try {
-            final Table table = db.getTable(mvName);
-            if (table instanceof MaterializedView) {
-                materializedView = (MaterializedView) table;
-            }
-        } finally {
-            db.readUnlock();
-        }
-        if (materializedView == null) {
-            throw new MetaNotFoundException(mvName + " is not a materialized view");
-        }
+        MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
+        executeRefreshMvTask(dbName, materializedView, new ExecuteOption(priority));
+    }
 
+    private void executeRefreshMvTask(String dbName, MaterializedView materializedView, ExecuteOption executeOption)
+            throws DdlException {
         MaterializedView.RefreshType refreshType = materializedView.getRefreshScheme().getType();
         if (refreshType != MaterializedView.RefreshType.SYNC) {
             TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
@@ -3438,13 +3439,12 @@ public class LocalMetastore implements ConnectorMetadata {
                 TaskBuilder.updateTaskInfo(task, materializedView);
                 taskManager.createTask(task, false);
             }
-            taskManager.executeTask(mvTaskName, new ExecuteOption(priority));
+            taskManager.executeTask(mvTaskName, executeOption);
         }
-
     }
 
-    @Override
-    public void cancelRefreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+    private MaterializedView getMaterializedViewToRefresh(String dbName, String mvName)
+            throws DdlException, MetaNotFoundException {
         Database db = this.getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
@@ -3462,6 +3462,29 @@ public class LocalMetastore implements ConnectorMetadata {
         if (materializedView == null) {
             throw new MetaNotFoundException(mvName + " is not a materialized view");
         }
+        return materializedView;
+    }
+
+    @Override
+    public void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement, int priority)
+            throws DdlException, MetaNotFoundException {
+        String dbName = refreshMaterializedViewStatement.getMvName().getDb();
+        String mvName = refreshMaterializedViewStatement.getMvName().getTbl();
+        boolean force = refreshMaterializedViewStatement.isForceRefresh();
+        PartitionRangeDesc range =
+                refreshMaterializedViewStatement.getPartitionRangeDesc();
+        MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(TaskRun.PARTITION_START, range == null ? null : range.getPartitionStart());
+        taskRunProperties.put(TaskRun.PARTITION_END, range == null ? null : range.getPartitionEnd());
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(force));
+        executeRefreshMvTask(dbName, materializedView,
+                new ExecuteOption(priority, false, taskRunProperties));
+    }
+
+    @Override
+    public void cancelRefreshMaterializedView(String dbName, String mvName) throws DdlException, MetaNotFoundException {
+        MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
         TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
         Task refreshTask = taskManager.getTask(TaskBuilder.getMvTaskName(materializedView.getId()));
         if (refreshTask != null) {

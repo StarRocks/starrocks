@@ -1504,7 +1504,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     vectorized::NullableColumn::create(column_ptr, vectorized::NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
         } else if (!desc->is_nullable() && column_ptr->is_nullable()) {
-            vectorized::NullableColumn* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
@@ -1557,7 +1557,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         }
         case TYPE_DECIMALV2: {
             column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::DecimalColumn* decimal = down_cast<vectorized::DecimalColumn*>(column);
+            auto* decimal = down_cast<vectorized::DecimalColumn*>(column);
             std::vector<DecimalV2Value>& datas = decimal->get_data();
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
@@ -1595,7 +1595,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
         if (desc->type().type == TYPE_CHAR) {
             vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
             vectorized::Offsets& offset = binary->get_offset();
             uint32_t len = desc->type().len;
 

@@ -288,7 +288,7 @@ StatusOr<bool> ColumnPredicateRewriter::_rewrite_expr_predicate(ObjectPool* pool
     *ptr = nullptr;
     size_t value_size = raw_dict_column->size();
     std::vector<uint8_t> selection(value_size);
-    const ColumnExprPredicate* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
+    const auto* pred = down_cast<const ColumnExprPredicate*>(raw_pred);
     pred->evaluate(raw_dict_column.get(), selection.data(), 0, value_size);
 
     size_t code_size = raw_code_column->size();
@@ -364,14 +364,14 @@ Status ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
 
                 auto [binary_column, codes] = extract_column_with_codes(*dict);
 
-                int dict_rows = codes.size();
+                size_t dict_rows = codes.size();
                 selection.resize(dict_rows);
 
                 RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
                 std::vector<uint8_t> code_mapping;
                 code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
-                for (int i = 0; i < codes.size(); ++i) {
+                for (size_t i = 0; i < codes.size(); ++i) {
                     code_mapping[codes[i]] = selection[i];
                 }
 
@@ -423,7 +423,7 @@ Status ZonemapPredicatesRewriter::rewrite_predicate_list(ObjectPool* pool, const
 Status ZonemapPredicatesRewriter::_rewrite_column_expr_predicates(ObjectPool* pool, const ColumnPredicate* pred,
                                                                   std::vector<const ColumnExprPredicate*>* new_preds) {
     DCHECK(new_preds != nullptr);
-    const ColumnExprPredicate* column_expr_pred = static_cast<const ColumnExprPredicate*>(pred);
+    const auto* column_expr_pred = static_cast<const ColumnExprPredicate*>(pred);
     return column_expr_pred->try_to_rewrite_for_zone_map_filter(pool, new_preds);
 }
 

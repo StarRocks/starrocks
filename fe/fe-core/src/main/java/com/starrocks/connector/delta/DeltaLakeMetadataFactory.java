@@ -2,14 +2,14 @@
 
 package com.starrocks.connector.delta;
 
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastore;
+import com.starrocks.connector.hive.CachingHiveMetastoreConf;
+import com.starrocks.connector.hive.HiveMetastoreOperations;
+import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
-import static com.starrocks.external.hive.CachingHiveMetastore.createQueryLevelInstance;
+import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
 
 public class DeltaLakeMetadataFactory {
     private final String catalogName;

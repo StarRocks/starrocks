@@ -95,7 +95,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
 
     // deal with nullable.
     if (bits->is_nullable()) {
-        NullableColumn* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
+        auto* null_column = ColumnHelper::as_raw_column<NullableColumn>(bits);
         uint8_t* null_value = null_column->null_column_data().data();
         uint8_t* data_value = ColumnHelper::get_cpp_data<TYPE_BOOLEAN>(null_column->data_column());
         for (uint16_t i = from; i < to; i++) {
@@ -216,7 +216,7 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         }
         if (root->get_child(0)->is_monotonic() && root->get_child(1)->is_monotonic()) {
             // rewrite = to >= and <=
-            auto build_binary_predicate_func = [this, pool, root](TExprOpcode::type new_op) {
+            auto build_binary_predicate_func = [pool, root](TExprOpcode::type new_op) {
                 TExprNode node;
                 node.node_type = TExprNodeType::BINARY_PRED;
                 node.type = root->type().to_thrift();

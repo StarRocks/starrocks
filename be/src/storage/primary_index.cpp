@@ -68,9 +68,6 @@ struct RowIdPack4 {
 };
 #pragma pack(pop)
 
-static const size_t large_mem_alloc_threhold = 2 * 1024 * 1024 * 1024UL;
-static const size_t phmap_hash_table_shard = 16;
-
 template <class T>
 class TraceAlloc {
 public:
@@ -257,7 +254,7 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
         uint32_t n = idx_end - idx_begin;
@@ -311,7 +308,7 @@ public:
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                 uint32_t idx_end, DeletesMap* deletes) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -361,7 +358,7 @@ public:
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -405,7 +402,7 @@ public:
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -448,7 +445,7 @@ public:
     }
 
     void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
@@ -487,7 +484,7 @@ public:
 
     void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
              std::vector<uint64_t>* rowids) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
@@ -931,7 +928,7 @@ void PrimaryIndex::_set_schema(const vectorized::Schema& pk_schema) {
     }
     _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
-    _pkey_to_rssid_rowid = std::move(create_hash_index(_enc_pk_type, _key_size));
+    _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
 Status PrimaryIndex::load(Tablet* tablet) {

@@ -44,13 +44,13 @@ public:
             lowcard_column = down_cast<const ColumnType*>(column);
         }
         if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; i++) {
                 sel[i] = evaluate_at(i, lowcard_column);
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; i++) {
                 sel[i] = evaluate_at_nullable(i, null_data, lowcard_column);
             }
         }
@@ -68,13 +68,13 @@ public:
             lowcard_column = down_cast<const ColumnType*>(column);
         }
         if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; i++) {
                 sel[i] = (sel[i] && evaluate_at(i, lowcard_column));
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; i++) {
                 sel[i] = (sel[i] && evaluate_at_nullable(i, null_data, lowcard_column));
             }
         }
@@ -92,13 +92,13 @@ public:
             lowcard_column = down_cast<const ColumnType*>(column);
         }
         if (!column->has_null()) {
-            for (size_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; i++) {
                 sel[i] = (sel[i] || _predicate_operator.eval_at(lowcard_column, i));
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
-            for (size_t i = from; i < to; i++) {
+            for (uint16_t i = from; i < to; i++) {
                 sel[i] = (sel[i] || evaluate_at_nullable(i, null_data, lowcard_column));
             }
         }

@@ -2,13 +2,11 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/controller.h>
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
+
+#include "common/compiler_util.h"
 #include "runtime/tablets_channel.h"
 #include "service/backend_options.h"
 #include "storage/async_delta_writer.h"

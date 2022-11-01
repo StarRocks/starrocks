@@ -8,7 +8,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.external.delta.DeltaUtils;
+import com.starrocks.connector.delta.DeltaUtils;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TDeltaLakeTable;
 import com.starrocks.thrift.THdfsPartition;

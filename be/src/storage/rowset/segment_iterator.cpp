@@ -54,7 +54,7 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     DCHECK_LE(tuple.columns(), chunk.num_columns());
     const auto& schema = tuple.schema();
     const size_t n = tuple.columns();
-    for (size_t i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < n; i++) {
         const Datum& v1 = tuple.get(i);
         const ColumnPtr& c = chunk.get_column_by_index(i);
         DCHECK_GE(c->size(), 1u);
@@ -1229,7 +1229,7 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
         ColumnId cid = _schema.field(predicate_count)->id();
         static_assert(std::is_same_v<rowid_t, TypeTraits<OLAP_FIELD_TYPE_UNSIGNED_INT>::CppType>);
         auto f = std::make_shared<Field>(cid, "ordinal", OLAP_FIELD_TYPE_UNSIGNED_INT, -1, -1, false);
-        RowIdColumnIterator* iter = new RowIdColumnIterator();
+        auto* iter = new RowIdColumnIterator();
         _obj_pool.add(iter);
         ctx->_read_schema.append(f);
         ctx->_dict_decode_schema.append(f);

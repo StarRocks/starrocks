@@ -12,8 +12,7 @@
 #include "fs/fs_broker.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 class ExportSinkIOBuffer final : public SinkIOBuffer {
 public:
@@ -210,5 +209,4 @@ void ExportSinkOperatorFactory::close(RuntimeState* state) {
     OperatorFactory::close(state);
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

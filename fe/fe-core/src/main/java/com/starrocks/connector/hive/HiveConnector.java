@@ -8,8 +8,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;

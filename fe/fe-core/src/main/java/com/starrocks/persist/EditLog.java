@@ -68,6 +68,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.persist.DropTaskRunsLog;
 import com.starrocks.scheduler.persist.DropTasksLog;
+import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.server.GlobalStateMgr;
@@ -689,6 +690,11 @@ public class EditLog {
                     globalStateMgr.getTaskManager().replayDropTaskRuns(dropTaskRunsLog.getQueryIdList());
                     break;
                 }
+                case OperationType.OP_UPDATE_TASK_RUN_STATE:
+                    TaskRunPeriodStatusChange taskRunPeriodStatusChange = (TaskRunPeriodStatusChange) journal.getData();
+                    globalStateMgr.getTaskManager().replayAlterRunningTaskRunProgress(
+                            taskRunPeriodStatusChange.getTaskRunProgressMap());
+                    break;
                 case OperationType.OP_CREATE_SMALL_FILE: {
                     SmallFile smallFile = (SmallFile) journal.getData();
                     globalStateMgr.getSmallFileMgr().replayCreateFile(smallFile);
@@ -1081,6 +1087,10 @@ public class EditLog {
 
     public void logUpdateTaskRun(TaskRunStatusChange statusChange) {
         logEdit(OperationType.OP_UPDATE_TASK_RUN, statusChange);
+    }
+
+    public void logAlterRunningTaskRunProgress(TaskRunPeriodStatusChange info) {
+        logEdit(OperationType.OP_UPDATE_TASK_RUN_STATE, info);
     }
 
     public void logAddPartition(PartitionPersistInfoV2 info) {

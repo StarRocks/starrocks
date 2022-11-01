@@ -1,10 +1,10 @@
 # sha2
 
-Calculate the SHA-224 hash value, SHA-256 hash value, SHA-384 hash value, and SHA-512 hash value of a string.
+Calculates the SHA-224 hash value, SHA-256 hash value, SHA-384 hash value, or SHA-512 hash value of a string.
 
 ## Syntax
 
-```Apache
+```Haskell
 VARCHAR sha2(VARCHAR expr, INT hash_length)
 ```
 
@@ -15,11 +15,11 @@ VARCHAR sha2(VARCHAR expr, INT hash_length)
 
 ## Return value
 
-Returns the hash value. When one of values of the previous two parameters is `Null`, the returned value is `Null`.
+Returns a hash value of the VARCHAR type. If any of the two input parameters is `Null`, `Null` is returned.
 
 ## Examples
 
-```Plain%20Text
+```Plain Text
 mysql> select sha2('abc',224);
 
 +----------------------------------------------------------+

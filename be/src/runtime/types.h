@@ -63,6 +63,8 @@ struct TypeDescriptor {
 
     /// Only set if type == TYPE_STRUCT. The field name of each child.
     std::vector<std::string> field_names;
+    // Only set if type == TYPE_MAP || type == TYPE_STRUCT.
+    std::vector<bool> selected_fields;
 
     TypeDescriptor() {}
 
@@ -260,6 +262,12 @@ struct TypeDescriptor {
     }
 
     inline bool is_complex_type() const { return type == TYPE_STRUCT || type == TYPE_ARRAY || type == TYPE_MAP; }
+
+    inline bool is_struct_type() const { return type == TYPE_STRUCT; }
+
+    inline bool is_array_type() const { return type == TYPE_ARRAY; }
+
+    inline bool is_map_type() const { return type == TYPE_MAP; }
 
     inline bool is_collection_type() const { return type == TYPE_ARRAY || type == TYPE_MAP; }
 
