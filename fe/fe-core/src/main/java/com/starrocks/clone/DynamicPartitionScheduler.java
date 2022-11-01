@@ -81,9 +81,11 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
 
     private static final String DEFAULT_RUNTIME_VALUE = FeConstants.null_string;
 
+    // runtime information for dynamic partitions key -> <tableName -> value>
     private final Map<String, Map<String, String>> runtimeInfos = Maps.newConcurrentMap();
+    // (DbId, TableId) for a collection of objects marked with "dynamic_partition.enable" = "true" on the table
     private final Set<Pair<Long, Long>> dynamicPartitionTableInfo = Sets.newConcurrentHashSet();
-
+    // (DbId, TableId) for a collection of objects marked with partition_ttl_number > 0 on the table
     private final Set<Pair<Long, Long>> ttlPartitionInfo = Sets.newConcurrentHashSet();
 
     private boolean initialize;
@@ -405,7 +407,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
                 olapTable = (OlapTable) table;
             } else {
                 iterator.remove();
-                LOG.warn("Could not get database={}, table={}. remove it from scheduler",
+                LOG.warn("database={}, table={}. is not olap table. remove it from scheduler",
                         dbId, tableId);
                 continue;
             }
