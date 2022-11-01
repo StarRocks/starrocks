@@ -169,7 +169,8 @@ void append_jvalue(MethodTypeDescriptor method_type_desc, Column* col, jvalue va
         switch (method_type_desc.type) {
 #define M(NAME)                                                                            \
     case NAME: {                                                                           \
-        col->append_numbers(static_cast<const void*>(&val), sizeof(RunTimeCppType<NAME>)); \
+        [[maybe_unused]] auto ret = col->append_numbers(static_cast<const void*>(&val),    \
+                                                        sizeof(RunTimeCppType<NAME>));     \
     }
             APPLY_FOR_NUMBERIC_TYPE(M)
 #undef M

@@ -31,15 +31,12 @@ public:
     PartitionSortSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                               std::shared_ptr<vectorized::ChunksSorter> chunks_sorter, SortExecExprs& sort_exec_exprs,
                               const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-                              const RowDescriptor& parent_node_row_desc,
-                              const RowDescriptor& parent_node_child_row_desc, SortContext* sort_context)
+                              SortContext* sort_context)
             : Operator(factory, id, "local_sort_sink", plan_node_id, driver_sequence),
               _chunks_sorter(std::move(chunks_sorter)),
               _sort_exec_exprs(sort_exec_exprs),
               _order_by_types(order_by_types),
               _materialized_tuple_desc(materialized_tuple_desc),
-              _parent_node_row_desc(parent_node_row_desc),
-              _parent_node_child_row_desc(parent_node_child_row_desc),
               _sort_context(sort_context) {
         _sort_context->ref();
     }
@@ -75,9 +72,6 @@ private:
     // Cached descriptor for the materialized tuple. Assigned in Prepare().
     TupleDescriptor* _materialized_tuple_desc;
 
-    // Used to get needed data from TopNNode.
-    const RowDescriptor& _parent_node_row_desc;
-    const RowDescriptor& _parent_node_child_row_desc;
     SortContext* _sort_context;
 };
 

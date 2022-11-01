@@ -85,7 +85,7 @@ OperatorPtr PartitionSortSinkOperatorFactory::create(int32_t dop, int32_t driver
     sort_context->add_partition_chunks_sorter(chunks_sorter);
     auto ope = std::make_shared<PartitionSortSinkOperator>(
             this, _id, _plan_node_id, driver_sequence, chunks_sorter, _sort_exec_exprs, _order_by_types,
-            _materialized_tuple_desc, _parent_node_row_desc, _parent_node_child_row_desc, sort_context.get());
+            _materialized_tuple_desc, sort_context.get());
     return ope;
 }
 
