@@ -19,7 +19,7 @@ public:
                    const std::vector<std::vector<SlotId>>& null_slot_ids, const std::vector<int64_t>& repeat_id_list,
                    uint64_t repeat_times_required, uint64_t repeat_times_last, const ColumnPtr& column_null,
                    const std::vector<std::vector<ColumnPtr>>& grouping_columns,
-                   const std::vector<std::vector<int64_t>>& grouping_list, const TupleId& output_tuple_id,
+                   const std::vector<std::vector<int64_t>>& grouping_list, TupleId output_tuple_id,
                    const TupleDescriptor* tuple_desc, const std::vector<ExprContext*>& conjunct_ctxs)
             : Operator(factory, id, "repeat", plan_node_id, driver_sequence),
               _slot_id_set_list(slot_id_set_list),
@@ -104,7 +104,7 @@ private:
     // first is grouping index and second is repeat index.
     const std::vector<std::vector<int64_t>>& _grouping_list;
     // Tulple id used for output, it has new slots.
-    const TupleId& _output_tuple_id;
+    const TupleId _output_tuple_id;
     const TupleDescriptor* _tuple_desc;
 
     // used for expr's compute.
@@ -120,7 +120,7 @@ public:
                           std::vector<int64_t>&& repeat_id_list, uint64_t repeat_times_required,
                           uint64_t repeat_times_last, ColumnPtr&& column_null,
                           std::vector<std::vector<ColumnPtr>>&& grouping_columns,
-                          std::vector<std::vector<int64_t>>&& grouping_list, TupleId&& output_tuple_id,
+                          std::vector<std::vector<int64_t>>&& grouping_list, TupleId output_tuple_id,
                           const TupleDescriptor* tuple_desc, std::vector<ExprContext*>&& conjunct_ctxs)
             : OperatorFactory(id, "repeat", plan_node_id),
               _slot_id_set_list(std::move(slot_id_set_list)),
@@ -132,7 +132,7 @@ public:
               _column_null(std::move(column_null)),
               _grouping_columns(std::move(grouping_columns)),
               _grouping_list(std::move(grouping_list)),
-              _output_tuple_id(std::move(output_tuple_id)),
+              _output_tuple_id(output_tuple_id),
               _tuple_desc(tuple_desc),
               _conjunct_ctxs(std::move(conjunct_ctxs)) {}
 

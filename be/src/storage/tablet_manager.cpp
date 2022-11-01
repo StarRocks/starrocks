@@ -21,10 +21,7 @@
 
 #include "storage/tablet_manager.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 #include <re2/re2.h>
 
@@ -72,8 +69,7 @@ bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets"
 TabletManager::TabletManager(int32_t tablet_map_lock_shard_size)
         : _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
-          _last_update_stat_ms(0),
-          _cur_shard(0) {
+          _last_update_stat_ms(0) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }

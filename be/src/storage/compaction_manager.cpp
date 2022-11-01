@@ -78,7 +78,8 @@ CompactionCandidate CompactionManager::pick_candidate() {
     return ret;
 }
 
-void CompactionManager::update_tablet_async(TabletSharedPtr tablet, bool need_update_context, bool is_compaction) {
+void CompactionManager::update_tablet_async(const TabletSharedPtr& tablet, bool need_update_context,
+                                            bool is_compaction) {
     Status st = _update_candidate_pool->submit_func([tablet, need_update_context, is_compaction, this] {
         update_tablet(tablet, need_update_context, is_compaction);
     });
@@ -87,7 +88,7 @@ void CompactionManager::update_tablet_async(TabletSharedPtr tablet, bool need_up
     }
 }
 
-void CompactionManager::update_tablet(TabletSharedPtr tablet, bool need_update_context, bool is_compaction) {
+void CompactionManager::update_tablet(const TabletSharedPtr& tablet, bool need_update_context, bool is_compaction) {
     std::vector<CompactionCandidate> candidates = tablet->get_compaction_candidates(need_update_context);
     if (candidates.empty()) {
         return;

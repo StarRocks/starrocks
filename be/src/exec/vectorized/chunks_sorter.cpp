@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/chunks_sorter.h"
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "column/type_traits.h"
 #include "exec/vectorized/sorting/sort_permute.h"
@@ -124,11 +126,11 @@ Status DataSegment::get_filter_array(std::vector<DataSegment>& data_segments, si
 
 ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>* sort_exprs,
                            const std::vector<bool>* is_asc, const std::vector<bool>* is_null_first,
-                           const std::string& sort_keys, const bool is_topn)
+                           std::string sort_keys, const bool is_topn)
         : _state(state),
           _sort_exprs(sort_exprs),
           _sort_desc(*is_asc, *is_null_first),
-          _sort_keys(sort_keys),
+          _sort_keys(std::move(sort_keys)),
           _is_topn(is_topn) {
     DCHECK(_sort_exprs != nullptr);
     DCHECK(is_asc != nullptr);
@@ -137,7 +139,7 @@ ChunksSorter::ChunksSorter(RuntimeState* state, const std::vector<ExprContext*>*
     DCHECK_EQ(is_asc->size(), is_null_first->size());
 }
 
-ChunksSorter::~ChunksSorter() {}
+ChunksSorter::~ChunksSorter() = default;
 
 void ChunksSorter::setup_runtime(RuntimeProfile* profile) {
     _build_timer = ADD_TIMER(profile, "BuildingTime");

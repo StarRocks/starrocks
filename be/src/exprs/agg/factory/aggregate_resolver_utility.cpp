@@ -6,15 +6,18 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "runtime/primitive_type.h"
+#include "runtime/primitive_type_infra.h"
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType pt>
-inline constexpr PrimitiveType HistogramResult = TYPE_VARCHAR;
-
-template <PrimitiveType pt>
-struct HisBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeHistogramAggregationFunction<pt>(); }
+struct HistogramDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_aggregate<pt>) {
+            resolver->add_aggregate_mapping_notnull<pt, TYPE_VARCHAR>(
+                    "histogram", false, AggregateFactory::MakeHistogramAggregationFunction<pt>());
+        }
+    }
 };
 
 void AggregateFuncResolver::register_utility() {
@@ -23,7 +26,9 @@ void AggregateFuncResolver::register_utility() {
     add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_VARCHAR>(
             "exchange_speed", false, AggregateFactory::MakeExchangePerfAggregateFunction<AggExchangePerfType::SPEED>());
 
-    AGGREGATE_ALL_TYPE_NOTNULL_FROM_TRAIT("histogram", false, HistogramResult, HisBuilder);
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, HistogramDispatcher(), this);
+    }
 }
 
 } // namespace starrocks::vectorized

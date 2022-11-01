@@ -34,6 +34,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -88,12 +89,34 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
+                .withTable("CREATE TABLE test.tbl4\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
+                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
+                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
+                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
                 .withNewMaterializedView("create materialized view test.mv1\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
                         "as select tbl1.k1, tbl2.k2 from tbl1 join tbl2 on tbl1.k2 = tbl2.k2;")
+                .withNewMaterializedView("create materialized view test.mv2\n" +
+                        "partition by date_trunc('month',k1) \n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh manual\n" +
+                        "properties('replication_num' = '1')\n" +
+                        "as select tbl4.k1, tbl4.k2 from tbl4;")
                 .withNewMaterializedView("create materialized view test.mv_inactive\n" +
                         "partition by date_trunc('month',k1) \n" +
                         "distributed by hash(k2) buckets 10\n" +
@@ -251,6 +274,86 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
             e.printStackTrace();
             Assert.fail("refresh failed");
         }
+    }
+
+    @Test
+    public void testRangePartitionRefresh() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv2"));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(TaskRun.PARTITION_START, "2022-01-03");
+        taskRunProperties.put(TaskRun.PARTITION_END, "2022-02-05");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        String insertSql = "insert into tbl4 partition(p1) values('2022-01-02',2,10);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Assert.assertEquals(2, materializedView.getPartition("p202112_202201").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202201_202202").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202202_202203").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+
+        taskRunProperties.put(TaskRun.PARTITION_START, "2021-12-03");
+        taskRunProperties.put(TaskRun.PARTITION_END, "2022-04-05");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Assert.assertEquals(2, materializedView.getPartition("p202112_202201").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202201_202202").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202202_202203").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+
+        taskRunProperties.put(TaskRun.PARTITION_START, "2021-12-03");
+        taskRunProperties.put(TaskRun.PARTITION_END, "2022-03-01");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        insertSql = "insert into tbl4 partition(p3) values('2022-03-02',21,102);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        insertSql = "insert into tbl4 partition(p0) values('2021-12-02',81,182);";
+        new StmtExecutor(connectContext, insertSql).execute();
+        taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Assert.assertEquals(3, materializedView.getPartition("p202112_202201").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202201_202202").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202202_202203").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+
+        taskRunProperties.put(TaskRun.PARTITION_START, "2021-12-03");
+        taskRunProperties.put(TaskRun.PARTITION_END, "2022-05-06");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(true));
+        taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Assert.assertEquals(4, materializedView.getPartition("p202112_202201").getVisibleVersion());
+        Assert.assertEquals(4, materializedView.getPartition("p202201_202202").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202202_202203").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202203_202204").getVisibleVersion());
+        Assert.assertEquals(3, materializedView.getPartition("p202204_202205").getVisibleVersion());
     }
 
     @Test

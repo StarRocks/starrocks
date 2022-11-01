@@ -30,8 +30,8 @@ Status Aggregator::open(RuntimeState* state) {
         RETURN_IF_ERROR(Expr::open(_agg_expr_ctxs[i], state));
         RETURN_IF_ERROR(_evaluate_const_columns(i));
     }
-    for (int i = 0; i < _intermediate_agg_expr_ctxs.size(); ++i) {
-        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctxs[i], state));
+    for (auto& _intermediate_agg_expr_ctx : _intermediate_agg_expr_ctxs) {
+        RETURN_IF_ERROR(Expr::open(_intermediate_agg_expr_ctx, state));
     }
     RETURN_IF_ERROR(Expr::open(_conjunct_ctxs, state));
 
@@ -529,8 +529,8 @@ Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
     std::vector<ColumnPtr> const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
-    for (int j = 0; j < _agg_expr_ctxs[i].size(); ++j) {
-        ASSIGN_OR_RETURN(auto col, _agg_expr_ctxs[i][j]->root()->evaluate_const(_agg_expr_ctxs[i][j]));
+    for (auto& j : _agg_expr_ctxs[i]) {
+        ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
         const_columns.emplace_back(std::move(col));
     }
     _agg_fn_ctxs[i]->impl()->set_constant_columns(const_columns);
@@ -784,8 +784,8 @@ vectorized::ChunkPtr Aggregator::_build_output_chunk(const vectorized::Columns& 
 
 void Aggregator::_reset_exprs() {
     SCOPED_TIMER(_expr_release_timer);
-    for (size_t i = 0; i < _group_by_columns.size(); i++) {
-        _group_by_columns[i] = nullptr;
+    for (auto& _group_by_column : _group_by_columns) {
+        _group_by_column = nullptr;
     }
 
     DCHECK(_agg_input_columns.size() == _agg_fn_ctxs.size());
@@ -810,8 +810,7 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             // All hash table could handle only null, and we don't know the real data
             // type for only null column, so we don't unpack it.
             if (!_group_by_columns[i]->only_null()) {
-                vectorized::ConstColumn* const_column =
-                        static_cast<vectorized::ConstColumn*>(_group_by_columns[i].get());
+                auto* const_column = static_cast<vectorized::ConstColumn*>(_group_by_columns[i].get());
                 const_column->data_column()->assign(chunk->num_rows(), 0);
                 _group_by_columns[i] = const_column->data_column();
             }
@@ -838,7 +837,7 @@ Status Aggregator::_evaluate_exprs(vectorized::Chunk* chunk) {
             if (j == 0) {
                 ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
                 _agg_input_columns[i][j] =
-                        vectorized::ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), std::move(col));
+                        vectorized::ColumnHelper::unpack_and_duplicate_const_column(chunk->num_rows(), col);
             } else {
                 ASSIGN_OR_RETURN(auto&& col, agg_expr_ctxs[i][j]->evaluate(chunk));
                 _agg_input_columns[i][j] = std::move(col);

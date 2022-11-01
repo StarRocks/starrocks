@@ -149,7 +149,7 @@ private:
         std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
     };
 
-    static Status _get_versions_to_be_changed(TabletSharedPtr base_tablet,
+    static Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                               std::vector<Version>* versions_to_be_changed);
 
     Status _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
@@ -157,7 +157,7 @@ private:
     Status _do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request, SchemaChangeParams& sc_params,
                                               const TabletSharedPtr& base_tablet, const TabletSharedPtr& new_tablet);
 
-    Status _validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request);
+    Status _validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request);
 
     static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 

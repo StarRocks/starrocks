@@ -137,11 +137,15 @@ public:
 
     void remove_first_n_values(size_t count) override;
 
+    // No complain about the overloaded-virtual for this function
+    DIAGNOSTIC_PUSH
+    DIAGNOSTIC_IGNORE("-Woverloaded-virtual")
     void append(const Slice& str) {
         _bytes.insert(_bytes.end(), str.data, str.data + str.size);
         _offsets.emplace_back(_bytes.size());
         _slices_cache = false;
     }
+    DIAGNOSTIC_POP
 
     void append_datum(const Datum& datum) override {
         append(datum.get_slice());

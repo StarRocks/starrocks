@@ -70,8 +70,8 @@ void SimdBlockFilter::merge(const SimdBlockFilter& bf) {
     DCHECK(_log_num_buckets == bf._log_num_buckets);
     for (int i = 0; i < (1 << _log_num_buckets); i++) {
 #ifdef __AVX2__
-        __m256i* const dst = reinterpret_cast<__m256i*>(_directory[i]);
-        __m256i* const src = reinterpret_cast<__m256i*>(bf._directory[i]);
+        auto* const dst = reinterpret_cast<__m256i*>(_directory[i]);
+        auto* const src = reinterpret_cast<__m256i*>(bf._directory[i]);
         const __m256i a = _mm256_load_si256(src);
         const __m256i b = _mm256_load_si256(dst);
         const __m256i c = _mm256_or_si256(a, b);

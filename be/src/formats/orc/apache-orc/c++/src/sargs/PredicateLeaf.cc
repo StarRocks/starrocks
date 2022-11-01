@@ -40,7 +40,7 @@ PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, std::string co
     validate();
 }
 
-PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, Literal literal)
+PredicateLeaf::PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, const Literal& literal)
         : mOperator(op), mType(type), mHasColumnName(false), mColumnId(columnId) {
     mLiterals.emplace_back(literal);
     mHashCode = hashCode();

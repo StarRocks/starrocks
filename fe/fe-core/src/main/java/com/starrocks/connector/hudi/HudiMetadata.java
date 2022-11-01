@@ -10,26 +10,26 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.RemoteFileOperations;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
-import com.starrocks.external.PartitionUtil;
-import com.starrocks.external.RemoteFileInfo;
-import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hive.Partition;
+import com.starrocks.connector.hive.HiveMetastoreOperations;
+import com.starrocks.connector.hive.HiveStatisticsProvider;
+import com.starrocks.connector.hive.Partition;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+
+import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 
 public class HudiMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(HudiMetadata.class);
@@ -101,8 +101,7 @@ public class HudiMetadata implements ConnectorMetadata {
         } else {
             Map<String, Partition> existingPartitions = hmsOps.getPartitionByNames(table, partitionKeys);
             for (PartitionKey partitionKey : partitionKeys) {
-                String hivePartitionName = FileUtils.makePartName(hmsTbl.getPartitionColumnNames(),
-                        PartitionUtil.fromPartitionKey(partitionKey));
+                String hivePartitionName = toHivePartitionName(hmsTbl.getPartitionColumnNames(), partitionKey);
                 Partition partition = existingPartitions.get(hivePartitionName);
                 if (partition != null) {
                     partitions.add(partition);

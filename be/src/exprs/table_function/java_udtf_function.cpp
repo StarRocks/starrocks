@@ -29,7 +29,7 @@ class JavaUDTFState : public TableFunctionState {
 public:
     JavaUDTFState(std::string libpath, std::string symbol, const TTypeDesc& desc)
             : _libpath(std::move(libpath)), _symbol(std::move(symbol)), _ret_type(TypeDescriptor::from_thrift(desc)) {}
-    ~JavaUDTFState() {}
+    ~JavaUDTFState() = default;
 
     Status open();
     void close();
@@ -175,6 +175,7 @@ std::pair<Columns, ColumnPtr> JavaUDTFFunction::process(TableFunctionState* stat
         helper.getEnv()->ExceptionClear();
     }
 
+    *eos = true;
     return std::make_pair(std::move(res), std::move(offsets_col));
 }
 

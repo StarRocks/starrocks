@@ -559,7 +559,7 @@ bool safe_int_internal(const char* start, const char* end, int base, IntType* va
         // loop over digits
         // loop body is interleaved for perf, not readability
         for (; start < end; ++start) {
-            unsigned char c = static_cast<unsigned char>(start[0]);
+            auto c = static_cast<unsigned char>(start[0]);
             int digit = kAsciiToInt[c];
             if (value > vmax_over_base) return false;
             value *= base;
@@ -582,7 +582,7 @@ bool safe_int_internal(const char* start, const char* end, int base, IntType* va
         // loop over digits
         // loop body is interleaved for perf, not readability
         for (; start < end; ++start) {
-            unsigned char c = static_cast<unsigned char>(start[0]);
+            auto c = static_cast<unsigned char>(start[0]);
             int digit = kAsciiToInt[c];
             if (value < vmin_over_base) return false;
             value *= base;
@@ -954,7 +954,7 @@ char* FastUInt64ToBufferLeft(uint64 u64, char* buffer) {
     uint digits;
     const char* ASCII_digits = nullptr;
 
-    uint32 u = static_cast<uint32>(u64);
+    auto u = static_cast<uint32>(u64);
     if (u == u64) return FastUInt32ToBufferLeft(u, buffer);
 
     uint64 top_11_digits = u64 / 1000000000;
@@ -1005,7 +1005,7 @@ char* FastUInt128ToBufferLeft(unsigned __int128 i, char* buffer) {
     static const unsigned __int128 TWENTY_DIGITS =
             static_cast<unsigned __int128>(10000000000) * static_cast<unsigned __int128>(10000000000);
 
-    uint64 u = static_cast<uint64>(i);
+    auto u = static_cast<uint64>(i);
     if (u == i) return FastUInt64ToBufferLeft(u, buffer);
 
     unsigned __int128 top_19_digits = i / TWENTY_DIGITS;

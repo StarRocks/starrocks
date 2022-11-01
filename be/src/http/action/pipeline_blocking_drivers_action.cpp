@@ -46,7 +46,7 @@ void PipelineBlockingDriversAction::handle(HttpRequest* req) {
     }
 }
 
-void PipelineBlockingDriversAction::_handle(HttpRequest* req, std::function<void(rapidjson::Document&)> func) {
+void PipelineBlockingDriversAction::_handle(HttpRequest* req, const std::function<void(rapidjson::Document&)>& func) {
     rapidjson::Document root;
     root.SetObject();
     func(root);

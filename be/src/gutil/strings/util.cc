@@ -962,7 +962,7 @@ void InsertString(string* const s, const vector<uint32>& indices, char const* co
     const unsigned s_len(s->size());
     tmp.reserve(s_len + separator_len * num_indices);
 
-    vector<uint32>::const_iterator const ind_end(indices.end());
+    auto const ind_end(indices.end());
     auto ind_pos(indices.begin());
 
     uint32 last_pos(0);
@@ -1036,17 +1036,17 @@ namespace strings {
 StringPiece FindEol(StringPiece s) {
     for (size_t i = 0; i < s.length(); ++i) {
         if (s[i] == '\n') {
-            return StringPiece(s.data() + i, 1);
+            return {s.data() + i, 1};
         }
         if (s[i] == '\r') {
             if (i + 1 < s.length() && s[i + 1] == '\n') {
-                return StringPiece(s.data() + i, 2);
+                return {s.data() + i, 2};
             } else {
-                return StringPiece(s.data() + i, 1);
+                return {s.data() + i, 1};
             }
         }
     }
-    return StringPiece(s.data() + s.length(), 0);
+    return {s.data() + s.length(), 0};
 }
 
 } // namespace strings

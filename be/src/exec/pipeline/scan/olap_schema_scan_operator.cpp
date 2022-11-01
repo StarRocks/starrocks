@@ -2,14 +2,15 @@
 
 #include "exec/pipeline/scan/olap_schema_scan_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/olap_schema_chunk_source.h"
 #include "exec/pipeline/scan/scan_operator.h"
 #include "gen_cpp/Types_types.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 OlapSchemaScanOperatorFactory::OlapSchemaScanOperatorFactory(int32_t id, ScanNode* schema_scan_node, size_t dop,
                                                              const TPlanNode& t_node,
@@ -31,9 +32,9 @@ OperatorPtr OlapSchemaScanOperatorFactory::do_create(int32_t dop, int32_t driver
 
 OlapSchemaScanOperator::OlapSchemaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence,
                                                int32_t dop, ScanNode* scan_node, OlapSchemaScanContextPtr ctx)
-        : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(ctx) {}
+        : ScanOperator(factory, id, driver_sequence, dop, scan_node), _ctx(std::move(ctx)) {}
 
-OlapSchemaScanOperator::~OlapSchemaScanOperator() {}
+OlapSchemaScanOperator::~OlapSchemaScanOperator() = default;
 
 Status OlapSchemaScanOperator::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -82,5 +83,4 @@ void OlapSchemaScanOperator::set_buffer_finished() {
     _ctx->get_chunk_buffer().set_finished(_driver_sequence);
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

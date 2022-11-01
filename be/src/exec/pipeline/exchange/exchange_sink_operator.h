@@ -68,7 +68,7 @@ public:
     Status serialize_chunk(const vectorized::Chunk* chunk, ChunkPB* dst, bool* is_first_chunk, int num_receivers = 1);
 
     // Return the physical bytes of attachment.
-    int64_t construct_brpc_attachment(PTransmitChunkParamsPtr _chunk_request, butil::IOBuf& attachment);
+    int64_t construct_brpc_attachment(const PTransmitChunkParamsPtr& _chunk_request, butil::IOBuf& attachment);
 
 private:
     bool _is_large_chunk(size_t sz) const {
@@ -201,7 +201,7 @@ public:
                                 bool is_pipeline_level_shuffle, int32_t num_shuffles_per_channel, int32_t sender_id,
                                 PlanNodeId dest_node_id, std::vector<ExprContext*> partition_expr_ctxs,
                                 bool enable_exchange_pass_through, bool enable_exchange_perf,
-                                FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns);
+                                FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns);
 
     ~ExchangeSinkOperatorFactory() override = default;
 

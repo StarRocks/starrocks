@@ -376,8 +376,8 @@ private:
         }
 
         if (rowsets_mask_buffer) {
-            for (size_t i = 0; i < rowsets_mask_buffer->size(); ++i) {
-                RETURN_IF_ERROR((*rowsets_mask_buffer)[i]->flush());
+            for (auto& i : *rowsets_mask_buffer) {
+                RETURN_IF_ERROR(i->flush());
             }
         }
 
@@ -437,7 +437,7 @@ private:
                 vector<vectorized::ChunkIteratorPtr> segment_iters;
                 for (const auto& segment_iter : res.value()) {
                     if (segment_iter) {
-                        segment_iters.emplace_back(std::move(segment_iter));
+                        segment_iters.emplace_back(segment_iter);
                     }
                 }
                 if (segment_iters.empty()) {

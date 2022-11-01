@@ -5,7 +5,7 @@ package com.starrocks.server;
 import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.external.hive.HiveMetaStoreThriftClient;
+import com.starrocks.connector.hive.HiveMetaStoreThriftClient;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

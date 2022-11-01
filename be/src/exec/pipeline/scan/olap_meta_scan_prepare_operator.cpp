@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/scan/olap_meta_scan_prepare_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/scan/olap_meta_scan_context.h"
 #include "exec/pipeline/scan/olap_meta_scan_operator.h"
 #include "exec/vectorized/olap_meta_scanner.h"
@@ -10,8 +12,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                                                          int32_t driver_sequence,
@@ -19,9 +20,9 @@ OlapMetaScanPrepareOperator::OlapMetaScanPrepareOperator(OperatorFactory* factor
                                                          OlapMetaScanContextPtr scan_ctx)
         : SourceOperator(factory, id, "olap_meta_scan_prepare", plan_node_id, driver_sequence),
           _scan_node(scan_node),
-          _scan_ctx(scan_ctx) {}
+          _scan_ctx(std::move(scan_ctx)) {}
 
-OlapMetaScanPrepareOperator::~OlapMetaScanPrepareOperator() {}
+OlapMetaScanPrepareOperator::~OlapMetaScanPrepareOperator() = default;
 
 Status OlapMetaScanPrepareOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
@@ -64,7 +65,7 @@ OlapMetaScanPrepareOperatorFactory::OlapMetaScanPrepareOperatorFactory(
         std::shared_ptr<OlapMetaScanContextFactory> scan_ctx_factory)
         : SourceOperatorFactory(id, "olap_meta_scan_prepare", plan_node_id),
           _scan_node(scan_node),
-          _scan_ctx_factory(scan_ctx_factory) {}
+          _scan_ctx_factory(std::move(scan_ctx_factory)) {}
 
 Status OlapMetaScanPrepareOperatorFactory::prepare(RuntimeState* state) {
     return Status::OK();
@@ -77,5 +78,4 @@ OperatorPtr OlapMetaScanPrepareOperatorFactory::create(int32_t degree_of_paralle
                                                          _scan_ctx_factory->get_or_create(driver_sequence));
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

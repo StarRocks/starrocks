@@ -25,6 +25,7 @@ Status FbCacheLib::init(const CacheOptions& options) {
             nvmConfig.navyConfig.setRaidFiles(files, options.disk_spaces[0].size, false);
         }
         nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
+        nvmConfig.navyConfig.blockCache().setDataChecksum(options.checksum);
         config.enableNvmCache(nvmConfig);
     }
 

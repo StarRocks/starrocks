@@ -1,19 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
-#include <string>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
-DIAGNOSTIC_POP
+
+#include <string>
 
 #include "column/chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "http/http_client.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"

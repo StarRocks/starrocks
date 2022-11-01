@@ -131,9 +131,12 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* open_limit;
 
-    bool use_block_cache = false;
+    std::vector<const TIcebergDeleteFile*> deletes;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    bool use_block_cache = false;
+    bool enable_populate_block_cache = false;
 };
 
 struct HdfsScannerContext {

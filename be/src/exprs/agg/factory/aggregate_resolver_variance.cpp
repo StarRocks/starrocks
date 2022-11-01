@@ -4,44 +4,43 @@
 #include "exprs/agg/factory/aggregate_factory.hpp"
 #include "exprs/agg/factory/aggregate_resolver.hpp"
 #include "exprs/agg/variance.h"
+#include "runtime/primitive_type.h"
 
 namespace starrocks::vectorized {
 
-template <PrimitiveType pt>
-using VarStateTrait = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultPT<pt>>>;
+struct StdDispatcher {
+    template <PrimitiveType pt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (pt_is_numeric<pt>) {
+            using VarState = DevFromAveAggregateState<RunTimeCppType<DevFromAveResultPT<pt>>>;
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "variance", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "variance_pop", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "var_pop", false, AggregateFactory::MakeVarianceAggregateFunction<pt, false>());
 
-template <PrimitiveType pt>
-struct VarBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeVarianceAggregateFunction<pt, false>(); }
-};
-template <PrimitiveType pt>
-struct VarSampBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeVarianceAggregateFunction<pt, true>(); }
-};
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "variance_samp", false, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "var_samp", false, AggregateFactory::MakeVarianceAggregateFunction<pt, true>());
 
-template <PrimitiveType pt>
-struct StdBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeStddevAggregateFunction<pt, false>(); }
-};
-template <PrimitiveType pt>
-struct StdSampBuilder {
-    AggregateFunctionPtr operator()() { return AggregateFactory::MakeStddevAggregateFunction<pt, true>(); }
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "stddev", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "std", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "stddev_pop", false, AggregateFactory::MakeStddevAggregateFunction<pt, false>());
+            resolver->add_aggregate_mapping<pt, DevFromAveResultPT<pt>, VarState>(
+                    "stddev_samp", false, AggregateFactory::MakeStddevAggregateFunction<pt, true>());
+        }
+    }
 };
 
 void AggregateFuncResolver::register_variance() {
-    for (auto var_name : std::vector<std::string>{"variance", "variance_pop", "var_pop"}) {
-        AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, VarBuilder);
+    for (auto type : aggregate_types()) {
+        type_dispatch_all(type, StdDispatcher(), this);
     }
-
-    for (auto var_name : std::vector<std::string>{"variance_samp", "var_samp"}) {
-        AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, VarSampBuilder);
-    }
-
-    for (auto var_name : std::vector<std::string>{"stddev", "std", "stddev_pop"}) {
-        AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT(var_name, false, DevFromAveResultPT, VarStateTrait, StdBuilder);
-    }
-
-    AGGREGATE_NUMERIC1_TYPE_FROM_TRAIT("stddev_samp", false, DevFromAveResultPT, VarStateTrait, StdSampBuilder);
 }
 
 } // namespace starrocks::vectorized

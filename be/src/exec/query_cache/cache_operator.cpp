@@ -12,8 +12,7 @@
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
 #include "util/time.h"
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 enum PerLaneBufferState {
     PLBS_INIT,
     PLBS_MISS,
@@ -103,7 +102,7 @@ struct PerLaneBuffer {
         } else {
             // CRITICAL(by satanson): The method is invoked when cloning chunk, when query cache enabled, chunk
             // may be accessed by multi-thread, so we must clone a chunk when pull chunk from cache operator.
-            ChunkPtr chunk = std::move(chunks[next_chunk_idx++]->clone_unique());
+            ChunkPtr chunk = chunks[next_chunk_idx++]->clone_unique();
             return chunk;
         }
     }
@@ -517,5 +516,4 @@ pipeline::OperatorPtr CacheOperatorFactory::create(int32_t degree_of_parallelism
     return std::make_shared<CacheOperator>(this, driver_sequence, _cache_mgr, _cache_param);
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

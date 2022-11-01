@@ -255,21 +255,21 @@ Status DataStreamRecvr::get_chunk_for_pipeline(std::unique_ptr<vectorized::Chunk
 
 void DataStreamRecvr::short_circuit_for_pipeline(const int32_t driver_sequence) {
     DCHECK(_is_pipeline);
-    PipelineSenderQueue* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    auto* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
     return sender_queue->short_circuit(driver_sequence);
 }
 
 bool DataStreamRecvr::has_output_for_pipeline(const int32_t driver_sequence) const {
     DCHECK(!_is_merging);
     DCHECK(_is_pipeline);
-    PipelineSenderQueue* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    auto* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
     return sender_queue->has_output(driver_sequence);
 }
 
 bool DataStreamRecvr::is_finished() const {
     DCHECK(!_is_merging);
     DCHECK(_is_pipeline);
-    PipelineSenderQueue* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
+    auto* sender_queue = static_cast<PipelineSenderQueue*>(_sender_queues[0]);
     return sender_queue->is_finished();
 }
 

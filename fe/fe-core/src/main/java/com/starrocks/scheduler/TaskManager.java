@@ -271,7 +271,9 @@ public class TaskManager {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build(), option);
+        return taskRunManager
+                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).build(),
+                        option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -566,6 +568,17 @@ public class TaskManager {
         }
         taskRunManager.getTaskRunHistory().getAllHistory()
                 .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
+    }
+
+    public void replayAlterRunningTaskRunProgress(Map<Long, Integer> taskRunProgresMap) {
+        Map<Long, TaskRun> runningTaskRunMap = taskRunManager.getRunningTaskRunMap();
+        for (Map.Entry<Long, Integer> entry : taskRunProgresMap.entrySet()) {
+            // When replaying the log, the task run may have ended
+            // and the status has changed to success or failed
+            if (runningTaskRunMap.containsKey(entry.getKey())) {
+                runningTaskRunMap.get(entry.getKey()).getStatus().setProgress(entry.getValue());
+            }
+        }
     }
 
     public void removeExpiredTasks() {

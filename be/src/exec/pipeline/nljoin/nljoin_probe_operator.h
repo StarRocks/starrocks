@@ -53,15 +53,15 @@ private:
     int _num_build_chunks() const;
     vectorized::Chunk* _move_build_chunk_index(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
-    Status _probe(RuntimeState* state, ChunkPtr chunk);
+    Status _probe(RuntimeState* state, const ChunkPtr& chunk);
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;
     void _init_build_match() const;
-    void _permute_probe_row(RuntimeState* state, ChunkPtr chunk);
+    void _permute_probe_row(RuntimeState* state, const ChunkPtr& chunk);
     ChunkPtr _permute_chunk(RuntimeState* state);
     Status _permute_right_join(RuntimeState* state);
-    void _permute_left_join(RuntimeState* state, ChunkPtr chunk, size_t probe_row_index, size_t probe_rows);
+    void _permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
     bool _is_left_join() const;
     bool _is_right_join() const;
@@ -92,9 +92,10 @@ private:
 
     // Probe states
     vectorized::ChunkPtr _probe_chunk = nullptr;
-    bool _probe_row_matched = false;
-    size_t _probe_row_start = 0;   // Start index of current chunk
-    size_t _probe_row_current = 0; // End index of current chunk
+    bool _probe_row_matched = false;  // For multi build-chunk, whether this probe row matched any join conjuncts
+    bool _probe_row_finished = false; // For multi build-chunk, whether this probe row is the last
+    size_t _probe_row_start = 0;      // Start index of current chunk
+    size_t _probe_row_current = 0;    // End index of current chunk
 
     // Counters
     RuntimeProfile::Counter* _permute_rows_counter = nullptr;

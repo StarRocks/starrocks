@@ -105,10 +105,10 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
+import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
-import com.starrocks.external.hive.events.MetastoreEventsProcessor;
-import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -129,6 +129,7 @@ import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
+import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -425,6 +426,8 @@ public class GlobalStateMgr {
     private ShardManager shardManager;
 
     private StateChangeExecution execution;
+
+    private TaskRunStateSynchronizer taskRunStateSynchronizer;
 
     // For LakeTable
     private CompactionManager compactionManager;
@@ -781,6 +784,11 @@ public class GlobalStateMgr {
         this.metadataMgr = metadataMgr;
     }
 
+    @VisibleForTesting
+    public void setStarOSAgent(StarOSAgent starOSAgent) {
+        this.starOSAgent = starOSAgent;
+    }
+
     public TaskManager getTaskManager() {
         return taskManager;
     }
@@ -1092,6 +1100,10 @@ public class GlobalStateMgr {
         statisticAutoCollector.start();
         taskManager.start();
         taskCleaner.start();
+
+        // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
+        taskRunStateSynchronizer = new TaskRunStateSynchronizer();
+        taskRunStateSynchronizer.start();
 
         if (Config.use_staros) {
             shardManager.getShardDeleter().start();

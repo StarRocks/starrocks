@@ -44,7 +44,7 @@ void MemInfo::init() {
 
         getline(memoryLimit, line);
         StringParser::ParseResult result;
-        int64_t memory_limit_bytes = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
+        auto memory_limit_bytes = StringParser::string_to_int<int64_t>(line.data(), line.size(), &result);
 
         if (result == StringParser::PARSE_SUCCESS) {
             _s_physical_mem = memory_limit_bytes;
@@ -72,7 +72,7 @@ void MemInfo::init() {
         }
 
         StringParser::ParseResult result;
-        int64_t mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
+        auto mem_total_kb = StringParser::string_to_int<int64_t>(fields[1].data(), fields[1].size(), &result);
 
         if (result == StringParser::PARSE_SUCCESS) {
             // Entries in /proc/meminfo are in KB.

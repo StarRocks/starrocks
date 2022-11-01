@@ -51,8 +51,7 @@
 #include "exprs/vectorized/literal.h"
 #include "exprs/vectorized/map_element_expr.h"
 #include "exprs/vectorized/placeholder_ref.h"
-#include "gen_cpp/Exprs_types.h"
-#include "gen_cpp/Types_types.h"
+#include "exprs/vectorized/subfield_expr.h"
 #include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -83,7 +82,7 @@ Expr::Expr(const Expr& expr)
           _fn(expr._fn),
           _fn_context_index(expr._fn_context_index) {}
 
-Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
+Expr::Expr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
@@ -345,6 +344,9 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::MAP_ELEMENT_EXPR:
         *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::SUBFIELD_EXPR:
+        *expr = pool->add(vectorized::SubfieldExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));

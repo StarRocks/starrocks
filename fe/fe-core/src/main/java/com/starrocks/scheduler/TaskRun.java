@@ -26,6 +26,10 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
+    public static final String PARTITION_START = "PARTITION_START";
+    public static final String PARTITION_END = "PARTITION_END";
+    public static final String FORCE = "FORCE";
+
     private long taskId;
 
     private Map<String, String> properties;

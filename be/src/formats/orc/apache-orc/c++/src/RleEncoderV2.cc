@@ -47,7 +47,7 @@ uint32_t RleEncoderV2::percentileBits(int64_t* data, size_t offset, size_t lengt
         }
     }
 
-    int32_t perLen = static_cast<int32_t>(static_cast<double>(length) * (1.0 - p));
+    auto perLen = static_cast<int32_t>(static_cast<double>(length) * (1.0 - p));
 
     // return the bits required by pth percentile length
     for (int32_t i = HIST_LEN - 1; i >= 0; i--) {
@@ -510,7 +510,7 @@ void RleEncoderV2::writeShortRepeatValues(EncodingOption&) {
 
     writeByte(static_cast<char>(header));
 
-    for (int32_t i = static_cast<int32_t>(numBytesRepeatVal - 1); i >= 0; i--) {
+    for (auto i = static_cast<int32_t>(numBytesRepeatVal - 1); i >= 0; i--) {
         int64_t b = ((repeatVal >> (i * 8)) & 0xff);
         writeByte(static_cast<char>(b));
     }
@@ -609,7 +609,7 @@ void RleEncoderV2::writePatchedBasedValues(EncodingOption& option) {
     writeByte(headerFourthByte);
 
     // write the base value using fixed bytes in big endian order
-    for (int32_t i = static_cast<int32_t>(baseBytes - 1); i >= 0; i--) {
+    for (auto i = static_cast<int32_t>(baseBytes - 1); i >= 0; i--) {
         char b = static_cast<char>(((option.min >> (i * 8)) & 0xff));
         writeByte(b);
     }
@@ -703,11 +703,11 @@ void RleEncoderV2::writeInts(int64_t* input, uint32_t offset, size_t len, uint32
 
     if (getClosestAlignedFixedBits(bitSize) == bitSize) {
         uint32_t numBytes;
-        uint32_t endOffSet = static_cast<uint32_t>(offset + len);
+        auto endOffSet = static_cast<uint32_t>(offset + len);
         if (bitSize < 8) {
             char bitMask = static_cast<char>((1 << bitSize) - 1);
             uint32_t numHops = 8 / bitSize;
-            uint32_t remainder = static_cast<uint32_t>(len % numHops);
+            auto remainder = static_cast<uint32_t>(len % numHops);
             uint32_t endUnroll = endOffSet - remainder;
             for (uint32_t i = offset; i < endUnroll; i += numHops) {
                 char toWrite = 0;

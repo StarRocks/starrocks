@@ -45,12 +45,12 @@
 namespace starrocks {
 
 static void on_chunked(struct evhttp_request* ev_req, void* param) {
-    HttpRequest* request = (HttpRequest*)ev_req->on_free_cb_arg;
+    auto* request = (HttpRequest*)ev_req->on_free_cb_arg;
     request->handler()->on_chunk_data(request);
 }
 
 static void on_free(struct evhttp_request* ev_req, void* arg) {
-    HttpRequest* request = (HttpRequest*)arg;
+    auto* request = (HttpRequest*)arg;
     delete request;
 }
 
@@ -64,7 +64,7 @@ static void on_request(struct evhttp_request* ev_req, void* arg) {
 }
 
 static int on_header(struct evhttp_request* ev_req, void* param) {
-    EvHttpServer* server = (EvHttpServer*)ev_req->on_complete_cb_arg;
+    auto* server = (EvHttpServer*)ev_req->on_complete_cb_arg;
     return server->on_header(ev_req);
 }
 

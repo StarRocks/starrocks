@@ -23,7 +23,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.external.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateCatalogStmt;

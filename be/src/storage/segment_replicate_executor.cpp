@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <utility>
 
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
@@ -31,9 +32,8 @@ private:
     bool _eos;
 };
 
-ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, const std::string& host, int32_t port,
-                                   int64_t node_id)
-        : _opt(opt), _host(host), _port(port), _node_id(node_id) {
+ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id)
+        : _opt(opt), _host(std::move(host)), _port(port), _node_id(node_id) {
     _closure = new ReusableClosure<PTabletWriterAddSegmentResult>();
     _closure->ref();
 }

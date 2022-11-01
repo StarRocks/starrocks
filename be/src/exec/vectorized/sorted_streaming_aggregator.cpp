@@ -4,6 +4,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "column/column_visitor_adapter.h"
@@ -37,7 +38,7 @@ public:
         ColumnSelfComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
         RETURN_IF_ERROR(column.data_column()->accept(&comparator));
 
-        auto data_column = column.data_column();
+        const auto& data_column = column.data_column();
         // NOTE
         if (!_first_column->empty()) {
             _cmp_vector[0] |= _first_column->compare_at(0, 0, *data_column, 1) != 0;
@@ -115,6 +116,10 @@ public:
         return Status::NotSupported("Unsupported map column in column wise comparator");
     }
 
+    Status do_visit(const vectorized::StructColumn& column) {
+        return Status::NotSupported("Unsupported struct column in column wise comparator");
+    }
+
 private:
     const ColumnPtr& _first_column;
     std::vector<uint8_t>& _cmp_vector;
@@ -127,8 +132,11 @@ private:
 class AppendWithMask : public ColumnVisitorMutableAdapter<AppendWithMask> {
 public:
     using SelMask = std::vector<uint8_t>;
-    AppendWithMask(vectorized::Column* column, const SelMask& sel_mask, size_t selected_size)
-            : ColumnVisitorMutableAdapter(this), _column(column), _sel_mask(sel_mask), _selected_size(selected_size) {}
+    AppendWithMask(vectorized::Column* column, SelMask sel_mask, size_t selected_size)
+            : ColumnVisitorMutableAdapter(this),
+              _column(column),
+              _sel_mask(std::move(sel_mask)),
+              _selected_size(selected_size) {}
 
     Status do_visit(vectorized::NullableColumn* column) {
         auto col = down_cast<vectorized::NullableColumn*>(_column);
@@ -194,6 +202,10 @@ public:
 
     Status do_visit(vectorized::MapColumn* column) {
         return Status::NotSupported("Unsupported map column in column wise comparator");
+    }
+
+    Status do_visit(vectorized::StructColumn* column) {
+        return Status::NotSupported("Unsupported struct column in column wise comparator");
     }
 
 private:

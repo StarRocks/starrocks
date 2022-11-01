@@ -7,14 +7,13 @@
 #include "exec/vectorized/schema_scanner.h"
 #include "exec/workgroup/work_group.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 OlapSchemaChunkSource::OlapSchemaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile,
-                                             MorselPtr&& morsel, OlapSchemaScanContextPtr ctx)
+                                             MorselPtr&& morsel, const OlapSchemaScanContextPtr& ctx)
         : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), ctx->get_chunk_buffer()), _ctx(ctx) {}
 
-OlapSchemaChunkSource::~OlapSchemaChunkSource() {}
+OlapSchemaChunkSource::~OlapSchemaChunkSource() = default;
 
 Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
@@ -22,8 +21,7 @@ Status OlapSchemaChunkSource::prepare(RuntimeState* state) {
     if (_dest_tuple_desc == nullptr) {
         return Status::InternalError("failed to get tuple descriptor");
     }
-    const SchemaTableDescriptor* schema_table =
-            static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
+    const auto* schema_table = static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
     if (schema_table == nullptr) {
         return Status::InternalError("Failed to get schema table descriptor");
     }
@@ -56,10 +54,10 @@ Status OlapSchemaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) 
     if (chunk_dst == nullptr) {
         return Status::InternalError("Failed to allocate new chunk");
     }
-    for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+    for (auto dest_slot_desc : dest_slot_descs) {
         ColumnPtr column =
-                vectorized::ColumnHelper::create_column(dest_slot_descs[i]->type(), dest_slot_descs[i]->is_nullable());
-        chunk_dst->append_column(std::move(column), dest_slot_descs[i]->id());
+                vectorized::ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
     bool scanner_eos = false;
@@ -94,5 +92,4 @@ const workgroup::WorkGroupScanSchedEntity* OlapSchemaChunkSource::_scan_sched_en
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();
 }
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

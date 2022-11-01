@@ -214,7 +214,7 @@ int NullableColumn::compare_at(size_t left, size_t right, const Column& rhs, int
         return rhs.is_null(right) ? 0 : nan_direction_hint;
     }
     if (rhs.is_nullable()) {
-        const NullableColumn& nullable_rhs = down_cast<const NullableColumn&>(rhs);
+        const auto& nullable_rhs = down_cast<const NullableColumn&>(rhs);
         if (nullable_rhs.immutable_null_column_data()[right]) {
             return -nan_direction_hint;
         }

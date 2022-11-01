@@ -18,6 +18,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "column/struct_column.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "types/hll.h"
@@ -423,6 +424,34 @@ public:
     }
 };
 
+class StructColumnSerde {
+public:
+    static int64_t max_serialized_size(const vectorized::StructColumn& column) {
+        int64_t size = 0;
+        for (const auto& field : column.fields()) {
+            size += serde::ColumnArraySerde::max_serialized_size(*field);
+        }
+        size += serde::ColumnArraySerde::max_serialized_size(column.field_names());
+        return size;
+    }
+
+    static uint8_t* serialize(const vectorized::StructColumn& column, uint8_t* buff) {
+        for (const auto& field : column.fields()) {
+            buff = serde::ColumnArraySerde::serialize(*field, buff);
+        }
+        buff = serde::ColumnArraySerde::serialize(column.field_names(), buff);
+        return buff;
+    }
+
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::StructColumn* column) {
+        for (const auto& field : column->fields_column()) {
+            buff = serde::ColumnArraySerde::deserialize(buff, field.get());
+        }
+        buff = serde::ColumnArraySerde::deserialize(buff, column->field_names_column().get());
+        return buff;
+    }
+};
+
 class ConstColumnSerde {
 public:
     static int64_t max_serialized_size(const vectorized::ConstColumn& column, const int encode_level) {
@@ -467,6 +496,11 @@ public:
 
     Status do_visit(const vectorized::MapColumn& column) {
         _size += MapColumnSerde::max_serialized_size(column, _encode_level);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        _size += StructColumnSerde::max_serialized_size(column);
         return Status::OK();
     }
 
@@ -522,6 +556,11 @@ public:
 
     Status do_visit(const vectorized::MapColumn& column) {
         _cur = MapColumnSerde::serialize(column, _cur, _encode_level);
+        return Status::OK();
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        _cur = StructColumnSerde::serialize(column, _cur);
         return Status::OK();
     }
 
@@ -589,6 +628,11 @@ public:
 
     Status do_visit(vectorized::MapColumn* column) {
         _cur = MapColumnSerde::deserialize(_cur, column, _encode_level);
+        return Status::OK();
+    }
+
+    Status do_visit(vectorized::StructColumn* column) {
+        _cur = StructColumnSerde::deserialize(_cur, column);
         return Status::OK();
     }
 

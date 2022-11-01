@@ -2,12 +2,9 @@
 
 #include "publish_version.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 
+#include "common/compiler_util.h"
 #include "common/tracer.h"
 #include "fmt/format.h"
 #include "gutil/strings/join.h"
@@ -69,12 +66,12 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
         }
     }
     std::mutex affected_dirs_lock;
-    for (size_t i = 0; i < tablet_tasks.size(); i++) {
+    for (auto& tablet_task : tablet_tasks) {
         uint32_t retry_time = 0;
         Status st;
         while (retry_time++ < PUBLISH_VERSION_SUBMIT_MAX_RETRY) {
-            st = token->submit_func([&, i]() {
-                auto& task = tablet_tasks[i];
+            st = token->submit_func([&]() {
+                auto& task = tablet_task;
                 auto tablet_span = Tracer::Instance().add_span("tablet_publish_txn", span);
                 auto scoped_tablet_span = trace::Scope(tablet_span);
                 tablet_span->SetAttribute("txn_id", transaction_id);
@@ -115,7 +112,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
             if (st.is_service_unavailable()) {
                 int64_t retry_sleep_ms = 50 * retry_time;
                 LOG(WARNING) << "publish version threadpool is busy, retry in  " << retry_sleep_ms
-                             << "ms. txn_id: " << transaction_id << ", tablet:" << tablet_tasks[i].tablet_id;
+                             << "ms. txn_id: " << transaction_id << ", tablet:" << tablet_task.tablet_id;
                 // In general, publish version is fast. A small sleep is needed here.
                 auto wait_span = Tracer::Instance().add_span("retry_wait", span);
                 SleepFor(MonoDelta::FromMilliseconds(retry_sleep_ms));
@@ -125,7 +122,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
             }
         }
         if (!st.ok()) {
-            tablet_tasks[i].st = std::move(st);
+            tablet_task.st = std::move(st);
         }
     }
     span->AddEvent("all_task_submitted");
@@ -137,8 +134,7 @@ void run_publish_version_task(ThreadPoolToken* token, const PublishVersionAgentT
     auto& error_tablet_ids = finish_task.error_tablet_ids;
     auto& tablet_versions = finish_task.tablet_versions;
     tablet_versions.reserve(tablet_tasks.size());
-    for (size_t i = 0; i < tablet_tasks.size(); i++) {
-        auto& task = tablet_tasks[i];
+    for (auto& task : tablet_tasks) {
         if (!task.st.ok()) {
             error_tablet_ids.push_back(task.tablet_id);
             if (st.ok()) {

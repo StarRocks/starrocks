@@ -2,6 +2,8 @@
 
 #include "storage/tablet_reader.h"
 
+#include <utility>
+
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -26,15 +28,14 @@ namespace starrocks::vectorized {
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema)
         : ChunkIterator(std::move(schema)),
-          _tablet(tablet),
+          _tablet(std::move(tablet)),
           _version(version),
-          _delete_predicates_version(version),
-          _is_vertical_merge(false) {}
+          _delete_predicates_version(version) {}
 
 TabletReader::TabletReader(TabletSharedPtr tablet, const Version& version, Schema schema, bool is_key,
                            RowSourceMaskBuffer* mask_buffer)
         : ChunkIterator(std::move(schema)),
-          _tablet(tablet),
+          _tablet(std::move(tablet)),
           _version(version),
           _delete_predicates_version(version),
           _is_vertical_merge(true),

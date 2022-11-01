@@ -213,6 +213,7 @@ import com.starrocks.sql.ast.MultiRangePartitionDesc;
 import com.starrocks.sql.ast.PartitionDesc;
 import com.starrocks.sql.ast.PartitionKeyDesc;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.PartitionRenameClause;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.sql.ast.PauseRoutineLoadStmt;
@@ -1196,7 +1197,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             StarRocksParser.RefreshMaterializedViewStatementContext context) {
         QualifiedName mvQualifiedName = getQualifiedName(context.qualifiedName());
         TableName mvName = qualifiedNameToTableName(mvQualifiedName);
-        return new RefreshMaterializedViewStatement(mvName);
+        PartitionRangeDesc partitionRangeDesc = null;
+        if (context.partitionRangeDesc() != null) {
+            partitionRangeDesc =
+                    (PartitionRangeDesc) visit(context.partitionRangeDesc());
+        }
+        return new RefreshMaterializedViewStatement(mvName, partitionRangeDesc, context.FORCE() != null);
     }
 
     @Override
@@ -4794,6 +4800,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     Long.parseLong(context.INTEGER_VALUE().getText()));
         }
     }
+
+    @Override
+    public ParseNode visitPartitionRangeDesc(StarRocksParser.PartitionRangeDescContext context) {
+        return new PartitionRangeDesc(((StringLiteral) visit(context.string(0))).getStringValue(),
+                ((StringLiteral) visit(context.string(1))).getStringValue());
+    }
+
 
     @Override
     public ParseNode visitSingleItemListPartitionDesc(StarRocksParser.SingleItemListPartitionDescContext context) {

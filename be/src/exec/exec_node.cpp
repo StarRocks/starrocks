@@ -106,7 +106,7 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
         }
     }
 
-    std::list<ExprContext*>::iterator iter = expr_ctxs->begin();
+    auto iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
             (*iter)->prepare(state);

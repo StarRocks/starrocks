@@ -233,6 +233,12 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
         for (auto& child : field.children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
+    } else if (field.type.type == TYPE_MAP) {
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        DCHECK(field.children[0].type.type == TYPE_STRUCT);
+        for (auto& child : field.children[0].children) {
+            _collect_field_io_range(child, ranges, end_offset);
+        }
     } else {
         auto& column = _row_group_metadata->columns[field.physical_column_index].meta_data;
         int64_t offset = 0;
@@ -429,7 +435,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     return Status::OK();
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk,
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk,
                                     size_t chunk_size) {
     auto& ctx = _column_reader_opts.context;
     if (ctx->rows_to_skip == 0) {

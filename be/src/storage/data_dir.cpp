@@ -50,7 +50,6 @@ using strings::Substitute;
 
 namespace starrocks {
 
-static const char* const kMtabPath = "/etc/mtab";
 static const char* const kTestFilePath = "/.testfile";
 
 DataDir::DataDir(const std::string& path, TStorageMedium::type storage_medium, TabletManager* tablet_manager,
@@ -178,7 +177,7 @@ void DataDir::register_tablet(Tablet* tablet) {
     TabletInfo tablet_info(tablet->tablet_id(), tablet->schema_hash(), tablet->tablet_uid());
 
     std::lock_guard<std::mutex> l(_mutex);
-    _tablet_set.emplace(std::move(tablet_info));
+    _tablet_set.emplace(tablet_info);
 }
 
 void DataDir::deregister_tablet(Tablet* tablet) {

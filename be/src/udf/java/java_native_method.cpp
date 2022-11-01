@@ -43,11 +43,11 @@ public:
 
 private:
     size_t _idx = 0;
-    jlong* _jarr = 0;
+    jlong* _jarr = nullptr;
 };
 
 jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong columnAddr, jint byteSize) {
-    Column* column = reinterpret_cast<Column*>(columnAddr);
+    auto* column = reinterpret_cast<Column*>(columnAddr);
     BinaryColumn* binary_column = nullptr;
     if (column->is_nullable()) {
         binary_column = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(down_cast<NullableColumn*>(column)->data_column());
@@ -67,7 +67,7 @@ jlong JavaNativeMethods::resizeStringData(JNIEnv* env, jclass clazz, jlong colum
 }
 
 jlongArray JavaNativeMethods::getAddrs(JNIEnv* env, jclass clazz, jlong columnAddr) {
-    Column* column = reinterpret_cast<Column*>(columnAddr);
+    auto* column = reinterpret_cast<Column*>(columnAddr);
     // return fixed array size
     int array_size = 3;
     auto jarr = env->NewLongArray(array_size);

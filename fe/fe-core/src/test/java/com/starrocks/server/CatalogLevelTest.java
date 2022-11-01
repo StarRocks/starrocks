@@ -3,11 +3,11 @@
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastoreApiConverter;
-import com.starrocks.external.hive.HiveMetastoreTest;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.external.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.hive.HiveMetastoreTest;
+import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;

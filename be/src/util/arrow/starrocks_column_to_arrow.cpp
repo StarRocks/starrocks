@@ -86,7 +86,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvDecimalGuard<PT, AT>> {
         }
         int64_t high = value >> 64;
         uint64_t low = value;
-        return arrow::Decimal128(high, low);
+        return {high, low};
     }
 
     static inline arrow::Status convert(const ColumnPtr& column, arrow::MemoryPool* pool,

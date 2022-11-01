@@ -225,7 +225,7 @@ Status PushHandler::_delete_convert(const TabletSharedPtr& cur_tablet, RowsetSha
 
 Status PushHandler::_load_convert(const TabletSharedPtr& cur_tablet, RowsetSharedPtr* cur_rowset) {
     Status st;
-    uint32_t num_rows = 0;
+    size_t num_rows = 0;
     PUniqueId load_id;
     load_id.set_hi(0);
     load_id.set_lo(0);

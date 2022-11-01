@@ -61,7 +61,7 @@ struct RowSourceMask {
 //
 class RowSourceMaskBuffer {
 public:
-    explicit RowSourceMaskBuffer(int64_t tablet_id, const std::string& storage_root_path);
+    explicit RowSourceMaskBuffer(int64_t tablet_id, std::string storage_root_path);
     ~RowSourceMaskBuffer();
 
     Status write(const std::vector<RowSourceMask>& source_masks);

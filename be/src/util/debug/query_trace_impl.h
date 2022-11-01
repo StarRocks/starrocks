@@ -72,27 +72,30 @@ public:
     ~QueryTrace() = default;
 
     // init event buffer for all drivers in a single fragment instance
-    void register_drivers(TUniqueId fragment_instance_id, starrocks::pipeline::Drivers& drivers);
+    void register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers);
 
     Status dump();
 
-    static void set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragment_instance_id, std::uintptr_t driver);
+    static void set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id,
+                                      std::uintptr_t driver);
 
 private:
+#ifdef ENABLE_QUERY_DEBUG_TRACE
     TUniqueId _query_id;
-    bool _is_enable = false;
-    int64_t _start_ts = -1;
+    [[maybe_unused]] bool _is_enable = false;
+    [[maybe_unused]] int64_t _start_ts = -1;
 
     std::shared_mutex _mutex;
     std::unordered_map<std::uintptr_t, std::unique_ptr<EventBuffer>> _buffers;
 
     // fragment_instance_id => driver list, it will be used to generate meta event
     std::unordered_map<TUniqueId, std::shared_ptr<std::unordered_set<std::uintptr_t>>> _fragment_drivers;
+#endif
 };
 
 class ScopedTracer {
 public:
-    ScopedTracer(const std::string& name, const std::string& category);
+    ScopedTracer(std::string name, std::string category);
     ~ScopedTracer();
 
 private:

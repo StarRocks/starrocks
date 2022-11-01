@@ -21,8 +21,7 @@
 
 #include "storage/schema_change.h"
 
-#include <signal.h>
-
+#include <csignal>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -69,7 +68,7 @@ public:
 private:
     ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk;
-    size_t _max_allocated_rows;
+    size_t _max_allocated_rows{0};
 };
 
 // TODO: optimize it with vertical sort
@@ -100,8 +99,7 @@ private:
     std::unique_ptr<ChunkAggregator> _aggregator;
 };
 
-ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator)
-        : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr), _max_allocated_rows(0) {}
+ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr) {}
 
 ChunkSorter::~ChunkSorter() = default;
 
@@ -910,7 +908,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
     return Status::OK();
 }
 
-Status SchemaChangeHandler::_get_versions_to_be_changed(TabletSharedPtr base_tablet,
+Status SchemaChangeHandler::_get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                                         std::vector<Version>* versions_to_be_changed) {
     RowsetSharedPtr rowset = base_tablet->rowset_with_max_version();
     if (rowset == nullptr) {
@@ -1043,7 +1041,8 @@ Status SchemaChangeHandler::_convert_historical_rowsets(SchemaChangeParams& sc_p
     return status;
 }
 
-Status SchemaChangeHandler::_validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request) {
+Status SchemaChangeHandler::_validate_alter_result(const TabletSharedPtr& new_tablet,
+                                                   const TAlterTabletReqV2& request) {
     int64_t max_continuous_version = new_tablet->max_continuous_version();
     LOG(INFO) << "find max continuous version of tablet=" << new_tablet->full_name()
               << ", version=" << max_continuous_version;

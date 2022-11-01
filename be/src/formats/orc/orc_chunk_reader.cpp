@@ -115,7 +115,7 @@ static void fill_boolean_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr
 template <PrimitiveType Type, typename OrcColumnVectorBatch>
 static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, int from, int size,
                                      const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col_start + size);
@@ -161,7 +161,7 @@ static void fill_int_column_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col,
 template <PrimitiveType Type, typename OrcColumnVectorBatch>
 static void fill_int_column_with_null_from_cvb(OrcColumnVectorBatch* data, ColumnPtr& col, int from, int size,
                                                const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -229,7 +229,7 @@ static void fill_int_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int fro
     // so there is no performance loss comparing to call `down_cast` directly
     // because in `down_cast` implementation, there is also a dyn_cast.
     {
-        orc::LongVectorBatch* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
         if (data != nullptr) {
             return fill_int_column_from_cvb<Type, orc::LongVectorBatch>(data, col, from, size, type_desc, ctx);
         }
@@ -237,7 +237,7 @@ static void fill_int_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int fro
     // if dyn_cast to long vector batch failed, try to dyn_cast to double vector batch for best effort
     // it only happens when slot type and orc type don't match.
     {
-        orc::DoubleVectorBatch* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
         if (data != nullptr) {
             return fill_int_column_from_cvb<Type, orc::DoubleVectorBatch>(data, col, from, size, type_desc, ctx);
         }
@@ -250,14 +250,14 @@ template <PrimitiveType Type>
 static void fill_int_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                       const TypeDescriptor& type_desc, void* ctx) {
     {
-        orc::LongVectorBatch* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::LongVectorBatch*>(cvb);
         if (data != nullptr) {
             return fill_int_column_with_null_from_cvb<Type, orc::LongVectorBatch>(data, col, from, size, type_desc,
                                                                                   ctx);
         }
     }
     {
-        orc::DoubleVectorBatch* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
+        auto* data = dynamic_cast<orc::DoubleVectorBatch*>(cvb);
         if (data != nullptr) {
             return fill_int_column_with_null_from_cvb<Type, orc::DoubleVectorBatch>(data, col, from, size, type_desc,
                                                                                     ctx);
@@ -551,7 +551,7 @@ static void fill_decimal128_column_with_null(orc::ColumnVectorBatch* cvb, Column
 
 static void fill_string_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
 
     auto* data = down_cast<orc::StringVectorBatch*>(cvb);
 
@@ -722,9 +722,6 @@ static inline void orc_date_to_native_date(JulianDate* jd, int64_t value) {
 static inline int64_t native_date_to_orc_date(const DateValue& dv) {
     return dv._julian - date::UNIX_EPOCH_JULIAN;
 }
-static inline int64_t native_date_to_orc_date(const JulianDate& jd) {
-    return jd - date::UNIX_EPOCH_JULIAN;
-}
 
 static void fill_date_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                              const TypeDescriptor& type_desc, void* ctx) {
@@ -802,7 +799,7 @@ static inline void orc_ts_to_native_ts(TimestampValue* tv, const cctz::time_zone
 
 static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                   const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
     auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -819,7 +816,7 @@ static void fill_timestamp_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, i
 
 static void fill_timestamp_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                             const TypeDescriptor& type_desc, void* ctx) {
-    OrcChunkReader* reader = static_cast<OrcChunkReader*>(ctx);
+    auto* reader = static_cast<OrcChunkReader*>(ctx);
     auto* data = down_cast<orc::TimestampVectorBatch*>(cvb);
     int col_start = col->size();
     col->resize(col->size() + size);
@@ -1690,7 +1687,7 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
         if (c->node_type() != TExprNodeType::type::SLOT_REF) {
             return false;
         }
-        ColumnRef* ref = down_cast<ColumnRef*>(c);
+        auto* ref = down_cast<ColumnRef*>(c);
         SlotId slot_id = ref->slot_id();
         // slot can not be found.
         auto iter = _slot_id_to_desc.find(slot_id);
@@ -1727,57 +1724,57 @@ bool OrcChunkReader::_ok_to_add_conjunct(const Expr* conjunct) {
 }
 
 static inline orc::Int128 to_orc128(int128_t value) {
-    return orc::Int128(uint64_t(value >> 64), uint64_t(value));
+    return {int64_t(value >> 64), uint64_t(value)};
 }
 
 static orc::Literal translate_to_orc_literal(Expr* lit, orc::PredicateDataType pred_type) {
     TExprNodeType::type node_type = lit->node_type();
     PrimitiveType ptype = lit->type().type;
     if (node_type == TExprNodeType::type::NULL_LITERAL) {
-        return orc::Literal(pred_type);
+        return {pred_type};
     }
 
-    VectorizedLiteral* vlit = down_cast<VectorizedLiteral*>(lit);
+    auto* vlit = down_cast<VectorizedLiteral*>(lit);
     ColumnPtr ptr = vlit->evaluate(nullptr, nullptr);
     if (ptr->only_null()) {
-        return orc::Literal(pred_type);
+        return {pred_type};
     }
 
     const Datum& datum = ptr->get(0);
     switch (ptype) {
     case PrimitiveType::TYPE_BOOLEAN:
-        return orc::Literal(bool(datum.get_int8()));
+        return {bool(datum.get_int8())};
     case PrimitiveType::TYPE_TINYINT:
-        return orc::Literal(int64_t(datum.get_int8()));
+        return {int64_t(datum.get_int8())};
     case PrimitiveType::TYPE_SMALLINT:
-        return orc::Literal(int64_t(datum.get_int16()));
+        return {int64_t(datum.get_int16())};
     case PrimitiveType::TYPE_INT:
-        return orc::Literal(int64_t(datum.get_int32()));
+        return {int64_t(datum.get_int32())};
     case PrimitiveType::TYPE_BIGINT:
-        return orc::Literal(datum.get_int64());
+        return {datum.get_int64()};
     case PrimitiveType::TYPE_FLOAT:
-        return orc::Literal(double(datum.get_float()));
+        return {double(datum.get_float())};
     case PrimitiveType::TYPE_DOUBLE:
-        return orc::Literal(datum.get_double());
+        return {datum.get_double()};
     case PrimitiveType::TYPE_VARCHAR:
     case PrimitiveType::TYPE_CHAR:
     case PrimitiveType::TYPE_BINARY: {
         const Slice& slice = datum.get_slice();
-        return orc::Literal(slice.data, slice.size);
+        return {slice.data, slice.size};
     }
     case PrimitiveType::TYPE_DATE:
-        return orc::Literal(orc::PredicateDataType::DATE, native_date_to_orc_date(datum.get_date()));
+        return {orc::PredicateDataType::DATE, native_date_to_orc_date(datum.get_date())};
     case PrimitiveType::TYPE_DECIMAL:
     case PrimitiveType::TYPE_DECIMALV2: {
         const DecimalV2Value& value = datum.get_decimal();
-        return orc::Literal(to_orc128(value.value()), value.PRECISION, value.SCALE);
+        return {to_orc128(value.value()), value.PRECISION, value.SCALE};
     }
     case PrimitiveType::TYPE_DECIMAL32:
-        return orc::Literal(orc::Int128(datum.get_int32()), lit->type().precision, lit->type().scale);
+        return {orc::Int128(datum.get_int32()), lit->type().precision, lit->type().scale};
     case PrimitiveType::TYPE_DECIMAL64:
-        return orc::Literal(orc::Int128(datum.get_int64()), lit->type().precision, lit->type().scale);
+        return {orc::Int128(datum.get_int64()), lit->type().precision, lit->type().scale};
     case PrimitiveType::TYPE_DECIMAL128:
-        return orc::Literal(to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale);
+        return {to_orc128(datum.get_int128()), lit->type().precision, lit->type().scale};
     default:
         CHECK(false) << "failed to handle primitive type = " << std::to_string(ptype);
     }
@@ -1823,7 +1820,7 @@ void OrcChunkReader::_add_conjunct(const Expr* conjunct, std::unique_ptr<orc::Se
 
     Expr* slot = conjunct->get_child(0);
     DCHECK(slot->is_slotref());
-    ColumnRef* ref = down_cast<ColumnRef*>(slot);
+    auto* ref = down_cast<ColumnRef*>(slot);
     SlotId slot_id = ref->slot_id();
     std::string name = _slot_id_to_desc[slot_id]->col_name();
     orc::PredicateDataType pred_type = _supported_primitive_types[slot->type().type];
@@ -2227,7 +2224,7 @@ Status OrcChunkReader::apply_dict_filter_eval_cache(const std::unordered_map<Slo
         Filter& data = static_cast<BooleanColumn*>(data_filter.get())->get_data();
         DCHECK(data.size() == size);
 
-        orc::StringVectorBatch* batch = down_cast<orc::StringVectorBatch*>(batch_vec[pos]);
+        auto* batch = down_cast<orc::StringVectorBatch*>(batch_vec[pos]);
         for (uint32_t i = 0; i < size; i++) {
             int64_t code = batch->codes[i];
             DCHECK(code < dict_filter.size());
@@ -2285,7 +2282,7 @@ int OrcChunkReader::get_column_id_by_name(const std::string& name) const {
 // ======================================================================================
 
 ORCHdfsFileStream::ORCHdfsFileStream(RandomAccessFile* file, uint64_t length)
-        : _file(std::move(file)), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
+        : _file(file), _length(length), _cache_buffer(0), _cache_offset(0), _buffer_stream(_file) {
     SharedBufferedInputStream::CoalesceOptions options = {.max_dist_size = config::io_coalesce_read_max_distance_size,
                                                           .max_buffer_size = config::io_coalesce_read_max_buffer_size};
     _buffer_stream.set_coalesce_options(options);
@@ -2358,6 +2355,7 @@ void ORCHdfsFileStream::clearIORanges() {
 void ORCHdfsFileStream::setIORanges(std::vector<orc::InputStream::IORange>& io_ranges) {
     _buffer_stream_enabled = true;
     std::vector<SharedBufferedInputStream::IORange> bs_io_ranges;
+    bs_io_ranges.reserve(io_ranges.size());
     for (const auto& r : io_ranges) {
         bs_io_ranges.emplace_back(SharedBufferedInputStream::IORange{.offset = static_cast<int64_t>(r.offset),
                                                                      .size = static_cast<int64_t>(r.size)});

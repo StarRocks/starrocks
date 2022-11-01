@@ -1536,6 +1536,7 @@ public class SubqueryTest extends PlanTestBase {
                 "     limit: 2");
     }
 
+    @Test
     public void testSubqueryElimination() throws Exception {
         {
             // Two tables

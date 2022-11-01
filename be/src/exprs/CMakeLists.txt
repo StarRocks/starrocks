@@ -73,6 +73,7 @@ set(EXPR_FILES
   vectorized/literal.cpp
   vectorized/locate.cpp
   vectorized/map_element_expr.cpp
+  vectorized/map_functions.cpp
   vectorized/math_functions.cpp
   vectorized/percentile_functions.cpp
   vectorized/runtime_filter_bank.cpp
@@ -88,6 +89,7 @@ set(EXPR_FILES
   vectorized/java_function_call_expr.cpp
   vectorized/lambda_function.cpp
   vectorized/array_map_expr.cpp
+  vectorized/subfield_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

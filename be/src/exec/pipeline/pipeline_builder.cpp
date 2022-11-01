@@ -192,7 +192,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& sou
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(
         OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
-        std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator) {
+        const std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)>& merge_operators_generator) {
     DCHECK(should_interpolate_cache_operator(upstream_pipeline[0], downstream_pipeline[0]->plan_node_id()));
 
     const auto& cache_param = _fragment_context->cache_param();

@@ -25,12 +25,14 @@
 #include <utility>
 #include <vector>
 
+#include "cctz/time_zone.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
 #include "types/date_value.h"
+#include "util/timezone_utils.h"
 
 namespace starrocks {
 
@@ -47,7 +49,8 @@ public:
 // for vectorized call
 class VExtLiteral : public ExtLiteral {
 public:
-    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column);
+    VExtLiteral(PrimitiveType type, vectorized::ColumnPtr column,
+                const std::string& timezone = TimezoneUtils::default_time_zone);
 
     VExtLiteral() = default;
     const std::string& to_string() const override { return _value; }
@@ -134,7 +137,7 @@ struct ExtFunction : public ExtPredicate {
 
 class EsPredicate {
 public:
-    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool);
+    EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, std::string timezone, ObjectPool* pool);
     ~EsPredicate();
     const std::vector<ExtPredicate*>& get_predicate_list();
     Status build_disjuncts_list(bool use_vectorized = true);
@@ -160,6 +163,7 @@ private:
     const TupleDescriptor* _tuple_desc = nullptr;
     std::vector<ExtPredicate*> _disjuncts;
     Status _es_query_status;
+    const std::string _timezone;
     ObjectPool* _pool = nullptr;
     std::map<std::string, std::string> _field_context;
 };

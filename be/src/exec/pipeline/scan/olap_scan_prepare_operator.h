@@ -48,7 +48,7 @@ public:
                                    OlapScanContextFactoryPtr ctx_factory);
     ~OlapScanPrepareOperatorFactory() override = default;
 
-    bool with_morsels() const { return true; }
+    bool with_morsels() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

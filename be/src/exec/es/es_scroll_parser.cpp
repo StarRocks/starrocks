@@ -277,7 +277,7 @@ template <PrimitiveType type, typename CppType>
 void ScrollParser::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
         using ColumnType = typename vectorized::RunTimeColumnType<type>;
-        ColumnType* runtime_column = down_cast<ColumnType*>(column);
+        auto* runtime_column = down_cast<ColumnType*>(column);
         runtime_column->append(value);
     };
 
@@ -585,7 +585,7 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
         TimestampValue value;
         value.from_unixtime(col.GetInt64() / 1000, TimezoneUtils::default_time_zone);
         if constexpr (type == TYPE_DATE) {
-            DateValue date_val = DateValue(value);
+            auto date_val = DateValue(value);
             _append_data<TYPE_DATE>(column, date_val);
         } else if constexpr (type == TYPE_DATETIME) {
             _append_data<TYPE_DATETIME>(column, value);

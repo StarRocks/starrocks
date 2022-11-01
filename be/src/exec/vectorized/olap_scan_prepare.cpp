@@ -17,8 +17,7 @@
 #include "storage/vectorized_column_predicate.h"
 #include "types/date_value.hpp"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 static bool ignore_cast(const SlotDescriptor& slot, const Expr& expr) {
     if (slot.type().is_date_type() && expr.type().is_date_type()) {
@@ -146,7 +145,7 @@ static bool get_predicate_value(ObjectPool* obj_pool, const SlotDescriptor& slot
         // |column_ptr| will be released after this method return, have to ensure that
         // the corresponding external storage will not be deallocated while the slice
         // still been used.
-        const Slice* slice = reinterpret_cast<const Slice*>(data->raw_data());
+        const auto* slice = reinterpret_cast<const Slice*>(data->raw_data());
         std::string* str = obj_pool->add(new std::string(slice->data, slice->size));
         *value = *str;
     } else {
@@ -263,7 +262,7 @@ void OlapScanConjunctsManager::normalize_in_or_equal_predicate<starrocks::TYPE_D
                     }
 
                     for (const TimestampValue& ts : pred->hash_set()) {
-                        DateValue date = implicit_cast<DateValue>(ts);
+                        auto date = implicit_cast<DateValue>(ts);
                         if (implicit_cast<TimestampValue>(date) == ts) {
                             values.insert(date);
                         }
@@ -390,7 +389,7 @@ void OlapScanConjunctsManager::normalize_join_runtime_filter(const SlotDescripto
 
         if (rf->has_null()) continue;
 
-        const RuntimeBloomFilter<SlotType>* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
+        const auto* filter = down_cast<const RuntimeBloomFilter<SlotType>*>(rf);
         // If this column doesn't have other filter, we use join runtime filter
         // to fast comput row range in storage engine
         if (range->is_init_state()) {
@@ -524,7 +523,7 @@ struct ColumnRangeBuilder {
                 full_range.set_scale(slot->type().scale);
             }
             ColumnValueRangeType& v = LookupOrInsert(column_value_ranges, col_name, full_range);
-            RangeType& range = std::get<ColumnValueRange<value_type>>(v);
+            auto& range = std::get<ColumnValueRange<value_type>>(v);
             if constexpr (pt_is_decimal<limit_type>) {
                 range.set_precision(slot->type().precision);
                 range.set_scale(slot->type().scale);
@@ -751,5 +750,4 @@ Status OlapScanConjunctsManager::parse_conjuncts(bool scan_keys_unlimited, int32
     return Status::OK();
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

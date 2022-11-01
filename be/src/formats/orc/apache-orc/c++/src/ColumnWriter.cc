@@ -192,8 +192,8 @@ void ColumnWriter::writeIndex(std::vector<proto::Stream>& streams) const {
                 positions.push_back(entry->positions(j));
             }
             entry->clear_positions();
-            for (size_t j = 0; j != positions.size(); ++j) {
-                entry->add_positions(positions[j]);
+            for (unsigned long position : positions) {
+                entry->add_positions(position);
             }
         }
     }
@@ -289,7 +289,7 @@ StructColumnWriter::StructColumnWriter(const Type& type, const StreamsFactory& f
 
 void StructColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                              const char* incomingMask) {
-    const StructVectorBatch* structBatch = dynamic_cast<const StructVectorBatch*>(&rowBatch);
+    const auto* structBatch = dynamic_cast<const StructVectorBatch*>(&rowBatch);
     if (structBatch == nullptr) {
         throw InvalidArgument("Failed to cast to StructVectorBatch");
     }
@@ -436,11 +436,11 @@ IntegerColumnWriter::IntegerColumnWriter(const Type& type, const StreamsFactory&
 
 void IntegerColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                               const char* incomingMask) {
-    const LongVectorBatch* longBatch = dynamic_cast<const LongVectorBatch*>(&rowBatch);
+    const auto* longBatch = dynamic_cast<const LongVectorBatch*>(&rowBatch);
     if (longBatch == nullptr) {
         throw InvalidArgument("Failed to cast to LongVectorBatch");
     }
-    IntegerColumnStatisticsImpl* intStats = dynamic_cast<IntegerColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* intStats = dynamic_cast<IntegerColumnStatisticsImpl*>(colIndexStatistics.get());
     if (intStats == nullptr) {
         throw InvalidArgument("Failed to cast to IntegerColumnStatisticsImpl");
     }
@@ -529,11 +529,11 @@ ByteColumnWriter::ByteColumnWriter(const Type& type, const StreamsFactory& facto
 }
 
 void ByteColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) {
-    LongVectorBatch* byteBatch = dynamic_cast<LongVectorBatch*>(&rowBatch);
+    auto* byteBatch = dynamic_cast<LongVectorBatch*>(&rowBatch);
     if (byteBatch == nullptr) {
         throw InvalidArgument("Failed to cast to LongVectorBatch");
     }
-    IntegerColumnStatisticsImpl* intStats = dynamic_cast<IntegerColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* intStats = dynamic_cast<IntegerColumnStatisticsImpl*>(colIndexStatistics.get());
     if (intStats == nullptr) {
         throw InvalidArgument("Failed to cast to IntegerColumnStatisticsImpl");
     }
@@ -626,11 +626,11 @@ BooleanColumnWriter::BooleanColumnWriter(const Type& type, const StreamsFactory&
 
 void BooleanColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                               const char* incomingMask) {
-    LongVectorBatch* byteBatch = dynamic_cast<LongVectorBatch*>(&rowBatch);
+    auto* byteBatch = dynamic_cast<LongVectorBatch*>(&rowBatch);
     if (byteBatch == nullptr) {
         throw InvalidArgument("Failed to cast to LongVectorBatch");
     }
-    BooleanColumnStatisticsImpl* boolStats = dynamic_cast<BooleanColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* boolStats = dynamic_cast<BooleanColumnStatisticsImpl*>(colIndexStatistics.get());
     if (boolStats == nullptr) {
         throw InvalidArgument("Failed to cast to BooleanColumnStatisticsImpl");
     }
@@ -728,7 +728,7 @@ DoubleColumnWriter::DoubleColumnWriter(const Type& type, const StreamsFactory& f
 // Float columns use 4 bytes per value and double columns use 8 bytes.
 template <typename FLOAT_TYPE, typename INTEGER_TYPE>
 inline void encodeFloatNum(FLOAT_TYPE input, char* output) {
-    INTEGER_TYPE* intBits = reinterpret_cast<INTEGER_TYPE*>(&input);
+    auto* intBits = reinterpret_cast<INTEGER_TYPE*>(&input);
     for (size_t i = 0; i < sizeof(INTEGER_TYPE); ++i) {
         output[i] = static_cast<char>(((*intBits) >> (8 * i)) & 0xff);
     }
@@ -736,11 +736,11 @@ inline void encodeFloatNum(FLOAT_TYPE input, char* output) {
 
 void DoubleColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                              const char* incomingMask) {
-    const DoubleVectorBatch* dblBatch = dynamic_cast<const DoubleVectorBatch*>(&rowBatch);
+    const auto* dblBatch = dynamic_cast<const DoubleVectorBatch*>(&rowBatch);
     if (dblBatch == nullptr) {
         throw InvalidArgument("Failed to cast to DoubleVectorBatch");
     }
-    DoubleColumnStatisticsImpl* doubleStats = dynamic_cast<DoubleColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* doubleStats = dynamic_cast<DoubleColumnStatisticsImpl*>(colIndexStatistics.get());
     if (doubleStats == nullptr) {
         throw InvalidArgument("Failed to cast to DoubleColumnStatisticsImpl");
     }
@@ -816,7 +816,7 @@ public:
         size_t length;
     };
 
-    SortedStringDictionary() {}
+    SortedStringDictionary() = default;
 
     // insert a new string into dictionary, return its insertion order
     size_t insert(const char* data, size_t len);
@@ -869,7 +869,7 @@ size_t SortedStringDictionary::insert(const char* str, size_t len) {
         data.emplace_back(len);
         memcpy(data.back().data(), str, len);
         // update dictionary entry to link pointer to internal storage
-        DictEntry* entry = const_cast<DictEntry*>(&(ret.first->first));
+        auto* entry = const_cast<DictEntry*>(&(ret.first->first));
         entry->data = data.back().data();
         totalLength += len;
     }
@@ -903,8 +903,8 @@ void SortedStringDictionary::reorder(std::vector<int64_t>& idxBuffer) const {
     }
 
     // do the transformation
-    for (size_t i = 0; i != idxBuffer.size(); ++i) {
-        idxBuffer[i] = static_cast<int64_t>(mapping[static_cast<size_t>(idxBuffer[i])]);
+    for (long& i : idxBuffer) {
+        i = static_cast<int64_t>(mapping[static_cast<size_t>(i)]);
     }
 }
 
@@ -982,7 +982,7 @@ protected:
      */
     SortedStringDictionary dictionary;
     // whether or not dictionary checking is done
-    bool doneDictionaryCheck;
+    bool doneDictionaryCheck{false};
     // whether or not it should be used
     bool useDictionary;
     // keys in the dictionary should not exceed this ratio
@@ -998,7 +998,7 @@ StringColumnWriter::StringColumnWriter(const Type& type, const StreamsFactory& f
           useCompression(options.getCompression() != CompressionKind_NONE),
           streamsFactory(factory),
           alignedBitPacking(options.getAlignedBitpacking()),
-          doneDictionaryCheck(false),
+
           useDictionary(options.getEnableDictionary()),
           dictSizeThreshold(options.getDictionaryKeySizeThreshold()) {
     if (type.getKind() == TypeKind::BINARY) {
@@ -1020,12 +1020,12 @@ StringColumnWriter::StringColumnWriter(const Type& type, const StreamsFactory& f
 
 void StringColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                              const char* incomingMask) {
-    const StringVectorBatch* stringBatch = dynamic_cast<const StringVectorBatch*>(&rowBatch);
+    const auto* stringBatch = dynamic_cast<const StringVectorBatch*>(&rowBatch);
     if (stringBatch == nullptr) {
         throw InvalidArgument("Failed to cast to StringVectorBatch");
     }
 
-    StringColumnStatisticsImpl* strStats = dynamic_cast<StringColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* strStats = dynamic_cast<StringColumnStatisticsImpl*>(colIndexStatistics.get());
     if (strStats == nullptr) {
         throw InvalidArgument("Failed to cast to StringColumnStatisticsImpl");
     }
@@ -1043,7 +1043,7 @@ void StringColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint6
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {
         if (!notNull || notNull[i]) {
-            const size_t len = static_cast<size_t>(length[i]);
+            const auto len = static_cast<size_t>(length[i]);
             if (useDictionary) {
                 size_t index = dictionary.insert(data[i], len);
                 dictionary.idxInDictBuffer.push_back(static_cast<int64_t>(index));
@@ -1259,9 +1259,9 @@ void StringColumnWriter::fallbackToDirectEncoding() {
 
     // store each length of the data into a vector
     const SortedStringDictionary::DictEntry* dictEntry = nullptr;
-    for (uint64_t i = 0; i != dictionary.idxInDictBuffer.size(); ++i) {
+    for (long i : dictionary.idxInDictBuffer) {
         // write one row data in direct encoding
-        dictEntry = entries[static_cast<size_t>(dictionary.idxInDictBuffer[i])];
+        dictEntry = entries[static_cast<size_t>(i)];
         directDataStream->write(dictEntry->data, dictEntry->length);
         directLengthEncoder->write(static_cast<int64_t>(dictEntry->length));
     }
@@ -1354,12 +1354,12 @@ private:
 };
 
 void CharColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) {
-    StringVectorBatch* charsBatch = dynamic_cast<StringVectorBatch*>(&rowBatch);
+    auto* charsBatch = dynamic_cast<StringVectorBatch*>(&rowBatch);
     if (charsBatch == nullptr) {
         throw InvalidArgument("Failed to cast to StringVectorBatch");
     }
 
-    StringColumnStatisticsImpl* strStats = dynamic_cast<StringColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* strStats = dynamic_cast<StringColumnStatisticsImpl*>(colIndexStatistics.get());
     if (strStats == nullptr) {
         throw InvalidArgument("Failed to cast to StringColumnStatisticsImpl");
     }
@@ -1374,7 +1374,7 @@ void CharColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     for (uint64_t i = 0; i < numValues; ++i) {
         if (!notNull || notNull[i]) {
             const char* charData = nullptr;
-            uint64_t originLength = static_cast<uint64_t>(length[i]);
+            auto originLength = static_cast<uint64_t>(length[i]);
             uint64_t charLength = Utf8Utils::charLength(data[i], originLength);
             if (charLength >= maxLength) {
                 charData = data[i];
@@ -1427,12 +1427,12 @@ private:
 
 void VarCharColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                               const char* incomingMask) {
-    StringVectorBatch* charsBatch = dynamic_cast<StringVectorBatch*>(&rowBatch);
+    auto* charsBatch = dynamic_cast<StringVectorBatch*>(&rowBatch);
     if (charsBatch == nullptr) {
         throw InvalidArgument("Failed to cast to StringVectorBatch");
     }
 
-    StringColumnStatisticsImpl* strStats = dynamic_cast<StringColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* strStats = dynamic_cast<StringColumnStatisticsImpl*>(colIndexStatistics.get());
     if (strStats == nullptr) {
         throw InvalidArgument("Failed to cast to StringColumnStatisticsImpl");
     }
@@ -1486,12 +1486,12 @@ public:
 
 void BinaryColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                              const char* incomingMask) {
-    StringVectorBatch* binBatch = dynamic_cast<StringVectorBatch*>(&rowBatch);
+    auto* binBatch = dynamic_cast<StringVectorBatch*>(&rowBatch);
     if (binBatch == nullptr) {
         throw InvalidArgument("Failed to cast to StringVectorBatch");
     }
 
-    BinaryColumnStatisticsImpl* binStats = dynamic_cast<BinaryColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* binStats = dynamic_cast<BinaryColumnStatisticsImpl*>(colIndexStatistics.get());
     if (binStats == nullptr) {
         throw InvalidArgument("Failed to cast to BinaryColumnStatisticsImpl");
     }
@@ -1504,7 +1504,7 @@ void BinaryColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint6
 
     uint64_t count = 0;
     for (uint64_t i = 0; i < numValues; ++i) {
-        uint64_t unsignedLength = static_cast<uint64_t>(length[i]);
+        auto unsignedLength = static_cast<uint64_t>(length[i]);
         if (!notNull || notNull[i]) {
             directDataStream->write(data[i], unsignedLength);
 
@@ -1586,12 +1586,12 @@ static int64_t formatNano(int64_t nanos) {
 
 void TimestampColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                                 const char* incomingMask) {
-    TimestampVectorBatch* tsBatch = dynamic_cast<TimestampVectorBatch*>(&rowBatch);
+    auto* tsBatch = dynamic_cast<TimestampVectorBatch*>(&rowBatch);
     if (tsBatch == nullptr) {
         throw InvalidArgument("Failed to cast to TimestampVectorBatch");
     }
 
-    TimestampColumnStatisticsImpl* tsStats = dynamic_cast<TimestampColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* tsStats = dynamic_cast<TimestampColumnStatisticsImpl*>(colIndexStatistics.get());
     if (tsStats == nullptr) {
         throw InvalidArgument("Failed to cast to TimestampColumnStatisticsImpl");
     }
@@ -1685,12 +1685,12 @@ DateColumnWriter::DateColumnWriter(const Type& type, const StreamsFactory& facto
 }
 
 void DateColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) {
-    const LongVectorBatch* longBatch = dynamic_cast<const LongVectorBatch*>(&rowBatch);
+    const auto* longBatch = dynamic_cast<const LongVectorBatch*>(&rowBatch);
     if (longBatch == nullptr) {
         throw InvalidArgument("Failed to cast to LongVectorBatch");
     }
 
-    DateColumnStatisticsImpl* dateStats = dynamic_cast<DateColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* dateStats = dynamic_cast<DateColumnStatisticsImpl*>(colIndexStatistics.get());
     if (dateStats == nullptr) {
         throw InvalidArgument("Failed to cast to DateColumnStatisticsImpl");
     }
@@ -1763,12 +1763,12 @@ Decimal64ColumnWriter::Decimal64ColumnWriter(const Type& type, const StreamsFact
 
 void Decimal64ColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                                 const char* incomingMask) {
-    const Decimal64VectorBatch* decBatch = dynamic_cast<const Decimal64VectorBatch*>(&rowBatch);
+    const auto* decBatch = dynamic_cast<const Decimal64VectorBatch*>(&rowBatch);
     if (decBatch == nullptr) {
         throw InvalidArgument("Failed to cast to Decimal64VectorBatch");
     }
 
-    DecimalColumnStatisticsImpl* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
     if (decStats == nullptr) {
         throw InvalidArgument("Failed to cast to DecimalColumnStatisticsImpl");
     }
@@ -1883,12 +1883,12 @@ Decimal64ColumnWriterV2::Decimal64ColumnWriterV2(const Type& type, const Streams
 
 void Decimal64ColumnWriterV2::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                                   const char* incomingMask) {
-    const Decimal64VectorBatch* decBatch = dynamic_cast<const Decimal64VectorBatch*>(&rowBatch);
+    const auto* decBatch = dynamic_cast<const Decimal64VectorBatch*>(&rowBatch);
     if (decBatch == nullptr) {
         throw InvalidArgument("Failed to cast to Decimal64VectorBatch");
     }
 
-    DecimalColumnStatisticsImpl* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
     if (decStats == nullptr) {
         throw InvalidArgument("Failed to cast to DecimalColumnStatisticsImpl");
     }
@@ -1979,12 +1979,12 @@ Int128 zigZagInt128(const Int128& value) {
 
 void Decimal128ColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                                  const char* incomingMask) {
-    const Decimal128VectorBatch* decBatch = dynamic_cast<const Decimal128VectorBatch*>(&rowBatch);
+    const auto* decBatch = dynamic_cast<const Decimal128VectorBatch*>(&rowBatch);
     if (decBatch == nullptr) {
         throw InvalidArgument("Failed to cast to Decimal128VectorBatch");
     }
 
-    DecimalColumnStatisticsImpl* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
+    auto* decStats = dynamic_cast<DecimalColumnStatisticsImpl*>(colIndexStatistics.get());
     if (decStats == nullptr) {
         throw InvalidArgument("Failed to cast to DecimalColumnStatisticsImpl");
     }
@@ -2085,7 +2085,7 @@ ListColumnWriter::~ListColumnWriter() {
 }
 
 void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) {
-    ListVectorBatch* listBatch = dynamic_cast<ListVectorBatch*>(&rowBatch);
+    auto* listBatch = dynamic_cast<ListVectorBatch*>(&rowBatch);
     if (listBatch == nullptr) {
         throw InvalidArgument("Failed to cast to ListVectorBatch");
     }
@@ -2095,8 +2095,8 @@ void ListColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_
     int64_t* offsets = listBatch->offsets.data() + offset;
     const char* notNull = listBatch->hasNulls ? listBatch->notNull.data() + offset : nullptr;
 
-    uint64_t elemOffset = static_cast<uint64_t>(offsets[0]);
-    uint64_t totalNumValues = static_cast<uint64_t>(offsets[numValues] - offsets[0]);
+    auto elemOffset = static_cast<uint64_t>(offsets[0]);
+    auto totalNumValues = static_cast<uint64_t>(offsets[numValues] - offsets[0]);
 
     // translate offsets to lengths
     for (uint64_t i = 0; i != numValues; ++i) {
@@ -2288,7 +2288,7 @@ MapColumnWriter::~MapColumnWriter() {
 }
 
 void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) {
-    MapVectorBatch* mapBatch = dynamic_cast<MapVectorBatch*>(&rowBatch);
+    auto* mapBatch = dynamic_cast<MapVectorBatch*>(&rowBatch);
     if (mapBatch == nullptr) {
         throw InvalidArgument("Failed to cast to MapVectorBatch");
     }
@@ -2298,8 +2298,8 @@ void MapColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t
     int64_t* offsets = mapBatch->offsets.data() + offset;
     const char* notNull = mapBatch->hasNulls ? mapBatch->notNull.data() + offset : nullptr;
 
-    uint64_t elemOffset = static_cast<uint64_t>(offsets[0]);
-    uint64_t totalNumValues = static_cast<uint64_t>(offsets[numValues] - offsets[0]);
+    auto elemOffset = static_cast<uint64_t>(offsets[0]);
+    auto totalNumValues = static_cast<uint64_t>(offsets[numValues] - offsets[0]);
 
     // translate offsets to lengths
     for (uint64_t i = 0; i != numValues; ++i) {
@@ -2517,7 +2517,7 @@ UnionColumnWriter::UnionColumnWriter(const Type& type, const StreamsFactory& fac
 
 void UnionColumnWriter::add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
                             const char* incomingMask) {
-    UnionVectorBatch* unionBatch = dynamic_cast<UnionVectorBatch*>(&rowBatch);
+    auto* unionBatch = dynamic_cast<UnionVectorBatch*>(&rowBatch);
     if (unionBatch == nullptr) {
         throw InvalidArgument("Failed to cast to UnionVectorBatch");
     }
