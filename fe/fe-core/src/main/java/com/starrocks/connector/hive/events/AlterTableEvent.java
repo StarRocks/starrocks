@@ -6,9 +6,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
-import com.starrocks.connector.hive.HivePartitionName;
 import com.starrocks.connector.hive.HiveTableName;
+import com.starrocks.connector.hive.Partition;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.Table;
@@ -95,7 +96,11 @@ public class AlterTableEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.existIncache(getEventType(), HiveTableName.of(dbName, tblName));
+        if (isResourceMappingCatalog(catalogName)) {
+            return true;
+        } else {
+            return cache.isTablePresent(HiveTableName.of(dbName, tblName));
+        }
     }
 
     @Override
@@ -128,10 +133,16 @@ public class AlterTableEvent extends MetastoreTableEvent {
 
         try {
             HiveTable updatedTable = HiveMetastoreApiConverter.toHiveTable(tableAfter, catalogName);
-            cache.refreshCacheByEvent(getEventType(), HiveTableName.of(dbName, tblName),
-                    HivePartitionName.of(dbName, tblName, Lists.newArrayList()),
-                    toHiveCommonStats(hmsTbl.getParameters()),
-                    HiveMetastoreApiConverter.toPartition(hmsTbl.getSd(), hmsTbl.getParameters()), updatedTable);
+            if (updatedTable.isUnPartitioned()) {
+                HiveCommonStats hiveCommonStats = toHiveCommonStats(tableAfter.getParameters());
+                Partition partition = HiveMetastoreApiConverter.toPartition(tableAfter.getSd(), tableAfter.getParameters());
+                LOG.info("Start to process ALTER_TABLE event on {}.{}.{}. HveCommonStats:[{}], Partition:[{}]",
+                        catalogName, dbName, tblName, hiveCommonStats, partition);
+                cache.refreshTableByEvent(updatedTable, hiveCommonStats, partition);
+            } else {
+                LOG.info("Start to process ALTER_TABLE event on {}.{}.{}", catalogName, dbName, tblName);
+                cache.refreshTableByEvent(updatedTable, null, null);
+            }
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

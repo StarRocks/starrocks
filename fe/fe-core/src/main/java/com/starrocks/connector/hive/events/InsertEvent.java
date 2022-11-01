@@ -4,7 +4,9 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HivePartitionName;
 import com.starrocks.connector.hive.HiveTableName;
@@ -43,12 +45,10 @@ public class InsertEvent extends MetastoreTableEvent {
             hmsTbl = Preconditions.checkNotNull(insertMessage.getTableObj());
             insertPartition = insertMessage.getPtnObj();
             if (insertPartition != null) {
-                hivePartitionNames.clear();
-                hivePartitionNames.add(new HivePartitionName(dbName, tblName,
-                        Lists.newArrayList(FileUtils.makePartName(
-                                hmsTbl.getPartitionKeys().stream()
-                                        .map(FieldSchema::getName)
-                                        .collect(Collectors.toList()), Lists.newArrayList(insertPartition.getValues())))));
+                List<String> partitionColNames = hmsTbl.getPartitionKeys().stream()
+                        .map(FieldSchema::getName).collect(Collectors.toList());
+                hivePartitionNames.add(HivePartitionName.of(dbName, tblName,
+                        FileUtils.makePartName(partitionColNames, insertPartition.getValues())));
             }
         } catch (Exception e) {
             LOG.warn("The InsertEvent of the current hive version cannot be parsed, " +
@@ -84,12 +84,10 @@ public class InsertEvent extends MetastoreTableEvent {
     @Override
     protected boolean existInCache() {
         if (isPartitionTbl()) {
-            List<String> partVals = insertPartition.getValues();
-            HivePartitionName hivePartitionName = new HivePartitionName(dbName, tblName, partVals);
-            return cache.existIncache(INSERT, hivePartitionName);
+            return cache.isPartitionPresent(getHivePartitionKey());
         } else {
             HiveTableName hiveTableName = HiveTableName.of(dbName, tblName);
-            return cache.existIncache(INSERT, hiveTableName);
+            return cache.isTablePresent(hiveTableName);
         }
     }
 
@@ -109,12 +107,22 @@ public class InsertEvent extends MetastoreTableEvent {
         }
 
         try {
-            HivePartitionName hivePartitionName = new HivePartitionName(dbName, tblName, insertPartition.getValues());
-            HiveTableName hiveTableName = HiveTableName.of(dbName, tblName);
-            cache.refreshCacheByEvent(INSERT, hiveTableName, hivePartitionName,
-                    toHiveCommonStats(hmsTbl.getParameters()),
-                    HiveMetastoreApiConverter.toPartition(hmsTbl.getSd(), hmsTbl.getParameters()),
-                    HiveMetastoreApiConverter.toHiveTable(hmsTbl, catalogName));
+            HiveTable hiveTable = HiveMetastoreApiConverter.toHiveTable(hmsTbl, catalogName);
+            com.starrocks.connector.hive.Partition partition;
+            HiveCommonStats hiveCommonStats;
+            if (hiveTable.isUnPartitioned()) {
+                partition = HiveMetastoreApiConverter.toPartition(hmsTbl.getSd(), hmsTbl.getParameters());
+                hiveCommonStats = toHiveCommonStats(hmsTbl.getParameters());
+                LOG.info("Start to process INSERT_EVENT on {}.{}.{}. Partition:[{}], HveCommonStats:[{}]",
+                        catalogName, dbName, tblName, partition, hiveCommonStats);
+                cache.refreshTableByEvent(hiveTable, hiveCommonStats, partition);
+            } else {
+                partition = HiveMetastoreApiConverter.toPartition(insertPartition.getSd(), insertPartition.getParameters());
+                hiveCommonStats = toHiveCommonStats(insertPartition.getParameters());
+                LOG.info("Start to process INSERT_EVENT event on {}.{}.{}.{}. Partition:[{}], HveCommonStats:[{}]",
+                        catalogName, dbName, tblName, getHivePartitionKey(), partition, hiveCommonStats);
+                cache.refreshPartitionByEvent(getHivePartitionKey(), hiveCommonStats, partition);
+            }
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

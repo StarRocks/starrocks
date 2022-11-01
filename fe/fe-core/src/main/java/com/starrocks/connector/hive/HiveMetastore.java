@@ -174,9 +174,9 @@ public class HiveMetastore implements IHiveMetastore {
 
             return response;
         } catch (MetastoreNotificationFetchException e) {
-            throw new MetastoreNotificationFetchException(
-                    "Unable to fetch notifications from metastore. Last synced event id is "
-                            + lastSyncedEventId, e);
+            LOG.error("Unable to fetch notifications from metastore. Last synced event id is {}", lastSyncedEventId, e);
+            throw new MetastoreNotificationFetchException("Unable to fetch notifications from metastore. " +
+                    "Last synced event id is " + lastSyncedEventId, e);
         }
     }
 }

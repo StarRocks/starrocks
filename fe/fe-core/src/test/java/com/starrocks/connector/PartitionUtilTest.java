@@ -3,6 +3,7 @@
 package com.starrocks.connector;
 
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
@@ -18,6 +19,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 import static com.starrocks.connector.PartitionUtil.createPartitionKey;
@@ -86,5 +88,13 @@ public class PartitionUtilTest {
                 partitionValues, Optional.of(partitionNames));
         Assert.assertEquals("HivePartitionName{databaseName='db', tableName='table'," +
                 " partitionValues=[1, 2, 3], partitionNames=Optional[a=1/b=2/c=3]}", hivePartitionName.toString());
+
+        Map<String, String> partitionColToValue = Maps.newHashMap();
+        partitionColToValue.put("k1", "1");
+        Assert.assertEquals("k1=1", PartitionUtil.toHivePartitionName(partitionColToValue));
+
+        partitionColToValue.put("k3", "c");
+        Assert.assertEquals("k1=1/k3=c", PartitionUtil.toHivePartitionName(partitionColToValue));
     }
+
 }
