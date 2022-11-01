@@ -41,7 +41,7 @@ inline constexpr PrimitiveType ImmediateAvgResultPT<PT, AvgDecimal64PTGuard<PT>>
 
 // Only for compile
 template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateAvgResultPT<PT, BinaryPTGuard<PT>> = TYPE_DOUBLE;
+inline constexpr PrimitiveType ImmediateAvgResultPT<PT, StringPTGuard<PT>> = TYPE_DOUBLE;
 
 template <typename T>
 struct AvgAggregateState {

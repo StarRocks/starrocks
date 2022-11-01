@@ -98,7 +98,7 @@ struct MaxByElement {
 };
 
 template <PrimitiveType PT>
-struct MaxByAggregateData<PT, BinaryPTGuard<PT>> {
+struct MaxByAggregateData<PT, StringPTGuard<PT>> {
     raw::RawVector<uint8_t> buffer_result;
     raw::RawVector<uint8_t> buffer_max;
     int32_t size = -1;
@@ -112,7 +112,7 @@ struct MaxByAggregateData<PT, BinaryPTGuard<PT>> {
 };
 
 template <PrimitiveType PT>
-struct MaxByElement<PT, MaxByAggregateData<PT>, BinaryPTGuard<PT>> {
+struct MaxByElement<PT, MaxByAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(MaxByAggregateData<PT>& state, Column* col, size_t row_num, const Slice& right) const {
         if (!state.has_value() || state.slice_max().compare(right) < 0) {
             state.buffer_result.resize(col->serialize_size(row_num));
@@ -263,7 +263,7 @@ public:
 };
 
 template <PrimitiveType PT, typename State, class OP>
-class MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>, BinaryPTGuard<PT>> final
+class MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxByAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {

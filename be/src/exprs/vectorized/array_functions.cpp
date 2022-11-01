@@ -1079,7 +1079,7 @@ public:
                 ResultType result;
 
                 size_t index;
-                if constexpr (!pt_is_binary<value_type>) {
+                if constexpr (!pt_is_string<value_type>) {
                     if constexpr (is_min) {
                         result = RunTimeTypeLimits<value_type>::max_value();
                     } else {
@@ -1121,7 +1121,7 @@ public:
                     }
                 }
 
-                if constexpr (!pt_is_binary<value_type>) {
+                if constexpr (!pt_is_string<value_type>) {
                     if (has_data) {
                         result_column->append(result);
                     } else {

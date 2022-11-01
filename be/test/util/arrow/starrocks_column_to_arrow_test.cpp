@@ -48,7 +48,7 @@ void compare_arrow_value(const RunTimeCppType<PT>& datum, const ArrowTypeIdToArr
         ASSERT_EQ(data_array->Value(i), datum);
     } else if constexpr (pt_is_largeint<PT>) {
         ASSERT_EQ(data_array->GetString(i), LargeIntValue::to_string(datum));
-    } else if constexpr (pt_is_binary<PT> || pt_is_date_or_datetime<PT>) {
+    } else if constexpr (pt_is_string<PT> || pt_is_date_or_datetime<PT>) {
         ASSERT_EQ(data_array->GetString(i), datum.to_string());
     } else if constexpr (pt_is_hll<PT>) {
         std::string s;
