@@ -13,8 +13,11 @@ import com.starrocks.analysis.GroupingFunctionCallExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
@@ -407,4 +410,44 @@ public class AnalyzerUtils {
             return null;
         }
     }
+
+    // For char and varchar types, use the inferred length if the length can be inferred,
+    // otherwise (include null type) use the longest varchar value.
+    // For double and float types, since they may be selected as key columns,
+    // the key column must be an exact value, so we unified into a default decimal type.
+    public static Type transformType(Type srcType) {
+        Type newType;
+        if (srcType.isScalarType()) {
+            if (PrimitiveType.VARCHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.CHAR == srcType.getPrimitiveType() ||
+                    PrimitiveType.NULL_TYPE == srcType.getPrimitiveType()) {
+                int len = ScalarType.MAX_VARCHAR_LENGTH;
+                if (srcType instanceof ScalarType) {
+                    ScalarType scalarType = (ScalarType) srcType;
+                    if (scalarType.getLength() > 0 && scalarType.isAssignedStrLenInColDefinition()) {
+                        len = scalarType.getLength();
+                    }
+                }
+                ScalarType stringType = ScalarType.createVarcharType(len);
+                stringType.setAssignedStrLenInColDefinition();
+                newType = stringType;
+            } else if (PrimitiveType.FLOAT == srcType.getPrimitiveType() ||
+                    PrimitiveType.DOUBLE == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(PrimitiveType.DECIMAL128, 38, 9);
+            } else if (PrimitiveType.DECIMAL128 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL64 == srcType.getPrimitiveType() ||
+                    PrimitiveType.DECIMAL32 == srcType.getPrimitiveType()) {
+                newType = ScalarType.createDecimalV3Type(srcType.getPrimitiveType(),
+                        srcType.getPrecision(), srcType.getDecimalDigits());
+            } else {
+                newType = ScalarType.createType(srcType.getPrimitiveType());
+            }
+        } else if (srcType.isArrayType()) {
+            newType = new ArrayType(transformType(((ArrayType) srcType).getItemType()));
+        } else {
+            throw new SemanticException("Unsupported CTAS transform type: %s", srcType.getPrimitiveType());
+        }
+        return newType;
+    }
+
 }
