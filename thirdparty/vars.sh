@@ -156,7 +156,7 @@ RAPIDJSON_MD5SUM="badd12c511e081fec6c89c43a7027bce"
 SIMDJSON_DOWNLOAD="https://github.com/simdjson/simdjson/archive/refs/tags/v2.2.0.tar.gz"
 SIMDJSON_NAME=simdjson-v2.2.0.tar.gz
 SIMDJSON_SOURCE=simdjson-2.2.0
-SIMDJSON_MD5SUM="5bb34cca7087a99c450dbdfe406bdc7d"
+SIMDJSON_MD5SUM="9bd0ced53281484d8842a9429065943d"
 
 # curl
 CURL_DOWNLOAD="https://curl.se/download/curl-7.79.0.tar.gz"
