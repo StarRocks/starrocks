@@ -61,9 +61,6 @@ private:
 
     // =====================================
     bool _is_finished = false;
-    ObjectPool _obj_pool;
-    ObjectPool* _pool = &_obj_pool;
-    RuntimeState* _runtime_state = nullptr;
 
     MysqlScannerParam _my_param;
     // Name of Mysql table
