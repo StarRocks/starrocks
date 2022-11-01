@@ -58,7 +58,7 @@ class CachedFdInputStream : public io::FdInputStream {
 public:
     explicit CachedFdInputStream(FdCache::Handle* h) : io::FdInputStream(FdCache::fd(h)), _h(h) {}
 
-    ~CachedFdInputStream() { FdCache::Instance()->release(_h); }
+    ~CachedFdInputStream() override { FdCache::Instance()->release(_h); }
 
 private:
     FdCache::Handle* _h;
