@@ -104,7 +104,7 @@ public:
               _max_capacity(max_capacity),
               _default_capacity(default_capacity),
               _mem_limit(mem_limit) {}
-              
+
     ~DynamicChunkBufferLimiter() override = default;
 
     void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows, size_t max_chunk_rows) override;
