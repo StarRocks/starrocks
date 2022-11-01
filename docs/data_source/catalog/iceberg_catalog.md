@@ -1,6 +1,6 @@
 # Iceberg catalog
 
-This topic describes how to create an Iceberg catalog, and how to configure your StarRock cluster for querying data from Apache Iceberg.
+This topic describes how to create an Iceberg catalog, and how to configure your StarRocks cluster for querying data from Apache Iceberg.
 
 An Iceberg catalog is an external catalog, which enables you to query data from Iceberg without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Iceberg when you query Iceberg data:
 
@@ -59,7 +59,7 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 
 If you use a custom metadata service for your Iceberg cluster, you need to create a custom catalog class and implement the related interface in StarRocks so that StarRocks can access the custom metadata service. The custom catalog class needs to inherit the abstract class BaseMetastoreCatalog. For information about how to create a custom catalog in StarRocks, see [IcebergHiveCatalog](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/external/iceberg/IcebergHiveCatalog.java). After the custom catalog is created, package the catalog and its related files, and then place them under the **fe/lib** path of each FE. Then restart each FE.
 
-> Note: The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRock.
+> Note: The class name of the custom catalog cannot be duplicated with the name of the class that already exists in StarRocks.
 
 After you complete the preceding operations, you can create an Iceberg catalog and configure its properties.
 
