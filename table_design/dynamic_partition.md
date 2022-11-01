@@ -30,33 +30,26 @@ PROPERTIES(
 );
 ```
 
-`PROPERTIES` 配置项如下：
+ **动态分区相关属性 `PROPERTIES`：**
 
 - `dynamic_partition.enable`：是否开启动态分区特性，取值为 `TRUE` 或 `FALSE`。默认值为 `TRUE`。
 
-- `dynamic_partition.time_unit`：必填，调度动态分区特性的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`，表示按天、周或月调度动态分区特性。并且，时间粒度必须对应分区名后缀格式。具体对应规则如下：
-  - 取值为 `DAY` 时，分区名后缀的格式应该为 yyyyMMdd，例如 `20200321`。
-  
-    ```SQL
+- `dynamic_partition.time_unit`：必填，动态分区的时间粒度，取值为 `DAY`、`WEEK` 或 `MONTH`。并且，时间粒度会决定动态创建的分区名后缀格式。
+  - 取值为 `DAY` 时，动态创建的分区名后缀格式为 yyyyMMdd，例如 `20200321`。
+  - 取值为 `WEEK` 时，动态创建的分区名后缀格式为 yyyy_ww，例如 `2020_13` 代表 2020 年第 13 周。
+  - 取值为 `MONTH` 时，动态创建的分区名后缀格式为 yyyyMM，例如 `202003`。
 
-    PARTITION BY RANGE(event_day)(
-    PARTITION p20200321 VALUES LESS THAN ("2020-03-22"),
-    PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),
-    PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
-    PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
-    )
-    ```
+- `dynamic_partition.start`：动态分区的起始偏移，取值范围为负整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，分区范围在此偏移之前的分区将会被删除。如果不填写，则默认为 `Integer.MIN_VALUE`，即 `-2147483648`，表示不删除历史分区。
 
-  - 取值为 `WEEK` 时，分区名后缀的格式应该为 yyyy_ww，例如 `2020_13` 代表 2020 年第 13 周。
-  - 取值为 `MONTH` 时，分区名后缀的格式应该为 yyyyMM，例如 `202003`。
+- `dynamic_partition.end`：必填，动态分区的结束偏移，取值范围为正整数。根据 `dynamic_partition.time_unit` 属性的不同，以当天（周/月）为基准，提前创建对应范围的分区。
 
-- `dynamic_partition.start`：必填，动态分区的开始时间。以当天为基准，超过该时间范围的分区将会被删除。取值范围为小于 0 的负整数，最大值为 **-1**。默认值为 **Integer.MIN_VALUE**，即 -2147483648。
+- `dynamic_partition.prefix`: 动态分区的前缀名，默认值为 `p`。
 
-- `dynamic_partition.end`：必填，动态分区的结束时间。 以当天为基准，提前创建指定数量的分区。取值范围为大于 0 的正整数，最小值为 **1**。
+- `dynamic_partition.buckets`: 动态分区的分桶数量，默认与 BUCKETS  保留字指定的分桶数量保持一致。
 
-- `dynamic_partition.prefix`: 动态分区的前缀名，默认值为 **p**。
+**动态分区相关 FE 配置项：**
 
-- `dynamic_partition.buckets`: 动态分区的分桶数量，默认与 BUCKETS 关键词指定的分桶数量保持一致。
+`dynamic_partition_check_interval_seconds`：FE 配置项，动态分区检查的时间周期，默认为 600，单位为 s，即每10分钟检查一次分区情况是否满足`PROPERTIES`中动态分区属性，如不满足，则会自动创建和删除分区。
 
 ## 查看表当前的分区情况
 
@@ -92,22 +85,3 @@ ALTER TABLE site_access SET("dynamic_partition.enable"="true");
 > - 可以执行 SHOW CREATE TABLE 命令，查看表的动态分区属性。
 >
 > - ALTER TABLE 也适用于修改 `PEROPERTIES` 中的其他配置项。
-
-## 使用说明
-
-开启动态分区特性，相当于将创建分区的判断逻辑交由 StarRocks 完成。因此创建表时，必须保证动态分区配置项 `dynamic_partition.time_unit` 指定的时间粒度与分区名后缀格式对应，否则创建表会失败。具体对应规则如下：
-
-- `dynamic_partition.time_unit` 指定为 `DAY` 时，分区名后缀的格式应该为 yyyyMMdd，例如 `20200325`。
-
-```SQL
-PARTITION BY RANGE(event_day)(
-PARTITION p20200321 VALUES LESS THAN ("2020-03-22"),
-PARTITION p20200322 VALUES LESS THAN ("2020-03-23"),
-PARTITION p20200323 VALUES LESS THAN ("2020-03-24"),
-PARTITION p20200324 VALUES LESS THAN ("2020-03-25")
-)
-```
-
-- `dynamic_partition.time_unit`指定为 `WEEK` 时，分区名后缀的格式应该为 yyyy_ww，例如 `2020_13`，代表 2020 年第 13 周。
-
-- `dynamic_partition.time_unit`指定为 `MONTH` 时，分区名后缀的格式应该为 yyyyMM，例如 `202003`。
