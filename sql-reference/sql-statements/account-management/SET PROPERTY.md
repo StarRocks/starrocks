@@ -16,7 +16,7 @@ SET PROPERTY [FOR 'user'] 'max_user_connections' = 'value';
 
 - `For 'user'`：指定用户，可选参数。如不设置该参数，默认设置当前用户的属性。
 
-- `'max_user_connections' = 'value'`：单个用户的最大连接数，必选参数。只有管理员和 root 用户有权限设置该属性。
+- `'max_user_connections' = 'value'`：单个用户的最大连接数，必选参数。有效数值范围：1~10000。
 
 ## 示例
 
