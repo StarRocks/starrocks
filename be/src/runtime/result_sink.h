@@ -71,9 +71,6 @@ private:
     std::shared_ptr<ResultFileOptions> _file_opts;
 
     // Owned by the RuntimeState.
-    const RowDescriptor& _row_desc;
-
-    // Owned by the RuntimeState.
     const std::vector<TExpr>& _t_output_expr;
     std::vector<ExprContext*> _output_expr_ctxs;
 

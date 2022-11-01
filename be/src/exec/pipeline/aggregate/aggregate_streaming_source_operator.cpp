@@ -45,7 +45,7 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     // It is no need to distinguish whether streaming or aggregation mode
     // We just first read chunk from buffer and finally read chunk from hash table
     if (!_aggregator->is_chunk_buffer_empty()) {
-        return std::move(_aggregator->poll_chunk_buffer());
+        return _aggregator->poll_chunk_buffer();
     }
 
     // Even if it is streaming mode, the purpose of reading from hash table is to
