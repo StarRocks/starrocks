@@ -190,6 +190,7 @@ import com.starrocks.sql.ast.Identifier;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
+import com.starrocks.sql.ast.IncrementalRefreshSchemeDesc;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -349,7 +350,6 @@ import java.math.BigInteger;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -517,8 +517,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.rollupDesc() == null ?
                         null : context.rollupDesc().rollupItem().stream().map(this::getRollup).collect(toList()),
                 context.orderByDesc() == null ? null :
-                visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
-                        .stream().map(Identifier::getValue).collect(toList()));
+                        visit(context.orderByDesc().identifierList().identifier(), Identifier.class)
+                                .stream().map(Identifier::getValue).collect(toList()));
     }
 
     private PartitionDesc getPartitionDesc(StarRocksParser.PartitionDescContext context) {
@@ -840,7 +840,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             alterJobIdList = context.INTEGER_VALUE()
                     .stream().map(ParseTree::getText).map(Long::parseLong).collect(toList());
         }
-        return new CancelAlterTableStmt(alterType, dbTableName, alterJobIdList == null ? null : alterJobIdList);
+        return new CancelAlterTableStmt(alterType, dbTableName, alterJobIdList);
     }
 
     @Override
@@ -1111,6 +1111,9 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "CreateMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
             }
 
+        }
+        if (refreshSchemeDesc instanceof IncrementalRefreshSchemeDesc) {
+            throw new IllegalArgumentException("Realtime materialized view is not supported");
         }
         if (!Config.enable_experimental_mv) {
             throw new IllegalArgumentException("The experimental mv is disabled, " +
@@ -3720,7 +3723,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDeprecatedDbPrivilegeObject(StarRocksParser.DeprecatedDbPrivilegeObjectContext context) {
         GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
         String token = ((Identifier) visit(context.identifierOrStringOrStar())).getValue();
-        ret.setPrivilegeObjectNameTokensList(Arrays.asList(Arrays.asList(token)));
+        ret.setPrivilegeObjectNameTokensList(Collections.singletonList(Collections.singletonList(token)));
         return ret;
     }
 
@@ -3728,8 +3731,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDeprecatedTablePrivilegeObject(StarRocksParser.DeprecatedTablePrivilegeObjectContext context) {
         GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
         List<String> tokenList = context.identifierOrStringOrStar().stream().map(
-                    c -> ((Identifier) visit(c)).getValue()).collect(toList());
-        ret.setPrivilegeObjectNameTokensList(Arrays.asList(tokenList));
+                c -> ((Identifier) visit(c)).getValue()).collect(toList());
+        ret.setPrivilegeObjectNameTokensList(Collections.singletonList(tokenList));
         return ret;
     }
 
@@ -3751,7 +3754,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         List<List<String>> l = new ArrayList<>();
         for (StarRocksParser.IdentifierOrStringContext oneContext : context.identifierOrString()) {
             String token = ((Identifier) visit(oneContext)).getValue();
-            l.add(Arrays.asList(token));
+            l.add(Collections.singletonList(token));
         }
         ret.setPrivilegeObjectNameTokensList(l);
         return ret;
@@ -3776,7 +3779,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         if (context.ASTERISK_SYMBOL() != null) {
             GrantRevokePrivilegeObjects ret = new GrantRevokePrivilegeObjects();
-            ret.setPrivilegeObjectNameTokensList(Arrays.asList(Arrays.asList("*")));
+            ret.setPrivilegeObjectNameTokensList(Collections.singletonList(Collections.singletonList("*")));
             return ret;
         } else if (context.userList() != null) {
             return (GrantRevokePrivilegeObjects) visit(context.userList());
@@ -3801,19 +3804,19 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
     @Override
     public ParseNode visitGrantImpersonateBrief(StarRocksParser.GrantImpersonateBriefContext context) {
-        List<String> privList = Arrays.asList("IMPERSONATE");
+        List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
-        List<UserIdentity> users = Arrays.asList(((UserIdentifier) visit(context.user())).getUserIdentity());
+        List<UserIdentity> users = Collections.singletonList(((UserIdentifier) visit(context.user())).getUserIdentity());
         objects.setUserPrivilegeObjectList(users);
         return new GrantPrivilegeStmt(privList, "USER", clause, objects);
     }
 
     @Override
     public ParseNode visitRevokeImpersonateBrief(StarRocksParser.RevokeImpersonateBriefContext context) {
-        List<String> privList = Arrays.asList("IMPERSONATE");
+        List<String> privList = Collections.singletonList("IMPERSONATE");
         GrantRevokeClause clause = (GrantRevokeClause) visit(context.grantRevokeClause());
-        List<UserIdentity> users = Arrays.asList(((UserIdentifier) visit(context.user())).getUserIdentity());
+        List<UserIdentity> users = Collections.singletonList(((UserIdentifier) visit(context.user())).getUserIdentity());
         GrantRevokePrivilegeObjects objects = new GrantRevokePrivilegeObjects();
         objects.setUserPrivilegeObjectList(users);
         return new RevokePrivilegeStmt(privList, "USER", clause, objects);
@@ -4928,6 +4931,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             return new AsyncRefreshSchemeDesc(defineStartTime, startTime, intervalLiteral);
         } else if (context.MANUAL() != null) {
             return new ManualRefreshSchemeDesc();
+        } else if (context.INCREMENTAL() != null) {
+            return new IncrementalRefreshSchemeDesc();
         }
         return null;
     }
