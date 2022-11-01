@@ -126,6 +126,8 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     continue;
                 }
                 checked = true;
+                // refresh external table meta cache
+                refreshExternalTable(context);
                 Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView();
                 LOG.debug("materialized view partitions to refresh:{}", partitionsToRefresh);
                 if (partitionsToRefresh.isEmpty()) {
@@ -150,6 +152,17 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
         updateMeta(execPlan);
+    }
+
+    private void refreshExternalTable(TaskRunContext context) {
+        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            MaterializedView.BaseTableInfo baseTableInfo = tablePair.first;
+            Table table = tablePair.second;
+            if (!table.isLocalTable()) {
+                context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), baseTableInfo.getTableName(), table, Lists.newArrayList());
+            }
+        }
     }
 
     private void updateMeta(ExecPlan execPlan) {

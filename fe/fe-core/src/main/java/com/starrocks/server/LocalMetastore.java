@@ -136,6 +136,7 @@ import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
 import com.starrocks.scheduler.TaskManager;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
@@ -3210,6 +3211,15 @@ public class LocalMetastore implements ConnectorMetadata {
                         ((IntLiteral) asyncRefreshSchemeDesc.getIntervalLiteral().getValue()).getValue());
                 asyncRefreshContext.setTimeUnit(
                         asyncRefreshSchemeDesc.getIntervalLiteral().getUnitIdentifier().getDescription());
+            }
+            // task which type is EVENT_TRIGGERED can not use external table as base table now.
+            if (asyncRefreshContext.getTimeUnit() == null) {
+                // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
+                Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(stmt.getQueryStatement());
+                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isOlapTable())) {
+                    throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
+                            "external table");
+                }
             }
         } else if (refreshSchemeDesc.getType() == MaterializedView.RefreshType.SYNC) {
             mvRefreshScheme = new MaterializedView.MvRefreshScheme();
