@@ -589,8 +589,10 @@ public class LocalTablet extends Tablet {
      * NORNAL:  delay Config.tablet_repair_delay_factor_second * 2;
      * LOW:     delay Config.tablet_repair_delay_factor_second * 3;
      */
-    public boolean readyToBeRepaired(TabletSchedCtx.Priority priority) {
-        if (priority == Priority.VERY_HIGH) {
+    public boolean readyToBeRepaired(TabletStatus status, TabletSchedCtx.Priority priority) {
+        if (priority == Priority.VERY_HIGH ||
+                status == TabletStatus.VERSION_INCOMPLETE ||
+                status == TabletStatus.NEED_FURTHER_REPAIR) {
             return true;
         }
 

@@ -11,11 +11,9 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDisk;
@@ -36,7 +34,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 public class TabletSchedulerTest {
     @Mocked
