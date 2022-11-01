@@ -110,18 +110,18 @@ public final class GlobalVariable {
      * The queries only using schema meta will never been queued, because a MySQL client will
      * query schema meta after the connection is established.
      */
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_ENABLE, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_ENABLE, flag = VariableMgr.GLOBAL)
     private static boolean queryQueueEnable = false;
     // Effective iff it is positive.
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_HARD_LIMIT, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_HARD_LIMIT, flag = VariableMgr.GLOBAL)
     private static int queryQueueConcurrencyHardLimit = 0;
     // Effective iff it is positive.
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT, flag = VariableMgr.GLOBAL)
     private static double queryQueueMemUsedPctHardLimit = 0;
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL)
     private static int queryQueuePendingTimeoutSecond = 300;
     // Unlimited iff it is non-positive.
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL | VariableMgr.INVISIBLE)
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL)
     private static int queryQueueMaxQueuedQueries = 1024;
 
     public static boolean isQueryQueueEnable() {
