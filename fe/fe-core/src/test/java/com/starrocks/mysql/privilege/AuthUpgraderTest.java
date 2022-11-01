@@ -185,11 +185,13 @@ public class AuthUpgraderTest {
                 replayUpgrade(image);
             }
             ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("harry", "%"));
-            ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
+            ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
+                    ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
 
             UserIdentity user = createUserByRole("harry");
             ctx.setCurrentUserIdentity(user);
-            ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
+            ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
+                    ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
         }
 
     }

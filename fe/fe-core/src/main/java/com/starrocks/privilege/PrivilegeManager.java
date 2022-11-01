@@ -35,7 +35,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -190,7 +189,7 @@ public class PrivilegeManager {
         Map<String, List<String>> map = this.provider.getValidPrivilegeTypeToActions();
         List<String> typeStrings = new ArrayList<>(map.keySet());
         Collections.sort(typeStrings);
-        for (short typeId = 0; typeId != typeStrings.size(); typeId ++) {
+        for (short typeId = 0; typeId != typeStrings.size(); typeId++) {
             String typeStr = typeStrings.get(typeId);
             typeStringToId.put(typeStr, typeId);
             PrivilegeTypes types = PrivilegeTypes.valueOf(typeStr);
@@ -202,7 +201,7 @@ public class PrivilegeManager {
 
             List<String> actionStrings = new ArrayList<>(map.get(typeStr));
             Collections.sort(actionStrings);
-            for (short actionId = 0; actionId != actionStrings.size(); ++ actionId) {
+            for (short actionId = 0; actionId != actionStrings.size(); actionId++) {
                 String actionStr = actionStrings.get(actionId);
                 actionMap.put(actionStr, new Action(actionId, actionStr));
             }
