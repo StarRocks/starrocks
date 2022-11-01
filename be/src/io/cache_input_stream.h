@@ -45,7 +45,6 @@ private:
     std::string _buffer;
     Stats _stats;
     int64_t _size;
-    int64_t _block_size;
     bool _enable_populate_cache = false;
 };
 
