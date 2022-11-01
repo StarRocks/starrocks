@@ -29,7 +29,7 @@ public:
 
     size_t merged_rows() const override { return _merged_rows; }
 
-    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
         for (auto& child : _children) {
             child->init_encoded_schema(dict_maps);
@@ -37,7 +37,7 @@ public:
         return Status::OK();
     }
 
-    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         ChunkIterator::init_output_schema(unused_output_column_ids);
         for (auto& child : _children) {
             child->init_output_schema(unused_output_column_ids);
