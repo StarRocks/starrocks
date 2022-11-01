@@ -17,6 +17,7 @@ public:
     ~CpuUsageRecorder();
 
     void update_interval();
+    // Return the cpu usage ratio in parts per thousand at an interval.
     int cpu_used_permille() const;
 
 private:
@@ -30,6 +31,8 @@ private:
     char* _line_ptr = nullptr;
     size_t _line_buf_size = 0;
 
+    // Record the latest two time points, where the current recorded point is at `_curr_idx`,
+    // and the previous recorded point is at `(_curr_idx+1)%2`.
     int _curr_idx = ABSENT_INDEX;
     int64_t _timestamp[2];
     uint64_t _proc_time[2];
