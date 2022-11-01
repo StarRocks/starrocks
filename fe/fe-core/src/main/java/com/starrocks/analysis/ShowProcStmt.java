@@ -95,7 +95,7 @@ public class ShowProcStmt extends ShowStmt {
                 return RedirectStatus.NO_FORWARD;
             }
             String[] pathGroup = path.split("/");
-            if (needForwardPathRoot.contains(pathGroup[1])) {
+            if (NEED_FORWARD_PATH_ROOT.contains(pathGroup[1])) {
                 return RedirectStatus.FORWARD_NO_SYNC;
             }
             return RedirectStatus.NO_FORWARD;
