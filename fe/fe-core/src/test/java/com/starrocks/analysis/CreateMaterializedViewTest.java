@@ -2003,7 +2003,7 @@ public class CreateMaterializedViewTest {
     @Test
     public void testCreateRealtimeMV() throws Exception {
         String sql = "create materialized view rtmv \n" +
-                "refresh realtime as " +
+                "refresh incremental as " +
                 "select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
                 "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
         try {
