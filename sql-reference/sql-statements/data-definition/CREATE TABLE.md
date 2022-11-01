@@ -2,7 +2,7 @@
 
 ## 功能
 
-该语句用于创建 table。
+该语句用于创建表。
 
 ## 语法
 
@@ -73,16 +73,16 @@ col_name col_type [agg_type] [NULL | NOT NULL] [DEFAULT "default_value"]
 范围：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
 * CHAR[(length)]
-定长字符串。长度范围：1 ~ 255。默认为1
+定长字符串。长度范围：1 ~ 255。默认为 1。
 
 * VARCHAR[(length)]
-变长字符串。长度范围：1 ~ 65533
+变长字符串。长度范围：1 ~ 1048576。
 
 * HLL (1~16385个字节)
-hll列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用
+hll列类型，不需要指定长度和默认值，长度根据数据的聚合程度系统内控制，并且HLL列只能通过配套的hll_union_agg、Hll_cardinality、hll_hash进行查询或使用。
 
 * BITMAP
-bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1
+bitmap列类型，不需要指定长度和默认值。表示整型的集合，元素最大支持到2^64 - 1。
 
 * ARRAY
 支持在一个数组中嵌套子数组，最多可嵌套 14 层。您必须使用尖括号（ < 和 > ）来声明 ARRAY 类型，如 ARRAY < INT >。目前不支持将数组中的元素声明为 [Fast Decimal](../data-types/DECIMAL.md) 类型。
@@ -94,9 +94,9 @@ bitmap列类型，不需要指定长度和默认值。表示整型的集合，�
 
 * SUM、MAX、MIN、REPLACE
 
-* HLL_UNION(仅用于HLL列，为HLL独有的聚合方式)。
+* HLL_UNION（仅用于HLL列，为HLL独有的聚合方式)。
 
-* BITMAP_UNION(仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)。
+* BITMAP_UNION（仅用于 BITMAP 列，为 BITMAP 独有的聚合方式)。
 
 * REPLACE_IF_NOT_NULL：这个聚合类型的含义是当且仅当新导入数据是非NULL值时会发生替换行为，如果新导入的数据是NULL，那么StarRocks仍然会保留原值。
 ```

@@ -2,14 +2,14 @@
 
 ## 功能
 
-获得日期中的分钟的信息，返回值范围从0-59。
+获得日期中的分钟的信息，返回值范围为 0~59。
 
-参数为Date或者Datetime类型。
+参数为 DATE 或者 DATETIME 类型。
 
 ## 语法
 
 ```Haskell
-INT MINUTE(DATETIME date)
+INT MINUTE(DSATETIME date)
 ```
 
 ## 示例
