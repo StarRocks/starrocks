@@ -20,8 +20,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -68,12 +66,11 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     // when executing refresh table or refresh partition in HiveMetaCache
     private final ReadWriteLock eventProcessorLock = new ReentrantReadWriteLock();
 
-    // resourcemapcatalog.dbName.tableName
+    // resourceName.dbName.tableName
+    // resourceName -> resource_mapping_inside_catalog_ + resourceName
     private final List<String> tables = Lists.newArrayList();
 
     private final ReadWriteLock tablesLock = new ReentrantReadWriteLock();
-
-    HiveExternalTableCounter counter = new HiveExternalTableCounter();
 
     public MetastoreEventsProcessor() {
         super(MetastoreEventsProcessor.class.getName(), Config.hms_events_polling_interval_ms);
@@ -249,111 +246,15 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         }
     }
 
-    public static class TableName {
-        private final String dbName;
-        private final String tblName;
-
-        public TableName(String dbName, String tblName) {
-            this.dbName = dbName;
-            this.tblName = tblName;
-        }
-
-        public String getDbName() {
-            return dbName;
-        }
-
-        public String getTblName() {
-            return tblName;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            TableName tableName = (TableName) o;
-            return Objects.equals(dbName, tableName.dbName) && Objects.equals(tblName, tableName.tblName);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(dbName, tblName);
-        }
-    }
-
     public static MessageDeserializer getMessageDeserializer() {
         return MESSAGE_DESERIALIZER;
-    }
-
-    public HiveExternalTableCounter getCounter() {
-        return counter;
     }
 
     public ReadWriteLock getEventProcessorLock() {
         return eventProcessorLock;
     }
 
-    public static class HiveExternalTableCounter {
-        // Each hive table corresponds to the number counter of the StarRocks hive external table
-        private final ConcurrentHashMap<HiveExternalTableIdentifier, Integer> hiveTblCounter = new ConcurrentHashMap<>();
-
-        public int add(String catalog, String database, String table) {
-            HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(catalog, database, table);
-            return hiveTblCounter.compute(identifier, (k, v) -> v == null ? 1 : v + 1);
-        }
-
-        public int reduce(String catalog, String database, String table) {
-            HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(catalog, database, table);
-            return hiveTblCounter.compute(identifier, (k, v) -> v == null || v == 0 ? 0 : v - 1);
-        }
-
-        public int get(String catalog, String database, String table) {
-            HiveExternalTableIdentifier identifier = HiveExternalTableIdentifier.of(catalog, database, table);
-            return hiveTblCounter.getOrDefault(identifier, 0);
-        }
-
-        private static class HiveExternalTableIdentifier {
-            String catalogName;
-            String databaseName;
-            String tableName;
-
-            private HiveExternalTableIdentifier(String catalogName, String databaseName, String tableName) {
-                this.catalogName = catalogName;
-                this.databaseName = databaseName;
-                this.tableName = tableName;
-            }
-
-            public static HiveExternalTableIdentifier of(String catalogName, String databaseName, String tableName) {
-                return new HiveExternalTableIdentifier(catalogName, databaseName, tableName);
-            }
-
-            @Override
-            public boolean equals(Object o) {
-                if (this == o) {
-                    return true;
-                }
-                if (o == null || getClass() != o.getClass()) {
-                    return false;
-                }
-
-                HiveExternalTableIdentifier that = (HiveExternalTableIdentifier) o;
-
-                return Objects.equals(catalogName, that.catalogName) &&
-                        Objects.equals(databaseName, that.databaseName) &&
-                        Objects.equals(tableName, that.tableName);
-            }
-
-            @Override
-            public int hashCode() {
-                return Objects.hash(catalogName, databaseName, tableName);
-            }
-        }
-    }
-
-    public boolean isCachedCatalog(String catalogName) {
+    public boolean isContainsCatalog(String catalogName) {
         return cacheUpdateProcessors.keySet().contains(catalogName);
     }
 }

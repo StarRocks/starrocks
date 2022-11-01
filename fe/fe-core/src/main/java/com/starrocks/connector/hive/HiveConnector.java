@@ -69,13 +69,10 @@ public class HiveConnector implements Connector {
     }
 
     public void onCreate() {
-        if (!internalMgr.isEnableHmsEventsIncrementalSync()) {
-            return;
-        }
-        Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
-        if (updateProcessor.isPresent()) {
-            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                    .registerCatalogCache(catalogName, updateProcessor.get());
+        if (internalMgr.isEnableHmsEventsIncrementalSync()) {
+            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+            updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .registerCatalogCache(catalogName, updateProcessor.get()));
         }
     }
 

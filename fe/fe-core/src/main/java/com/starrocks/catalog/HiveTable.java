@@ -63,6 +63,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 /**
  * External hive table
@@ -379,7 +380,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         MetastoreEventsProcessor eventsProcessor =
                 GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor();
         String catalogName = getCatalogName();
-        if (eventsProcessor.isCachedCatalog(catalogName)) {
+        if (isResourceMappingCatalog(catalogName) && eventsProcessor.isContainsCatalog(catalogName)) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTable(
                     String.join(".", catalogName, hiveDbName, hiveTableName));
         }
@@ -393,7 +394,7 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
         MetastoreEventsProcessor eventsProcessor =
                 GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor();
         String catalogName = getCatalogName();
-        if (eventsProcessor.isCachedCatalog(catalogName)) {
+        if (isResourceMappingCatalog(catalogName) && eventsProcessor.isContainsCatalog(catalogName)) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(
                     String.join(".", catalogName, hiveDbName, hiveTableName));
         }

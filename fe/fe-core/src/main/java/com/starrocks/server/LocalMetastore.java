@@ -315,6 +315,9 @@ public class LocalMetastore implements ConnectorMetadata {
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
             db.getMaterializedViews().forEach(Table::onCreate);
+            if (Config.enable_hms_events_incremental_sync) {
+                db.getHiveTables().forEach(HiveTable::onCreate);
+            }
         }
         LOG.info("finished replay databases from image");
         return newChecksum;
