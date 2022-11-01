@@ -351,7 +351,7 @@ public class ColocateTableIndex implements Writable {
 
     public int getNumOfTabletsPerBucket(GroupId groupId) {
         List<Long> allTableIds = getAllTableIds(groupId);
-        Database db = GlobalStateMgr.getCurrentState().getDb(groupId.dbId);
+        Database db = Catalog.getCurrentCatalog().getDb(groupId.dbId);
         if (!allTableIds.isEmpty() && db != null) {
             db.readLock();
             try {

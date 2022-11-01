@@ -741,7 +741,6 @@ public class TabletScheduler extends MasterDaemon {
         }
     }
 
-    @VisibleForTesting
     public void handleTabletByTypeAndStatus(TabletStatus status, TabletSchedCtx tabletCtx, AgentBatchTask batchTask)
             throws SchedException {
         if (tabletCtx.getType() == Type.REPAIR) {

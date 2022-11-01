@@ -25,6 +25,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.ColocateGroupSchema;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
@@ -40,7 +41,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
@@ -251,7 +251,7 @@ public class ColocateTableBalancerTest {
         };
 
         // To avoid "missing x invocation to..." error
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        Catalog.getCurrentSystemInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
                 Lists.newArrayList(4L, 2L, 3L, 4L, 2L, 3L, 4L, 2L, 3L), 3);
@@ -317,7 +317,7 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        Catalog.getCurrentSystemInfo().getIdToBackend();
         GroupId groupId = new GroupId(10000, 10001);
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,
                 Lists.newArrayList(4L, 2L, 3L, 4L, 2L, 3L, 4L, 2L, 3L), 1);
@@ -725,10 +725,10 @@ public class ColocateTableBalancerTest {
     }
 
     private void addTabletsToScheduler(String dbName, String tableName, boolean setGroupId) {
-        Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Database database = Catalog.getCurrentCatalog().getDb(dbName);
         OlapTable table = (OlapTable) database.getTable(tableName);
         // add its tablet to TabletScheduler
-        TabletScheduler tabletScheduler = GlobalStateMgr.getCurrentState().getTabletScheduler();
+        TabletScheduler tabletScheduler = Catalog.getCurrentCatalog().getTabletScheduler();
         for (Partition partition : table.getPartitions()) {
             MaterializedIndex materializedIndex = partition.getBaseIndex();
             for (Tablet tablet : materializedIndex.getTablets()) {
@@ -742,7 +742,7 @@ public class ColocateTableBalancerTest {
                 ctx.setOrigPriority(TabletSchedCtx.Priority.LOW);
                 if (setGroupId) {
                     ctx.setColocateGroupId(
-                            GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
+                            Catalog.getCurrentCatalog().getColocateTableIndex().getGroup(table.getId()));
                 }
                 tabletScheduler.addTablet(ctx, false);
             }
@@ -756,12 +756,12 @@ public class ColocateTableBalancerTest {
                         "distributed by hash(`id`) buckets 3 " +
                         "properties('replication_num' = '1', 'colocate_with' = 'group1');");
 
-        GlobalStateMgr.getCurrentState().getTabletScheduler().runAfterCatalogReady();
-        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:db1");
+        Catalog.getCurrentCatalog().getTabletScheduler().runAfterCatalogReady();
+        Database database = Catalog.getCurrentCatalog().getDb("default_cluster:db1");
         OlapTable table = (OlapTable) database.getTable("tbl");
         addTabletsToScheduler("default_cluster:db1", "tbl", false);
 
-        ColocateTableIndex colocateIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex colocateIndex = Catalog.getCurrentCatalog().getColocateTableIndex();
         List<List<Long>> bl = Lists.newArrayList();
         bl.add(new ArrayList<>(Arrays.asList(1L, 2L, 3L)));
         bl.add(new ArrayList<>(Arrays.asList(1L, 2L, 3L)));
@@ -772,8 +772,8 @@ public class ColocateTableBalancerTest {
         long tableId = table.getId();
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
         colocateTableBalancer.runAfterCatalogReady();
-        GroupId groupId = GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(tableId);
-        Assert.assertTrue(GlobalStateMgr.getCurrentState().getColocateTableIndex().isGroupUnstable(groupId));
+        GroupId groupId = Catalog.getCurrentCatalog().getColocateTableIndex().getGroup(tableId);
+        Assert.assertTrue(Catalog.getCurrentCatalog().getColocateTableIndex().isGroupUnstable(groupId));
     }
 
     @Test
@@ -784,7 +784,7 @@ public class ColocateTableBalancerTest {
                         "properties('replication_num' = '1', 'colocate_with' = 'group2');");
         addTabletsToScheduler("default_cluster:db2", "tbl2", true);
         ColocateTableBalancer colocateTableBalancer = ColocateTableBalancer.getInstance();
-        TabletSchedulerStat stat = GlobalStateMgr.getCurrentState().getTabletScheduler().getStat();
+        TabletSchedulerStat stat = Catalog.getCurrentCatalog().getTabletScheduler().getStat();
 
         colocateTableBalancer.runAfterCatalogReady();
         long before = stat.counterColocateBalanceRound.get();
@@ -803,9 +803,9 @@ public class ColocateTableBalancerTest {
                         "distributed by hash(`id`) buckets 1 " +
                         "properties('replication_num' = '1', 'colocate_with' = 'group3');");
 
-        Database database = GlobalStateMgr.getCurrentState().getDb("default_cluster:db3");
+        Database database = Catalog.getCurrentCatalog().getDb("default_cluster:db3");
         OlapTable table = (OlapTable) database.getTable("tbl3");
-        ColocateTableIndex colocateTableIndex = GlobalStateMgr.getCurrentState().getColocateTableIndex();
+        ColocateTableIndex colocateTableIndex = Catalog.getCurrentCatalog().getColocateTableIndex();
 
         // get backend list before set bad
         List<List<Long>> backendListBefore = ImmutableList.copyOf(
@@ -906,7 +906,7 @@ public class ColocateTableBalancerTest {
             }
         };
 
-        GlobalStateMgr.getCurrentSystemInfo().getIdToBackend();
+        Catalog.getCurrentSystemInfo().getIdToBackend();
         GroupId groupId = new GroupId(10005, 10006);
         short replicationNUm = 3;
         ColocateTableIndex colocateTableIndex = createColocateIndex(groupId,

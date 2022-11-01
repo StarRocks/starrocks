@@ -207,7 +207,7 @@ public class ColocateTableBalancer extends MasterDaemon {
 
         // get all groups
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
-        TabletScheduler tabletScheduler = globalStateMgr.getTabletScheduler();
+        TabletScheduler tabletScheduler = catalog.getTabletScheduler();
         TabletSchedulerStat stat = tabletScheduler.getStat();
         Map<GroupId, Long> group2InScheduleTabletNum = tabletScheduler.getTabletsNumInScheduleForEachCG();
         for (GroupId groupId : groupIds) {
@@ -256,7 +256,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                 colocateIndex.addBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
                 ColocatePersistInfo info =
                         ColocatePersistInfo.createForBackendsPerBucketSeq(groupId, balancedBackendsPerBucketSeq);
-                globalStateMgr.getEditLog().logColocateBackendsPerBucketSeq(info);
+                catalog.getEditLog().logColocateBackendsPerBucketSeq(info);
                 LOG.info("balance colocate group {}. now backends per bucket sequence is: {}, " +
                                 "bucket sequence before balance: {}", groupId, balancedBackendsPerBucketSeq,
                         group2ColocateRelocationInfo.get(groupId).getLastBackendsPerBucketSeq());
@@ -277,6 +277,7 @@ public class ColocateTableBalancer extends MasterDaemon {
         Catalog catalog = Catalog.getCurrentCatalog();
         ColocateTableIndex colocateIndex = catalog.getColocateTableIndex();
         TabletScheduler tabletScheduler = catalog.getTabletScheduler();
+        long checkStartTime = System.currentTimeMillis();
 
         // check each group
         Set<GroupId> groupIds = colocateIndex.getAllGroupIds();
@@ -317,10 +318,7 @@ public class ColocateTableBalancer extends MasterDaemon {
                             int idx = 0;
                             for (Long tabletId : index.getTabletIdsInOrder()) {
                                 Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
-                                Preconditions.checkState(bucketsSeq.size() == replicationNum,
-                                        bucketsSeq.size() + " vs. " + replicationNum);
                                 LocalTablet tablet = (LocalTablet) index.getTablet(tabletId);
-                                Set<Long> bucketsSeq = backendBucketsSeq.get(idx);
                                 // Tablet has already been scheduled, no need to schedule again
                                 if (!tabletScheduler.containsTablet(tablet.getId())) {
                                     Preconditions.checkState(bucketsSeq.size() == replicationNum,
@@ -772,10 +770,10 @@ public class ColocateTableBalancer extends MasterDaemon {
             return;
         }
 
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        Catalog catalog = Catalog.getCurrentCatalog();
+        SystemInfoService infoService = Catalog.getCurrentSystemInfo();
 
-        Map<String, ClusterLoadStatistic> statisticMap = globalStateMgr.getTabletScheduler().getStatisticMap();
+        Map<String, ClusterLoadStatistic> statisticMap = catalog.getTabletScheduler().getStatisticMap();
         if (statisticMap == null) {
             return;
         }
@@ -783,7 +781,7 @@ public class ColocateTableBalancer extends MasterDaemon {
         if (statistic == null) {
             return;
         }
-        ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
+        ColocateTableIndex colocateIndex = catalog.getColocateTableIndex();
 
         Set<Long> currentBackendsSet = colocateIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
         Set<Long> savedBackendSet = ImmutableSet.copyOf(currentBackendsSet);
