@@ -409,8 +409,15 @@
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
     + Cryptographic Functions
+      + [aes_encrypt](./sql-reference/sql-functions/crytographic-functions/aes_encrypt.md)
+      + [aes_decrypt](./sql-reference/sql-functions/crytographic-functions/aes_decrypt.md)
+      + [to_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
+      + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
+      + [md5sum](./sql-reference/sql-functions/crytographic-functions/md5sum.md)
+      + [md5sum_numeric](./sql-reference/sql-functions/crytographic-functions/md5sum_numeric.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
+      + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
     + Math Functions
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
