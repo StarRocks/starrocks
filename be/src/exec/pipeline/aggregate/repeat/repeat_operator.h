@@ -110,16 +110,9 @@ public:
     ~RepeatOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-<<<<<<< HEAD
         return std::make_shared<RepeatOperator>(this, _id, _plan_node_id, driver_sequence, _null_slot_ids,
                                                 _repeat_times_required, _repeat_times_last, _grouping_list, _tuple_desc,
                                                 _conjunct_ctxs);
-=======
-        return std::make_shared<RepeatOperator>(this, _id, _plan_node_id, driver_sequence,
-                                                _null_slot_ids, _repeat_times_required,
-                                                _repeat_times_last, _grouping_list,
-                                                _tuple_desc, _conjunct_ctxs);
->>>>>>> 6799e65db ([Refactor] Fix clang complains 3)
     }
 
 private:
