@@ -88,7 +88,7 @@ public class EnumeratePlan {
             // 4. compute the localProperty-rank in the property.
             int localRankOfProperties = localRankOfGroupExpression - planCountOfKProperties;
 
-            if (outputPropertyGroup.isChildrenEnforced()) {
+            if (outputPropertyGroup.isSameGroup()) {
                 // 5.1 child is an enforced node that belongs to the same group
                 OptExpression childPlan = extractNthPlanImpl(chooseGroupExpression.getGroup(),
                         childrenOutputProperties.get(0), localRankOfProperties);
@@ -212,11 +212,11 @@ public class EnumeratePlan {
     private static void countGroupExpressionValidPlan(GroupExpression groupExpression,
                                                       PhysicalPropertySet outputProperty) {
         for (OutputPropertyGroup outputPropertyGroup : groupExpression.getChildrenOutputProperties(outputProperty)) {
-            boolean isChildrenEnforced = outputPropertyGroup.isChildrenEnforced();
+            boolean isSameGroup = outputPropertyGroup.isSameGroup();
             List<PhysicalPropertySet> childrenOutputProperties = outputPropertyGroup.getChildrenOutputProperties();
 
             int childPlanCount = 1;
-            if (isChildrenEnforced) {
+            if (isSameGroup) {
                 childPlanCount *= countGroupValidPlan(groupExpression.getGroup(), childrenOutputProperties.get(0));
             } else {
                 for (int childIndex = 0; childIndex < groupExpression.arity(); ++childIndex) {

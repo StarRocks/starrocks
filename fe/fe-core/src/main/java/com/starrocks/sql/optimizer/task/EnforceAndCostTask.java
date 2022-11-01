@@ -407,11 +407,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     }
 
     private void recordPlanEnumInfo(GroupExpression groupExpression, PhysicalPropertySet outputProperty,
-                                    boolean isChildrenEnforced,
+                                    boolean isSameGroup,
                                     List<PhysicalPropertySet> childrenOutputProperties) {
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
             // record the output/input properties when child group could satisfy this group expression required property
-            groupExpression.addValidOutputPropertyGroup(outputProperty, isChildrenEnforced, childrenOutputProperties);
+            groupExpression.addValidOutputPropertyGroup(outputProperty, isSameGroup, childrenOutputProperties);
             groupExpression.getGroup().addSatisfyOutputPropertyGroupExpression(outputProperty, groupExpression);
         }
     }
@@ -432,7 +432,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         PhysicalPropertySet enforcedProperty = null;
         if (!satisfyDistributionProperty && satisfyOrderProperty) {
             if (requiredProperty.getSortProperty().isEmpty()) {
-                enforcedProperty = enforceDistribute(false, outputProperty);
+                enforcedProperty = enforceDistribute(outputProperty);
             } else {
                 /*
                  * The sorting attribute does not make sense when the sort property is not empty,
@@ -451,33 +451,33 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 enforcedProperty = enforceSortAndDistribute(newProperty, requiredProperty);
             }
         } else if (satisfyDistributionProperty && !satisfyOrderProperty) {
-            enforcedProperty = enforceSort(false, outputProperty);
+            enforcedProperty = enforceSort(outputProperty);
         } else if (!satisfyDistributionProperty) {
             enforcedProperty = enforceSortAndDistribute(outputProperty, requiredProperty);
         }
         return enforcedProperty;
     }
 
-    private PhysicalPropertySet enforceDistribute(boolean isOldEnforced, PhysicalPropertySet oldOutputProperty) {
+    private PhysicalPropertySet enforceDistribute(PhysicalPropertySet oldOutputProperty) {
         PhysicalPropertySet newOutputProperty = oldOutputProperty.copy();
         newOutputProperty.setDistributionProperty(context.getRequiredProperty().getDistributionProperty());
         GroupExpression enforcer =
                 context.getRequiredProperty().getDistributionProperty().appendEnforcers(groupExpression.getGroup());
 
         updateCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty);
-        recordPlanEnumInfo(enforcer, newOutputProperty, isOldEnforced, Lists.newArrayList(oldOutputProperty));
+        recordPlanEnumInfo(enforcer, newOutputProperty, true, Lists.newArrayList(oldOutputProperty));
 
         return newOutputProperty;
     }
 
-    private PhysicalPropertySet enforceSort(boolean isOldEnforced, PhysicalPropertySet oldOutputProperty) {
+    private PhysicalPropertySet enforceSort(PhysicalPropertySet oldOutputProperty) {
         PhysicalPropertySet newOutputProperty = oldOutputProperty.copy();
         newOutputProperty.setSortProperty(context.getRequiredProperty().getSortProperty());
         GroupExpression enforcer =
                 context.getRequiredProperty().getSortProperty().appendEnforcers(groupExpression.getGroup());
 
         updateCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty);
-        recordPlanEnumInfo(enforcer, newOutputProperty, isOldEnforced, Lists.newArrayList(oldOutputProperty));
+        recordPlanEnumInfo(enforcer, newOutputProperty, true, Lists.newArrayList(oldOutputProperty));
 
         return newOutputProperty;
     }
@@ -487,11 +487,11 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         PhysicalPropertySet enforcedProperty;
         if (requiredProperty.getDistributionProperty().getSpec()
                 .equals(DistributionSpec.createGatherDistributionSpec())) {
-            enforcedProperty = enforceSort(false, outputProperty);
-            enforcedProperty = enforceDistribute(true, enforcedProperty);
+            enforcedProperty = enforceSort(outputProperty);
+            enforcedProperty = enforceDistribute(enforcedProperty);
         } else {
-            enforcedProperty = enforceDistribute(false, outputProperty);
-            enforcedProperty = enforceSort(true, enforcedProperty);
+            enforcedProperty = enforceDistribute(outputProperty);
+            enforcedProperty = enforceSort(enforcedProperty);
         }
 
         return enforcedProperty;
