@@ -163,7 +163,7 @@ public:
     PipelineDriver(const PipelineDriver& driver)
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
 
-    ~PipelineDriver();
+    ~PipelineDriver() noexcept;
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }

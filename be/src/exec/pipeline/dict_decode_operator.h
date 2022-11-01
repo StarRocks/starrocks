@@ -84,9 +84,9 @@ public:
                                                     _dict_optimize_parser);
     }
 
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) override;
 
 private:
     std::vector<int32_t> _encode_column_cids;

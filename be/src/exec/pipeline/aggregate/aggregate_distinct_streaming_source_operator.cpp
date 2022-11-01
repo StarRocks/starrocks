@@ -40,7 +40,7 @@ void AggregateDistinctStreamingSourceOperator::close(RuntimeState* state) {
 
 StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_chunk(RuntimeState* state) {
     if (!_aggregator->is_chunk_buffer_empty()) {
-        return std::move(_aggregator->poll_chunk_buffer());
+        return _aggregator->poll_chunk_buffer();
     }
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
