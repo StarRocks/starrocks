@@ -50,6 +50,7 @@ import java.util.Map;
  */
 public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
+    public static final int NO_TTL = -1;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -57,6 +58,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
     private Short replicationNum = FeConstants.default_replication_num;
+
+    // partition time to live number, -1 means no ttl
+    private int partitionTTLNumber = NO_TTL;
 
     private boolean isInMemory = false;
 
@@ -142,6 +146,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildPartitionTTL() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(NO_TTL)));
+        return this;
+    }
+
     public TableProperty buildInMemory() {
         isInMemory = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_INMEMORY, "false"));
         return this;
@@ -189,6 +199,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public Short getReplicationNum() {
         return replicationNum;
+    }
+
+    public void setPartitionTTLNumber(int partitionTTLNumber) {
+        this.partitionTTLNumber = partitionTTLNumber;
+    }
+
+    public int getPartitionTTLNumber() {
+        return partitionTTLNumber;
     }
 
     public boolean isInMemory() {
@@ -253,5 +271,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();
+        buildPartitionTTL();
     }
 }
