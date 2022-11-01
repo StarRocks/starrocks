@@ -636,7 +636,7 @@ public:
                     state_data.is_null = false;
                     this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
                 } else if constexpr (!IgnoreNull) {
-                    this->data(state_data).is_null = false;
+                    state_data.is_null = false;
                     this->nested_function->process_null(ctx, state_data.mutable_nest_state());
                 }
             }
@@ -664,7 +664,7 @@ public:
                         state_data.is_null = false;
                         this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
                     } else if constexpr (!IgnoreNull) {
-                        this->data(state_data).is_null = false;
+                        state_data.is_null = false;
                         this->nested_function->process_null(ctx, state_data.mutable_nest_state());
                     }
                 }
@@ -690,7 +690,7 @@ public:
                     state_data.is_null = false;
                     this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
                 } else if constexpr (!IgnoreNull) {
-                    this->data(state_data).is_null = false;
+                    state_data.is_null = false;
                     this->nested_function->process_null(ctx, state_data.mutable_nest_state());
                 }
             }
