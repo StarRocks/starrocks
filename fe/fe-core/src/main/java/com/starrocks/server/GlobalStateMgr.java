@@ -364,7 +364,7 @@ public class GlobalStateMgr {
     // This is used to turned on in hard code.
     public static final boolean USING_NEW_PRIVILEGE = false;
     // change to true in UT
-    private AtomicBoolean usingNewPrivilege = new AtomicBoolean(USING_NEW_PRIVILEGE);
+    private AtomicBoolean usingNewPrivilege = new AtomicBoolean(false);
 
     private AuthenticationManager authenticationManager;
     private PrivilegeManager privilegeManager;

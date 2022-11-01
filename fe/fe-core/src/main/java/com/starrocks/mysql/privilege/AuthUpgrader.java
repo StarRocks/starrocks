@@ -251,19 +251,19 @@ public class AuthUpgrader {
             Role role = entry.getValue();
             try {
                 if (isBuiltInRoles(roleName)) {
-                    grantBuiltInRoles(roleName, role.getUsers());
-                } else {
-                    // create new role
-                    RolePrivilegeCollection collection = new RolePrivilegeCollection(
-                            roleName, RolePrivilegeCollection.RoleFlags.MUTABLE,
-                            RolePrivilegeCollection.RoleFlags.REMOVABLE);
-                    upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection);
-                    upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection);
-                    upgradeRoleImpersonatePrivileges(role.getImpersonateUsers(), collection);
-                    privilegeManager.upgradeRoleInitPrivilegeUnlock(roleId, collection);
-                    for (UserIdentity user : role.getUsers()) {
-                        privilegeManager.upgradeUserRoleUnlock(user, roleId);
-                    }
+                    // built roles has been automatically created
+                    continue;
+                }
+                // create new role
+                RolePrivilegeCollection collection = new RolePrivilegeCollection(
+                        roleName, RolePrivilegeCollection.RoleFlags.MUTABLE,
+                        RolePrivilegeCollection.RoleFlags.REMOVABLE);
+                upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection);
+                upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection);
+                upgradeRoleImpersonatePrivileges(role.getImpersonateUsers(), collection);
+                privilegeManager.upgradeRoleInitPrivilegeUnlock(roleId, collection);
+                for (UserIdentity user : role.getUsers()) {
+                    privilegeManager.upgradeUserRoleUnlock(user, roleId);
                 }
             } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
@@ -308,22 +308,6 @@ public class AuthUpgrader {
 
     protected boolean isBuiltInRoles(String roleName) {
         return roleName.equals(Role.ADMIN_ROLE) || roleName.equals(Role.OPERATOR_ROLE);
-    }
-
-    protected void grantBuiltInRoles(String roleName, Set<UserIdentity> users) {
-        if (roleName.equals(Role.ADMIN_ROLE)) {
-            for (UserIdentity user : users) {
-                privilegeManager.upgradeUserRoleUnlock(
-                        user,
-                        PrivilegeManager.DB_ADMIN_ROLE_ID,
-                        PrivilegeManager.CLUSTER_ADMIN_ROLE_ID,
-                        PrivilegeManager.USER_ADMIN_ROLE_ID);
-            }
-        } else if (roleName.equals(Role.OPERATOR_ROLE)) {
-            for (UserIdentity user : users) {
-                privilegeManager.upgradeUserRoleUnlock(user, PrivilegeManager.ROOT_ROLE_ID);
-            }
-        }
     }
 
     protected void upgradeTablePrivileges(String db, String table, Privilege privilege, PrivilegeCollection collection)
