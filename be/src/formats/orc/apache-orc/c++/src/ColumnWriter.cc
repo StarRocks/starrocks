@@ -1853,16 +1853,15 @@ class Decimal64ColumnWriterV2 : public ColumnWriter {
 public:
     Decimal64ColumnWriterV2(const Type& type, const StreamsFactory& factory, const WriterOptions& options);
 
-    virtual void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues,
-                     const char* incomingMask) override;
+    void add(ColumnVectorBatch& rowBatch, uint64_t offset, uint64_t numValues, const char* incomingMask) override;
 
-    virtual void flush(std::vector<proto::Stream>& streams) override;
+    void flush(std::vector<proto::Stream>& streams) override;
 
-    virtual uint64_t getEstimatedSize() const override;
+    uint64_t getEstimatedSize() const override;
 
-    virtual void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
+    void getColumnEncoding(std::vector<proto::ColumnEncoding>& encodings) const override;
 
-    virtual void recordPosition() const override;
+    void recordPosition() const override;
 
 protected:
     uint64_t precision;
