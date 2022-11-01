@@ -75,6 +75,8 @@ public:
 
     Status visit(const vectorized::MapColumn& column) override { return _impl->do_visit(column); }
 
+    Status visit(const vectorized::StructColumn& column) override { return _impl->do_visit(column); }
+
     Status visit(const vectorized::BinaryColumn& column) override { return _impl->do_visit(column); }
 
     Status visit(const vectorized::LargeBinaryColumn& column) override { return _impl->do_visit(column); }
@@ -145,6 +147,8 @@ public:
     Status visit(vectorized::ArrayColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(vectorized::MapColumn* column) override { return _impl->do_visit(column); }
+
+    Status visit(vectorized::StructColumn* column) override { return _impl->do_visit(column); }
 
     Status visit(vectorized::BinaryColumn* column) override { return _impl->do_visit(column); }
 

@@ -64,6 +64,7 @@ enum TExprNodeType {
   PLACEHOLDER_EXPR,
   CLONE_EXPR,
   LAMBDA_FUNCTION_EXPR,
+  SUBFIELD_EXPR,
 }
 
 //enum TAggregationOp {
@@ -203,6 +204,9 @@ struct TExprNode {
   28: optional Types.TPrimitiveType child_type
 
   29: optional TPlaceHolder vslot_ref;
+
+  // Used for SubfieldExpr
+  30: optional string used_subfield_name;
 
   // For vector query engine
   50: optional bool use_vectorized
