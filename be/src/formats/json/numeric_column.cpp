@@ -11,11 +11,15 @@ namespace starrocks::vectorized {
 template <typename FromType, typename ToType>
 static inline bool checked_cast(const FromType& from, ToType* to) {
     *to = static_cast<ToType>(from);
-    if constexpr (std::numeric_limits<ToType>::is_integer) {
-        return (from > std::numeric_limits<ToType>::max() || from < std::numeric_limits<ToType>::min());
-    }
 
+    // NOTE: use lowest() because float and double needed.
+    // Needs to covnert long and int128_t to double to compare, so disable compiler's complain
+    DIAGNOSTIC_PUSH
+#if defined(__clang__)
+    DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
     return (from < std::numeric_limits<ToType>::lowest() || from > std::numeric_limits<ToType>::max());
+    DIAGNOSTIC_POP
 }
 
 // The value must be in type simdjson::ondemand::json_type::number;

@@ -107,7 +107,7 @@ private:
 
 class ListColumnReader : public ColumnReader {
 public:
-    explicit ListColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit ListColumnReader(const ColumnReaderOptions& opts) {}
     ~ListColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> element_reader) {
@@ -162,15 +162,13 @@ public:
     }
 
 private:
-    const ColumnReaderOptions& _opts;
-
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _element_reader;
 };
 
 class MapColumnReader : public ColumnReader {
 public:
-    explicit MapColumnReader(const ColumnReaderOptions& opts) : _opts(opts) {}
+    explicit MapColumnReader(const ColumnReaderOptions& opts) {}
     ~MapColumnReader() override = default;
 
     Status init(const ParquetField* field, std::unique_ptr<ColumnReader> key_reader,
@@ -243,8 +241,6 @@ public:
     }
 
 private:
-    const ColumnReaderOptions& _opts;
-
     const ParquetField* _field = nullptr;
     std::unique_ptr<ColumnReader> _key_reader;
     std::unique_ptr<ColumnReader> _value_reader;

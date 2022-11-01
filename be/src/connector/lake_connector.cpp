@@ -77,7 +77,6 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
-    const std::vector<std::string>* _unused_output_columns = nullptr;
     std::unordered_set<uint32_t> _unused_output_column_ids;
     // For release memory.
     using PredicatePtr = std::unique_ptr<vectorized::ColumnPredicate>;
