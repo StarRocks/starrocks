@@ -501,6 +501,9 @@ CONF_mInt32(priority_queue_remaining_tasks_increased_frequency, "512");
 // Sync tablet_meta when modifing meta.
 CONF_mBool(sync_tablet_meta, "false");
 
+// Sync tablet data file when creating a new file.
+CONF_mBool(sync_tablet_data, "false");
+
 // Default thrift rpc timeout ms.
 CONF_mInt32(thrift_rpc_timeout_ms, "5000");
 
