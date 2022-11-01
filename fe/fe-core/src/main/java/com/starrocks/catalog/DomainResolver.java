@@ -65,6 +65,10 @@ public class DomainResolver extends LeaderDaemon {
         this.authenticationManager = authenticationManager;
     }
 
+    /**
+     * if a follower has just transfered to leader, or if it is replaying a AuthUpgrade journal.
+     * this function will be called to switch from using Auth to using AuthenticationManager.
+     */
     public void setAuthenticationManager(AuthenticationManager manager) {
         lock.writeLock().lock();
         try {

@@ -443,8 +443,9 @@ public class AuthenticationManager {
     public void setLoaded() {
         isLoaded = true;
     }
+
     /**
-     * upgrade user
+     * these public interfaces are for AuthUpgrader to upgrade from 2.x
      */
     public void upgradeUserUnlocked(UserIdentity userIdentity, Password password) throws AuthenticationException {
         AuthPlugin plugin = password.getAuthPlugin();

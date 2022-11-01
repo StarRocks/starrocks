@@ -3226,7 +3226,9 @@ public class GlobalStateMgr {
         upgrader.replayUpgradeAsFollower(info.getRoleNameToId());
         usingNewPrivilege.set(true);
         domainResolver.setAuthenticationManager(authenticationManager);
-        this.auth = null;
+        if (!isCheckpointThread()) {
+            this.auth = null;
+        }
     }
 
     // entry of checking tablets operation

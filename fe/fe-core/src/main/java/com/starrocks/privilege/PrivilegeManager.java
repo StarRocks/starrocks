@@ -1265,8 +1265,9 @@ public class PrivilegeManager {
     public void setLoaded() {
         isLoaded = true;
     }
+
     /**
-     * for AuthUpgrader
+     * these public interfaces are for AuthUpgrader to upgrade from 2.x
      */
     public void upgradeUserInitPrivilegeUnlock(UserIdentity userIdentity, UserPrivilegeCollection collection) {
         collection.grantRole(PUBLIC_ROLE_ID);

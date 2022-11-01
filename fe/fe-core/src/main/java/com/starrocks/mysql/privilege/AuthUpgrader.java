@@ -35,7 +35,7 @@ public class AuthUpgrader {
     private PrivilegeManager privilegeManager;
     private GlobalStateMgr globalStateMgr;
 
-    // constants to
+    // constants used when upgrading
     private short tableTypeId;
     private short userTypeId;
     private String tableTypeStr;
@@ -59,7 +59,6 @@ public class AuthUpgrader {
     public boolean needUpgrade() {
         return !this.authenticationManager.isLoaded() || !this.privilegeManager.isLoaded();
     }
-
 
     public void upgradeAsLeader() throws RuntimeException {
         try {
@@ -107,7 +106,6 @@ public class AuthUpgrader {
             throw new AuthUpgradeUnrecoveredException("should not happen", e);
         }
     }
-
 
     protected void upgradeUser() throws AuthUpgradeUnrecoveredException {
         UserPrivTable globalTable = this.auth.getUserPrivTable();
@@ -184,22 +182,22 @@ public class AuthUpgrader {
                 }
                 UserPrivilegeCollection collection = new UserPrivilegeCollection();
 
-                // 3. grant global privileges
+                // 2. grant global privileges
                 upgradeUserGlobalPrivileges(entry, collection);
 
-                // 4. grant db privileges
+                // 3. grant db privileges
                 upgradeUserDbPrivileges(dbTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                // 5. grant table privilege
+                // 4. grant table privilege
                 upgradeUserTablePrivileges(tableTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                // 6. grant resource privileges
+                // 5. grant resource privileges
                 upgradeUserResourcePrivileges(resourceTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                // 7. grant impersonate privileges
+                // 6. grant impersonate privileges
                 upgradeUserImpersonate(impersonateUserPrivTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                // 8. set privilege to user
+                // 7. set privilege to user
                 privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
 
             } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
@@ -211,7 +209,7 @@ public class AuthUpgrader {
             }
         } // for iter in globalTable
 
-        // 3. grant privileges on all domain users
+        // 4. grant privileges on all domain users
         // must loop twice, otherwise impersonate may fail on non-existence user
         upiter = auth.getPropertyMgr().propertyMap.entrySet().iterator();
         while (upiter.hasNext()) {
@@ -221,48 +219,43 @@ public class AuthUpgrader {
             try {
                 for (String hostname : whiteList.getAllDomains()) {
                     UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
-
                     UserPrivilegeCollection collection = new UserPrivilegeCollection();
 
-                    // 3. grant global privileges
+                    // 1. grant global privileges
                     Iterator<PrivEntry> globalIter = globalTable.getReadOnlyIteratorByUser(userIdentity);
-                    if (iter.hasNext()) {
-                        upgradeUserGlobalPrivileges((GlobalPrivEntry) iter.next(), collection);
+                    if (globalIter.hasNext()) {
+                        upgradeUserGlobalPrivileges((GlobalPrivEntry) globalIter.next(), collection);
                     }
 
-                    // 4. grant db privileges
+                    // 2. grant db privileges
                     upgradeUserDbPrivileges(dbTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                    // 5. grant table privilege
+                    // 3. grant table privilege
                     upgradeUserTablePrivileges(tableTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                    // 6. grant resource privileges
+                    // 4. grant resource privileges
                     upgradeUserResourcePrivileges(resourceTable.getReadOnlyIteratorByUser(userIdentity), collection);
 
-                    // 7. grant impersonate privileges
+                    // 5. grant impersonate privileges
                     upgradeUserImpersonate(impersonateUserPrivTable.getReadOnlyIteratorByUser(userIdentity),
                             collection);
 
-                    // 8. set privilege to user
+                    // 6. set privilege to user
                     privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
                 }
             } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
                     LOG.warn("discard domain user priv for {}", userName);
                 } else {
-                    throw new AuthUpgradeUnrecoveredException("bad user priv entry " + entry, e);
+                    throw new AuthUpgradeUnrecoveredException("bad user priv for " + userName, e);
                 }
             }
-        } // for iter in globalTable
-
-
+        } // for upiter in UserPropertyMap
     }
 
     protected void upgradeUserGlobalPrivileges(GlobalPrivEntry entry, UserPrivilegeCollection collection)
             throws PrivilegeException, AuthUpgradeUnrecoveredException {
-
         PrivBitSet bitSet = entry.getPrivSet();
-
         for (Privilege privilege : bitSet.toPrivilegeList()) {
             upgradeTablePrivileges(DbPrivEntry.ANY_DB, DbPrivEntry.ANY_DB, privilege, collection);
         }
@@ -270,7 +263,6 @@ public class AuthUpgrader {
 
     protected void upgradeUserDbPrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
             throws PrivilegeException, AuthUpgradeUnrecoveredException {
-
         while (iterator.hasNext()) {
             DbPrivEntry entry = (DbPrivEntry) iterator.next();
             PrivBitSet bitSet = entry.getPrivSet();
@@ -290,8 +282,9 @@ public class AuthUpgrader {
             }
         }
     }
+
     protected void upgradeUserResourcePrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection) {
-        // TODO
+        // TODO: resource object has not implemented yet
     }
 
     protected void upgradeUserImpersonate(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
@@ -303,7 +296,8 @@ public class AuthUpgrader {
     }
 
     /**
-     * @param roleNameToId, can be null, meaning that leader is upgrading
+     * input param roleNameToId, can be null, meaning that leader is upgrading
+     * return roleNameToId if it's leader
      */
     protected Map<String, Long> upgradeRole(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoveredException {
         Map<String, Long> ret = new HashMap<>();
@@ -323,6 +317,7 @@ public class AuthUpgrader {
                             "failed to upgrade role " + roleName + " while replaying!");
                 }
             }
+
             Role role = entry.getValue();
             try {
                 if (isBuiltInRoles(roleName)) {
@@ -333,10 +328,18 @@ public class AuthUpgrader {
                 RolePrivilegeCollection collection = new RolePrivilegeCollection(
                         roleName, RolePrivilegeCollection.RoleFlags.MUTABLE,
                         RolePrivilegeCollection.RoleFlags.REMOVABLE);
+
+                // 1. table privileges(including global+db)
                 upgradeRoleTablePrivileges(role.getTblPatternToPrivs(), collection);
+
+                // 2. resource privileges
                 upgradeRoleResourcePrivileges(role.getResourcePatternToPrivs(), collection);
+
+                // 3. impersonate privileges
                 upgradeRoleImpersonatePrivileges(role.getImpersonateUsers(), collection);
+
                 privilegeManager.upgradeRoleInitPrivilegeUnlock(roleId, collection);
+                // grant role to user
                 for (UserIdentity user : role.getUsers()) {
                     privilegeManager.upgradeUserRoleUnlock(user, roleId);
                 }
@@ -367,9 +370,9 @@ public class AuthUpgrader {
         }
     }
 
-
     protected void upgradeRoleResourcePrivileges(
             Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection) {
+        // TODO: resource object has not implemented yet
     }
 
     protected void upgradeRoleImpersonatePrivileges(Set<UserIdentity> impersonateUsers, RolePrivilegeCollection collection)
