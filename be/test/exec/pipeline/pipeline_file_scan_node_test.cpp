@@ -344,8 +344,7 @@ class TestFileScanSinkOperator : public Operator {
 public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
-            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence),
-              _counter(std::move(counter)) {}
+            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {

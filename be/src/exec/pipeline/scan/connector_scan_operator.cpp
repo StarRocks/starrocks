@@ -218,6 +218,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();
+        _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();
     }
     _ck_acc.reset();
