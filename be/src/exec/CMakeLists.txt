@@ -46,7 +46,6 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
     vectorized/sorted_streaming_aggregator.cpp
