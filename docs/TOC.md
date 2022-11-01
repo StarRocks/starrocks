@@ -382,7 +382,6 @@
       + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
       + [md5sum](./sql-reference/sql-functions/crytographic-functions/md5sum.md)
-      + [md5sum_numeric](./sql-reference/sql-functions/crytographic-functions/md5sum_numeric.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
       + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
     + Math Functions
