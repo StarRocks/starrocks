@@ -161,6 +161,10 @@ public enum RuleType {
     IMP_CTE_ANCHOR_TO_NO_CTE,
     IMP_CTE_PRODUCE,
 
+    IMP_STREAM_AGG,
+    IMP_STREAM_JOIN,
+    IMP_BINLOG_SOURCE,
+
     NUM_RULES;
 
     public int id() {
