@@ -23,6 +23,7 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,12 +40,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
+import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
 public class TaskManager {
 
@@ -260,6 +264,24 @@ public class TaskManager {
             }
         }
         return taskRunManager.killTaskRun(task.getId());
+    }
+
+    public Constants.TaskRunState executeTaskSync(String taskName) throws ExecutionException, InterruptedException {
+        return executeTaskSync(taskName, new ExecuteOption());
+    }
+
+    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option)
+            throws ExecutionException, InterruptedException {
+        Task task = nameToTaskMap.get(taskName);
+        if (task == null) {
+            throw new DmlException("execute task:" + taskName + " failed");
+        }
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
+        if (submitResult.getStatus() != SUBMITTED) {
+            throw new DmlException("execute task:" + taskName + " failed");
+        }
+        return taskRun.getFuture().get();
     }
 
     public SubmitResult executeTask(String taskName) {
