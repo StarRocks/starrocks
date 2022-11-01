@@ -60,6 +60,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -845,5 +846,10 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
+    }
+
+    public List<HiveTable> getHiveTables() {
+        return idToTable.values().stream().filter(tbl -> tbl.isHiveTable())
+                .map(tbl -> (HiveTable) tbl).collect(Collectors.toList());
     }
 }

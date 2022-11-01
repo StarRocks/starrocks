@@ -62,7 +62,8 @@ public class HudiMetadataFactory {
         Optional<CacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
             cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
-                    catalogName, metastore, remoteFileIO, pullRemoteFileExecutor, isRecursive));
+                    catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
+                    isRecursive, false));
         } else {
             cacheUpdateProcessor = Optional.empty();
         }

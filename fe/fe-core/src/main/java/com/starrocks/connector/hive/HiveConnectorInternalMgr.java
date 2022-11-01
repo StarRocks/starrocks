@@ -29,6 +29,7 @@ public class HiveConnectorInternalMgr {
 
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
+    private final boolean enableHmsEventsIncrementalSync;
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
@@ -42,6 +43,8 @@ public class HiveConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+        this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
+                String.valueOf(Config.enable_hms_events_incremental_sync)));
     }
 
     public void shutdown() {
@@ -119,5 +122,9 @@ public class HiveConnectorInternalMgr {
 
     public CachingRemoteFileConf getRemoteFileConf() {
         return remoteFileConf;
+    }
+
+    public boolean isEnableHmsEventsIncrementalSync() {
+        return enableHmsEventsIncrementalSync;
     }
 }

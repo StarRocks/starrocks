@@ -5,12 +5,16 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONDropTableMessage;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
+
+import static com.starrocks.connector.hive.events.MetastoreEventType.DROP_TABLE;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 /**
  * MetastoreEvent for DROP_TABLE event type
@@ -20,9 +24,10 @@ public class DropTableEvent extends MetastoreTableEvent {
     private final String dbName;
     private final String tableName;
 
-    private DropTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache) {
-        super(event, metaCache);
-        Preconditions.checkArgument(MetastoreEventType.DROP_TABLE.equals(getEventType()));
+    private DropTableEvent(NotificationEvent event,
+                           CacheUpdateProcessor cacheProcessor, String catalogName) {
+        super(event, cacheProcessor, catalogName);
+        Preconditions.checkArgument(DROP_TABLE.equals(getEventType()));
         JSONDropTableMessage dropTableMessage =
                 (JSONDropTableMessage) MetastoreEventsProcessor.getMessageDeserializer()
                         .getDropTableMessage(event.getMessage());
@@ -37,15 +42,14 @@ public class DropTableEvent extends MetastoreTableEvent {
         }
     }
 
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache) {
-        return Lists.newArrayList(new DropTableEvent(event, metaCache));
+    public static List<MetastoreEvent> getEvents(NotificationEvent event,
+                                                 CacheUpdateProcessor cacheProcessor, String catalogName) {
+        return Lists.newArrayList(new DropTableEvent(event, cacheProcessor, catalogName));
     }
 
     @Override
     protected boolean existInCache() {
-        // TODO(stephen): refactor this function
-        return false;
-        // return cache.getTableFromCache(HiveTableName.of(dbName, tableName)) != null;
+        return cache.existIncache(DROP_TABLE, HiveTableName.of(dbName, tableName));
     }
 
     @Override
@@ -54,9 +58,7 @@ public class DropTableEvent extends MetastoreTableEvent {
     }
 
     protected boolean isSupported() {
-        // TODO(stephen): refactor this function
-        return false;
-        // return !IcebergTable.isInternalCatalog(cache.getResourceName());
+        return !isResourceMappingCatalog(catalogName);
     }
 
     @Override
@@ -66,12 +68,7 @@ public class DropTableEvent extends MetastoreTableEvent {
         }
 
         try {
-            // TODO(stephen): refactor this function
-            // HiveTable table = (HiveTable) cache.getTableFromCache(HiveTableName.of(dbName, tableName));
-            // if (table == null) {
-            //    return;
-            // }
-            // cache.clearCache(table.getHmsTableInfo());
+            cache.refreshCacheByEvent(DROP_TABLE, HiveTableName.of(dbName, tblName), null, null, null, null);
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);
@@ -79,5 +76,4 @@ public class DropTableEvent extends MetastoreTableEvent {
                     debugString("Failed to process alter table event"));
         }
     }
-
 }
