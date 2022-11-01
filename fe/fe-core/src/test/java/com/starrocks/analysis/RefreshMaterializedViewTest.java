@@ -41,7 +41,12 @@ public class RefreshMaterializedViewTest {
                 .withNewMaterializedView("create materialized view mv_to_refresh\n" +
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh async\n" +
-                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;");
+                        "as select k2, sum(v1) as total from tbl_with_mv group by k2;")
+                .withNewMaterializedView("create materialized view mv2_to_refresh\n" +
+                        "PARTITION BY k1\n"+
+                        "distributed by hash(k2) buckets 3\n" +
+                        "refresh manual\n" +
+                        "as select k1, k2, v1  from tbl_with_mv;");
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
@@ -49,5 +54,32 @@ public class RefreshMaterializedViewTest {
         String mvName = alterMvStmt.getMvName().getTbl();
         Assert.assertEquals("test", dbName);
         Assert.assertEquals("mv_to_refresh", mvName);
+
+        String sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('2022-02-03') END ('2022-02-25') FORCE;";
+        RefreshMaterializedViewStatement statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        Assert.assertTrue(statement.isForceRefresh());
+        Assert.assertEquals("2022-02-03", statement.getPartitionRangeDesc().getPartitionStart());
+        Assert.assertEquals("2022-02-25", statement.getPartitionRangeDesc().getPartitionEnd());
+
+        try {
+            sql = "REFRESH MATERIALIZED VIEW test.mv_to_refresh PARTITION START('2022-02-03') END ('2022-02-25') FORCE;";
+            statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Not support refresh by partition for single partition mv.", e.getMessage());
+        }
+
+        try {
+            sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('2022-02-03') END ('2020-02-25') FORCE;";
+            statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Batch build partition start date should less than end date.", e.getMessage());
+        }
+
+        try {
+            sql = "REFRESH MATERIALIZED VIEW test.mv2_to_refresh PARTITION START('dhdfghg') END ('2020-02-25') FORCE;";
+            statement = (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals("Batch build partition EVERY is date type but START or END does not type match.", e.getMessage());
+        }
     }
 }

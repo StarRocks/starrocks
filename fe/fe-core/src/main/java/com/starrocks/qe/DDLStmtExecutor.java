@@ -258,9 +258,7 @@ public class DDLStmtExecutor {
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getLocalMetastore()
-                        .refreshMaterializedView(stmt.getMvName().getDb(),
-                                stmt.getMvName().getTbl(),
-                                Constants.TaskRunPriority.NORMAL.value());
+                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.NORMAL.value());
             });
             return null;
         }
