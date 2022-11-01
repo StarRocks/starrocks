@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/sort/sort_context.h"
 #include "exec/pipeline/source_operator.h"
@@ -32,25 +34,20 @@ public:
     bool has_output() const override;
 
     bool is_finished() const override;
+    Status set_finished(RuntimeState* state) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
-    void add_morsel(Morsel* morsel) {}
-
-    Status set_finishing(RuntimeState* state) override;
-    Status set_finished(RuntimeState* state) override;
-
 private:
-    bool _is_finished = false;
     SortContext* _sort_context;
 };
 
 class LocalMergeSortSourceOperatorFactory final : public SourceOperatorFactory {
 public:
     LocalMergeSortSourceOperatorFactory(int32_t id, int32_t plan_node_id,
-                                        const std::shared_ptr<SortContextFactory>& sort_context_factory)
+                                        std::shared_ptr<SortContextFactory> sort_context_factory)
             : SourceOperatorFactory(id, "local_merge_source", plan_node_id),
-              _sort_context_factory(sort_context_factory) {}
+              _sort_context_factory(std::move(sort_context_factory)) {}
 
     ~LocalMergeSortSourceOperatorFactory() override = default;
 

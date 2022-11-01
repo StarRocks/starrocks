@@ -30,11 +30,10 @@ bool ExchangeMergeSortSourceOperator::has_output() const {
 }
 
 bool ExchangeMergeSortSourceOperator::is_finished() const {
-    if (_limit < 0) {
-        return _is_finished;
-    } else {
-        return _num_rows_returned >= _limit || _is_finished;
+    if (_is_finished) {
+        return true;
     }
+    return _limit < 0 || _num_rows_returned >= _limit;
 }
 
 Status ExchangeMergeSortSourceOperator::set_finishing(RuntimeState* state) {

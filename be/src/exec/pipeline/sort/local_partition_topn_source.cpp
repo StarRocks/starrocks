@@ -17,7 +17,12 @@ bool LocalPartitionTopnSourceOperator::has_output() const {
 }
 
 bool LocalPartitionTopnSourceOperator::is_finished() const {
-    return _partition_topn_ctx->is_finished();
+    return _is_finished || _partition_topn_ctx->is_finished();
+}
+
+Status LocalPartitionTopnSourceOperator::set_finished(RuntimeState*) {
+    _is_finished = true;
+    return Status::OK();
 }
 
 StatusOr<vectorized::ChunkPtr> LocalPartitionTopnSourceOperator::pull_chunk(RuntimeState* state) {

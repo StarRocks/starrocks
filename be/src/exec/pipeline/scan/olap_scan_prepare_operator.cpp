@@ -38,6 +38,11 @@ bool OlapScanPrepareOperator::has_output() const {
     return !is_finished();
 }
 
+Status OlapScanPrepareOperator::set_finished(RuntimeState* state) {
+    _ctx->set_finished();
+    return Status::OK();
+}
+
 bool OlapScanPrepareOperator::is_finished() const {
     return _ctx->is_prepare_finished() || _ctx->is_finished();
 }

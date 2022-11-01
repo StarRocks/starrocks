@@ -17,22 +17,20 @@ StatusOr<vectorized::ChunkPtr> LocalMergeSortSourceOperator::pull_chunk(RuntimeS
     return _sort_context->pull_chunk();
 }
 
-Status LocalMergeSortSourceOperator::set_finishing(RuntimeState* state) {
-    _is_finished = true;
-    return Status::OK();
-}
-
 Status LocalMergeSortSourceOperator::set_finished(RuntimeState* state) {
     return _sort_context->set_finished();
 }
 
 bool LocalMergeSortSourceOperator::has_output() const {
-    return _sort_context->is_partition_sort_finished() && !_sort_context->is_output_finished();
+    return !_sort_context->is_finished() && _sort_context->is_partition_sort_finished() &&
+           !_sort_context->is_output_finished();
 }
 
 bool LocalMergeSortSourceOperator::is_finished() const {
-    return _sort_context->is_partition_sort_finished() && _sort_context->is_output_finished();
+    return _sort_context->is_finished() ||
+           (_sort_context->is_partition_sort_finished() && _sort_context->is_output_finished());
 }
+
 OperatorPtr LocalMergeSortSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto sort_context = _sort_context_factory->create(driver_sequence);
     return std::make_shared<LocalMergeSortSourceOperator>(this, _id, _plan_node_id, driver_sequence,

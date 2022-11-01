@@ -26,10 +26,12 @@ public:
     bool has_output() const override;
 
     bool is_finished() const override;
+    Status set_finished(RuntimeState*) override;
 
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
+    bool _is_finished = false;
     LocalPartitionTopnContext* _partition_topn_ctx;
 };
 

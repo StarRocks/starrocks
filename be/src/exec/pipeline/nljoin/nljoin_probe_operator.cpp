@@ -122,7 +122,7 @@ bool NLJoinProbeOperator::need_input() const {
 }
 
 bool NLJoinProbeOperator::is_finished() const {
-    return (_input_finished || _skip_probe()) && !has_output();
+    return _cross_join_context->is_finished() || ((_input_finished || _skip_probe()) && !has_output());
 }
 
 Status NLJoinProbeOperator::set_finishing(RuntimeState* state) {
