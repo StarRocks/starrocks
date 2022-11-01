@@ -216,7 +216,7 @@ Status ColumnExprPredicate::try_to_rewrite_for_zone_map_filter(starrocks::Object
         }
         if (root->get_child(0)->is_monotonic() && root->get_child(1)->is_monotonic()) {
             // rewrite = to >= and <=
-            auto build_binary_predicate_func = [this, pool, root](TExprOpcode::type new_op) {
+            auto build_binary_predicate_func = [pool, root](TExprOpcode::type new_op) {
                 TExprNode node;
                 node.node_type = TExprNodeType::BINARY_PRED;
                 node.type = root->type().to_thrift();

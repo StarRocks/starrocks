@@ -54,16 +54,16 @@ public:
     void predicates_of_column(ColumnId cid, Container* container) const;
 
     Status convert_to(ConjunctivePredicates* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const {
-        int num_vec_preds = _vec_preds.size();
+        size_t num_vec_preds = _vec_preds.size();
         dst->_vec_preds.resize(num_vec_preds);
-        for (int i = 0; i < num_vec_preds; ++i) {
+        for (size_t i = 0; i < num_vec_preds; ++i) {
             ColumnId cid = _vec_preds[i]->column_id();
             RETURN_IF_ERROR(_vec_preds[i]->convert_to(&dst->_vec_preds[i], get_type_info(new_types[cid]), obj_pool));
         }
 
-        int num_non_vec_preds = _non_vec_preds.size();
+        size_t num_non_vec_preds = _non_vec_preds.size();
         dst->_non_vec_preds.resize(num_non_vec_preds);
-        for (int i = 0; i < num_non_vec_preds; ++i) {
+        for (size_t i = 0; i < num_non_vec_preds; ++i) {
             ColumnId cid = _non_vec_preds[i]->column_id();
             RETURN_IF_ERROR(
                     _non_vec_preds[i]->convert_to(&dst->_non_vec_preds[i], get_type_info(new_types[cid]), obj_pool));

@@ -1026,7 +1026,8 @@ public:
             }
             auto value = src_datum.template get<SrcType>();
             std::string src = src_type->to_string(&value);
-            uint64_t hash_value = HashUtil::murmur_hash64A(src.data(), src.size(), HashUtil::MURMUR_SEED);
+            uint64_t hash_value =
+                    HashUtil::murmur_hash64A(src.data(), static_cast<int32_t>(src.size()), HashUtil::MURMUR_SEED);
             HyperLogLog hll;
             hll.update(hash_value);
             dst_datum.set_hyperloglog(&hll);
@@ -1082,7 +1083,7 @@ public:
             auto scale_factor = get_scale_factor<CppType>(src_type->scale());
             DecimalV3Cast::to_float<CppType, double>(v, scale_factor, &origin_value);
             PercentileValue percentile;
-            percentile.add(origin_value);
+            percentile.add(static_cast<float>(origin_value));
             dst_datum.set_percentile(&percentile);
             dst_col->append_datum(dst_datum);
         }
@@ -1311,7 +1312,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, nullable);
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1371,7 +1372,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE, nullable);
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1435,7 +1436,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, nullable);
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1495,7 +1496,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATETIME, nullable);
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1560,7 +1561,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL_V2, nullable);
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1626,7 +1627,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, nullable);
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1746,7 +1747,7 @@ public:
                 return dst;
             }
         }
-        uint16_t num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
             Datum src_datum = src.get(i);
@@ -1896,9 +1897,9 @@ Status RowConverter::init(const Schema& in_schema, const Schema& out_schema) {
 }
 
 void RowConverter::convert(std::vector<Datum>* dst, const std::vector<Datum>& src) const {
-    int num_datums = src.size();
+    size_t num_datums = src.size();
     dst->resize(num_datums);
-    for (int i = 0; i < num_datums; ++i) {
+    for (size_t i = 0; i < num_datums; ++i) {
         _converters[i]->convert(&(*dst)[i], src[i]);
     }
 }
