@@ -220,13 +220,11 @@ public:
         }
 
         if (_sync_on_close) {
-            if (config::sync_tablet_meta) {
-                Status sync_status = sync();
-                if (!sync_status.ok()) {
-                    LOG(ERROR) << "Unable to Sync " << _filename << ": " << sync_status.to_string();
-                    if (s.ok()) {
-                        s = sync_status;
-                    }
+            Status sync_status = sync();
+            if (!sync_status.ok()) {
+                LOG(ERROR) << "Unable to Sync " << _filename << ": " << sync_status.to_string();
+                if (s.ok()) {
+                    s = sync_status;
                 }
             }
         }
