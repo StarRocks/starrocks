@@ -20,7 +20,7 @@ Returns a value of the BIGINT type.
 
 ## Examples
 
-Calculate the page views (PVs) of a web page. Assume that `user_id` is of the INT type. The latter two queries are equivalent.
+Calculate the unique views (UVs) of a web page. If `user_id` is of the INT type, the latter two queries are equivalent.
 
 ```Plaintext
 mysql> select * from test
