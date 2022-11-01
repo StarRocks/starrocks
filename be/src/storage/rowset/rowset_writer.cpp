@@ -841,7 +841,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         seg_info->set_data_size(segment_size);
         seg_info->set_index_size(index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
-        seg_info->set_path(std::move((*segment_writer)->segment_path()));
+        seg_info->set_path((*segment_writer)->segment_path());
     }
 
     (*segment_writer).reset();

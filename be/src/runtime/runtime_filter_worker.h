@@ -140,7 +140,6 @@ private:
     UnboundedBlockingQueue<RuntimeFilterWorkerEvent> _queue;
     std::unordered_map<TUniqueId, RuntimeFilterMerger> _mergers;
     ExecEnv* _exec_env;
-    std::atomic<bool> _stop;
     std::thread _thread;
 };
 

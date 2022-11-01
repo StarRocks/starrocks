@@ -1099,7 +1099,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(_now, column); \
         };                                                                                                      \
                                                                                                                 \
-        std::string debug_string() const {                                                                      \
+        std::string debug_string() const override {                                                             \
             std::stringstream out;                                                                              \
             auto expr_debug_string = Expr::debug_string();                                                      \
             out << "VectorizedCastExpr ("                                                                       \

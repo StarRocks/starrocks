@@ -83,7 +83,6 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
-    const std::vector<std::string>* _unused_output_columns = nullptr;
     std::unordered_set<uint32_t> _unused_output_column_ids;
 
     // slot descriptors for each one of |output_columns|.
@@ -103,8 +102,6 @@ private:
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
-    RuntimeProfile::Counter* _tablet_counter = nullptr;
-    RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;

@@ -348,9 +348,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
         auto bucket = h.bucket() % nbucket;
         auto bid = page * nbucket + bucket;
         auto& sz = bucket_sizes[bid];
-        if (sz >= kBucketSizeMax) {
-            return Status::InternalError("bucket size exceed kBucketSizeMax");
-        }
         sz++;
         auto& data_size = bucket_data_size[bid].first;
         data_size += kv_ref.size;
@@ -2017,7 +2014,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
     if (shard_info.size == 0) {
         return Status::OK();
     }
-    *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
+    *shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, (*shard)->pages.data(), shard_info.bytes));
     if (shard_info.key_size != 0) {
         return _get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, shard_bits, shard);
@@ -2603,7 +2600,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                   << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
                   << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
     }
-    OlapReaderStatistics stats;
     std::unique_ptr<vectorized::Column> pk_column;
     if (pk_columns.size() > 1) {
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {

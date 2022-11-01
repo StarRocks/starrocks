@@ -250,7 +250,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
     // set column information
     uint32_t col_ordinal = 0;
-    uint32_t key_count = 0;
     bool has_bf_columns = false;
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
@@ -259,7 +258,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
         RETURN_IF_ERROR(t_column_to_pb_column(col_unique_id, tcolumn, field_version, column));
 
-        key_count += column->is_key();
         has_bf_columns |= column->is_bf_column();
 
         if (tablet_schema.__isset.indexes) {
