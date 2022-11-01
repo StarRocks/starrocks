@@ -1312,7 +1312,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE_V2, nullable);
-        int num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1372,7 +1372,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATE, nullable);
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1436,7 +1436,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_TIMESTAMP, nullable);
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1496,7 +1496,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DATETIME, nullable);
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1561,7 +1561,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL_V2, nullable);
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1627,7 +1627,7 @@ public:
     ColumnPtr copy_convert(const Column& src) const override {
         auto nullable = src.is_nullable();
         auto dst = ChunkHelper::column_from_field_type(OLAP_FIELD_TYPE_DECIMAL, nullable);
-        uint16_t num_items = static_cast<uint16_t>(src.size());
+        int num_items = static_cast<int>(src.size());
         dst->reserve(num_items);
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
@@ -1747,7 +1747,7 @@ public:
                 return dst;
             }
         }
-        int num_items = src.size();
+        int num_items = static_cast<int>(src.size());
         for (int i = 0; i < num_items; ++i) {
             Datum dst_datum;
             Datum src_datum = src.get(i);
