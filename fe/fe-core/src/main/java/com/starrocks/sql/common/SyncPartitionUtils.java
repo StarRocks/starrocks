@@ -9,6 +9,7 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.MaxLiteral;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
@@ -88,11 +89,15 @@ public class SyncPartitionUtils {
     public static Map<String, Range<PartitionKey>> mappingRangeList(Map<String, Range<PartitionKey>> baseRangeMap,
                                                                     String granularity, PrimitiveType partitionType) {
         Set<LocalDateTime> timePointSet = Sets.newTreeSet();
-        for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
-            PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), granularity);
-            // this mappedRange may exist range overlap
-            timePointSet.add(mappedRange.getLowerDateTime());
-            timePointSet.add(mappedRange.getUpperDateTime());
+        try {
+            for (Map.Entry<String, Range<PartitionKey>> rangeEntry : baseRangeMap.entrySet()) {
+                PartitionMapping mappedRange = mappingRange(rangeEntry.getValue(), granularity);
+                // this mappedRange may exist range overlap
+                timePointSet.add(mappedRange.getLowerDateTime());
+                timePointSet.add(mappedRange.getUpperDateTime());
+            }
+        } catch (AnalysisException e) {
+            throw new SemanticException("Convert to PartitionMapping failed:", e);
         }
         List<LocalDateTime> timePointList = Lists.newArrayList(timePointSet);
         // deal overlap
@@ -122,19 +127,25 @@ public class SyncPartitionUtils {
         return result;
     }
 
-    public static PartitionMapping mappingRange(Range<PartitionKey> baseRange, String granularity) {
+    public static PartitionMapping mappingRange(Range<PartitionKey> baseRange, String granularity)
+            throws AnalysisException {
         // assume expr partition must be DateLiteral and only one partition
         LiteralExpr lowerExpr = baseRange.lowerEndpoint().getKeys().get(0);
         LiteralExpr upperExpr = baseRange.upperEndpoint().getKeys().get(0);
         Preconditions.checkArgument(lowerExpr instanceof DateLiteral);
-        Preconditions.checkArgument(upperExpr instanceof DateLiteral);
         DateLiteral lowerDate = (DateLiteral) lowerExpr;
-        DateLiteral upperDate = (DateLiteral) upperExpr;
         LocalDateTime lowerDateTime = lowerDate.toLocalDateTime();
-        LocalDateTime upperDateTime = upperDate.toLocalDateTime();
-
         LocalDateTime truncLowerDateTime = getLowerDateTime(lowerDateTime, granularity);
-        LocalDateTime truncUpperDateTime = getUpperDateTime(upperDateTime, granularity);
+
+        DateLiteral upperDate;
+        LocalDateTime truncUpperDateTime;
+        if (upperExpr instanceof MaxLiteral) {
+            upperDate = new DateLiteral(Type.DATE, true);
+            truncUpperDateTime = upperDate.toLocalDateTime();
+        } else {
+            upperDate = (DateLiteral) upperExpr;
+            truncUpperDateTime = getUpperDateTime(upperDate.toLocalDateTime(), granularity);
+        }
         return new PartitionMapping(truncLowerDateTime, truncUpperDateTime);
     }
 
