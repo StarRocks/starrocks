@@ -7,17 +7,10 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Config;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.CachingHiveMetastore;
-import com.starrocks.connector.hive.HiveCommonStats;
-import com.starrocks.connector.hive.HivePartitionName;
-import com.starrocks.connector.hive.HiveTableName;
-import com.starrocks.connector.hive.IHiveMetastore;
-import com.starrocks.connector.hive.Partition;
 import com.starrocks.connector.hive.events.MetastoreEventType;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.server.GlobalStateMgr;
@@ -52,14 +45,15 @@ public class CacheUpdateProcessor {
                                 IHiveMetastore metastore,
                                 RemoteFileIO remoteFileIO,
                                 ExecutorService executor,
-                                boolean isRecursive) {
+                                boolean isRecursive,
+                                boolean enableHmsEventsIncrementalSync) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO instanceof CachingRemoteFileIO
                 ? Optional.of((CachingRemoteFileIO) remoteFileIO) : Optional.empty();
         this.executor = executor;
         this.isRecursive = isRecursive;
-        if (Config.enable_hms_events_incremental_sync) {
+        if (enableHmsEventsIncrementalSync) {
             setLastSyncedEventId(metastore.getCurrentEventId());
         }
     }
@@ -154,23 +148,42 @@ public class CacheUpdateProcessor {
 
             List<Future<?>> futures = Lists.newArrayList();
             if ("drop".equalsIgnoreCase(type)) {
-                remotePathKeys.forEach(pathKey -> {
-                    futures.add(executor.submit(() -> remoteFileIO.get().removeRemoteFile(pathKey)));
-                });
+                if (remotePathKeys.size() > 1) {
+                    remotePathKeys.forEach(pathKey -> {
+                        futures.add(executor.submit(() -> remoteFileIO.get().removeRemoteFile(pathKey)));
+                    });
+                    for (Future<?> future : futures) {
+                        try {
+                            future.get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            LOG.error("Failed to refresh remote files on [{}.{}], partitionNames: {}",
+                                    hmsTable.getDbName(), hmsTable.getTableName(), hivePartitionNames);
+                            throw new StarRocksConnectorException("Failed to refresh remote files", e);
+                        }
+                    }
+                } else {
+                    remotePathKeys.forEach(pathKey -> {
+                        remoteFileIO.get().removeRemoteFile(pathKey);
+                    });
+                }
             } else {
-                remotePathKeys.forEach(pathKey -> {
-                    futures.add(executor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
-                });
-            }
-
-
-            for (Future<?> future : futures) {
-                try {
-                    future.get();
-                } catch (InterruptedException | ExecutionException e) {
-                    LOG.error("Failed to refresh remote files on [{}.{}], partitionNames: {}",
-                            hmsTable.getDbName(), hmsTable.getTableName(), hivePartitionNames);
-                    throw new StarRocksConnectorException("Failed to refresh remote files", e);
+                if (remotePathKeys.size() > 1) {
+                    remotePathKeys.forEach(pathKey -> {
+                        futures.add(executor.submit(() -> remoteFileIO.get().updateRemoteFiles(pathKey)));
+                    });
+                    for (Future<?> future : futures) {
+                        try {
+                            future.get();
+                        } catch (InterruptedException | ExecutionException e) {
+                            LOG.error("Failed to refresh remote files on [{}.{}], partitionNames: {}",
+                                    hmsTable.getDbName(), hmsTable.getTableName(), hivePartitionNames);
+                            throw new StarRocksConnectorException("Failed to refresh remote files", e);
+                        }
+                    }
+                } else {
+                    remotePathKeys.forEach(pathKey -> {
+                        remoteFileIO.get().updateRemoteFiles(pathKey);
+                    });
                 }
             }
         }
@@ -211,10 +224,12 @@ public class CacheUpdateProcessor {
                 updateTableRemoteFileIO(hiveTable, "ALTER");
                 break;
             case ALTER_PARTITION:
-                updatePartitionRemoteFileIO(hiveTable, hivePartitionName.getPartitionValues(), hiveTable, "ALTER");
+                updatePartitionRemoteFileIO(hiveTable,
+                        Lists.newArrayList(hivePartitionName.getPartitionNames().get()), hiveTable, "ALTER");
                 break;
             case DROP_PARTITION:
-                updatePartitionRemoteFileIO(hiveTable, hivePartitionName.getPartitionValues(), hiveTable, "DROP");
+                updatePartitionRemoteFileIO(hiveTable,
+                        Lists.newArrayList(hivePartitionName.getPartitionNames().get()), hiveTable, "DROP");
                 break;
             case DROP_TABLE:
                 updateTableRemoteFileIO(hiveTable, "DROP");

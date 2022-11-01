@@ -47,7 +47,7 @@ public class AlterTableEvent extends MetastoreTableEvent {
             tableAfter = Preconditions.checkNotNull(alterTableMessage.getTableObjAfter());
             tableBefore = Preconditions.checkNotNull(alterTableMessage.getTableObjBefore());
             // ignore schema change on internal catalog's hive table
-            if (isResourceMappingCatalog(catalogName)) {
+            if (!isResourceMappingCatalog(catalogName)) {
                 isSchemaChange = isSchemaChange(tableBefore.getSd().getCols(), tableAfter.getSd().getCols());
             }
         } catch (Exception e) {

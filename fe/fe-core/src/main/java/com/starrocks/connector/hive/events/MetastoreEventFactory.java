@@ -67,12 +67,16 @@ public class MetastoreEventFactory implements EventFactory {
         boolean isTableCached = false;
         for (NotificationEvent event : events) {
             if (isResourceMappingCatalog(catalogName)) {
-                isTableCached = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                        .containsHiveTable(String.join(".", catalogName, event.getDbName(), event.getTableName()));
+                if (!GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                        .needToProcess(String.join(".", catalogName, event.getDbName(), event.getTableName()))) {
+                    LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
+                            catalogName, event.getDbName(), event.getTableName(), event);
+                    continue;
+                }
             }
 
             if (!cacheProcessor.existIncache(MetastoreEventType.ALTER_TABLE,
-                    HiveTableName.of(event.getDbName(), event.getTableName())) && isTableCached) {
+                    HiveTableName.of(event.getDbName(), event.getTableName())) && !isTableCached) {
                 LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
                         catalogName, event.getDbName(), event.getTableName(), event);
                 continue;

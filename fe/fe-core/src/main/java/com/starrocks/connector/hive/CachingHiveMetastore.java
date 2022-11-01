@@ -399,7 +399,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         tableCache.put(hiveTableName, updatedHiveTable);
         if (updatedHiveTable.isUnPartitioned()) {
             HivePartitionStats partitionStats =
-                    getPartitionStatus(commonStats, get(tableStatsCache, hiveTableName).getColumnStats());
+                    createPartitionStats(commonStats, get(tableStatsCache, hiveTableName).getColumnStats());
             tableStatsCache.put(hiveTableName, partitionStats);
             partitionCache.put(hivePartitionName, partition);
         } else {
@@ -408,7 +408,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         }
     }
 
-    private HivePartitionStats getPartitionStatus(HiveCommonStats commonStats, Map<String, HiveColumnStats> columnStats) {
+    private HivePartitionStats createPartitionStats(HiveCommonStats commonStats, Map<String, HiveColumnStats> columnStats) {
         long totalRowNums = commonStats.getRowNums();
         if (totalRowNums == -1) {
             return HivePartitionStats.empty();
@@ -418,7 +418,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
 
     private void refreshPartitionByEvent(HivePartitionName hivePartitionName,
                                          HiveCommonStats commonStats, Partition partition) {
-        HivePartitionStats partitionStats = getPartitionStatus(
+        HivePartitionStats partitionStats = createPartitionStats(
                 commonStats, get(partitionStatsCache, hivePartitionName).getColumnStats());
         partitionStatsCache.put(hivePartitionName, partitionStats);
         partitionCache.put(hivePartitionName, partition);

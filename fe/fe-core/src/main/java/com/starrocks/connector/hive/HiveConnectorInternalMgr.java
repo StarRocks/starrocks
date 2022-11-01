@@ -8,7 +8,6 @@ import com.starrocks.connector.CachingRemoteFileConf;
 import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ReentrantExecutor;
 import com.starrocks.connector.RemoteFileIO;
-import com.starrocks.connector.hive.CachingHiveMetastore;
 import org.apache.hadoop.conf.Configuration;
 
 import java.util.Map;

@@ -37,5 +37,7 @@ public interface IHiveMetastore {
     default void invalidateAll() {
     }
 
-    long getCurrentEventId();
+    default long getCurrentEventId() {
+        return -1;
+    }
 }

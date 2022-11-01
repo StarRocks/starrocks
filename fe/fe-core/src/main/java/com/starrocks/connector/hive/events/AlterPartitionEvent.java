@@ -46,11 +46,10 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             partitionAfter = Preconditions.checkNotNull(alterPartitionMessage.getPtnObjAfter());
             hmsTbl = alterPartitionMessage.getTableObj();
             hivePartitionNames.clear();
-            hivePartitionNames.add(new HivePartitionName(dbName, tblName,
-                    Lists.newArrayList(FileUtils.makePartName(
-                            hmsTbl.getPartitionKeys().stream()
-                                    .map(FieldSchema::getName)
-                                    .collect(Collectors.toList()), Lists.newArrayList(partitionAfter.getValues())))));
+            List<String> partitionColNames = hmsTbl.getPartitionKeys().stream()
+                    .map(FieldSchema::getName).collect(Collectors.toList());
+            hivePartitionNames.add(HivePartitionName.of(dbName, tblName,
+                    FileUtils.makePartName(partitionColNames, partitionAfter.getValues())));
         } catch (Exception e) {
             throw new MetastoreNotificationException(
                     debugString("Unable to parse the alter partition message"), e);

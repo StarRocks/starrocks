@@ -77,15 +77,15 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         this.metastoreEventFactory = new MetastoreEventFactory();
     }
 
-    public void registerCatalogCache(String catalogName, CacheUpdateProcessor cache) {
+    public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
         cacheUpdateProcessors.put(catalogName, cache);
     }
 
-    public void unRegisterCatalogCache(String catalogName) {
+    public void unRegisterCacheUpdateProcessor(String catalogName) {
         cacheUpdateProcessors.remove(catalogName);
     }
 
-    public void registerTable(String catalogTableName) {
+    public void registerTableFromResource(String catalogTableName) {
         tablesLock.writeLock().lock();
         try {
             tables.add(catalogTableName);
@@ -95,7 +95,7 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         }
     }
 
-    public void unregisterTable(String catalogTableName) {
+    public void unRegisterTableFromResource(String catalogTableName) {
         tablesLock.writeLock().lock();
         try {
             tables.remove(catalogTableName);
@@ -105,13 +105,8 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         }
     }
 
-    public boolean containsHiveTable(String catalogTableName) {
-        tablesLock.readLock().lock();
-        try {
-            return tables.contains(catalogTableName);
-        } finally {
-            tablesLock.readLock().unlock();
-        }
+    public boolean needToProcess(String catalogTableName) {
+        return tables.contains(catalogTableName);
     }
 
     /**

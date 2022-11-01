@@ -41,7 +41,6 @@ import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
@@ -374,28 +373,18 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onCreate() {
-        if (!Config.enable_hms_events_incremental_sync) {
-            return;
-        }
-        MetastoreEventsProcessor eventsProcessor =
-                GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor();
-        String catalogName = getCatalogName();
-        if (isResourceMappingCatalog(catalogName) && eventsProcessor.isContainsCatalog(catalogName)) {
-            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTable(
+        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(catalogName)) {
+            String catalogName = getCatalogName();
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTableFromResource(
                     String.join(".", catalogName, hiveDbName, hiveTableName));
         }
     }
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
-        if (!Config.enable_hms_events_incremental_sync) {
-            return;
-        }
-        MetastoreEventsProcessor eventsProcessor =
-                GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor();
-        String catalogName = getCatalogName();
-        if (isResourceMappingCatalog(catalogName) && eventsProcessor.isContainsCatalog(catalogName)) {
-            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unregisterTable(
+        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(catalogName)) {
+            String catalogName = getCatalogName();
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterTableFromResource(
                     String.join(".", catalogName, hiveDbName, hiveTableName));
         }
     }

@@ -45,11 +45,10 @@ public class AddPartitionEvent extends MetastoreTableEvent {
             this.addedPartition = addedPartition;
             hmsTbl = addPartitionMessage.getTableObj();
             hivePartitionNames.clear();
-            hivePartitionNames.add(new HivePartitionName(dbName, tblName,
-                    Lists.newArrayList(FileUtils.makePartName(
-                            hmsTbl.getPartitionKeys().stream()
-                                    .map(FieldSchema::getName)
-                                    .collect(Collectors.toList()), Lists.newArrayList(addedPartition.getValues())))));
+            List<String> partitionColNames = hmsTbl.getPartitionKeys().stream()
+                    .map(FieldSchema::getName).collect(Collectors.toList());
+            hivePartitionNames.add(HivePartitionName.of(dbName, tblName,
+                    FileUtils.makePartName(partitionColNames, addedPartition.getValues())));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(ex);
         }
