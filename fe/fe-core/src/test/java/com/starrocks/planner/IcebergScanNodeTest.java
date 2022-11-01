@@ -3,34 +3,60 @@ package com.starrocks.planner;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.TableRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.thrift.*;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
+import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergFileContent;
+import com.starrocks.thrift.TScanRange;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
-import org.apache.iceberg.*;
+import org.apache.iceberg.BaseCombinedScanTask;
+import org.apache.iceberg.CombinedScanTask;
+import org.apache.iceberg.DataFile;
+import org.apache.iceberg.DataFiles;
+import org.apache.iceberg.DataTableScan;
+import org.apache.iceberg.DeleteFile;
+import org.apache.iceberg.Files;
+import org.apache.iceberg.FileFormat;
+import org.apache.iceberg.FileMetadata;
+import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.PartitionSpec;
+import org.apache.iceberg.Schema;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.Table;
+import org.apache.iceberg.TableScan;
 import org.apache.iceberg.exceptions.RuntimeIOException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.io.FileIO;
 import org.apache.iceberg.io.InputFile;
 import org.apache.iceberg.io.OutputFile;
+import org.apache.iceberg.types.Types;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -178,11 +204,9 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testGetScanRangeLocations(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked com.starrocks.catalog.IcebergTable table,
+    public void testGetScanRangeLocations(@Mocked com.starrocks.catalog.IcebergTable table,
                                           @Mocked Table iTable,
-                                          @Mocked Snapshot snapshot,
-                                          @Mocked TableScan scan) throws UserException {
+                                          @Mocked Snapshot snapshot) throws UserException {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -206,11 +230,9 @@ public class IcebergScanNodeTest {
     }
 
     @Test
-    public void testGetScanRangeLocationsWithEquality(@Mocked GlobalStateMgr globalStateMgr,
-                                          @Mocked com.starrocks.catalog.IcebergTable table,
+    public void testGetScanRangeLocationsWithEquality(@Mocked com.starrocks.catalog.IcebergTable table,
                                           @Mocked Table iTable,
-                                          @Mocked Snapshot snapshot,
-                                          @Mocked TableScan scan) throws UserException {
+                                          @Mocked Snapshot snapshot) throws UserException {
         Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
         DescriptorTable descTable = analyzer.getDescTbl();
         TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
@@ -226,5 +248,65 @@ public class IcebergScanNodeTest {
         THdfsScanRange hdfsScanRange = scanRange.hdfs_scan_range;
         TIcebergDeleteFile deleteFile = hdfsScanRange.delete_files.get(0);
         Assert.assertEquals(TIcebergFileContent.EQUALITY_DELETES, deleteFile.file_content);
+    }
+
+    @Test
+    public void testAppendEqualityColumns(@Mocked IcebergTable table,
+                                          @Mocked Table iTable,
+                                          @Mocked Snapshot snapshot,
+                                          @Mocked PhysicalIcebergScanOperator node,
+                                          @Mocked ColumnRefFactory columnRefFactory,
+                                          @Mocked ExecPlan context) throws UserException {
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        tupleDesc.setTable(table);
+
+        setUpMock(false, table, iTable, snapshot);
+
+        Map<ColumnRefOperator, Column> columnMap = new HashMap<>();
+        Map<ColumnRefOperator, Expr> columnRefOperatorExprMap = new HashMap<>();
+        DescriptorTable descriptorTable = new DescriptorTable();
+        List<Column> columns = new ArrayList<>();
+        Column column = new Column();
+        column.setName("test");
+        columns.add(column);
+        List<Types.NestedField> iColumns = new ArrayList<>();
+        Types.NestedField iColumn = Types.NestedField.of(1, false, "test", new Types.IntegerType());
+        iColumns.add(iColumn);
+        Schema schema = new Schema(iColumns);
+        new Expectations() {
+            {
+                node.getColRefToColumnMetaMap();
+                result = columnMap;
+
+                node.getTable();
+                result = table;
+
+                table.getFullSchema();
+                result = columns;
+
+                iTable.schema();
+                result = schema;
+
+                context.getColRefToExpr();
+                result = columnRefOperatorExprMap;
+
+                context.getDescTbl();
+                result = descriptorTable;
+            }
+        };
+
+        new MockUp<TupleDescriptor>() {
+            @Mock
+            public TableRef getRef() {
+                return new TableRef();
+            }
+        };
+
+        IcebergScanNode scanNode = new IcebergScanNode(new PlanNodeId(0), tupleDesc, "IcebergScanNode");
+        scanNode.getScanRangeLocations();
+        scanNode.appendEqualityColumns(node, columnRefFactory, context);
+        Assert.assertEquals(context.getColRefToExpr().size(), 1);
     }
 }

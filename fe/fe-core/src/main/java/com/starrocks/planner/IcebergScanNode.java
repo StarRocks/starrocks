@@ -8,14 +8,25 @@ import com.google.common.collect.ImmutableCollection;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.SlotDescriptor;
+import com.starrocks.analysis.SlotId;
+import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
 import com.starrocks.connector.PredicateUtils;
 import com.starrocks.connector.iceberg.ExpressionConverter;
 import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.Field;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
@@ -126,6 +137,42 @@ public class IcebergScanNode extends ScanNode {
         icebergPredicates = expressions;
     }
 
+    /**
+     * Append columns need to read for equality delete files
+     */
+    public void appendEqualityColumns(PhysicalIcebergScanOperator node,
+                                      ColumnRefFactory columnRefFactory,
+                                      ExecPlan context) {
+        Table referenceTable = node.getTable();
+        Set<String> scanNodeColumns = node.getColRefToColumnMetaMap().values().stream()
+                .map(column -> column.getName()).collect(Collectors.toSet());
+        Set<String> appendEqualityColumns = equalityDeleteColumns.stream()
+                .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
+        for (String eqName : appendEqualityColumns) {
+            for (Column column : referenceTable.getFullSchema()) {
+                if (column.getName().equals(eqName)) {
+                    Field field;
+                    TableName tableName = desc.getRef().getName();
+                    if (referenceTable.getBaseSchema().contains(column)) {
+                        field = new Field(column.getName(), column.getType(), tableName,
+                                new SlotRef(tableName, column.getName(), column.getName()), true);
+                    } else {
+                        field = new Field(column.getName(), column.getType(), tableName,
+                                new SlotRef(tableName, column.getName(), column.getName()), false);
+                    }
+                    ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
+                            field.getType(), column.isAllowNull());
+                    SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
+                    slotDescriptor.setColumn(column);
+                    slotDescriptor.setIsNullable(column.isAllowNull());
+                    slotDescriptor.setIsMaterialized(true);
+                    context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
+                    break;
+                }
+            }
+        }
+    }
+
     @Override
     public void finalizeStats(Analyzer analyzer) throws UserException {
         if (isFinalized) {
@@ -211,14 +258,6 @@ public class IcebergScanNode extends ScanNode {
 
     public HDFSScanNodePredicates getScanNodePredicates() {
         return scanNodePredicates;
-    }
-
-    public Set<String> getEqualityDeleteColumns() {
-        return equalityDeleteColumns;
-    }
-
-    public TupleDescriptor getDesc() {
-        return this.desc;
     }
 
     @Override
