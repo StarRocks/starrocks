@@ -425,7 +425,7 @@ void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
     const size_t offset = _offsets->get_data()[idx];
     const size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
-    buf->begin_push_map();
+    buf->begin_push_bracket();
     Column* keys = _keys.get();
     Column* values = _values.get();
     if (map_size > 0) {
@@ -439,7 +439,7 @@ void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx) const {
         buf->separator(':');
         values->put_mysql_row_buffer(buf, offset + i);
     }
-    buf->finish_push_map();
+    buf->finish_push_bracket();
 }
 
 Datum MapColumn::get(size_t idx) const {

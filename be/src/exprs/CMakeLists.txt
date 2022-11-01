@@ -89,6 +89,7 @@ set(EXPR_FILES
   vectorized/java_function_call_expr.cpp
   vectorized/lambda_function.cpp
   vectorized/array_map_expr.cpp
+  vectorized/subfield_expr.cpp
 )
 
 add_library(Exprs ${EXPR_FILES})

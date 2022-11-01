@@ -14,6 +14,7 @@ set(EXEC_FILES
         ./column/fixed_length_column_test.cpp
         ./column/json_column_test.cpp
         ./column/map_column_test.cpp
+        ./column/struct_column_test.cpp
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
@@ -110,6 +111,7 @@ set(EXEC_FILES
         ./exprs/vectorized/es_functions_test.cpp
         ./exprs/vectorized/utility_functions_test.cpp
         ./exprs/vectorized/runtime_filter_test.cpp
+        ./exprs/vectorized/subfield_expr_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/binary_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp

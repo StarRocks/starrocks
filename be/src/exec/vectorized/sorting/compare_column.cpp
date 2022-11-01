@@ -165,6 +165,11 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(const vectorized::StructColumn& column) {
+        //TODO(SmithCruise)
+        return Status::NotSupported("Not support");
+    }
+
     template <typename T>
     Status do_visit(const vectorized::BinaryColumnBase<T>& column) {
         const auto& lhs_datas = column.get_data();
@@ -285,9 +290,10 @@ public:
         return Status::OK();
     }
 
-    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("not support"); }
-    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("not support"); }
-    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("not support"); }
+    Status do_visit(const vectorized::ConstColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const vectorized::ArrayColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const vectorized::MapColumn& column) { return Status::NotSupported("Not support"); }
+    Status do_visit(const vectorized::StructColumn& column) { return Status::NotSupported("Not support"); }
     template <typename T>
     Status do_visit(const vectorized::ObjectColumn<T>& column) {
         return Status::NotSupported("not support");
