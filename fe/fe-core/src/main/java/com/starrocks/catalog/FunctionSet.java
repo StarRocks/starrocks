@@ -624,7 +624,7 @@ public class FunctionSet {
             return null;
         }
 
-        // Finally check for non-strict supertypes
+        // Finally, check for non-strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
                 return checkPolymorphicFunction(f, desc.getArgs());
@@ -1253,7 +1253,7 @@ public class FunctionSet {
             // Because unnest is a variadic function, and the types of multiple parameters may be inconsistent,
             // the current SR variadic function parsing can only support variadic parameters of the same type.
             // The unnest is treated specially here, and the type of the child is directly used as the unnest function type.
-            if (fn.functionName().equalsIgnoreCase("UNNEST")) {
+            if (fn.functionName().equals("unnest")) {
                 List<Type> realTableFnRetTypes = new ArrayList<>();
                 for (Type paramType : paramTypes) {
                     if (!paramType.isArrayType()) {

@@ -668,7 +668,7 @@ public class QueryAnalyzer {
             node.setChildExpressions(node.getFunctionParams().exprs());
 
             if (node.getColumnNames() == null) {
-                if (tableFunction.getFunctionName().getFunction().equalsIgnoreCase("unnest")) {
+                if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
                     // If the unnest variadic function does not explicitly specify column name,
                     // all column names are `unnest`. This refers to the return column name of postgresql.
                     List<String> columnNames = new ArrayList<>();

@@ -67,8 +67,7 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     }
 
     if (table_function_name == "unnest" && arg_types.size() > 1) {
-        _table_function = vectorized::get_table_function(table_function_name, {INVALID_TYPE}, {INVALID_TYPE},
-                                                         table_fn.binary_type);
+        _table_function = vectorized::get_table_function(table_function_name, {}, {}, table_fn.binary_type);
     } else {
         _table_function =
                 vectorized::get_table_function(table_function_name, arg_types, return_types, table_fn.binary_type);

@@ -48,6 +48,12 @@ public class AnalyzeLateralTest {
     }
 
     @Test
+    public void testUpperCase() {
+        analyzeSuccess("select v1,t.* from tarray, UNNEST(v3) t");
+        analyzeSuccess("select * from tarray, UNNEST(v3, ['a', 'b', 'c']) as t(unnest_1, unnest_2)");
+    }
+
+    @Test
     public void testVarArgs() {
         analyzeSuccess("select * from tarray, unnest(v3) as t(unnest_1)");
         analyzeSuccess("select unnest_1 from tarray, unnest(v3) as t(unnest_1)");
@@ -64,5 +70,9 @@ public class AnalyzeLateralTest {
                 "table t has 1 columns available but 2 columns specified");
         analyzeFail("select * from tarray, unnest(v3) as t(unnest_1, unnest_2)",
                 "table t has 2 columns available but 1 columns specified");
+
+        analyzeFail("select * from tarray, unnest(null, null) as t(unnest_1, unnest_2)", "Unknown table function");
+        analyzeFail("select * from tarray, unnest(v3, null) as t(unnest_1, unnest_2)", "Unknown table function");
+        analyzeFail("select * from tarray, unnest(null, v3) as t(unnest_1, unnest_2)", "Unknown table function");
     }
 }

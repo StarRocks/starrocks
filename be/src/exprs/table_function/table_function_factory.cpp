@@ -82,7 +82,7 @@ TableFunctionResolver::TableFunctionResolver() {
     // and there is no special treatment for different types of input parameters,
     // this is just for compatibility and find the corresponding function
     TableFunctionPtr multi_unnest = std::make_shared<MultiUnnest>();
-    add_function_mapping("unnest", {INVALID_TYPE}, {INVALID_TYPE}, multi_unnest);
+    add_function_mapping("unnest", {}, {}, multi_unnest);
 
     TableFunctionPtr func_json_each = std::make_shared<JsonEach>();
     add_function_mapping("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, func_json_each);
