@@ -240,6 +240,10 @@ public class StatisticUtils {
         }
     }
 
+    // Get all the columns in the table that can be collected.
+    // The list will only contain aggregated and non-aggregated columns of the "replace" type.
+    // This is because in aggregate type tables, metric columns generally do not participate in predicate.
+    // Collecting these columns is not meaningful but time-consuming, so we exclude them.
     public static List<String> getCollectibleColumns(Table table) {
         List<String> columns = new ArrayList<>();
         for (Column column : table.getBaseSchema()) {
