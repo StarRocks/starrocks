@@ -1268,6 +1268,7 @@ public class RestoreJob extends AbstractJob {
                         continue;
                     }
                     DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), (OlapTable) tbl);
+                    DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), (OlapTable) tbl);
                 }
             } finally {
                 db.readUnlock();
