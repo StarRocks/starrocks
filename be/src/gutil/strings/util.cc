@@ -684,7 +684,9 @@ char* strndup_with_new(const char* the_string, int max_length) {
     auto result = new char[max_length + 1];
     result[max_length] = '\0'; // terminate the string because strncpy might not
     DIAGNOSTIC_PUSH
+#if defined(__GNUC__) && !defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wstringop-truncation")
+#endif
     return strncpy(result, the_string, max_length);
     DIAGNOSTIC_POP
 }

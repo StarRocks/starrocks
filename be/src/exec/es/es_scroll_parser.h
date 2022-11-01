@@ -79,8 +79,6 @@ private:
     rapidjson::SizeType _cur_line;
     rapidjson::Document _document_node;
     rapidjson::Value _inner_hits_node;
-    // TODO: This value assigned but never used.
-    bool _doc_value_mode;
 
     rapidjson::StringBuffer _scratch_buffer;
     rapidjson::Writer<rapidjson::StringBuffer> _temp_writer;
