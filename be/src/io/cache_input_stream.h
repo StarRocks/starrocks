@@ -35,6 +35,8 @@ public:
 
     const Stats& stats() { return _stats; }
 
+    void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
+
 private:
     std::string _cache_key;
     std::string _filename;
@@ -44,6 +46,7 @@ private:
     Stats _stats;
     int64_t _size;
     int64_t _block_size;
+    bool _enable_populate_cache = false;
 };
 
 } // namespace starrocks::io
