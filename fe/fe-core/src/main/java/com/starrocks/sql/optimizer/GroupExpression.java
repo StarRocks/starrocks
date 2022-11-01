@@ -126,10 +126,9 @@ public class GroupExpression {
         this.outputPropertyMap.put(requiredPropertySet, outputPropertySet);
     }
 
-    public void addValidOutputPropertyGroup(PhysicalPropertySet outputProperty, boolean isSameGroup,
+    public void addValidOutputPropertyGroup(PhysicalPropertySet outputProperty,
                                             List<PhysicalPropertySet> childrenOutputProperties) {
-        validOutputPropertyGroups.add(
-                OutputPropertyGroup.of(outputProperty, isSameGroup, childrenOutputProperties));
+        validOutputPropertyGroups.add(OutputPropertyGroup.of(outputProperty, childrenOutputProperties));
     }
 
     public List<OutputPropertyGroup> getChildrenOutputProperties(PhysicalPropertySet outputProperty) {

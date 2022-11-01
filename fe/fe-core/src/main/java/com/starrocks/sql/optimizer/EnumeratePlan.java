@@ -85,28 +85,21 @@ public class EnumeratePlan {
         for (Map.Entry<OutputPropertyGroup, Integer> entry : entries) {
             OutputPropertyGroup outputPropertyGroup = entry.getKey();
             childrenOutputProperties = outputPropertyGroup.getChildrenOutputProperties();
-            // 4. compute the localProperty-rank in the property.
-            int localRankOfProperties = localRankOfGroupExpression - planCountOfKProperties;
 
-            if (outputPropertyGroup.isSameGroup()) {
-                // 5.1 child is an enforced node that belongs to the same group
-                OptExpression childPlan = extractNthPlanImpl(chooseGroupExpression.getGroup(),
-                        childrenOutputProperties.get(0), localRankOfProperties);
-                childPlans.add(childPlan);
-            } else {
-                if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
-                    // 5.2 compute sub-ranks of children groups
-                    List<Integer> childRankList =
-                            computeNthOfChildGroups(chooseGroupExpression, localRankOfProperties,
-                                    childrenOutputProperties);
-                    // 6. computes the child group recursively
-                    for (int childIndex = 0; childIndex < chooseGroupExpression.arity(); ++childIndex) {
-                        OptExpression childPlan = extractNthPlanImpl(chooseGroupExpression.inputAt(childIndex),
-                                childrenOutputProperties.get(childIndex), childRankList.get(childIndex));
-                        childPlans.add(childPlan);
-                    }
-                    break;
+            if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
+                // 4. compute the localProperty-rank in the property.
+                int localRankOfProperties = localRankOfGroupExpression - planCountOfKProperties;
+                // 5. compute sub-ranks of children groups
+                List<Integer> childRankList =
+                        computeNthOfChildGroups(chooseGroupExpression, localRankOfProperties,
+                                childrenOutputProperties);
+                // 6. computes the child group recursively
+                for (int childIndex = 0; childIndex < chooseGroupExpression.arity(); ++childIndex) {
+                    OptExpression childPlan = extractNthPlanImpl(chooseGroupExpression.inputAt(childIndex),
+                            childrenOutputProperties.get(childIndex), childRankList.get(childIndex));
+                    childPlans.add(childPlan);
                 }
+                break;
             }
             planCountOfKProperties += entry.getValue();
         }
@@ -198,7 +191,7 @@ public class EnumeratePlan {
         for (GroupExpression groupExpression : group.getSatisfyOutputPropertyGroupExpressions(outputProperty)) {
             if (groupExpression.getInputs().isEmpty()) {
                 // It's leaf node of the plan
-                groupExpression.addPlanCountOfProperties(OutputPropertyGroup.of(outputProperty, false), 1);
+                groupExpression.addPlanCountOfProperties(OutputPropertyGroup.of(outputProperty), 1);
             } else if (groupExpression.hasValidSubPlan()) {
                 // count the plan count of this group expression
                 countGroupExpressionValidPlan(groupExpression, outputProperty);
@@ -212,17 +205,12 @@ public class EnumeratePlan {
     private static void countGroupExpressionValidPlan(GroupExpression groupExpression,
                                                       PhysicalPropertySet outputProperty) {
         for (OutputPropertyGroup outputPropertyGroup : groupExpression.getChildrenOutputProperties(outputProperty)) {
-            boolean isSameGroup = outputPropertyGroup.isSameGroup();
             List<PhysicalPropertySet> childrenOutputProperties = outputPropertyGroup.getChildrenOutputProperties();
 
             int childPlanCount = 1;
-            if (isSameGroup) {
-                childPlanCount *= countGroupValidPlan(groupExpression.getGroup(), childrenOutputProperties.get(0));
-            } else {
-                for (int childIndex = 0; childIndex < groupExpression.arity(); ++childIndex) {
-                    childPlanCount *= countGroupValidPlan(groupExpression.inputAt(childIndex),
-                            childrenOutputProperties.get(childIndex));
-                }
+            for (int childIndex = 0; childIndex < groupExpression.arity(); ++childIndex) {
+                childPlanCount *= countGroupValidPlan(groupExpression.inputAt(childIndex),
+                        childrenOutputProperties.get(childIndex));
             }
 
             groupExpression.addPlanCountOfProperties(outputPropertyGroup, childPlanCount);

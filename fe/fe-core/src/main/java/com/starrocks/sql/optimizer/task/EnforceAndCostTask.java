@@ -312,7 +312,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
 
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);
         PhysicalPropertySet requiredProperty = context.getRequiredProperty();
-        recordPlanEnumInfo(groupExpression, outputProperty, false, childrenOutputProperties);
+        recordPlanEnumInfo(groupExpression, outputProperty, childrenOutputProperties);
         // Enforce property if outputProperty doesn't satisfy context requiredProperty
         if (!outputProperty.isSatisfy(requiredProperty)) {
             // Enforce the property to meet the required property
@@ -407,11 +407,10 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
     }
 
     private void recordPlanEnumInfo(GroupExpression groupExpression, PhysicalPropertySet outputProperty,
-                                    boolean isSameGroup,
                                     List<PhysicalPropertySet> childrenOutputProperties) {
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
             // record the output/input properties when child group could satisfy this group expression required property
-            groupExpression.addValidOutputPropertyGroup(outputProperty, isSameGroup, childrenOutputProperties);
+            groupExpression.addValidOutputPropertyGroup(outputProperty, childrenOutputProperties);
             groupExpression.getGroup().addSatisfyOutputPropertyGroupExpression(outputProperty, groupExpression);
         }
     }
@@ -465,7 +464,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 context.getRequiredProperty().getDistributionProperty().appendEnforcers(groupExpression.getGroup());
 
         updateCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty);
-        recordPlanEnumInfo(enforcer, newOutputProperty, true, Lists.newArrayList(oldOutputProperty));
+        recordPlanEnumInfo(enforcer, newOutputProperty, Lists.newArrayList(oldOutputProperty));
 
         return newOutputProperty;
     }
@@ -477,7 +476,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                 context.getRequiredProperty().getSortProperty().appendEnforcers(groupExpression.getGroup());
 
         updateCostWithEnforcer(enforcer, oldOutputProperty, newOutputProperty);
-        recordPlanEnumInfo(enforcer, newOutputProperty, true, Lists.newArrayList(oldOutputProperty));
+        recordPlanEnumInfo(enforcer, newOutputProperty, Lists.newArrayList(oldOutputProperty));
 
         return newOutputProperty;
     }

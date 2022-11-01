@@ -230,7 +230,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
             childGroup.setBestExpression(enforcer, childCosts, newOutputProperty);
 
             if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
-                enforcer.addValidOutputPropertyGroup(newOutputProperty, true, Lists.newArrayList(childOutputProperty));
+                enforcer.addValidOutputPropertyGroup(newOutputProperty, Lists.newArrayList(childOutputProperty));
                 enforcer.getGroup().addSatisfyOutputPropertyGroupExpression(newOutputProperty, enforcer);
             }
             return new Pair<>(enforcer, newOutputProperty);
@@ -269,7 +269,7 @@ public class ChildOutputPropertyGuarantor extends PropertyDeriverBase<Void, Expr
         childGroup.setBestExpression(enforcer, childCost, newOutputProperty);
 
         if (ConnectContext.get().getSessionVariable().isSetUseNthExecPlan()) {
-            enforcer.addValidOutputPropertyGroup(newOutputProperty, true, Lists.newArrayList(oldOutputProperty));
+            enforcer.addValidOutputPropertyGroup(newOutputProperty, Lists.newArrayList(oldOutputProperty));
             enforcer.getGroup().addSatisfyOutputPropertyGroupExpression(newOutputProperty, enforcer);
         }
     }

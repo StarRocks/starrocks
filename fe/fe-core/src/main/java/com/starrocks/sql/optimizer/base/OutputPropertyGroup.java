@@ -9,34 +9,25 @@ import java.util.Objects;
 
 public class OutputPropertyGroup {
     private final PhysicalPropertySet outputProperty;
-    private final boolean isSameGroup;
     private final List<PhysicalPropertySet> childrenOutputProperties;
 
-    public OutputPropertyGroup(PhysicalPropertySet outputProperty, boolean isSameGroup,
+    public OutputPropertyGroup(PhysicalPropertySet outputProperty,
                                List<PhysicalPropertySet> childrenOutputProperties) {
         this.outputProperty = outputProperty;
-        this.isSameGroup = isSameGroup;
         this.childrenOutputProperties = childrenOutputProperties;
     }
 
     public static OutputPropertyGroup of(PhysicalPropertySet outputProperty,
-                                         boolean isSameGroup,
                                          List<PhysicalPropertySet> inputProperties) {
-        return new OutputPropertyGroup(outputProperty, isSameGroup, inputProperties);
+        return new OutputPropertyGroup(outputProperty, inputProperties);
     }
 
-    public static OutputPropertyGroup of(PhysicalPropertySet outputProperty,
-                                         boolean isSameGroup,
-                                         PhysicalPropertySet... inputProperties) {
-        return new OutputPropertyGroup(outputProperty, isSameGroup, Lists.newArrayList(inputProperties));
+    public static OutputPropertyGroup of(PhysicalPropertySet outputProperty, PhysicalPropertySet... inputProperties) {
+        return new OutputPropertyGroup(outputProperty, Lists.newArrayList(inputProperties));
     }
 
     public PhysicalPropertySet getOutputProperty() {
         return outputProperty;
-    }
-
-    public boolean isSameGroup() {
-        return isSameGroup;
     }
 
     public List<PhysicalPropertySet> getChildrenOutputProperties() {
@@ -53,20 +44,18 @@ public class OutputPropertyGroup {
         }
         OutputPropertyGroup that = (OutputPropertyGroup) o;
         return Objects.equals(outputProperty, that.outputProperty) &&
-                Objects.equals(isSameGroup, that.isSameGroup) &&
                 Objects.equals(childrenOutputProperties, that.childrenOutputProperties);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(outputProperty, isSameGroup, childrenOutputProperties);
+        return Objects.hash(outputProperty, childrenOutputProperties);
     }
 
     @Override
     public String toString() {
         return "OutputPropertyGroup{" +
                 "outputProperty=" + outputProperty +
-                ", isSameGroup=" + isSameGroup +
                 ", childrenOutputProperties=" + childrenOutputProperties +
                 '}';
     }
