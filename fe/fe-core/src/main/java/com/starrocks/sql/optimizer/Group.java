@@ -10,8 +10,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.statistics.Statistics;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
 import java.util.List;
@@ -31,8 +29,6 @@ import java.util.Set;
  * which came from the initial query tree.
  */
 public class Group {
-    private static final Logger LOG = LogManager.getLogger(Group.class);
-
     private final int id;
 
     private final List<GroupExpression> logicalExpressions;
@@ -41,12 +37,12 @@ public class Group {
     private boolean isExplored;
 
     private Statistics statistics;
-    // confidence statistics record the statistics when group expression has lowest cost,
-    // confidence statistics is the statistics in group with highest confidence for each physical property
+    // confidence statistics record the statistics when group expression has the lowest cost,
+    // confidence statistics is the statistics in group with the highest confidence for each physical property
     private final Map<PhysicalPropertySet, Statistics> confidenceStatistics;
     private final Map<PhysicalPropertySet, Pair<Double, GroupExpression>> lowestCostExpressions;
     // GroupExpressions in this Group which could satisfy the required property.
-    private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyRequiredPropertyGroupExpressions;
+    private final Map<PhysicalPropertySet, Set<GroupExpression>> satisfyOutputPropertyGroupExpressions;
 
     // All expressions in one group have same logical property.
     private LogicalProperty logicalProperty;
@@ -56,7 +52,7 @@ public class Group {
         logicalExpressions = Lists.newArrayList();
         physicalExpressions = Lists.newArrayList();
         lowestCostExpressions = Maps.newHashMap();
-        satisfyRequiredPropertyGroupExpressions = Maps.newHashMap();
+        satisfyOutputPropertyGroupExpressions = Maps.newHashMap();
         confidenceStatistics = Maps.newHashMap();
         isExplored = false;
     }
@@ -145,26 +141,35 @@ public class Group {
         }
     }
 
-    public Set<GroupExpression> getSatisfyRequiredGroupExpressions(PhysicalPropertySet requiredProperty) {
-        Set<GroupExpression> groupExpressions = satisfyRequiredPropertyGroupExpressions.get(requiredProperty);
-        Preconditions.checkState(groupExpressions != null);
+    public List<PhysicalPropertySet> getSatisfyRequiredPropertyGroupExpressions(PhysicalPropertySet requiredProperty) {
+        List<PhysicalPropertySet> outputProperties = Lists.newArrayList();
+        for (Map.Entry<PhysicalPropertySet, Set<GroupExpression>> entry : satisfyOutputPropertyGroupExpressions.entrySet()) {
+            if (entry.getKey().isSatisfy(requiredProperty)) {
+                outputProperties.add(entry.getKey());
+            }
+        }
+        return outputProperties;
+    }
+
+    public Set<GroupExpression> getSatisfyOutputPropertyGroupExpressions(PhysicalPropertySet outputProperty) {
+        Set<GroupExpression> groupExpressions = Sets.newLinkedHashSet();
+        Preconditions.checkState(satisfyOutputPropertyGroupExpressions.containsKey(outputProperty));
+        groupExpressions.addAll(satisfyOutputPropertyGroupExpressions.get(outputProperty));
         return groupExpressions;
     }
 
-    public void addSatisfyRequiredPropertyGroupExpression(PhysicalPropertySet outputProperty,
-                                                          GroupExpression groupExpression) {
-        if (!satisfyRequiredPropertyGroupExpressions.containsKey(outputProperty)) {
-            satisfyRequiredPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
+    public void addSatisfyOutputPropertyGroupExpression(PhysicalPropertySet outputProperty,
+                                                        GroupExpression groupExpression) {
+        if (!satisfyOutputPropertyGroupExpressions.containsKey(outputProperty)) {
+            satisfyOutputPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
         }
-        satisfyRequiredPropertyGroupExpressions.get(outputProperty).add(groupExpression);
+        satisfyOutputPropertyGroupExpressions.get(outputProperty).add(groupExpression);
     }
 
-    public void addSatisfyRequiredPropertyGroupExpressions(PhysicalPropertySet outputProperty,
-                                                           Set<GroupExpression> groupExpressions) {
-        if (!satisfyRequiredPropertyGroupExpressions.containsKey(outputProperty)) {
-            satisfyRequiredPropertyGroupExpressions.put(outputProperty, Sets.newLinkedHashSet());
-        }
-        satisfyRequiredPropertyGroupExpressions.get(outputProperty).addAll(groupExpressions);
+    public void addSatisfyOutputPropertyGroupExpressions(PhysicalPropertySet outputProperty,
+                                                         Set<GroupExpression> groupExpressions) {
+        groupExpressions.forEach(
+                groupExpression -> addSatisfyOutputPropertyGroupExpression(outputProperty, groupExpression));
     }
 
     public void replaceBestExpressionProperty(PhysicalPropertySet oldProperty, PhysicalPropertySet newProperty,
@@ -261,7 +266,7 @@ public class Group {
         if (statistics == null) {
             statistics = other.statistics;
         }
-        other.satisfyRequiredPropertyGroupExpressions.forEach(this::addSatisfyRequiredPropertyGroupExpressions);
+        other.satisfyOutputPropertyGroupExpressions.forEach(this::addSatisfyOutputPropertyGroupExpressions);
     }
 
     public void removeGroupExpression(GroupExpression groupExpression) {

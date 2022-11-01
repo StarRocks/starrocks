@@ -295,6 +295,8 @@ public class Optimizer {
     private OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
 
+        int planCount = result.getPlanCount();
+
         // Since there may be many different plans in the logic phase, it's possible
         // that this switch can't turned on after logical optimization, so we only determine
         // whether the PreAggregate can be turned on in the final
@@ -311,6 +313,8 @@ public class Optimizer {
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
         result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
+
+        result.setPlanCount(planCount);
         return result;
     }
 
