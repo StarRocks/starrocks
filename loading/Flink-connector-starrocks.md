@@ -68,7 +68,6 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
         )
     );
 
-
     // -------- 原始数据为 CSV 格式 --------
     class RowData {
         public int score;
@@ -109,8 +108,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
                 slots[1] = streamRowData.name;
             }
         )
-    )
-    ;
+    );
     ```
 
 * 如您使用 Flink Table API，则需要参考如下命令。
