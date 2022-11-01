@@ -38,6 +38,7 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 /*
  * DomainResolver resolve the domain name saved in user property to list of IPs,
@@ -50,6 +51,7 @@ public class DomainResolver extends LeaderDaemon {
 
     private Auth auth;
     private AuthenticationManager authenticationManager;
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
     public DomainResolver(Auth auth) {
         super("domain resolver", 10L * 1000);
@@ -63,37 +65,53 @@ public class DomainResolver extends LeaderDaemon {
         this.authenticationManager = authenticationManager;
     }
 
+    public void setAuthenticationManager(AuthenticationManager manager) {
+        lock.writeLock().lock();
+        try {
+            this.auth = null;
+            this.authenticationManager = manager;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     // 'public' for test
     @Override
     public void runAfterCatalogReady() {
-        // domain names
-        Set<String> allDomains;
-        if (auth != null) {
-            allDomains = Sets.newHashSet();
-            auth.getAllDomains(allDomains);
-        } else {
-            allDomains = authenticationManager.getAllHostnames();
-        }
-
-        // resolve domain name
-        Map<String, Set<String>> resolvedIPsMap = Maps.newHashMap();
-        for (String domain : allDomains) {
-            LOG.debug("begin to resolve domain: {}", domain);
-            Set<String> resolvedIPs = Sets.newHashSet();
-            if (!resolveWithBNS(domain, resolvedIPs) && !resolveWithDNS(domain, resolvedIPs)) {
-                continue;
+        lock.readLock().lock();
+        try {
+            // domain names
+            Set<String> allDomains;
+            if (auth != null) {
+                allDomains = Sets.newHashSet();
+                auth.getAllDomains(allDomains);
+            } else {
+                allDomains = authenticationManager.getAllHostnames();
             }
-            LOG.debug("get resolved ip of domain {}: {}", domain, resolvedIPs);
 
-            resolvedIPsMap.put(domain, resolvedIPs);
+            // resolve domain name
+            Map<String, Set<String>> resolvedIPsMap = Maps.newHashMap();
+            for (String domain : allDomains) {
+                LOG.debug("begin to resolve domain: {}", domain);
+                Set<String> resolvedIPs = Sets.newHashSet();
+                if (!resolveWithBNS(domain, resolvedIPs) && !resolveWithDNS(domain, resolvedIPs)) {
+                    continue;
+                }
+                LOG.debug("get resolved ip of domain {}: {}", domain, resolvedIPs);
+
+                resolvedIPsMap.put(domain, resolvedIPs);
+            }
+
+            // refresh user priv table by resolved IPs
+            if (auth != null) {
+                auth.refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
+            } else {
+                authenticationManager.setHostnameToIpSet(resolvedIPsMap);
+            }
+        } finally {
+            lock.readLock().unlock();
         }
 
-        // refresh user priv table by resolved IPs
-        if (auth != null) {
-            auth.refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
-        } else {
-            authenticationManager.setHostnameToIpSet(resolvedIPsMap);
-        }
     }
 
     /**

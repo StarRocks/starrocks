@@ -145,6 +145,9 @@ public class Auth implements Writable {
         return impersonateUserPrivTable;
     }
 
+    protected UserPropertyMgr getPropertyMgr() {
+        return propertyMgr;
+    }
     /**
      * check if role exist, this function can be used in analyze phrase to validate role
      */

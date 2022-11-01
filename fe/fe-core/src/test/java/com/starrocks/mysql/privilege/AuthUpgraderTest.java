@@ -18,18 +18,27 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInputStream;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 public class AuthUpgraderTest {
     private ConnectContext ctx;
     private long roleUserId = 0;
 
     private UtFrameUtils.PseudoImage executeAndUpgrade(String...sqls) throws Exception {
+        GlobalStateMgr.getCurrentState().initAuth(false);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         // 1. execute old grant
         for (String sql : sqls) {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(sql, ctx), ctx);
         }
+        Map<String, Set<String>> resolvedIPsMap = new HashMap<>();
+        resolvedIPsMap.put("localhost", new HashSet<>(Arrays.asList("127.0.0.1")));
+        ctx.getGlobalStateMgr().getAuth().refreshUserPrivEntriesByResovledIPs(resolvedIPsMap);
         // 2. save image
         UtFrameUtils.PseudoImage image = new UtFrameUtils.PseudoImage();
         ctx.getGlobalStateMgr().getAuth().saveAuth(image.getDataOutputStream(), -1);
@@ -192,6 +201,22 @@ public class AuthUpgraderTest {
             ctx.setCurrentUserIdentity(user);
             ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
+        }
+    }
+
+    @Test
+    public void testDomainUser() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                "create user domain_user@['localhost']",
+                "GRANT select_priv on db1.tbl1 TO domain_user@['localhost']");
+
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            checkPrivilegeAsUser(UserIdentity.createAnalyzedUserIdentWithDomain(
+                    "domain_user", "localhost"), "select * from db1.tbl1");
         }
     }
 

@@ -1262,6 +1262,9 @@ public class PrivilegeManager {
         return isLoaded;
     }
 
+    public void setLoaded() {
+        isLoaded = true;
+    }
     /**
      * for AuthUpgrader
      */

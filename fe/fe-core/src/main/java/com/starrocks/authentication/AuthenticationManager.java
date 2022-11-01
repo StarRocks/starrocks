@@ -440,6 +440,9 @@ public class AuthenticationManager {
         return isLoaded;
     }
 
+    public void setLoaded() {
+        isLoaded = true;
+    }
     /**
      * upgrade user
      */
@@ -452,5 +455,11 @@ public class AuthenticationManager {
         UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
         userToAuthenticationInfo.put(userIdentity, info);
         LOG.info("upgrade user {}", userIdentity);
+    }
+
+    public void upgradeUserProperty(String userName, long maxConn) {
+        UserProperty userProperty = new UserProperty();
+        userProperty.setMaxConn(maxConn);
+        userNameToProperty.put(userName, new UserProperty());
     }
 }

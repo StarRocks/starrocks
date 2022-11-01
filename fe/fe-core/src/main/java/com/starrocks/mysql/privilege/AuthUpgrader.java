@@ -20,7 +20,6 @@ import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -62,21 +61,27 @@ public class AuthUpgrader {
     }
 
 
-    public void upgradeAsLeader() throws IOException {
+    public void upgradeAsLeader() throws RuntimeException {
         try {
+            LOG.info("start to upgrade as leader.");
             init();
             upgradeUser();
             Map<String, Long> roleNameToId = upgradeRole(null);
             this.globalStateMgr.getEditLog().logAuthUpgrade(roleNameToId);
+            LOG.info("upgraded as leader successfully.");
         } catch (Exception e) {
-            throw new IOException(e);
+            throw new RuntimeException(e);
         }
     }
 
     public void replayUpgradeAsFollower(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoveredException {
+        LOG.info("start to replay upgrade as follower.");
         init();
         upgradeUser();
         upgradeRole(roleNameToId);
+        authenticationManager.setLoaded();
+        privilegeManager.setLoaded();
+        LOG.info("replayed upgrade as follower successfully.");
     }
 
     private void init() throws AuthUpgradeUnrecoveredException {
@@ -111,7 +116,7 @@ public class AuthUpgrader {
         ResourcePrivTable resourceTable = this.auth.getResourcePrivTable();
         ImpersonateUserPrivTable impersonateUserPrivTable = this.auth.getImpersonateUserPrivTable();
 
-        // 1. create all users
+        // 1. create all ip users
         Iterator<PrivEntry> iter = globalTable.getFullReadOnlyIterator();
         while (iter.hasNext()) {
             GlobalPrivEntry entry = (GlobalPrivEntry) iter.next();
@@ -123,7 +128,7 @@ public class AuthUpgrader {
                 }
                 // 1. ignore fake entries created by domain resolver
                 if (entry.isSetByDomainResolver) {
-                    LOG.info("ignore entry created by domain resolver : {}", entry);
+                    LOG.warn("ignore entry created by domain resolver : {}", entry);
                     continue;
                 }
                 // 2. create user in authentication manager
@@ -137,7 +142,31 @@ public class AuthUpgrader {
             }
         }
 
-        // 2. grant all user privileges
+        // 2. create all domain user & set user properties
+        Iterator<Map.Entry<String, UserProperty>> upiter = auth.getPropertyMgr().propertyMap.entrySet().iterator();
+        while (upiter.hasNext()) {
+            Map.Entry<String, UserProperty> entry = upiter.next();
+            String userName = entry.getKey();
+            UserProperty userProperty = entry.getValue();
+            WhiteList whiteList = userProperty.getWhiteList();
+            try {
+                authenticationManager.upgradeUserProperty(userName, userProperty.getMaxConn());
+                for (String hostname : whiteList.getAllDomains()) {
+                    byte[] p = whiteList.getPassword(hostname);
+                    Password password = new Password(p, null, null);
+                    UserIdentity user = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
+                    authenticationManager.upgradeUserUnlocked(user, password);
+                }
+            } catch (AuthenticationException e) {
+                if (Config.ignore_invalid_privilege_authentications) {
+                    LOG.warn("discard user {} whitelist {}", userName, whiteList, e);
+                } else {
+                    throw new AuthUpgradeUnrecoveredException("bad domain user  " + userName, e);
+                }
+            }
+        }
+
+        // 3. grant privileges on all ip users
         // must loop twice, otherwise impersonate may fail on non-existence user
         iter = globalTable.getFullReadOnlyIterator();
         while (iter.hasNext()) {
@@ -149,7 +178,7 @@ public class AuthUpgrader {
                     continue;
                 }
                 // 1. ignore fake entries created by domain resolver
-                if (entry.isSetByDomainResolver) {
+                if (entry.isSetByDomainResolver || entry.isDomain) {
                     LOG.info("ignore entry created by domain resolver : {}", entry);
                     continue;
                 }
@@ -181,6 +210,52 @@ public class AuthUpgrader {
                 }
             }
         } // for iter in globalTable
+
+        // 3. grant privileges on all domain users
+        // must loop twice, otherwise impersonate may fail on non-existence user
+        upiter = auth.getPropertyMgr().propertyMap.entrySet().iterator();
+        while (upiter.hasNext()) {
+            Map.Entry<String, UserProperty> entry = upiter.next();
+            String userName = entry.getKey();
+            WhiteList whiteList = entry.getValue().getWhiteList();
+            try {
+                for (String hostname : whiteList.getAllDomains()) {
+                    UserIdentity userIdentity = UserIdentity.createAnalyzedUserIdentWithDomain(userName, hostname);
+
+                    UserPrivilegeCollection collection = new UserPrivilegeCollection();
+
+                    // 3. grant global privileges
+                    Iterator<PrivEntry> globalIter = globalTable.getReadOnlyIteratorByUser(userIdentity);
+                    if (iter.hasNext()) {
+                        upgradeUserGlobalPrivileges((GlobalPrivEntry) iter.next(), collection);
+                    }
+
+                    // 4. grant db privileges
+                    upgradeUserDbPrivileges(dbTable.getReadOnlyIteratorByUser(userIdentity), collection);
+
+                    // 5. grant table privilege
+                    upgradeUserTablePrivileges(tableTable.getReadOnlyIteratorByUser(userIdentity), collection);
+
+                    // 6. grant resource privileges
+                    upgradeUserResourcePrivileges(resourceTable.getReadOnlyIteratorByUser(userIdentity), collection);
+
+                    // 7. grant impersonate privileges
+                    upgradeUserImpersonate(impersonateUserPrivTable.getReadOnlyIteratorByUser(userIdentity),
+                            collection);
+
+                    // 8. set privilege to user
+                    privilegeManager.upgradeUserInitPrivilegeUnlock(userIdentity, collection);
+                }
+            } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
+                if (Config.ignore_invalid_privilege_authentications) {
+                    LOG.warn("discard domain user priv for {}", userName);
+                } else {
+                    throw new AuthUpgradeUnrecoveredException("bad user priv entry " + entry, e);
+                }
+            }
+        } // for iter in globalTable
+
+
     }
 
     protected void upgradeUserGlobalPrivileges(GlobalPrivEntry entry, UserPrivilegeCollection collection)

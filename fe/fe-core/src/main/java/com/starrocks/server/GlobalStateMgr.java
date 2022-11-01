@@ -364,7 +364,7 @@ public class GlobalStateMgr {
     // This is used to turned on in hard code.
     public static final boolean USING_NEW_PRIVILEGE = false;
     // change to true in UT
-    private AtomicBoolean usingNewPrivilege = new AtomicBoolean(false);
+    private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationManager authenticationManager;
     private PrivilegeManager privilegeManager;
@@ -892,16 +892,14 @@ public class GlobalStateMgr {
 
     // set usingNewPrivilege = true in UT
     public void initAuth(boolean usingNewPrivilege) {
+        this.auth = new Auth();
+        this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
         if (usingNewPrivilege) {
-            this.usingNewPrivilege = new AtomicBoolean(true);
-            this.auth = null;
             this.authenticationManager = new AuthenticationManager();
             this.domainResolver = new DomainResolver(authenticationManager);
             this.privilegeManager = new PrivilegeManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
-            this.usingNewPrivilege = new AtomicBoolean(false);
-            this.auth = new Auth();
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
             this.privilegeManager = null;
@@ -1020,6 +1018,17 @@ public class GlobalStateMgr {
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
 
+            if (USING_NEW_PRIVILEGE) {
+                AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+                if (upgrader.needUpgrade()) {
+                    // upgrade metadata in old privilege framework to the new one
+                    upgrader.upgradeAsLeader();
+                    this.domainResolver.setAuthenticationManager(authenticationManager);
+                    usingNewPrivilege.set(true);
+                }
+                auth = null;  // remove references to useless objects to release memory
+            }
+
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
@@ -1135,6 +1144,9 @@ public class GlobalStateMgr {
 
     private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
+        if (isUsingNewPrivilege()) {
+            auth = null;
+        }
 
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
             Preconditions.checkState(newType == FrontendNodeType.UNKNOWN);
@@ -1185,9 +1197,6 @@ public class GlobalStateMgr {
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
-        if (isUsingNewPrivilege()) {
-            auth = new Auth();
-        }
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
@@ -1249,18 +1258,9 @@ public class GlobalStateMgr {
 
         if (isUsingNewPrivilege()) {
             AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-            if (!upgrader.needUpgrade()) {
-                // meta already updated
-                auth = null;  // remove references to useless objects to release memory
-            } else if (isLeader()) {
-                // upgrade metadata in old privilege framework to the new one
-                upgrader.upgradeAsLeader();
-                auth = null;  // remove references to useless objects to release memory
-            } else {
-                // follower will treat itself as old privilege
+            if (upgrader.needUpgrade() && !isLeader() && !isCheckpointThread()) {
+                LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
                 usingNewPrivilege.set(false);
-                authenticationManager = null;
-                privilegeManager = null;
                 domainResolver = new DomainResolver(auth);
             }
         }
@@ -1460,10 +1460,6 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
-        if (isUsingNewPrivilege()) {
-            auth = new Auth();
-        }
-
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
@@ -1507,10 +1503,6 @@ public class GlobalStateMgr {
             checksum = compactionManager.saveCompactionManager(dos, checksum);
             dos.writeLong(checksum);
             saveRBACPrivilege(dos);
-        }
-
-        if (isUsingNewPrivilege()) {
-            auth = null;
         }
 
         long saveImageEndTime = System.currentTimeMillis();
@@ -3230,11 +3222,10 @@ public class GlobalStateMgr {
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
-        this.authenticationManager = new AuthenticationManager();
-        this.privilegeManager = new PrivilegeManager(this, null);
         AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
         upgrader.replayUpgradeAsFollower(info.getRoleNameToId());
         usingNewPrivilege.set(true);
+        domainResolver.setAuthenticationManager(authenticationManager);
         this.auth = null;
     }
 
