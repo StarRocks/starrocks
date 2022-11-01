@@ -364,14 +364,14 @@ Status ConjunctivePredicatesRewriter::rewrite_predicate(ObjectPool* pool) {
 
                 auto [binary_column, codes] = extract_column_with_codes(*dict);
 
-                int dict_rows = codes.size();
+                size_t dict_rows = codes.size();
                 selection.resize(dict_rows);
 
                 RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
                 std::vector<uint8_t> code_mapping;
                 code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
-                for (int i = 0; i < codes.size(); ++i) {
+                for (size_t i = 0; i < codes.size(); ++i) {
                     code_mapping[codes[i]] = selection[i];
                 }
 

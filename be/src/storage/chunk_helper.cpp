@@ -166,9 +166,9 @@ ColumnId ChunkHelper::max_column_id(const starrocks::vectorized::Schema& schema)
 
 template <typename T>
 struct ColumnDeleter {
-    ColumnDeleter(uint32_t chunk_size) : chunk_size(chunk_size) {}
+    ColumnDeleter(size_t chunk_size) : chunk_size(chunk_size) {}
     void operator()(vectorized::Column* ptr) const { vectorized::return_column<T>(down_cast<T*>(ptr), chunk_size); }
-    uint32_t chunk_size;
+    size_t chunk_size;
 };
 
 template <typename T, bool force>
@@ -292,7 +292,7 @@ void ChunkHelper::padding_char_columns(const std::vector<size_t>& char_column_in
         }
 
         for (size_t j = 1; j <= num_rows; ++j) {
-            new_offset[j] = len * j;
+            new_offset[j] = static_cast<uint32_t>(len * j);
         }
 
         const auto& field = schema.field(field_index);
@@ -423,7 +423,7 @@ Status ChunkAccumulator::push(vectorized::ChunkPtr&& chunk) {
     // Cut the input chunk into pieces if larger than desired
     for (size_t start = 0; start < input_rows;) {
         size_t remain_rows = input_rows - start;
-        int need_rows = 0;
+        size_t need_rows = 0;
         if (_tmp_chunk) {
             need_rows = std::min(_desired_size - _tmp_chunk->num_rows(), remain_rows);
             TRY_CATCH_BAD_ALLOC(_tmp_chunk->append(*chunk, start, need_rows));
