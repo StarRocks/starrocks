@@ -43,11 +43,11 @@ public class PrivilegeManager {
     private static final String ALL_ACTIONS = "ALL";
     // builtin roles and users
     private static final String ROOT_ROLE_NAME = "root";
-    public static long ROOT_ROLE_ID = -1;
-    public static long DB_ADMIN_ROLE_ID = -2;
-    public static long CLUSTER_ADMIN_ROLE_ID = -3;
-    public static long USER_ADMIN_ROLE_ID = -4;
-    public static long PUBLIC_ROLE_ID = -5;
+    public static final long ROOT_ROLE_ID = -1;
+    public static final long DB_ADMIN_ROLE_ID = -2;
+    public static final long CLUSTER_ADMIN_ROLE_ID = -3;
+    public static final long USER_ADMIN_ROLE_ID = -4;
+    public static final long PUBLIC_ROLE_ID = -5;
 
     @SerializedName(value = "t")
     private final Map<String, Short> typeStringToId;

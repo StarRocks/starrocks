@@ -130,7 +130,7 @@ public class AuthUpgrader {
                 authenticationManager.upgradeUserUnlocked(userIdentity, entry.getPassword());
             } catch (AuthenticationException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
-                    LOG.warn("discard user priv entry:{}\n{}", entry.toString(), entry.toGrantSQL(), e);
+                    LOG.warn("discard user priv entry:{}\n{}", entry, entry.toGrantSQL(), e);
                 } else {
                     throw new AuthUpgradeUnrecoveredException("bad user priv entry " + entry, e);
                 }
@@ -175,7 +175,7 @@ public class AuthUpgrader {
 
             } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
-                    LOG.warn("discard user priv entry:{}\n{}", entry.toString(), entry.toGrantSQL(), e);
+                    LOG.warn("discard user priv entry:{}\n{}", entry, entry.toGrantSQL(), e);
                 } else {
                     throw new AuthUpgradeUnrecoveredException("bad user priv entry " + entry, e);
                 }
@@ -189,7 +189,7 @@ public class AuthUpgrader {
         PrivBitSet bitSet = entry.getPrivSet();
 
         for (Privilege privilege : bitSet.toPrivilegeList()) {
-            upgradeTablePrivileges(TablePrivEntry.ANY_DB, TablePrivEntry.ANY_DB, privilege, collection);
+            upgradeTablePrivileges(DbPrivEntry.ANY_DB, DbPrivEntry.ANY_DB, privilege, collection);
         }
     }
 
@@ -200,7 +200,7 @@ public class AuthUpgrader {
             DbPrivEntry entry = (DbPrivEntry) iterator.next();
             PrivBitSet bitSet = entry.getPrivSet();
             for (Privilege privilege : bitSet.toPrivilegeList()) {
-                upgradeTablePrivileges(entry.getOrigDb(), TablePrivEntry.ANY_DB, privilege, collection);
+                upgradeTablePrivileges(entry.getOrigDb(), DbPrivEntry.ANY_DB, privilege, collection);
             }
         }
     }
@@ -267,7 +267,7 @@ public class AuthUpgrader {
                 }
             } catch (AuthUpgradeUnrecoveredException | PrivilegeException e) {
                 if (Config.ignore_invalid_privilege_authentications) {
-                    LOG.warn("discard role[{}] priv:{}", roleName, role.toString(), e);
+                    LOG.warn("discard role[{}] priv:{}", roleName, role, e);
                 } else {
                     throw new AuthUpgradeUnrecoveredException("bad role priv " + roleName, e);
                 }

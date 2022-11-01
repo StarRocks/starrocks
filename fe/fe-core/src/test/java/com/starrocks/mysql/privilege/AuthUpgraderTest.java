@@ -193,7 +193,6 @@ public class AuthUpgraderTest {
             ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(
                     ctx, UserIdentity.createAnalyzedUserIdentWithIp("gregory", "%"));
         }
-
     }
 
 }
