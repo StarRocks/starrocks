@@ -2,7 +2,7 @@
 
 ## 功能
 
-输入一组 bitmap 值, 求这一组 bitmap 值的并集, 并返回
+输入一组 bitmap 值，求这一组 bitmap 值的并集。
 
 ## 语法
 
@@ -26,7 +26,7 @@ from table
 group by page_id;
 ```
 
-和 bitmap_count 函数组合使用可以求得网页的 PV 数据
+和 bitmap_count 函数组合使用可以求得网页的 UV 数据。
 
 ```sql
 select page_id, bitmap_count(bitmap_union(user_id))
@@ -34,7 +34,7 @@ from table
 group by page_id;
 ```
 
-当 user_id 字段为 int 时, 上面查询语义等同于
+当 `user_id` 字段为 INT 时，上面查询语义等同于如下语句：
 
 ```sql
 select page_id, count(distinct user_id)
