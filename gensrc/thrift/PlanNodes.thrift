@@ -313,6 +313,9 @@ struct THdfsScanRange {
     10: optional bool use_hudi_jni_reader;
 
     11: optional list<TIcebergDeleteFile> delete_files;
+    
+    // number of lines at the start of the file to skip
+    12: optional i64 skip_header
 }
 
 struct TBinlogScanRange {

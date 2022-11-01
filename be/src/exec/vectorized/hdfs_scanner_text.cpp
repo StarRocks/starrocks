@@ -368,6 +368,15 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
             CSVReader::Record dummy;
             RETURN_IF_ERROR(reader->next_record(&dummy));
         }
+        if (scan_range->__isset.skip_header) {
+            if (scan_range->skip_header) {
+                for (int64_t i = 0; i < scan_range->skip_header; i++) {
+                    CSVReader::Record dummy;
+                    RETURN_IF_ERROR(reader->next_record(&dummy));
+                }
+            }
+        }
+
     }
     return Status::OK();
 }
