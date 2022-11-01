@@ -47,16 +47,17 @@ public class HiveMetadataFactory {
                 remoteFileIO instanceof CachingRemoteFileIO);
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
 
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
+        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor(false);
         return new HiveMetadata(catalogName, hiveMetastoreOperations,
                 remoteFileOperations, statisticsProvider, cacheUpdateProcessor);
     }
 
-    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor() {
+    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor(boolean enableHmsEventsIncrementalSync) {
         Optional<CacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
             cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
-                    catalogName, metastore, remoteFileIO, pullRemoteFileExecutor, isRecursive));
+                    catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
+                    isRecursive, enableHmsEventsIncrementalSync));
         } else {
             cacheUpdateProcessor = Optional.empty();
         }

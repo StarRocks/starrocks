@@ -95,6 +95,10 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         return cacheBuilder;
     }
 
+    public void removeRemoteFile(RemotePathKey pathKey) {
+        cache.invalidate(pathKey);
+    }
+
     public void invalidateAll() {
         cache.invalidateAll();
     }
