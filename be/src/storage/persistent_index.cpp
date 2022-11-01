@@ -38,7 +38,11 @@ constexpr size_t kPackSize = 16;
 constexpr size_t kPagePackLimit = (kPageSize - kPageHeaderSize) / kPackSize;
 constexpr size_t kBucketSizeMax = 256;
 // if l0_mem_size exceeds this value, l0 need snapshot
+#if BE_TEST
+constexpr size_t kL0SnapshotSizeMax = 1 * 1024 * 1024;
+#else
 constexpr size_t kL0SnapshotSizeMax = 16 * 1024 * 1024;
+#endif
 constexpr size_t kLongKeySize = 64;
 
 const char* const kIndexFileMagic = "IDX1";
@@ -750,7 +754,8 @@ public:
             const size_t batch_num = (nums > 4096) ? 4096 : nums;
             raw::stl_string_resize_uninitialized(&buff, batch_num * kv_pair_size);
             RETURN_IF_ERROR(file->read_at_fully(offset, buff.data(), buff.size()));
-            std::vector<Slice> keys(batch_num);
+            std::vector<Slice> keys;
+            keys.reserve(batch_num);
             std::vector<IndexValue> values;
             values.reserve(batch_num);
             size_t buf_offset = 0;
@@ -1173,7 +1178,7 @@ public:
                 values.emplace_back(value);
                 offset += kv_pair_size;
             }
-            RETURN_IF_ERROR(load_wals(nums, keys, values.data()));
+            RETURN_IF_ERROR(load_wals(batch_num, keys, values.data()));
             nums -= batch_num;
         }
         return Status::OK();

@@ -147,7 +147,11 @@ public class FrontendsProcNode implements ProcNodeInterface {
             if (InetAddressValidator.getInstance().isValidInet4Address(fe.getHost())) {
                 realHost = addr.getAddress().getHostAddress();
             } else {
-                realHost = addr.getAddress().getHostName();
+                try {
+                    realHost = addr.getAddress().getHostName();
+                } catch (Exception e) {
+                    LOG.warn("Fail to get address hostname of fe: {} msg: {}", addr, e);
+                }
             }
             if (fe.getHost().equals(realHost) && fe.getEditLogPort() == addr.getPort()) {
                 return true;
