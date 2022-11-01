@@ -116,14 +116,22 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
 
     _swap_chunk->reset();
 
-    Columns key_columns;
-    int num_key_columns = chunk->schema()->num_key_fields();
-    for (int i = 0; i < num_key_columns; i++) {
-        key_columns.push_back(chunk->get_column_by_index(i));
+    std::vector<ColumnId> sort_key_idxes;
+    if (chunk->schema()->sort_key_idxes().empty()) {
+        int num_key_columns = chunk->schema()->num_key_fields();
+        for (ColumnId i = 0; i < num_key_columns; ++i) {
+            sort_key_idxes.push_back(i);
+        }
+    } else {
+        sort_key_idxes = chunk->schema()->sort_key_idxes();
     }
-
+    Columns key_columns;
+    for (const auto sort_key_idx : sort_key_idxes) {
+        key_columns.push_back(chunk->get_column_by_index(sort_key_idx));
+    }
     SmallPermutation perm = create_small_permutation(chunk->num_rows());
-    Status st = stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(num_key_columns), &perm);
+    Status st =
+            stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(sort_key_idxes.size()), &perm);
     CHECK(st.ok());
     std::vector<uint32_t> selective;
     permutate_to_selective(perm, &selective);
@@ -262,15 +270,13 @@ bool ChunkMerger::_pop_heap() {
     MergeElement element = _heap.top();
     _heap.pop();
 
-    if (++element.row_index >= element.chunk->num_rows()) {
-        return true;
+    if (++element.row_index < element.chunk->num_rows()) {
+        _heap.push(element);
     }
-
-    _heap.push(element);
     return true;
 }
 
-bool LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+bool LinkedSchemaChange::process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
 #ifndef BE_TEST
     Status st = CurrentThread::mem_tracker()->check_mem_limit("LinkedSchemaChange");
@@ -291,16 +297,16 @@ bool LinkedSchemaChange::process(TabletReader* reader, RowsetWriter* new_rowset_
     return true;
 }
 
-Status LinkedSchemaChange::process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+Status LinkedSchemaChange::process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
-    if (process(reader, new_rowset_writer, new_tablet, base_tablet, rowset)) {
+    if (process(iter, new_rowset_writer, new_tablet, base_tablet, rowset)) {
         return Status::OK();
     } else {
         return Status::InternalError("failed to proccessV2 LinkedSchemaChange");
     }
 }
 
-bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+bool SchemaChangeDirectly::process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                    TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
     ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
@@ -321,13 +327,13 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
             return false;
         }
 #endif
-        Status status = reader->do_get_next(base_chunk.get());
+        Status status = iter->get_next(base_chunk.get());
 
         if (!status.ok()) {
             if (status.is_end_of_file()) {
                 break;
             } else {
-                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.get_error_msg();
+                LOG(WARNING) << "iterator failed to get next chunk, status: " << status.get_error_msg();
                 return false;
             }
         }
@@ -373,7 +379,7 @@ bool SchemaChangeDirectly::process(TabletReader* reader, RowsetWriter* new_rowse
     return true;
 }
 
-Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer,
+Status SchemaChangeDirectly::process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer,
                                         TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                         RowsetSharedPtr rowset) {
     Schema base_schema = ChunkHelper::convert_schema_to_format_v2(
@@ -397,13 +403,13 @@ Status SchemaChangeDirectly::process_v2(TabletReader* reader, RowsetWriter* new_
             return st;
         }
 #endif
-        Status status = reader->do_get_next(base_chunk.get());
+        Status status = iter->get_next(base_chunk.get());
 
         if (!status.ok()) {
             if (status.is_end_of_file()) {
                 break;
             } else {
-                LOG(WARNING) << "tablet reader failed to get next chunk, status: " << status.get_error_msg();
+                LOG(WARNING) << "iterator failed to get next chunk, status: " << status.get_error_msg();
                 return status;
             }
         }
@@ -457,7 +463,7 @@ SchemaChangeWithSorting::~SchemaChangeWithSorting() {
     SAFE_DELETE(_chunk_allocator);
 }
 
-bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+bool SchemaChangeWithSorting::process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset) {
     if (_chunk_allocator == nullptr) {
         _chunk_allocator = new (std::nothrow) ChunkAllocator(new_tablet->tablet_schema(), _memory_limitation);
@@ -482,7 +488,7 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
     while (!bg_worker_stopped) {
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
         ChunkPtr new_chunk = nullptr;
-        Status status = reader->do_get_next(base_chunk.get());
+        Status status = iter->get_next(base_chunk.get());
         if (!status.ok()) {
             if (!status.is_end_of_file()) {
                 LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
@@ -562,7 +568,7 @@ bool SchemaChangeWithSorting::process(TabletReader* reader, RowsetWriter* new_ro
     return true;
 }
 
-Status SchemaChangeWithSorting::process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer,
+Status SchemaChangeWithSorting::process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer,
                                            TabletSharedPtr new_tablet, TabletSharedPtr base_tablet,
                                            RowsetSharedPtr rowset) {
     MemTableRowsetWriterSink mem_table_sink(new_rowset_writer);
@@ -591,7 +597,7 @@ Status SchemaChangeWithSorting::process_v2(TabletReader* reader, RowsetWriter* n
     while (!bg_worker_stopped) {
 #ifndef BE_TEST
         auto cur_usage = CurrentThread::mem_tracker()->consumption();
-        // we check memory usage exceeds 90% since tablet reader use some memory
+        // we check memory usage exceeds 90% since iterator use some memory
         // it will return fail if memory is exhausted
         if (cur_usage > CurrentThread::mem_tracker()->limit() * 0.9) {
             RETURN_IF_ERROR_WITH_WARN(mem_table->finalize(), "failed to finalize mem table");
@@ -603,7 +609,7 @@ Status SchemaChangeWithSorting::process_v2(TabletReader* reader, RowsetWriter* n
         }
 #endif
         ChunkPtr base_chunk = ChunkHelper::new_chunk(base_schema, config::vector_chunk_size);
-        Status status = reader->do_get_next(base_chunk.get());
+        Status status = iter->get_next(base_chunk.get());
         if (!status.ok()) {
             if (!status.is_end_of_file()) {
                 LOG(WARNING) << "failed to get next chunk, status is:" << status.to_string();
@@ -762,12 +768,12 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2(const TAlterTabletReqV2&
     }
 
     if (base_tablet->keys_type() == KeysType::PRIMARY_KEYS) {
-        if (sc_params.sc_directly) {
+        if (sc_params.sc_sorting) {
+            status = new_tablet->updates()->reorder_from(base_tablet, request.alter_version,
+                                                         sc_params.chunk_changer.get());
+        } else if (sc_params.sc_directly) {
             status = new_tablet->updates()->convert_from(base_tablet, request.alter_version,
                                                          sc_params.chunk_changer.get());
-        } else if (sc_params.sc_sorting) {
-            LOG(WARNING) << "schema change of primary key model do not support sorting.";
-            status = Status::NotSupported("schema change of primary key model do not support sorting.");
         } else {
             status = new_tablet->updates()->link_from(base_tablet.get(), request.alter_version);
         }
@@ -816,7 +822,7 @@ Status SchemaChangeHandler::_do_process_alter_tablet_v2_normal(const TAlterTable
 
         for (auto& version : versions_to_be_changed) {
             rowsets_to_change.push_back(base_tablet->get_rowset_by_version(version));
-            // prepare tablet reader to prevent rowsets being compacted
+            // prepare iterator to prevent rowsets being compacted
             std::unique_ptr<TabletReader> tablet_reader =
                     std::make_unique<TabletReader>(base_tablet, version, base_schema);
             RETURN_IF_ERROR(tablet_reader->prepare());

@@ -480,6 +480,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         LinkedList<Column> newSchema = new LinkedList<>();
         LinkedList<Column> targetIndexSchema = indexSchemaMap.get(targetIndexId);
+        int keyIdx = 0;
 
         // check and create new ordered column list
         Set<String> colNameSet = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
@@ -490,6 +491,10 @@ public class SchemaChangeHandler extends AlterHandler {
             }
             if (!colNameSet.add(colName)) {
                 throw new DdlException("Duplicated column[" + colName + "]");
+            }
+            if (oneCol.get().isKey() && keyIdx++ != targetIndexSchema.indexOf(oneCol.get())
+                    && olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
+                throw new DdlException("can not reorder primary key");
             }
             newSchema.add(oneCol.get());
         }
@@ -1147,9 +1152,6 @@ public class SchemaChangeHandler extends AlterHandler {
                 processModifyColumn((ModifyColumnClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ReorderColumnsClause) {
                 // reorder column
-                if (olapTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    throw new DdlException("Primary key table do not support reorder column");
-                }
                 processReorderColumn((ReorderColumnsClause) alterClause, olapTable, indexSchemaMap);
             } else if (alterClause instanceof ModifyTablePropertiesClause) {
                 // modify table properties

@@ -373,7 +373,7 @@ void* StorageEngine::_update_compaction_thread_callback(void* arg, DataDir* data
 
         int32_t interval = config::update_compaction_check_interval_seconds;
         if (interval <= 0) {
-            LOG(WARNING) << "base compaction check interval config is illegal: " << interval << ", force set to 1";
+            LOG(WARNING) << "update compaction check interval config is illegal: " << interval << ", force set to 1";
             interval = 1;
         }
         do {

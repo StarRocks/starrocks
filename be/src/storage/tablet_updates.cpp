@@ -20,6 +20,7 @@
 #include "storage/chunk_iterator.h"
 #include "storage/compaction_utils.h"
 #include "storage/del_vector.h"
+#include "storage/merge_iterator.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_meta_manager.h"
@@ -2559,6 +2560,181 @@ Status TabletUpdates::_convert_from_base_rowset(const std::shared_ptr<Tablet>& b
     }
 
     return rowset_writer->flush();
+}
+
+Status TabletUpdates::reorder_from(const std::shared_ptr<Tablet>& base_tablet, int64_t request_version,
+                                   vectorized::ChunkChanger* chunk_changer) {
+    OlapStopWatch watch;
+    DCHECK(_tablet.tablet_state() == TABLET_NOTREADY)
+            << "tablet state is not TABLET_NOTREADY, reorder_from is not allowed"
+            << " tablet_id:" << _tablet.tablet_id() << " tablet_state:" << _tablet.tablet_state();
+    LOG(INFO) << "reorder_from start tablet:" << _tablet.tablet_id() << " #pending:" << _pending_commits.size()
+              << " base_tablet:" << base_tablet->tablet_id() << " request_version:" << request_version;
+    int64_t max_version = base_tablet->updates()->max_version();
+    if (max_version < request_version) {
+        LOG(WARNING) << "reorder_from: base_tablet's max_version:" << max_version
+                     << " < alter_version:" << request_version << " tablet:" << _tablet.tablet_id()
+                     << " base_tablet:" << base_tablet->tablet_id();
+        return Status::InternalError("reorder_from: max_version < request_version");
+    }
+    std::vector<RowsetSharedPtr> src_rowsets;
+    EditVersion version;
+    Status status = base_tablet->updates()->get_applied_rowsets(request_version, &src_rowsets, &version);
+    if (!status.ok()) {
+        LOG(WARNING) << "reorder_from: get base tablet rowsets error tablet:" << base_tablet->tablet_id()
+                     << " request_version:" << request_version << " reason:" << status;
+        return status;
+    }
+
+    // disable compaction temporarily when tablet just loaded
+    _last_compaction_time_ms = UnixMillis();
+
+    auto kv_store = _tablet.data_dir()->get_meta();
+    auto tablet_id = _tablet.tablet_id();
+    uint32_t next_rowset_id = 0;
+    std::vector<RowsetLoadInfo> new_rowset_load_infos(src_rowsets.size());
+
+    vectorized::Schema base_schema = ChunkHelper::convert_schema_to_format_v2(base_tablet->tablet_schema());
+
+    size_t memory_limitation =
+            static_cast<size_t>(config::memory_limitation_per_thread_for_schema_change) * 1024 * 1024 * 1024;
+    auto sc_procedure = std::make_unique<vectorized::SchemaChangeWithSorting>(chunk_changer, memory_limitation);
+
+    OlapReaderStatistics stats;
+
+    size_t total_bytes = 0;
+    size_t total_rows = 0;
+    size_t total_files = 0;
+    for (int i = 0; i < src_rowsets.size(); i++) {
+        const auto& src_rowset = src_rowsets[i];
+
+        RowsetReleaseGuard guard(src_rowset->shared_from_this());
+        auto res = src_rowset->get_segment_iterators2(base_schema, base_tablet->data_dir()->get_meta(), version.major(),
+                                                      &stats);
+        if (!res.ok()) {
+            return res.status();
+        }
+
+        RowsetId rid = StorageEngine::instance()->next_rowset_id();
+
+        RowsetWriterContext writer_context;
+        writer_context.rowset_id = rid;
+        writer_context.tablet_uid = _tablet.tablet_uid();
+        writer_context.tablet_id = _tablet.tablet_id();
+        writer_context.partition_id = _tablet.partition_id();
+        writer_context.tablet_schema_hash = _tablet.schema_hash();
+        writer_context.rowset_path_prefix = _tablet.schema_hash_path();
+        writer_context.tablet_schema = &_tablet.tablet_schema();
+        writer_context.rowset_state = VISIBLE;
+        writer_context.version = src_rowset->version();
+        writer_context.segments_overlap = src_rowset->rowset_meta()->segments_overlap();
+        writer_context.schema_change_sorting = true;
+
+        std::unique_ptr<RowsetWriter> rowset_writer;
+        status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
+        if (!status.ok()) {
+            LOG(INFO) << "build rowset writer failed";
+            return Status::InternalError("build rowset writer failed");
+        }
+
+        if (!sc_procedure->process(new_heap_merge_iterator(res.value()).get(), rowset_writer.get(),
+                                   std::static_pointer_cast<Tablet>(_tablet.shared_from_this()), base_tablet,
+                                   nullptr)) {
+            LOG(WARNING) << "failed to process reorder";
+            return Status::InternalError("failed to process reorder");
+        }
+
+        status = rowset_writer->flush();
+        if (!status.ok()) {
+            LOG(WARNING) << "failed to convert from base rowset, exit alter process";
+            return status;
+        }
+
+        auto new_rowset = rowset_writer->build();
+        if (!new_rowset.ok()) return new_rowset.status();
+
+        auto& new_rowset_load_info = new_rowset_load_infos[i];
+        new_rowset_load_info.num_segments = (*new_rowset)->num_segments();
+        new_rowset_load_info.rowset_id = next_rowset_id;
+
+        auto& rowset_meta_pb = new_rowset_load_info.rowset_meta_pb;
+        (*new_rowset)->rowset_meta()->to_rowset_pb(&rowset_meta_pb);
+        rowset_meta_pb.set_rowset_seg_id(new_rowset_load_info.rowset_id);
+        rowset_meta_pb.set_rowset_id(rid.to_string());
+
+        next_rowset_id += std::max(1U, (uint32_t)new_rowset_load_info.num_segments);
+
+        total_bytes += rowset_meta_pb.total_disk_size();
+        total_rows += rowset_meta_pb.num_rows();
+        total_files += rowset_meta_pb.num_segments() + rowset_meta_pb.num_delete_files();
+    }
+
+    TabletMetaPB meta_pb;
+    _tablet.tablet_meta()->to_meta_pb(&meta_pb);
+    meta_pb.set_tablet_state(TabletStatePB::PB_RUNNING);
+    TabletUpdatesPB* updates_pb = meta_pb.mutable_updates();
+    updates_pb->clear_versions();
+    auto version_pb = updates_pb->add_versions();
+    version_pb->mutable_version()->set_major(version.major());
+    version_pb->mutable_version()->set_minor(version.minor());
+    int64_t creation_time = time(nullptr);
+    version_pb->set_creation_time(creation_time);
+    for (auto& new_rowset_load_info : new_rowset_load_infos) {
+        version_pb->mutable_rowsets()->Add(new_rowset_load_info.rowset_id);
+    }
+    version_pb->set_rowsetid_add(next_rowset_id);
+    auto apply_version_pb = updates_pb->mutable_apply_version();
+    apply_version_pb->set_major(version.major());
+    apply_version_pb->set_minor(version.minor());
+    updates_pb->set_next_log_id(1);
+    updates_pb->set_next_rowset_id(next_rowset_id);
+
+    // delete old meta & write new meta
+    auto data_dir = _tablet.data_dir();
+    rocksdb::WriteBatch wb;
+    RETURN_IF_ERROR(TabletMetaManager::clear_log(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_rowset(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(data_dir, &wb, tablet_id));
+    RETURN_IF_ERROR(TabletMetaManager::clear_persistent_index(data_dir, &wb, tablet_id));
+    // do not clear pending rowsets, because these pending rowsets should be committed after schemachange is done
+    RETURN_IF_ERROR(TabletMetaManager::put_tablet_meta(data_dir, &wb, meta_pb));
+    DelVector delvec;
+    for (const auto& new_rowset_load_info : new_rowset_load_infos) {
+        RETURN_IF_ERROR(
+                TabletMetaManager::put_rowset_meta(data_dir, &wb, tablet_id, new_rowset_load_info.rowset_meta_pb));
+        for (int j = 0; j < new_rowset_load_info.num_segments; j++) {
+            RETURN_IF_ERROR(TabletMetaManager::put_del_vector(data_dir, &wb, tablet_id,
+                                                              new_rowset_load_info.rowset_id + j, delvec));
+        }
+    }
+
+    std::unique_lock wrlock(_tablet.get_header_lock());
+    status = kv_store->write_batch(&wb);
+    if (!status.ok()) {
+        LOG(WARNING) << "Fail to delete old meta and write new meta" << tablet_id << ": " << status;
+        return Status::InternalError("Fail to delete old meta and write new meta");
+    }
+
+    auto update_manager = StorageEngine::instance()->update_manager();
+    auto index_entry = update_manager->index_cache().get_or_create(tablet_id);
+    index_entry->update_expire_time(MonotonicMillis() + update_manager->get_cache_expire_ms());
+    auto& index = index_entry->value();
+    index.unload();
+    update_manager->index_cache().release(index_entry);
+    // 4. load from new meta
+    status = _load_from_pb(*updates_pb);
+    if (!status.ok()) {
+        LOG(WARNING) << "_load_from_pb failed tablet_id:" << tablet_id << " " << status;
+        return status;
+    }
+
+    _tablet.set_tablet_state(TabletState::TABLET_RUNNING);
+    LOG(INFO) << "reorder_from finish tablet:" << _tablet.tablet_id() << " version:" << this->max_version()
+              << " base tablet:" << base_tablet->tablet_id() << " #pending:" << _pending_commits.size()
+              << " time:" << watch.get_elapse_second() << "s"
+              << " #column:" << _tablet.tablet_schema().num_columns() << " #rowset:" << src_rowsets.size()
+              << " #file:" << total_files << " #row:" << total_rows << " bytes:" << total_bytes;
+    return Status::OK();
 }
 
 void TabletUpdates::_remove_unused_rowsets() {

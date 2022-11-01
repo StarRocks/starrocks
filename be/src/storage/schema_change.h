@@ -65,10 +65,10 @@ public:
     SchemaChange() = default;
     virtual ~SchemaChange() = default;
 
-    virtual bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
+    virtual bool process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                          TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 
-    virtual Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
+    virtual Status process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr tablet,
                               TabletSharedPtr base_tablet, RowsetSharedPtr rowset) = 0;
 };
 
@@ -77,10 +77,10 @@ public:
     explicit LinkedSchemaChange(ChunkChanger* chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
     ~LinkedSchemaChange() override = default;
 
-    bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    bool process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    Status process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
@@ -94,10 +94,10 @@ public:
     explicit SchemaChangeDirectly(ChunkChanger* chunk_changer) : SchemaChange(), _chunk_changer(chunk_changer) {}
     ~SchemaChangeDirectly() override = default;
 
-    bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    bool process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    Status process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
@@ -111,10 +111,10 @@ public:
     explicit SchemaChangeWithSorting(ChunkChanger* chunk_changer, size_t memory_limitation);
     ~SchemaChangeWithSorting() override;
 
-    bool process(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    bool process(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
-    Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
+    Status process_v2(ChunkIterator* iter, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
                       TabletSharedPtr base_tablet, RowsetSharedPtr rowset);
 
 private:

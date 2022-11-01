@@ -624,7 +624,10 @@ Status SchemaChangeUtils::parse_request(const TabletSchema& base_schema, const T
     // If the reference sequence of the Key column is out of order, it needs to be reordered
     int num_default_value = 0;
 
-    for (int i = 0; i < new_schema.num_key_columns(); ++i) {
+    auto nkey_columns =
+            new_schema.keys_type() != KeysType::PRIMARY_KEYS ? new_schema.num_key_columns() : new_schema.num_columns();
+
+    for (int i = 0; i < nkey_columns; ++i) {
         ColumnMapping* column_mapping = chunk_changer->get_mutable_column_mapping(i);
 
         if (column_mapping->ref_column < 0) {
