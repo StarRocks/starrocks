@@ -20,7 +20,7 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
 
 点击 [版本信息](https://search.maven.org/search?q=g:com.starrocks) 查看页面Latest Version信息，替换下面x.x.x内容
 
-```xml
+```Plain text
 <dependency>
     <groupId>com.starrocks</groupId>
     <artifactId>flink-connector-starrocks</artifactId>
@@ -116,7 +116,8 @@ flink-connector-starrocks 的内部实现是通过缓存并批量由 stream load
     ```scala
     // -------- 原始数据为 CSV 格式 --------
     // create a table with `structure` and `properties`
-    // Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory` to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
+    // Needed: Add `com.starrocks.connector.flink.table.StarRocksDynamicTableSinkFactory`
+    //         to: `src/main/resources/META-INF/services/org.apache.flink.table.factories.Factory`
     tEnv.executeSql(
         "CREATE TABLE USER_RESULT(" +
             "name VARCHAR," +
