@@ -49,6 +49,7 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_ENABLE = "query_queue_enable";
     public static final String QUERY_QUEUE_CONCURRENCY_HARD_LIMIT = "query_queue_concurrency_hard_limit";
     public static final String QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT = "query_queue_mem_used_pct_hard_limit";
+    public static final String QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT = "query_queue_cpu_used_permille_hard_limit";
     public static final String QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
     public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
 
@@ -118,6 +119,9 @@ public final class GlobalVariable {
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT, flag = VariableMgr.GLOBAL)
     private static double queryQueueMemUsedPctHardLimit = 0;
+    // Effective iff it is positive.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT, flag = VariableMgr.GLOBAL)
+    private static long queryQueueCpuUsedPermilleHardLimit = 0;
     @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL)
     private static int queryQueuePendingTimeoutSecond = 300;
     // Unlimited iff it is non-positive.
@@ -154,6 +158,18 @@ public final class GlobalVariable {
 
     public static void setQueryQueueMemUsedPctHardLimit(double queryQueueMemUsedPctHardLimit) {
         GlobalVariable.queryQueueMemUsedPctHardLimit = queryQueueMemUsedPctHardLimit;
+    }
+
+    public static boolean isQueryQueueCpuUsedPermilleHardLimitEffective() {
+        return queryQueueCpuUsedPermilleHardLimit > 0;
+    }
+
+    public static double getQueryQueueCpuUsedPermilleHardLimit() {
+        return queryQueueCpuUsedPermilleHardLimit;
+    }
+
+    public static void setQueryQueueCpuUsedPermilleHardLimit(long queryQueueCpuUsedPermilleHardLimit) {
+        GlobalVariable.queryQueueCpuUsedPermilleHardLimit = queryQueueCpuUsedPermilleHardLimit;
     }
 
     public static int getQueryQueuePendingTimeoutSecond() {

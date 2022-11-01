@@ -7,4 +7,5 @@ struct TResourceUsage {
     1: optional i32 num_running_queries
     2: optional i64 mem_limit_bytes
     3: optional i64 mem_used_bytes
+    4: optional i32 cpu_used_permille;
 }

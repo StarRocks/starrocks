@@ -716,6 +716,8 @@ void* ReportResourceUsageTaskWorkerPool::_worker_thread_callback(void* arg_this)
         resource_usage.__set_num_running_queries(ExecEnv::GetInstance()->query_context_mgr()->size());
         resource_usage.__set_mem_used_bytes(ExecEnv::GetInstance()->process_mem_tracker()->consumption());
         resource_usage.__set_mem_limit_bytes(ExecEnv::GetInstance()->process_mem_tracker()->limit());
+        worker_pool_this->_cpu_usage_recorder.update_interval();
+        resource_usage.__set_cpu_used_permille(worker_pool_this->_cpu_usage_recorder.cpu_used_permille());
         request.__set_resource_usage(std::move(resource_usage));
 
         TMasterResult result;

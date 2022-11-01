@@ -79,6 +79,7 @@ public class ComputeNode implements IComputable, Writable {
     private volatile int numRunningQueries = 0;
     private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
+    private volatile int cpuUsedPermille = 0;
 
     public ComputeNode() {
         this.host = "";
@@ -289,7 +290,12 @@ public class ComputeNode implements IComputable, Writable {
         return ((double) memUsedBytes) / memLimitBytes;
     }
 
-    public boolean updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes) {
+    public int getCpuUsedPermille() {
+        return cpuUsedPermille;
+    }
+
+    public boolean updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                       int cpuUsedPermille) {
         boolean isChanged = false;
         if (numRunningQueries != this.numRunningQueries) {
             this.numRunningQueries = numRunningQueries;
@@ -301,6 +307,10 @@ public class ComputeNode implements IComputable, Writable {
         }
         if (memUsedBytes != this.memUsedBytes) {
             this.memUsedBytes = memUsedBytes;
+            isChanged = true;
+        }
+        if (cpuUsedPermille != this.cpuUsedPermille) {
+            this.cpuUsedPermille = cpuUsedPermille;
             isChanged = true;
         }
         return isChanged;
@@ -486,6 +496,11 @@ public class ComputeNode implements IComputable, Writable {
 
         if (GlobalVariable.isQueryQueueConcurrencyHardLimitEffective() &&
                 numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyHardLimit()) {
+            return true;
+        }
+
+        if (GlobalVariable.isQueryQueueCpuUsedPermilleHardLimitEffective() &&
+                cpuUsedPermille >= GlobalVariable.getQueryQueueCpuUsedPermilleHardLimit()) {
             return true;
         }
 

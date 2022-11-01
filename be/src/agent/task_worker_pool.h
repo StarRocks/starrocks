@@ -36,6 +36,7 @@
 #include "gen_cpp/HeartbeatService_types.h"
 #include "storage/olap_define.h"
 #include "storage/storage_engine.h"
+#include "util/cpu_usage_info.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -213,6 +214,9 @@ private:
     AgentTaskRequestPtr _convert_task(const TAgentTaskRequest& task, time_t recv_time) override {
         return std::make_shared<AgentTaskRequestWithoutReqBody>(task, recv_time);
     }
+
+private:
+    CpuUsageRecorder _cpu_usage_recorder;
 };
 
 } // namespace starrocks

@@ -69,11 +69,13 @@ public class ReportHandlerTest {
         handler.testHandleSetTabletEnablePersistentIndex(backendId, backendTablets);
     }
 
-    private TResourceUsage genResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes) {
+    private TResourceUsage genResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                            int cpuUsedPermille) {
         TResourceUsage usage = new TResourceUsage();
         usage.setNum_running_queries(numRunningQueries);
         usage.setMem_limit_bytes(memLimitBytes);
         usage.setMem_used_bytes(memUsedBytes);
+        usage.setCpu_used_permille(cpuUsedPermille);
         return usage;
     }
 
@@ -86,6 +88,7 @@ public class ReportHandlerTest {
         int numRunningQueries = 1;
         long memLimitBytes = 3;
         long memUsedBytes = 2;
+        int cpuUsedPermille = 300;
         new Expectations(systemInfoService, queryQueueManager) {
             {
                 queryQueueManager.maybeNotifyAfterLock();
@@ -102,12 +105,13 @@ public class ReportHandlerTest {
             }
         };
 
-        TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes);
+        TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
         // Sync to FE followers and notify pending queries, because resource usage is changed.
         ReportHandler.testHandleResourceUsageReport(backendId, resourceUsage);
         Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
         Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
         Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
+        Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
         // Don't sync and notify, because resource usage isn't changed.
         ReportHandler.testHandleResourceUsageReport(backendId, resourceUsage);
         // Don't sync and notify, because this BE doesn't exist.

@@ -1419,7 +1419,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TUpdateResourceUsageResponse updateResourceUsage(TUpdateResourceUsageRequest request) throws TException {
         TResourceUsage usage = request.getResource_usage();
         QueryQueueManager.getInstance().updateResourceUsage(request.getBackend_id(),
-                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes());
+                usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
+                usage.getCpu_used_permille());
 
         TUpdateResourceUsageResponse res = new TUpdateResourceUsageResponse();
         TStatus status = new TStatus(TStatusCode.OK);

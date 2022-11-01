@@ -168,25 +168,31 @@ public class QueryQueueManagerTest {
         GlobalVariable.setQueryQueueEnable(true);
         GlobalVariable.setQueryQueueConcurrencyHardLimit(0);
         GlobalVariable.setQueryQueueMemUsedPctHardLimit(0);
+        GlobalVariable.setQueryQueueCpuUsedPermilleHardLimit(0);
         Assert.assertFalse(manager.needWait());
 
         GlobalVariable.setQueryQueueConcurrencyHardLimit(3);
         GlobalVariable.setQueryQueueMemUsedPctHardLimit(0.3);
+        GlobalVariable.setQueryQueueCpuUsedPermilleHardLimit(400);
         // Case 3: exceed concurrency threshold.
-        manager.updateResourceUsage(be2.getId(), 3, 10, 0);
+        manager.updateResourceUsage(be2.getId(), 3, 10, 0, 200);
         Assert.assertTrue(manager.needWait());
 
         // Case 4: exceed memory threshold.
-        manager.updateResourceUsage(be2.getId(), 0, 10, 4);
+        manager.updateResourceUsage(be2.getId(), 0, 10, 4, 200);
         Assert.assertTrue(manager.needWait());
 
-        // Case 5: BE isn't alive after resource overload.
+        // Case 5: exceed CPU threshold.
+        manager.updateResourceUsage(be2.getId(), 0, 10, 2, 500);
+        Assert.assertTrue(manager.needWait());
+
+        // Case 6: BE isn't alive after resource overload.
         be2.setAlive(false);
         Assert.assertFalse(manager.needWait());
 
-        // Case 6: don't exceed concurrency and memory threshold.
+        // Case 7: don't exceed concurrency and memory threshold.
         be2.setAlive(true);
-        manager.updateResourceUsage(be2.getId(), 2, 10, 2);
+        manager.updateResourceUsage(be2.getId(), 2, 10, 2, 200);
         Assert.assertFalse(manager.needWait());
     }
 }

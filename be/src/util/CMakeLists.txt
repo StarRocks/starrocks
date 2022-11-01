@@ -37,6 +37,7 @@ set(UTIL_FILES
   compression/stream_compression.cpp
   coding.cpp
   cpu_info.cpp
+  cpu_usage_info.cpp
   crc32c.cpp
   date_func.cpp
   dynamic_util.cpp

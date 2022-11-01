@@ -77,7 +77,8 @@ public class QueryQueueManager {
         }
     }
 
-    public boolean updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes) {
+    public boolean updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+                                       int cpuUsedPermille) {
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: {}", backendId);
@@ -87,7 +88,8 @@ public class QueryQueueManager {
         try {
             lock.lock();
 
-            boolean isChanged = backend.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes);
+            boolean isChanged =
+                    backend.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
             if (isChanged) {
                 LOG.debug("resource usage from backend {} has changed", backendId);
                 maybeNotifyAfterLock();
