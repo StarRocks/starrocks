@@ -26,6 +26,7 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.common.FeConstants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
+import com.starrocks.system.BackendHbResponse;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
 import org.junit.Assert;
@@ -228,10 +229,8 @@ public class BackendTest {
     @Test
     public void testHeartbeatOk() throws Exception {
         Backend be = new Backend();
-        BackendHbResponse hbResponse = new BackendHbResponse(1, 9060, 8040, 8060, 8090,
-                System.currentTimeMillis(), "1.0", 64);
+        BackendHbResponse hbResponse = new BackendHbResponse();
         boolean isChanged = be.handleHbResponse(hbResponse, false);
         Assert.assertTrue(isChanged);
     }
-
 }
