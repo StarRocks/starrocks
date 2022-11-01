@@ -41,7 +41,7 @@ public:
 
     bool is_page_full() override { return _encoder.len() >= _options.data_page_size; }
 
-    size_t add(const uint8_t* vals, size_t count) override {
+    uint32_t add(const uint8_t* vals, uint32_t count) override {
         DCHECK(!_finished);
         if (count == 0) {
             return 0;
@@ -69,7 +69,7 @@ public:
         _encoder.clear();
     }
 
-    size_t count() const override { return _count; }
+    uint32_t count() const override { return _count; }
 
     uint64_t size() const override { return _buf.size(); }
 
@@ -92,7 +92,7 @@ public:
 private:
     typedef typename TypeTraits<Type>::CppType CppType;
     PageBuilderOptions _options;
-    size_t _count;
+    uint32_t _count;
     bool _finished;
     faststring _buf;
     CppType _first_val;
@@ -124,7 +124,7 @@ public:
         }
     }
 
-    Status seek_to_position_in_page(size_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init() firstly";
         DCHECK_LE(pos, _num_elements) << "Tried to seek to " << pos << " which is > number of elements ("
                                       << _num_elements << ") in the block!";
@@ -156,7 +156,7 @@ public:
             return Status::OK();
         }
 
-        size_t to_fetch = std::min(*n, _num_elements - _cur_index);
+        uint32_t to_fetch = std::min(static_cast<uint32_t>(*n), _num_elements - _cur_index);
         uint8_t* data_ptr = dst->data();
         _decoder.get_batch(reinterpret_cast<CppType*>(data_ptr), to_fetch);
         _cur_index += to_fetch;
@@ -166,7 +166,7 @@ public:
 
     Status next_batch(size_t* n, vectorized::Column* dst) override {
         vectorized::SparseRange read_range;
-        size_t begin = current_index();
+        uint32_t begin = current_index();
         read_range.add(vectorized::Range(begin, begin + *n));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *n = current_index() - begin;
@@ -212,9 +212,9 @@ public:
         return Status::OK();
     }
 
-    size_t count() const override { return _num_elements; }
+    uint32_t count() const override { return _num_elements; }
 
-    size_t current_index() const override { return _cur_index; }
+    uint32_t current_index() const override { return _cur_index; }
 
     EncodingTypePB encoding_type() const override { return FOR_ENCODING; }
 
@@ -223,8 +223,8 @@ private:
 
     bool _parsed;
     Slice _data;
-    size_t _num_elements;
-    size_t _cur_index;
+    uint32_t _num_elements;
+    uint32_t _cur_index;
     ForDecoder<CppType> _decoder;
 };
 

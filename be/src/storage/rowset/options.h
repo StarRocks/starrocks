@@ -27,13 +27,13 @@
 
 namespace starrocks {
 
-static const size_t DEFAULT_PAGE_SIZE = 1024 * 1024; // default size: 1M
+static const uint32_t DEFAULT_PAGE_SIZE = 1024 * 1024; // default size: 1M
 
 class PageBuilderOptions {
 public:
-    size_t data_page_size = DEFAULT_PAGE_SIZE;
+    uint32_t data_page_size = DEFAULT_PAGE_SIZE;
 
-    size_t dict_page_size = DEFAULT_PAGE_SIZE;
+    uint32_t dict_page_size = DEFAULT_PAGE_SIZE;
 };
 
 class PageDecoderOptions {
