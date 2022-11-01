@@ -20,7 +20,7 @@ BITMAP_UNION_COUNT(value)
 
 ## 示例
 
-使用该函数计算网页的 PV 数据。假设 `user_id` 字段类型为 INT，下面两个查询是等价的。
+使用该函数计算网页的 UV 数据。假设 `user_id` 字段类型为 INT，下面两个查询是等价的。
 
 ```sql
 mysql> select * from test
