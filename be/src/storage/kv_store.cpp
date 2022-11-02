@@ -94,6 +94,9 @@ Status KVStore::init(bool read_only) {
         return Status::OK();
     }
 
+    LOG(WARNING) << "Fail to open RocksDB, reason:" << s.ToString()
+        << ", path:" << db_path;
+
     //
     // Open failed, may be it's because the column families we are trying to open is a subset of column families,
     // this may happen in the case that StarRocks has been upgrated to a newer version with some extra column
