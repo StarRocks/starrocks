@@ -39,6 +39,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class OlapTableTest {
 
@@ -86,10 +87,12 @@ public class OlapTableTest {
             tbl.addRelatedMaterializedView(mvId2);
             MvId mvId3 = new MvId(db.getId(), 30L);
             tbl.addRelatedMaterializedView(mvId3);
-            Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L), tbl.getRelatedMaterializedViews());
+            Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L),
+                    tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
             tbl.removeRelatedMaterializedView(mvId1);
             tbl.removeRelatedMaterializedView(mvId2);
-            Assert.assertEquals(Sets.newHashSet(30L), tbl.getRelatedMaterializedViews());
+            Assert.assertEquals(Sets.newHashSet(30L),
+                    tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
             tbl.removeRelatedMaterializedView(mvId3);
             Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
