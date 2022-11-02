@@ -136,7 +136,7 @@ Status DefaultValueColumnIterator::next_batch(const vectorized::SparseRange& ran
             for (size_t i = 0; i < to_read; i++) {
                 slices.emplace_back(*reinterpret_cast<const Slice*>(_mem_value));
             }
-            dst->append_strings(slices);
+            [[maybe_unused]] auto ret = dst->append_strings(slices);
         } else {
             dst->append_value_multiple_times(_mem_value, to_read);
         }

@@ -12,16 +12,17 @@
 
 namespace starrocks::pipeline {
 
-NLJoinProbeOperator::NLJoinProbeOperator(
-        OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence, TJoinOp::type join_op,
-        const std::string& sql_join_conjuncts, const std::vector<ExprContext*>& join_conjuncts,
-        const std::vector<ExprContext*>& conjunct_ctxs, const std::vector<SlotDescriptor*>& col_types,
-        size_t probe_column_count, size_t build_column_count, const std::shared_ptr<NLJoinContext>& cross_join_context)
+NLJoinProbeOperator::NLJoinProbeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
+                                         int32_t driver_sequence, TJoinOp::type join_op,
+                                         const std::string& sql_join_conjuncts,
+                                         const std::vector<ExprContext*>& join_conjuncts,
+                                         const std::vector<ExprContext*>& conjunct_ctxs,
+                                         const std::vector<SlotDescriptor*>& col_types, size_t probe_column_count,
+                                         const std::shared_ptr<NLJoinContext>& cross_join_context)
         : OperatorWithDependency(factory, id, "nestloop_join_probe", plan_node_id, driver_sequence),
           _join_op(join_op),
           _col_types(col_types),
           _probe_column_count(probe_column_count),
-          _build_column_count(build_column_count),
           _sql_join_conjuncts(sql_join_conjuncts),
           _join_conjuncts(join_conjuncts),
           _conjunct_ctxs(conjunct_ctxs),
@@ -454,7 +455,7 @@ void NLJoinProbeOperatorFactory::_init_row_desc() {
 OperatorPtr NLJoinProbeOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     return std::make_shared<NLJoinProbeOperator>(this, _id, _plan_node_id, driver_sequence, _join_op,
                                                  _sql_join_conjuncts, _join_conjuncts, _conjunct_ctxs, _col_types,
-                                                 _probe_column_count, _build_column_count, _cross_join_context);
+                                                 _probe_column_count, _cross_join_context);
 }
 
 Status NLJoinProbeOperatorFactory::prepare(RuntimeState* state) {
