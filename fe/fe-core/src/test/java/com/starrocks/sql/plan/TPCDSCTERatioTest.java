@@ -2,51 +2,15 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
-import com.starrocks.common.FeConstants;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 
 import java.util.Arrays;
 import java.util.List;
-import java.util.Map;
 
-public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
-    private static final Map<String, Long> ROW_COUNT_MAP = ImmutableMap.<String, Long>builder()
-            .put("call_center", 42L)
-            .put("catalog_page", 30000L)
-            .put("catalog_returns", 143996756L)
-            .put("catalog_sales", 1439980416L)
-            .put("customer", 12000000L)
-            .put("customer_address", 6000000L)
-            .put("customer_demographics", 1920800L)
-            .put("date_dim", 73049L)
-            .put("date_dim_varchar", 73049L)
-            .put("household_demographics", 7200L)
-            .put("income_band", 20L)
-            .put("inventory", 783000000L)
-            .put("item", 300000L)
-            .put("promotion", 1500L)
-            .put("reason", 65L)
-            .put("ship_mode", 20L)
-            .put("store", 1002L)
-            .put("store_returns", 287999764L)
-            .put("store_sales", 2879987999L)
-            .put("time_dim", 86400L)
-            .put("warehouse", 20L)
-            .put("web_page", 3000L)
-            .put("web_returns", 71997522L)
-            .put("web_sales", 720000376L)
-            .put("web_site", 54L)
-            .build();
+public class TPCDSCTERatioTest extends TPCDS1TTestBase {
 
     private static final List<String> CTE_SQL_NAME = Arrays.asList(
             "Q01", "Q02", "Q04", "Q11", "Q14_1", "Q14_2", "Q23_1", "Q23_2", "Q24_1",
@@ -56,35 +20,6 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
             Q01, Q02, Q04, Q11, Q14_1, Q14_2, Q23_1, Q23_2, Q24_1,
             Q24_2, Q30, Q31, Q39_1, Q39_2, Q47, Q57, Q59, Q64,
             Q74, Q75, Q81, Q95);
-
-    private StatisticStorage origin;
-
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        TPCDSPlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setCboCteReuse(true);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-    }
-
-    @AfterClass
-    public static void afterClass() {
-        TPCDSPlanTestBase.afterClass();
-    }
-
-    @Before
-    public void setUp() throws Exception {
-        origin = GlobalStateMgr.getCurrentStatisticStorage();
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCDSStatisticStorage());
-        setTPCDSTableStats(ROW_COUNT_MAP);
-        FeConstants.runningUnitTest = true;
-        connectContext.getSessionVariable().setCboCTERuseRatio(1.2);
-    }
-
-    @After
-    public void tearDown() throws Exception {
-        FeConstants.runningUnitTest = false;
-        connectContext.getGlobalStateMgr().setStatisticStorage(origin);
-    }
 
     public void setRatio(double ratio) {
         connectContext.getSessionVariable().setCboCTERuseRatio(ratio);
@@ -97,7 +32,7 @@ public class TPCDSCTERatioTest extends TPCDSPlanTestBase {
 
     public void testInline(String sql) throws Exception {
         String plan = getFragmentPlan(sql);
-        Assert.assertFalse(plan, plan.contains("MultiCastDataSinks"));
+        Assertions.assertFalse(plan.contains("MultiCastDataSinks"), plan);
     }
 
     private static void print(List<Boolean> expect, List<Boolean> actual) {
