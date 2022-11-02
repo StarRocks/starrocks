@@ -201,7 +201,9 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
                                                      wfile->filename(), segment_pb.data_size() - remaining_bytes,
                                                      segment_pb.data_size()));
         }
-
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
 
         // 3. update statistic
@@ -241,6 +243,9 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
                                                      segment_pb.delete_data_size()));
         }
 
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
 
         _num_delfile++;
@@ -403,6 +408,9 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk&
             return Status::InternalError("deletes column serialize failed");
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
         if (seg_info) {
             seg_info->set_delete_num_rows(deletes.size());
