@@ -2716,6 +2716,9 @@ public class Catalog {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
+        db.writeLock();
+        db.setExist(true);
+        db.writeUnlock();
         final Cluster cluster = nameToCluster.get(db.getClusterName());
         cluster.addDb(db.getFullName(), db.getId());
         globalTransactionMgr.addDatabaseTransactionMgr(db.getId());
@@ -2810,6 +2813,7 @@ public class Catalog {
                 } else {
                     Catalog.getCurrentCatalog().onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -2876,6 +2880,7 @@ public class Catalog {
                 } else {
                     Catalog.getCurrentCatalog().onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -2912,6 +2917,9 @@ public class Catalog {
 
             fullNameToDb.put(db.getFullName(), db);
             idToDb.put(db.getId(), db);
+            db.writeLock();
+            db.setExist(true);
+            db.writeUnlock();
             final Cluster cluster = nameToCluster.get(db.getClusterName());
             cluster.addDb(db.getFullName(), db.getId());
 

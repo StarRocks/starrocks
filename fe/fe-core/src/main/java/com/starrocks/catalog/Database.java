@@ -97,6 +97,12 @@ public class Database extends MetaObject implements Writable {
 
     private long lastSlowLockLogTime = 0;
 
+    // This param is used to make sure db not dropped when leader node writes wal,
+    // so this param dose not need to be persistent,
+    // and this param maybe not right when the db is dropped and the catalog has done a checkpoint,
+    // but that'ok to meet our needs.
+    private volatile boolean exist = true;
+
     public enum DbState {
         NORMAL, LINK, MOVE
     }
@@ -124,29 +130,90 @@ public class Database extends MetaObject implements Writable {
         this.clusterName = "";
     }
 
-    public void readLock() {
-        long startMs = System.nanoTime() / 1000000;
-        this.rwLock.readLock().lock();
-        long endMs = System.nanoTime() / 1000000;
-        if (endMs - startMs > SLOW_LOCK_MS && endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
+    private void logSlowLockEventIfNeeded(long startMs, String type, Thread formerOwner) {
+        long endMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        if (endMs - startMs > SLOW_LOCK_MS &&
+                endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
             lastSlowLockLogTime = endMs;
-            LOG.warn("slow read lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
-                    new Exception());
+            LOG.warn("slow db lock. type: {}, db id: {}, db name: {}, wait time: {}ms, " +
+                            "former {}, current stack trace: ", type, id, fullQualifiedName, endMs - startMs,
+                    getOwnerInfo(formerOwner), new Exception());
+        }
+    }
+
+    private void logTryLockFailureEvent(String type) {
+        Thread owner = rwLock.getOwner();
+        if (owner != null) {
+            LOG.warn("try db lock failed. type: {}, current {}", type, getOwnerInfo(owner));
+        }
+    }
+
+    private String getOwnerInfo(Thread owner) {
+        if (owner == null) {
+            return "";
+        }
+        StringBuilder sb = new StringBuilder();
+        sb.append("owner id: ").append(owner.getId()).append(", owner name: ")
+                .append(owner.getName()).append(", owner stack: ").append(Util.dumpThread(owner, 50));
+        return sb.toString();
+    }
+
+    public void readLock() {
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        Thread formerOwner = rwLock.getOwner();
+        this.rwLock.readLock().lock();
+        logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
+    }
+
+    // this function make sure lock can only be obtained if the db has not been dropped
+    public boolean readLockAndCheckExist() {
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        Thread formerOwner = rwLock.getOwner();
+        this.rwLock.readLock().lock();
+        logSlowLockEventIfNeeded(startMs, "readLock", formerOwner);
+        if (exist) {
+            return true;
+        } else {
+            this.rwLock.readLock().unlock();
+            return false;
         }
     }
 
     public boolean tryReadLock(long timeout, TimeUnit unit) {
         try {
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.readLock().tryLock(timeout, unit)) {
-                Thread owner = rwLock.getOwner();
-                if (owner != null) {
-                    LOG.warn("database lock is held by: {}", Util.dumpThread(owner, 50));
-                }
+                logTryLockFailureEvent("readLock");
                 return false;
             }
+            logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try read lock at db[" + id + "]", e);
+            return false;
+        }
+    }
+
+    // this function make sure lock can only be obtained if the db has not been dropped
+    public boolean tryReadLockAndCheckExist(long timeout, TimeUnit unit) {
+        try {
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            Thread formerOwner = rwLock.getOwner();
+            if (!this.rwLock.readLock().tryLock(timeout, unit)) {
+                logTryLockFailureEvent("readLock");
+                return false;
+            }
+            logSlowLockEventIfNeeded(startMs, "tryReadLock", formerOwner);
+            if (exist) {
+                return true;
+            } else {
+                this.rwLock.readLock().unlock();
+                return false;
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("failed to try read lock at db[" + id + "]", e);
+            Thread.currentThread().interrupt();
             return false;
         }
     }
@@ -156,28 +223,61 @@ public class Database extends MetaObject implements Writable {
     }
 
     public void writeLock() {
-        long startMs = System.nanoTime() / 1000000;
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        Thread formerOwner = rwLock.getOwner();
         this.rwLock.writeLock().lock();
-        long endMs = System.nanoTime() / 1000000;
-        if (endMs - startMs > SLOW_LOCK_MS && endMs > lastSlowLockLogTime + SLOW_LOCK_LOG_EVERY_MS) {
-            lastSlowLockLogTime = endMs;
-            LOG.warn("slow write lock db:" + id + " " + fullQualifiedName + " " + (endMs - startMs) + "ms",
-                    new Exception());
+        logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
+    }
+
+    // this function make sure lock can only be obtained if the db has not been dropped
+    public boolean writeLockAndCheckExist() {
+        long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+        Thread formerOwner = rwLock.getOwner();
+        this.rwLock.writeLock().lock();
+        logSlowLockEventIfNeeded(startMs, "writeLock", formerOwner);
+        if (exist) {
+            return true;
+        } else {
+            this.rwLock.writeLock().unlock();
+            return false;
         }
     }
 
     public boolean tryWriteLock(long timeout, TimeUnit unit) {
         try {
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            Thread formerOwner = rwLock.getOwner();
             if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
-                Thread owner = rwLock.getOwner();
-                if (owner != null) {
-                    LOG.warn("database lock is held by: {}", Util.dumpThread(owner, 50));
-                }
+                logTryLockFailureEvent("writeLock");
                 return false;
             }
+            logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
             return true;
         } catch (InterruptedException e) {
             LOG.warn("failed to try write lock at db[" + id + "]", e);
+            return false;
+        }
+    }
+
+    // this function make sure lock can only be obtained if the db has not been dropped
+    public boolean tryWriteLockAndCheckExist(long timeout, TimeUnit unit) {
+        try {
+            long startMs = TimeUnit.MILLISECONDS.convert(System.nanoTime(), TimeUnit.NANOSECONDS);
+            Thread formerOwner = rwLock.getOwner();
+            if (!this.rwLock.writeLock().tryLock(timeout, unit)) {
+                logTryLockFailureEvent("tryWriteLock");
+                return false;
+            }
+            logSlowLockEventIfNeeded(startMs, "tryWriteLock", formerOwner);
+            if (exist) {
+                return true;
+            } else {
+                this.rwLock.writeLock().unlock();
+                return false;
+            }
+        } catch (InterruptedException e) {
+            LOG.warn("failed to try write lock at db[" + id + "]", e);
+            Thread.currentThread().interrupt();
             return false;
         }
     }
@@ -687,5 +787,10 @@ public class Database extends MetaObject implements Writable {
 
     public boolean isInfoSchemaDb() {
         return ClusterNamespace.getNameFromFullName(fullQualifiedName).equalsIgnoreCase(InfoSchemaDb.DATABASE_NAME);
+    }
+
+    // the invoker should hold db's writeLock
+    public void setExist(boolean exist) {
+        this.exist = exist;
     }
 }
