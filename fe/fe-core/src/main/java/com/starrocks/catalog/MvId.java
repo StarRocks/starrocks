@@ -22,8 +22,12 @@ public class MvId {
 
     @Override
     public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
         MvId mvId = (MvId) o;
         return dbId == mvId.dbId && id == mvId.id;
     }
