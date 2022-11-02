@@ -8,6 +8,8 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -20,6 +22,8 @@ import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorS
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingRemoteFileIO implements RemoteFileIO {
+    private static final Logger LOG = LogManager.getLogger(CachingRemoteFileIO.class);
+
     public static final long NEVER_EVICT = -1;
     public static final long NEVER_REFRESH = -1;
     private final RemoteFileIO fileIO;
@@ -53,6 +57,7 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         try {
             return ImmutableMap.of(pathKey, cache.getUnchecked(pathKey));
         } catch (UncheckedExecutionException e) {
+            LOG.error("Error occurred when getting remote files from cache", e);
             throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
             throw e;
         }

@@ -84,7 +84,7 @@ public class InsertEvent extends MetastoreTableEvent {
     @Override
     protected boolean existInCache() {
         if (isPartitionTbl()) {
-            return cache.isPartitionPresent(getHivePartitionKey());
+            return cache.isPartitionPresent(getHivePartitionName());
         } else {
             HiveTableName hiveTableName = HiveTableName.of(dbName, tblName);
             return cache.isTablePresent(hiveTableName);
@@ -120,8 +120,8 @@ public class InsertEvent extends MetastoreTableEvent {
                 partition = HiveMetastoreApiConverter.toPartition(insertPartition.getSd(), insertPartition.getParameters());
                 hiveCommonStats = toHiveCommonStats(insertPartition.getParameters());
                 LOG.info("Start to process INSERT_EVENT event on {}.{}.{}.{}. Partition:[{}], HveCommonStats:[{}]",
-                        catalogName, dbName, tblName, getHivePartitionKey(), partition, hiveCommonStats);
-                cache.refreshPartitionByEvent(getHivePartitionKey(), hiveCommonStats, partition);
+                        catalogName, dbName, tblName, getHivePartitionName(), partition, hiveCommonStats);
+                cache.refreshPartitionByEvent(getHivePartitionName(), hiveCommonStats, partition);
             }
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
