@@ -202,8 +202,8 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |配置项|默认值|描述|
 |---|---|---|
 |meta_dir|StarRocksFE.STARROCKS_HOME_DIR + "/meta"|元数据保留目录。|
-|heartbeat_mgr_threads_num|8|HeartbeatMgr 中发送心跳任务的线程数。|
-|heartbeat_mgr_blocking_queue_size|1024|HeartbeatMgr 中发送心跳任务的线程池的队列长度。|
+|heartbeat_mgr_threads_num|8|Heartbeat Manager 中发送心跳任务的线程数。|
+|heartbeat_mgr_blocking_queue_size|1024|Heartbeat Manager 中发送心跳任务的线程池的队列长度。|
 |metadata_failure_recovery|FALSE|强制重置 FE 的元数据，请谨慎使用该配置项。|
 |edit_log_port|9010|FE Group(Master, Follower, Observer)之间通信用的端口。|
 |edit_log_type|BDB|Edit log 的类型，只能为 BDB。|
