@@ -34,16 +34,12 @@
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
   + [Colocation Join](/using_starrocks/Colocation_join.md)
-  + [外部表](/using_starrocks/External_table.md)
+  + [外部表](/data_source/External_table.md)
   + [数组](/using_starrocks/Array.md)
-  + [窗口函数](/using_starrocks/Window_function.md)
-  + [JAVA UDF](/using_starrocks/JAVA_UDF.md)
   + [Bitmap 索引](/table_design/Bitmap_index.md)
   + [Bloomfilter 索引](/table_design/Bloomfilter_index.md)
   + [基于 Bitmap 实现精确去重](/using_starrocks/Using_bitmap.md)
   + [基于 HyperLogLog 实现近似去重](/using_starrocks/Using_HLL.md)
-  + [时区](/using_starrocks/timezone.md)
-  + [文件管理器](/using_starrocks/filemanager.md)
 + 参考手册
   + SQL参考
     + 用户账户管理
@@ -175,6 +171,8 @@
         + [JSON](/sql-reference/sql-statements/data-types/JSON.md)
         + [HLL](/sql-reference/sql-statements/data-types/HLL.md)
   + 函数参考
+    + [窗口函数](/sql-reference/sql-functions/Window_function.md)
+    + [JAVA UDF](/sql-reference/sql-functions/JAVA_UDF.md)
     + 日期函数
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](/sql-reference/sql-functions/date-time-functions/curdate.md)
@@ -427,6 +425,7 @@
     + [备份恢复](/administration/Backup_and_restore.md)
     + [参数配置](/administration/Configuration.md)
     + [监控报警](/administration/Monitor_and_Alert.md)
+    + [时区](/administration/timezone.md)
     + 资源管理
       + [资源隔离](/administration/Resource_Group.md)
       + [查询管理](/administration/Query_management.md)
@@ -434,6 +433,7 @@
       + [负载均衡](/administration/Load_balance.md)
       + [副本管理](/administration/Replica.md)
       + [黑名单管理](/administration/Blacklist.md)
+      + [文件管理器](/administration/filemanager.md)
   + 数据恢复
     + [数据删除恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)

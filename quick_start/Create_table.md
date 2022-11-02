@@ -109,7 +109,7 @@ StarRocks 默认会给 Key 列创建稀疏索引加速查询，具体规则见 [
 
 #### ENGINE 类型
 
-默认为 olap。可选 mysql，elasticsearch，hive，ICEBERG 代表创建表为 [外部表](/using_starrocks/External_table.md#外部表)。
+默认为 olap。可选 mysql，elasticsearch，hive，ICEBERG 代表创建表为 [外部表](/data_source/External_table.md#外部表)。
 
 <br/>
 
