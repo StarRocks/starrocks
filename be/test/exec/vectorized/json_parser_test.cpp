@@ -381,4 +381,93 @@ PARALLEL_TEST(JsonParserTest, test_expanded_json_array_parser_with_jsonroot) {
     ASSERT_TRUE(st.is_end_of_file());
 }
 
+PARALLEL_TEST(JsonParserTest, test_illegal_document_stream) {
+    // ndjson with ' ', '/t', '\n'
+    std::string input = R"(   {"key1": 1} "key2": 2}    {"key3": 3}
+    {"key4": 4})";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+
+    std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
+
+    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_STREQ(parser->left_bytes_string().data(), R"("key2": 2}    {"key3": 3}
+    {"key4": 4})");
+}
+
+PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
+    // json array with ' ', '/t', '\n'
+    std::string input = R"( [  {"key1": 1}, {"key2": 2},    {"key3": 3},
+    {"key4": 4}])";
+    // Reserved for simdjson padding.
+    auto size = input.size();
+    input.resize(input.size() + simdjson::SIMDJSON_PADDING);
+    auto padded_size = input.size();
+
+    simdjson::ondemand::parser simdjson_parser;
+
+    std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
+
+    auto st = parser->parse(reinterpret_cast<uint8_t*>(input.data()), size, padded_size);
+
+    ASSERT_TRUE(st.ok());
+
+    simdjson::ondemand::object row;
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    int64_t val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    // double get.
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key1").get_int64();
+    ASSERT_EQ(val, 1);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key2").get_int64();
+    ASSERT_EQ(val, 2);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key3").get_int64();
+    ASSERT_EQ(val, 3);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.ok());
+
+    st = parser->get_current(&row);
+    ASSERT_TRUE(st.ok());
+    val = row.find_field("key4").get_int64();
+    ASSERT_EQ(val, 4);
+
+    st = parser->advance();
+    ASSERT_TRUE(st.is_end_of_file());
+}
+
 } // namespace starrocks::vectorized

@@ -446,7 +446,8 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 return st;
             }
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
+            _state->append_error_msg_to_file(fmt::format("not parsed: {}", parser->left_bytes_string()),
+                                             st.to_string());
             return st;
         }
         size_t chunk_row_num = chunk->num_rows();

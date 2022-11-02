@@ -12,9 +12,13 @@ const size_t MAX_RAW_JSON_LEN = 64;
 
 Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
     try {
+        _data = data;
+        _len = len;
+
         _doc_stream = _parser->iterate_many(data, len);
 
         _doc_stream_itr = _doc_stream.begin();
+
 
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to parse json as document stream. error: $0",
@@ -36,12 +40,6 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
         if (_doc_stream_itr != _doc_stream.end()) {
             simdjson::ondemand::document_reference doc = *_doc_stream_itr;
 
-            if (doc.type() != simdjson::ondemand::json_type::object) {
-                auto err_msg = fmt::format("the value should be object type in json document stream, value: {}",
-                                           JsonFunctions::to_json_string(doc, MAX_RAW_JSON_LEN));
-                return Status::DataQualityError(err_msg);
-            }
-
             _curr = doc.get_object();
             *row = _curr;
             _curr_ready = true;
@@ -49,6 +47,9 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
         }
         return Status::EndOfFile("all documents of the stream are iterated");
     } catch (simdjson::simdjson_error& e) {
+        // record current index.
+        _off = _doc_stream_itr.current_index();
+
         std::string err_msg;
         if (e.error() == simdjson::CAPACITY) {
             // It's necessary to tell the user when they try to load json array whose payload size is beyond the simdjson::ondemand::parser's buffer.
@@ -70,6 +71,10 @@ Status JsonDocumentStreamParser::advance() noexcept {
         return Status::OK();
     }
     return Status::EndOfFile("all documents of the stream are iterated");
+}
+
+std::string JsonDocumentStreamParser::left_bytes_string() noexcept {
+    return std::string(reinterpret_cast<char*>(_data) + _off, _len - _off);
 }
 
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
@@ -138,6 +143,10 @@ Status JsonArrayParser::advance() noexcept {
                 strings::Substitute("Failed to iterate json as array. error: $0", simdjson::error_message(e.error()));
         return Status::DataQualityError(err_msg);
     }
+}
+
+std::string JsonArrayParser::left_bytes_string() noexcept {
+    return std::string(_doc.current_location());
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {
