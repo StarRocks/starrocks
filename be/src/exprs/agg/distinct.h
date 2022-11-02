@@ -97,7 +97,7 @@ struct DistinctAggregateState<PT, SumPT, FixedLengthPTGuard<PT>> {
 };
 
 template <PrimitiveType PT, PrimitiveType SumPT>
-struct DistinctAggregateState<PT, SumPT, BinaryPTGuard<PT>> {
+struct DistinctAggregateState<PT, SumPT, StringPTGuard<PT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
@@ -258,7 +258,7 @@ struct DistinctAggregateStateV2<PT, SumPT, FixedLengthPTGuard<PT>> {
 };
 
 template <PrimitiveType PT, PrimitiveType SumPT>
-struct DistinctAggregateStateV2<PT, SumPT, BinaryPTGuard<PT>> : public DistinctAggregateState<PT, SumPT> {};
+struct DistinctAggregateStateV2<PT, SumPT, StringPTGuard<PT>> : public DistinctAggregateState<PT, SumPT> {};
 
 // Dear god this template class as template parameter kills me!
 template <PrimitiveType PT, PrimitiveType SumPT,

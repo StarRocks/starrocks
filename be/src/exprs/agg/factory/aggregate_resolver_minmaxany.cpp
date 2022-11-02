@@ -34,7 +34,7 @@ void AggregateFuncResolver::register_bitmap() {
 struct MinMaxAnyDispatcher {
     template <PrimitiveType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_binary<pt>) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
             resolver->add_aggregate_mapping<pt, pt, MinAggregateData<pt>>(
                     "min", true, AggregateFactory::MakeMinAggregateFunction<pt>());
             resolver->add_aggregate_mapping<pt, pt, MaxAggregateData<pt>>(
@@ -53,8 +53,8 @@ template <PrimitiveType ret_type>
 struct MaxByDispatcherInner {
     template <PrimitiveType arg_type>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr ((pt_is_aggregate<arg_type> || pt_is_binary<arg_type>)&&(pt_is_aggregate<ret_type> ||
-                                                                              pt_is_binary<ret_type>)) {
+        if constexpr ((pt_is_aggregate<arg_type> || pt_is_string<arg_type>)&&(pt_is_aggregate<ret_type> ||
+                                                                              pt_is_string<ret_type>)) {
             resolver->add_aggregate_mapping_notnull<arg_type, ret_type>(
                     "max_by", true, AggregateFactory::MakeMaxByAggregateFunction<arg_type>());
         }

@@ -145,7 +145,7 @@ VALUE_GUARD(PrimitiveType, DecimalPTGuard, pt_is_decimal, TYPE_DECIMAL32, TYPE_D
 VALUE_GUARD(PrimitiveType, SumDecimal64PTGuard, pt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
 VALUE_GUARD(PrimitiveType, HllPTGuard, pt_is_hll, TYPE_HLL)
 VALUE_GUARD(PrimitiveType, ObjectPTGuard, pt_is_object, TYPE_OBJECT)
-VALUE_GUARD(PrimitiveType, BinaryPTGuard, pt_is_binary, TYPE_CHAR, TYPE_VARCHAR)
+VALUE_GUARD(PrimitiveType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(PrimitiveType, JsonGuard, pt_is_json, TYPE_JSON)
 VALUE_GUARD(PrimitiveType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
 

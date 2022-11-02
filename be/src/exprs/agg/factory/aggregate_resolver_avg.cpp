@@ -24,7 +24,7 @@ struct AvgDispatcher {
 struct ArrayAggDispatcher {
     template <PrimitiveType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_binary<pt>) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt>) {
             auto func = AggregateFactory::MakeArrayAggAggregateFunction<pt>();
             using AggState = ArrayAggAggregateState<pt>;
             resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,
