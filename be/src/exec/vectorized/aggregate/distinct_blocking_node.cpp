@@ -123,9 +123,9 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
     // shared by sink operator and source operator
-
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
@@ -137,6 +137,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
                 context->next_operator_id(), id(), aggregator_factory, std::move(partition_expr_ctxs));
         auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
     };
 
@@ -153,7 +154,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    if (context->need_local_shuffle(ops_with_sink)) {
+    if (could_local_shuffle) {
         auto partition_expr_ctxs =
                 dynamic_cast<AggregateDistinctBlockingSinkOperatorFactory*>(sink_operator.get())->partition_by_exprs();
         ops_with_sink =
@@ -166,8 +167,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     dynamic_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
-            ->set_need_local_shuffle(
-                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
+            ->set_could_local_shuffle(
+                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
     ops_with_source.push_back(std::move(source_operator));
 
     if (should_cache) {
