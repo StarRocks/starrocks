@@ -3,11 +3,11 @@
 package com.starrocks.connector.hive.events;
 
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.server.CatalogMgr;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
@@ -20,10 +20,9 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 
 /**
@@ -59,54 +58,34 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     // event factory which is used to get or create MetastoreEvents
     private final MetastoreEventFactory metastoreEventFactory;
 
-    private Map<String, CacheUpdateProcessor> cacheUpdateProcessors = Maps.newHashMap();
+    private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
 
-    // Locking is required during event processing that avoiding data inconsistency
-    // when manually executing refresh operation. This lock needs to be acquired
-    // when executing refresh table or refresh partition in HiveMetaCache
-    private final ReadWriteLock eventProcessorLock = new ReentrantReadWriteLock();
-
-    // resourceName.dbName.tableName
-    // resourceName -> resource_mapping_inside_catalog_ + resourceName
-    private final List<String> tables = Lists.newArrayList();
-
-    private final ReadWriteLock tablesLock = new ReentrantReadWriteLock();
+    // [catalogName.dbName.tableName] for hive table with resource
+    private final List<String> externalTables = Lists.newArrayList();
 
     public MetastoreEventsProcessor() {
         super(MetastoreEventsProcessor.class.getName(), Config.hms_events_polling_interval_ms);
-        this.metastoreEventFactory = new MetastoreEventFactory();
+        this.metastoreEventFactory = new MetastoreEventFactory(externalTables);
     }
 
     public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
+        LOG.info("Start to synchronize hive metadata cache on catalog {}", catalogName);
         cacheUpdateProcessors.put(catalogName, cache);
     }
 
     public void unRegisterCacheUpdateProcessor(String catalogName) {
+        LOG.info("Stop to synchronize hive metadata cache on catalog {}", catalogName);
         cacheUpdateProcessors.remove(catalogName);
     }
 
     public void registerTableFromResource(String catalogTableName) {
-        tablesLock.writeLock().lock();
-        try {
-            tables.add(catalogTableName);
-            LOG.info("Succeed to register {} to Metastore event processor", catalogTableName);
-        } finally {
-            tablesLock.writeLock().unlock();
-        }
+        externalTables.add(catalogTableName);
+        LOG.info("Succeed to register {} to Metastore event processor", catalogTableName);
     }
 
     public void unRegisterTableFromResource(String catalogTableName) {
-        tablesLock.writeLock().lock();
-        try {
-            tables.remove(catalogTableName);
-            LOG.info("Succeed to remove {} from Metastore event processor", catalogTableName);
-        } finally {
-            tablesLock.writeLock().unlock();
-        }
-    }
-
-    public boolean needToProcess(String catalogTableName) {
-        return tables.contains(catalogTableName);
+        externalTables.remove(catalogTableName);
+        LOG.info("Succeed to remove {} from Metastore event processor", catalogTableName);
     }
 
     /**
@@ -219,9 +198,13 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     @Override
     protected void runAfterCatalogReady() {
         List<String> catalogs = Lists.newArrayList(cacheUpdateProcessors.keySet());
-        LOG.info("Start to pull [{}] events", catalogs);
+        int resourceCatalogNum = (int) cacheUpdateProcessors.keySet().stream()
+                .filter(CatalogMgr.ResourceMappingCatalog::isResourceMappingCatalog).count();
+        int catalogNum = cacheUpdateProcessors.size() - resourceCatalogNum;
+        LOG.info("Start to pull [{}] events. resource mapping catalog size [{}], normal catalog log size [{}]",
+                catalogs, resourceCatalogNum, catalogNum);
+
         for (String catalogName : catalogs) {
-            eventProcessorLock.writeLock().lock();
             List<NotificationEvent> events = Collections.emptyList();
             try {
                 events = getNextHMSEvents(catalogName);
@@ -235,21 +218,11 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
                 LOG.error("Failed to process hive metastore [{}] events " +
                                 "in the range of event id from {} to {}.", catalogName,
                         events.get(0).getEventId(), events.get(events.size() - 1).getEventId(), ex);
-            } finally {
-                eventProcessorLock.writeLock().unlock();
             }
         }
     }
 
     public static MessageDeserializer getMessageDeserializer() {
         return MESSAGE_DESERIALIZER;
-    }
-
-    public ReadWriteLock getEventProcessorLock() {
-        return eventProcessorLock;
-    }
-
-    public boolean isContainsCatalog(String catalogName) {
-        return cacheUpdateProcessors.keySet().contains(catalogName);
     }
 }

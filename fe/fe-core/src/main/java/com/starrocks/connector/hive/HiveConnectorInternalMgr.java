@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
+
 public class HiveConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
@@ -73,7 +75,7 @@ public class HiveConnectorInternalMgr {
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
-                    hmsConf.getCacheRefreshIntervalSec(),
+                    enableHmsEventsIncrementalSync ? NEVER_REFRESH : hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),
                     hmsConf.enableListNamesCache());
         }
@@ -96,7 +98,7 @@ public class HiveConnectorInternalMgr {
                     remoteFileIO,
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
                     remoteFileConf.getCacheTtlSec(),
-                    remoteFileConf.getCacheRefreshIntervalSec(),
+                    enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());
         }
 
@@ -124,7 +126,7 @@ public class HiveConnectorInternalMgr {
         return remoteFileConf;
     }
 
-    public boolean isEnableHmsEventsIncrementalSync() {
+    public boolean enableHmsEventsIncrementalSync() {
         return enableHmsEventsIncrementalSync;
     }
 }

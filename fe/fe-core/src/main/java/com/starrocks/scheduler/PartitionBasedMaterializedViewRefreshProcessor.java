@@ -160,7 +160,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             Table table = tablePair.second;
             if (!table.isLocalTable()) {
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), baseTableInfo.getTableName(), table, Lists.newArrayList());
+                        baseTableInfo.getDbName(), table, Lists.newArrayList());
             }
         }
     }

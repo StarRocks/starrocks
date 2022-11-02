@@ -20,11 +20,11 @@ public interface IHiveMetastore {
 
     List<String> getPartitionKeys(String dbName, String tableName);
 
-    Partition getPartition(String dbName, String tblName, List<String> partitionValues);
+    Partition getPartition(String dbName, String tableName, List<String> partitionValues);
 
-    Map<String, Partition> getPartitionsByNames(String dbName, String tblName, List<String> partitionNames);
+    Map<String, Partition> getPartitionsByNames(String dbName, String tableName, List<String> partitionNames);
 
-    HivePartitionStats getTableStatistics(String dbName, String tblName);
+    HivePartitionStats getTableStatistics(String dbName, String tableName);
 
     Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitions);
 
@@ -35,6 +35,12 @@ public interface IHiveMetastore {
     }
 
     default void invalidateAll() {
+    }
+
+    default void invalidateTable(String dbName, String tableName) {
+    }
+
+    default void invalidatePartition(HivePartitionName partitionName) {
     }
 
     default long getCurrentEventId() {

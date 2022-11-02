@@ -24,16 +24,19 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.hive.common.FileUtils;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.FutureTask;
 import java.util.stream.Collectors;
 
+import static org.apache.hadoop.hive.common.FileUtils.escapePathName;
 import static org.apache.hadoop.hive.common.FileUtils.unescapePathName;
 
 public class PartitionUtil {
@@ -108,6 +111,22 @@ public class PartitionUtil {
     public static String toHivePartitionName(List<String> partitionColumnNames,
                                              List<String> partitionValues) {
         return FileUtils.makePartName(partitionColumnNames, partitionValues);
+    }
+
+    public static String toHivePartitionName(Map<String, String> partitionColNameToValue) {
+        int i = 0;
+        StringBuilder name = new StringBuilder();
+        for (Map.Entry<String, String> entry : partitionColNameToValue.entrySet()) {
+            if (i++ > 0) {
+                name.append(Path.SEPARATOR);
+            }
+            String partitionColName = entry.getKey();
+            String partitionValue = entry.getValue();
+            name.append(escapePathName(partitionColName.toLowerCase(Locale.ROOT)));
+            name.append('=');
+            name.append(escapePathName(partitionValue.toLowerCase(Locale.ROOT)));
+        }
+        return name.toString();
     }
 
     public static List<String> fromPartitionKey(PartitionKey key) {

@@ -16,7 +16,6 @@ import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import com.starrocks.connector.hive.events.MetastoreEventType;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.jetbrains.annotations.NotNull;
@@ -280,9 +279,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         ));
     }
 
-    public void refreshTable(String hiveDbName, String hiveTblName) {
-        databaseCache.put(hiveDbName, loadDb(hiveDbName));
-
+    public synchronized void refreshTable(String hiveDbName, String hiveTblName) {
         HiveTableName hiveTableName = HiveTableName.of(hiveDbName, hiveTblName);
         Table updatedTable = loadTable(hiveTableName);
         tableCache.put(hiveTableName, updatedTable);
@@ -293,9 +290,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
             Partition updatedPartition = loadPartition(hivePartitionName);
             partitionCache.put(hivePartitionName, updatedPartition);
         } else {
-            List<HivePartitionName> presentPartitionNames = partitionCache.asMap().keySet().stream()
-                    .filter(partitionName -> partitionName.approximateMatchTable(hiveDbName, hiveTblName))
-                    .collect(Collectors.toList());
+            List<HivePartitionName> presentPartitionNames = getPresentPartitionNames(partitionCache, hiveDbName, hiveTblName);
             if (presentPartitionNames.size() > 0) {
                 Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(presentPartitionNames);
                 partitionCache.putAll(updatedPartitions);
@@ -305,9 +300,8 @@ public class CachingHiveMetastore implements IHiveMetastore {
         if (hmsTable.isUnPartitioned()) {
             tableStatsCache.put(hiveTableName, loadTableStatistics(hiveTableName));
         } else {
-            List<HivePartitionName> presentPartitionStatistics = partitionStatsCache.asMap().keySet().stream()
-                    .filter(partitionName -> partitionName.approximateMatchTable(hiveDbName, hiveTblName))
-                    .collect(Collectors.toList());
+            List<HivePartitionName> presentPartitionStatistics = getPresentPartitionNames(
+                    partitionStatsCache, hiveDbName, hiveTblName);
             if (presentPartitionStatistics.size() > 0) {
                 Map<HivePartitionName, HivePartitionStats> updatePartitionStats =
                         loadPartitionsStatistics(presentPartitionStatistics);
@@ -316,7 +310,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         }
     }
 
-    public void refreshPartition(List<HivePartitionName> partitionNames) {
+    public synchronized void refreshPartition(List<HivePartitionName> partitionNames) {
         Map<HivePartitionName, Partition> updatedPartitions = loadPartitionsByNames(partitionNames);
         partitionCache.putAll(updatedPartitions);
 
@@ -343,7 +337,14 @@ public class CachingHiveMetastore implements IHiveMetastore {
         }
     }
 
-    public void invalidateAll() {
+    private List<HivePartitionName> getPresentPartitionNames(LoadingCache<HivePartitionName, ?> cache,
+                                                             String dbName, String tableName) {
+        return cache.asMap().keySet().stream()
+                .filter(partitionName -> partitionName.approximateMatchTable(dbName, tableName))
+                .collect(Collectors.toList());
+    }
+
+    public synchronized void invalidateAll() {
         databaseNamesCache.invalidateAll();
         tableNamesCache.invalidateAll();
         partitionKeysCache.invalidateAll();
@@ -354,58 +355,54 @@ public class CachingHiveMetastore implements IHiveMetastore {
         partitionStatsCache.invalidateAll();
     }
 
-    public boolean existInCache(MetastoreEventType eventType, Object key) {
-        switch (eventType) {
-            case ALTER_TABLE:
-            case DROP_TABLE:
-                return existInCache(tableCache, key);
-            case ALTER_PARTITION:
-                return existInCache(partitionCache, key);
-            default:
-                return false;
-        }
+    public synchronized void invalidateTable(String dbName, String tableName) {
+        HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
+        tableCache.invalidate(hiveTableName);
+        tableStatsCache.invalidate(hiveTableName);
+        List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
+        presentPartitions.forEach(p -> partitionCache.invalidate(p));
+        List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
+        presentPartitionStats.forEach(p -> partitionStatsCache.invalidate(p));
     }
 
-    public void refreshCacheByEvent(MetastoreEventType eventType, HiveTableName hiveTableName,
-                                    HivePartitionName hivePartitionName, HiveCommonStats commonStats,
-                                    Partition partition, HiveTable updatedHiveTable) {
-        switch (eventType) {
-            case ALTER_TABLE:
-                refreshTableByEvent(hiveTableName, hivePartitionName, commonStats, partition, updatedHiveTable);
-                break;
-            case DROP_TABLE:
-                clearCache(hiveTableName);
-                break;
-            case ALTER_PARTITION:
-                refreshPartitionByEvent(hivePartitionName, commonStats, partition);
-                break;
-            case DROP_PARTITION:
-                dropPartitionKeyByEvent(hivePartitionName);
-                break;
-            case INSERT:
-                if (updatedHiveTable.isUnPartitioned()) {
-                    refreshTableByEvent(hiveTableName, hivePartitionName, commonStats, partition, updatedHiveTable);
-                } else {
-                    refreshPartitionByEvent(hivePartitionName, commonStats, partition);
-                }
-                break;
-            default:
-                return;
-        }
+    public synchronized void invalidatePartition(HivePartitionName partitionName) {
+        partitionCache.invalidate(partitionName);
+        partitionStatsCache.invalidate(partitionName);
     }
 
-    private void refreshTableByEvent(HiveTableName hiveTableName, HivePartitionName hivePartitionName,
-                                     HiveCommonStats commonStats, Partition partition, HiveTable updatedHiveTable) {
+    public boolean isTablePresent(HiveTableName tableName) {
+        return tableCache.getIfPresent(tableName) != null;
+    }
+
+    public boolean isPartitionPresent(HivePartitionName hivePartitionName) {
+        return partitionCache.getIfPresent(hivePartitionName) != null;
+    }
+
+    public synchronized void refreshTableByEvent(HiveTable updatedHiveTable, HiveCommonStats commonStats, Partition partition) {
+        String dbName = updatedHiveTable.getDbName();
+        String tableName = updatedHiveTable.getTableName();
+        HiveTableName hiveTableName = HiveTableName.of(dbName, tableName);
         tableCache.put(hiveTableName, updatedHiveTable);
         if (updatedHiveTable.isUnPartitioned()) {
-            HivePartitionStats partitionStats =
-                    createPartitionStats(commonStats, get(tableStatsCache, hiveTableName).getColumnStats());
-            tableStatsCache.put(hiveTableName, partitionStats);
-            partitionCache.put(hivePartitionName, partition);
+            Map<String, HiveColumnStats> columnStats = get(tableStatsCache, hiveTableName).getColumnStats();
+            HivePartitionStats updatedPartitionStats = createPartitionStats(commonStats, columnStats);
+            tableStatsCache.put(hiveTableName, updatedPartitionStats);
+            partitionCache.put(HivePartitionName.of(dbName, tableName, Lists.newArrayList()), partition);
         } else {
-            partitionCache.invalidate(hivePartitionName);
-            partitionStatsCache.invalidate(hivePartitionName);
+            List<HivePartitionName> presentPartitions = getPresentPartitionNames(partitionCache, dbName, tableName);
+            presentPartitions.forEach(p -> partitionCache.invalidate(p));
+            List<HivePartitionName> presentPartitionStats = getPresentPartitionNames(partitionStatsCache, dbName, tableName);
+            presentPartitionStats.forEach(p -> partitionStatsCache.invalidate(p));
         }
+    }
+
+    public synchronized void refreshPartitionByEvent(HivePartitionName hivePartitionName,
+                                                     HiveCommonStats commonStats,
+                                                     Partition partition) {
+        Map<String, HiveColumnStats> columnStats = get(partitionStatsCache, hivePartitionName).getColumnStats();
+        HivePartitionStats updatedPartitionStats = createPartitionStats(commonStats, columnStats);
+        partitionCache.put(hivePartitionName, partition);
+        partitionStatsCache.put(hivePartitionName, updatedPartitionStats);
     }
 
     private HivePartitionStats createPartitionStats(HiveCommonStats commonStats, Map<String, HiveColumnStats> columnStats) {
@@ -416,43 +413,14 @@ public class CachingHiveMetastore implements IHiveMetastore {
         return new HivePartitionStats(commonStats, columnStats);
     }
 
-    private void refreshPartitionByEvent(HivePartitionName hivePartitionName,
-                                         HiveCommonStats commonStats, Partition partition) {
-        HivePartitionStats partitionStats = createPartitionStats(
-                commonStats, get(partitionStatsCache, hivePartitionName).getColumnStats());
-        partitionStatsCache.put(hivePartitionName, partitionStats);
-        partitionCache.put(hivePartitionName, partition);
-    }
-
-    private void dropPartitionKeyByEvent(HivePartitionName hivePartitionName) {
-        partitionCache.invalidate(hivePartitionName);
-        partitionStatsCache.invalidate(hivePartitionName);
-    }
-
-    private void clearCache(HiveTableName hiveTableName) {
-        tableCache.invalidate(hiveTableName);
-        tableStatsCache.invalidate(hiveTableName);
-        List<String> partitionNames = partitionKeysCache.getIfPresent(hiveTableName);
-        partitionKeysCache.invalidate(hiveTableName);
-        partitionNames.stream().forEach(partitionName -> {
-            HivePartitionName hivePartitionName = HivePartitionName.of(
-                    hiveTableName.getDatabaseName(), hiveTableName.getTableName(), partitionName);
-            partitionCache.invalidate(hivePartitionName);
-            partitionStatsCache.invalidate(hivePartitionName);
-        });
-    }
-
-    private  <K, V> boolean existInCache(LoadingCache<K, V> cache, Object key) {
-        return cache.getIfPresent(key) != null;
-    }
-
     public long getCurrentEventId() {
         return metastore.getCurrentEventId();
     }
 
-    public NotificationEventResponse getNextEventResponse(long lastSyncedEventId, String catalogName,
-                                                          final boolean getAllEvents)
-            throws MetastoreNotificationFetchException {
+    public NotificationEventResponse getNextEventResponse(
+            long lastSyncedEventId,
+            String catalogName,
+            final boolean getAllEvents) throws MetastoreNotificationFetchException {
         return ((HiveMetastore) metastore).getNextEventResponse(lastSyncedEventId, catalogName, getAllEvents);
     }
 }

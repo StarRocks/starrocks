@@ -373,19 +373,17 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onCreate() {
-        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(catalogName)) {
-            String catalogName = getCatalogName();
+        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTableFromResource(
-                    String.join(".", catalogName, hiveDbName, hiveTableName));
+                    String.join(".", getCatalogName(), hiveDbName, hiveTableName));
         }
     }
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
-        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(catalogName)) {
-            String catalogName = getCatalogName();
+        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
             GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterTableFromResource(
-                    String.join(".", catalogName, hiveDbName, hiveTableName));
+                    String.join(".", getCatalogName(), hiveDbName, hiveTableName));
         }
     }
 

@@ -47,21 +47,11 @@ public class HiveMetaClient {
 
     private final HiveConf conf;
 
-    private long baseHmsEventId;
-
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
-        if (Config.enable_hms_events_incremental_sync) {
-            init();
-        }
-    }
-
-    private void init() {
-        CurrentNotificationEventId currentNotificationEventId = getCurrentNotificationEventId();
-        this.baseHmsEventId = currentNotificationEventId.getEventId();
     }
 
     public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
@@ -297,7 +287,7 @@ public class HiveMetaClient {
             return client.hiveClient.getCurrentNotificationEventId();
         } catch (Exception e) {
             LOG.error("Failed to fetch current notification event id", e);
-            throw new StarRocksConnectorException("Failed to get current notification event id. msg: " + e.getMessage());
+            throw new MetastoreNotificationFetchException("Failed to get current notification event id. msg: " + e.getMessage());
         }
     }
 
@@ -308,7 +298,9 @@ public class HiveMetaClient {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getNextNotification(lastEventId, maxEvents, filter);
         } catch (Exception e) {
-            throw new MetastoreNotificationFetchException("Failed to get next notification. msg: " + e.getMessage());
+            LOG.error("Failed to get next notification based on last event id {}", lastEventId, e);
+            throw new MetastoreNotificationFetchException("Failed to get next notification based on last event id: " +
+                    lastEventId + ". msg: " + e.getMessage());
         }
     }
 }

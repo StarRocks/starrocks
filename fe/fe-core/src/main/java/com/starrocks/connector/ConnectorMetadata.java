@@ -105,7 +105,7 @@ public interface ConnectorMetadata {
     default void clear() {
     }
 
-    default void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
+    default void refreshTable(String srDbName, Table table, List<String> partitionNames) {
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {

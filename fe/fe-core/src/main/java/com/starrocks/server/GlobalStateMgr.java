@@ -3091,7 +3091,7 @@ public class GlobalStateMgr {
             catalogName = hmsTable.getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, tblName, table, partitions);
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions);
     }
 
     public void initDefaultCluster() {

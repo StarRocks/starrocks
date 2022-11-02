@@ -64,13 +64,14 @@ public class HiveConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
-                internalMgr.isSearchRecursive()
+                internalMgr.isSearchRecursive(),
+                internalMgr.enableHmsEventsIncrementalSync()
         );
     }
 
     public void onCreate() {
-        if (internalMgr.isEnableHmsEventsIncrementalSync()) {
-            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor(true);
+        if (internalMgr.enableHmsEventsIncrementalSync()) {
+            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
             updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
                     .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
         }
@@ -79,7 +80,7 @@ public class HiveConnector implements Connector {
     @Override
     public void shutdown() {
         internalMgr.shutdown();
-        metadataFactory.getCacheUpdateProcessor(false).ifPresent(CacheUpdateProcessor::invalidateAll);
+        metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
         GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }
