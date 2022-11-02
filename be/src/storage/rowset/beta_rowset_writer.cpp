@@ -303,6 +303,9 @@ Status HorizontalBetaRowsetWriter::flush_chunk_with_deletes(const vectorized::Ch
             return Status::InternalError("deletes column serialize failed");
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
         _num_delfile++;
         _num_rows_del += deletes.size();
