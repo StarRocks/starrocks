@@ -68,7 +68,6 @@ private:
     int32_t _num_sinkers;
 
     std::shared_ptr<FileSinkIOBuffer> _file_sink_buffer;
-    RuntimeProfile* _profile = nullptr;
     FragmentContext* const _fragment_ctx;
 };
 } // namespace pipeline
