@@ -135,13 +135,21 @@ fi
 USE_JEMALLOC=ON
 
 HELP=0
-if [[ $OPTS =~ "-j" ]] && [ $# == 3 ] || [ $# == 1 ] ; then
+if [ $# == 1 ] ; then
     # default
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
+elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
+    # default
+    BUILD_BE=1
+    BUILD_FE=1
+    BUILD_SPARK_DPP=1
+    CLEAN=0
+    RUN_UT=0
+    PARALLEL=$2
 else
     BUILD_BE=0
     BUILD_FE=0
