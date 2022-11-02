@@ -24,7 +24,7 @@ public class ConnectorMgr {
 
     private final MetadataMgr metadataMgr;
 
-    public final List<String> supportConnectorType = Lists.newArrayList();
+    public final List<String> SUPPORT_CONNECTOR_TYPE = Lists.newArrayList();
 
     public ConnectorMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
@@ -38,7 +38,7 @@ public class ConnectorMgr {
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
-        supportConnectorType.add(connectorFactory.name());
+        SUPPORT_CONNECTOR_TYPE.add(connectorFactory.name());
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
         Preconditions.checkArgument(existingConnectorFactory == null,
