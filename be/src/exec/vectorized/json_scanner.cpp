@@ -28,6 +28,7 @@
 namespace starrocks::vectorized {
 
 const int64_t MAX_ERROR_LINES_IN_FILE = 50;
+const int64_t MAX_ERROR_LOG_LENGTH = 64;
 
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
@@ -446,8 +447,9 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 return st;
             }
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file(fmt::format("not parsed: {}", parser->left_bytes_string()),
-                                             st.to_string());
+            _state->append_error_msg_to_file(
+                    fmt::format("parser current location: {}", parser->left_bytes_string(MAX_ERROR_LOG_LENGTH)),
+                    st.to_string());
             return st;
         }
         size_t chunk_row_num = chunk->num_rows();

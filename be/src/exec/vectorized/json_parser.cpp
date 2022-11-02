@@ -4,6 +4,8 @@
 
 #include <fmt/format.h>
 
+#include <algorithm>
+
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::vectorized {
@@ -72,8 +74,8 @@ Status JsonDocumentStreamParser::advance() noexcept {
     return Status::EndOfFile("all documents of the stream are iterated");
 }
 
-std::string JsonDocumentStreamParser::left_bytes_string() noexcept {
-    return std::string(reinterpret_cast<char*>(_data) + _off, _len - _off);
+std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
+    return std::string(reinterpret_cast<char*>(_data) + _off, std::min(_len - _off, sz));
 }
 
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {
@@ -112,12 +114,6 @@ Status JsonArrayParser::get_current(simdjson::ondemand::object* row) noexcept {
 
         simdjson::ondemand::value val = *_array_itr;
 
-        if (val.type() != simdjson::ondemand::json_type::object) {
-            auto err_msg = fmt::format("the value should be object type in json array, value: {}",
-                                       JsonFunctions::to_json_string(val, MAX_RAW_JSON_LEN));
-            return Status::DataQualityError(err_msg);
-        }
-
         _curr = val.get_object();
         *row = _curr;
         _curr_ready = true;
@@ -144,8 +140,8 @@ Status JsonArrayParser::advance() noexcept {
     }
 }
 
-std::string JsonArrayParser::left_bytes_string() noexcept {
-    return std::string(_doc.current_location());
+std::string JsonArrayParser::left_bytes_string(size_t sz) noexcept {
+    return std::string(_doc.current_location()).substr(0, sz);
 }
 
 Status JsonDocumentStreamParserWithRoot::get_current(simdjson::ondemand::object* row) noexcept {

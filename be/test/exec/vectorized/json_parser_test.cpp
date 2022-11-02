@@ -408,7 +408,7 @@ PARALLEL_TEST(JsonParserTest, test_illegal_document_stream) {
 
     st = parser->get_current(&row);
     ASSERT_TRUE(st.is_data_quality_error());
-    ASSERT_STREQ(parser->left_bytes_string().data(), R"("key2": 2}    {"key3": 3}
+    ASSERT_STREQ(parser->left_bytes_string(64).data(), R"("key2": 2}    {"key3": 3}
     {"key4": 4})");
 }
 
@@ -441,7 +441,7 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
 
     st = parser->get_current(&row);
     ASSERT_TRUE(st.is_data_quality_error());
-    ASSERT_STREQ(parser->left_bytes_string().data(), R"("key2": 2},    {"key3": 3},
+    ASSERT_STREQ(parser->left_bytes_string(64).data(), R"("key2": 2},    {"key3": 3},
     {"key4": 4}])");
 }
 
