@@ -2,20 +2,20 @@
 
 package com.starrocks.sql.plan;
 
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-public class TPCDSCTETest extends TPCDSPlanTestBase {
+public class TPCDS1TTest extends TPCDS1TTestBase {
 
-    @BeforeClass
+    @BeforeAll
     public static void beforeClass() throws Exception {
         TPCDSPlanTestBase.beforeClass();
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
     }
 
-    @AfterClass
+    @AfterAll
     public static void afterClass() {
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
     }
@@ -562,4 +562,44 @@ public class TPCDSCTETest extends TPCDSPlanTestBase {
         testAllInlineCTE(Q99);
     }
 
+    @Test
+    public void testQuery14IntersectDistinct() throws Exception {
+        String sql = "select iss.i_brand_id brand_id\n" +
+                "     ,iss.i_class_id class_id\n" +
+                "     ,iss.i_category_id category_id\n" +
+                " from store_sales\n" +
+                "     ,item iss\n" +
+                "     ,date_dim d1\n" +
+                " where ss_item_sk = iss.i_item_sk\n" +
+                "   and ss_sold_date_sk = d1.d_date_sk\n" +
+                "   and d1.d_year between 1999 AND 1999 + 2\n" +
+                " intersect\n" +
+                " select ics.i_brand_id\n" +
+                "     ,ics.i_class_id\n" +
+                "     ,ics.i_category_id\n" +
+                " from catalog_sales\n" +
+                "     ,item ics\n" +
+                "     ,date_dim d2\n" +
+                " where cs_item_sk = ics.i_item_sk\n" +
+                "   and cs_sold_date_sk = d2.d_date_sk\n" +
+                "   and d2.d_year between 1999 AND 1999 + 2\n" +
+                " intersect\n" +
+                " select iws.i_brand_id\n" +
+                "     ,iws.i_class_id\n" +
+                "     ,iws.i_category_id\n" +
+                " from web_sales\n" +
+                "     ,item iws\n" +
+                "     ,date_dim d3\n" +
+                " where ws_item_sk = iws.i_item_sk\n" +
+                "   and ws_sold_date_sk = d3.d_date_sk\n" +
+                "   and d3.d_year between 1999 AND 1999 + 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "41:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 199: i_brand_id, 201: i_class_id, 203: i_category_id");
+        assertContains(plan, "27:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 115: i_brand_id, 117: i_class_id, 119: i_category_id");
+        assertContains(plan, "13:AGGREGATE (merge finalize)\n" +
+                "  |  group by: 31: i_brand_id, 33: i_class_id, 35: i_category_id");
+
+    }
 }

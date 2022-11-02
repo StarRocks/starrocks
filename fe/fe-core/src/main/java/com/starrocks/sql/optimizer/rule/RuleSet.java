@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EsScanPartitionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.InlineOneCTEConsumeRule;
+import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithOutInnerRule;
@@ -109,6 +110,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectToCTEAncho
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.QuantifiedApply2OuterJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoteScanPartitionPruneRule;
+import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
@@ -323,6 +325,11 @@ public class RuleSet {
         REWRITE_RULES.put(RuleSetType.INLINE_CTE, ImmutableList.of(
                 new InlineOneCTEConsumeRule(),
                 new PruneCTEProduceRule()
+        ));
+
+        REWRITE_RULES.put(RuleSetType.INTERSECT_REWRITE, ImmutableList.of(
+                new IntersectAddDistinctRule(),
+                new ReorderIntersectRule()
         ));
     }
 
