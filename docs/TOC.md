@@ -456,6 +456,7 @@
 + Developers
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
+    + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes
