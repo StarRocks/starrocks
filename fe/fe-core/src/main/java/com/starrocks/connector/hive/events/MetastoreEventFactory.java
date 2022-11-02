@@ -8,7 +8,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
 import com.starrocks.connector.hive.HiveTableName;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -25,6 +24,15 @@ import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceM
  */
 public class MetastoreEventFactory implements EventFactory {
     private static final Logger LOG = LogManager.getLogger(MetastoreEventFactory.class);
+    private final List<String> externalTables;
+
+    public MetastoreEventFactory(List<String> externalTables) {
+        this.externalTables = externalTables;
+    }
+
+    public boolean needToProcess(String catalogTableName) {
+        return externalTables.contains(catalogTableName);
+    }
 
     /**
      * For an {@link AddPartitionEvent} and {@link DropPartitionEvent} drop event,
@@ -43,8 +51,6 @@ public class MetastoreEventFactory implements EventFactory {
                 return AlterTableEvent.getEvents(event, cacheProcessor, catalogName);
             case DROP_TABLE:
                 return DropTableEvent.getEvents(event, cacheProcessor, catalogName);
-            case ADD_PARTITION:
-                return AddPartitionEvent.getEvents(event, cacheProcessor, catalogName);
             case ALTER_PARTITION:
                 return AlterPartitionEvent.getEvents(event, cacheProcessor, catalogName);
             case DROP_PARTITION:
@@ -64,23 +70,23 @@ public class MetastoreEventFactory implements EventFactory {
         // Currently, the hive external table needs to be manually created in StarRocks to map with the hms table.
         // Therefore, it's necessary to filter the events pulled this time from the hms instance,
         // and the events of the tables that don't register in the fe MetastoreEventsProcessor need to be filtered out.
-        boolean isTableCached = false;
         for (NotificationEvent event : events) {
+            String dbName = event.getDbName();
+            String tableName = event.getTableName();
             if (isResourceMappingCatalog(catalogName)) {
-                if (!GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                        .needToProcess(String.join(".", catalogName, event.getDbName(), event.getTableName()))) {
+                if (!needToProcess(String.join(".", catalogName, dbName, tableName))) {
+                    LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
+                            catalogName, event.getDbName(), event.getTableName(), event);
+                    continue;
+                }
+            } else {
+                if (!cacheProcessor.isTablePresent(HiveTableName.of(dbName, tableName))) {
                     LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
                             catalogName, event.getDbName(), event.getTableName(), event);
                     continue;
                 }
             }
 
-            if (!cacheProcessor.existIncache(MetastoreEventType.ALTER_TABLE,
-                    HiveTableName.of(event.getDbName(), event.getTableName())) && !isTableCached) {
-                LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
-                        catalogName, event.getDbName(), event.getTableName(), event);
-                continue;
-            }
             metastoreEvents.addAll(get(event, cacheProcessor, catalogName));
         }
 

@@ -49,7 +49,7 @@ public class DropTableEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.existIncache(DROP_TABLE, HiveTableName.of(dbName, tableName));
+        return cache.isTablePresent(HiveTableName.of(dbName, tableName));
     }
 
     @Override
@@ -68,7 +68,8 @@ public class DropTableEvent extends MetastoreTableEvent {
         }
 
         try {
-            cache.refreshCacheByEvent(DROP_TABLE, HiveTableName.of(dbName, tblName), null, null, null, null);
+            LOG.info("Start to process DROP_TABLE event on {}.{}.{}", catalogName, dbName, tblName);
+            cache.invalidateTable(dbName, tableName);
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

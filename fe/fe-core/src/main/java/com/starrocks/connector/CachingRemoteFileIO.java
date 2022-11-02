@@ -38,7 +38,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
     public static CachingRemoteFileIO createCatalogLevelInstance(RemoteFileIO fileIO, Executor executor,
                                                         long expireAfterWrite, long refreshInterval, long maxSize) {
         return new CachingRemoteFileIO(fileIO, executor, expireAfterWrite, refreshInterval, maxSize);
-
     }
 
     public static CachingRemoteFileIO createQueryLevelInstance(RemoteFileIO fileIO, long maxSize) {
@@ -81,6 +80,14 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         cache.put(pathKey, loadRemoteFiles(pathKey));
     }
 
+    public synchronized void invalidateAll() {
+        cache.invalidateAll();
+    }
+
+    public void invalidatePartition(RemotePathKey pathKey) {
+        cache.invalidate(pathKey);
+    }
+
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
         CacheBuilder<Object, Object> cacheBuilder = CacheBuilder.newBuilder();
         if (expiresAfterWriteSec >= 0) {
@@ -93,13 +100,5 @@ public class CachingRemoteFileIO implements RemoteFileIO {
 
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
-    }
-
-    public void removeRemoteFile(RemotePathKey pathKey) {
-        cache.invalidate(pathKey);
-    }
-
-    public void invalidateAll() {
-        cache.invalidateAll();
     }
 }

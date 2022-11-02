@@ -144,9 +144,9 @@ public class MetadataMgr {
         return ImmutableList.copyOf(files.build());
     }
 
-    public void refreshTable(String catalogName, String dbName, String tableName, Table table, List<String> partitionNames) {
+    public void refreshTable(String catalogName, String srDbName, Table table, List<String> partitionNames) {
         Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
-        connectorMetadata.ifPresent(metadata -> metadata.refreshTable(dbName, tableName, table, partitionNames));
+        connectorMetadata.ifPresent(metadata -> metadata.refreshTable(srDbName, table, partitionNames));
     }
 
     private class QueryMetadatas {

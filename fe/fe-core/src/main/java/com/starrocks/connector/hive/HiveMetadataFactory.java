@@ -20,6 +20,7 @@ public class HiveMetadataFactory {
     private final long perQueryCacheRemotePathMaxNum;
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
+    private final boolean enableHmsEventsIncrementalSync;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -27,7 +28,8 @@ public class HiveMetadataFactory {
                                CachingHiveMetastoreConf hmsConf,
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
-                               boolean isRecursive) {
+                               boolean isRecursive,
+                               boolean enableHmsEventsIncrementalSync) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -35,6 +37,7 @@ public class HiveMetadataFactory {
         this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.isRecursive = isRecursive;
+        this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
     }
 
     public HiveMetadata create() {
@@ -47,12 +50,12 @@ public class HiveMetadataFactory {
                 remoteFileIO instanceof CachingRemoteFileIO);
         HiveStatisticsProvider statisticsProvider = new HiveStatisticsProvider(hiveMetastoreOperations, remoteFileOperations);
 
-        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor(false);
+        Optional<CacheUpdateProcessor> cacheUpdateProcessor = getCacheUpdateProcessor();
         return new HiveMetadata(catalogName, hiveMetastoreOperations,
                 remoteFileOperations, statisticsProvider, cacheUpdateProcessor);
     }
 
-    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor(boolean enableHmsEventsIncrementalSync) {
+    public synchronized Optional<CacheUpdateProcessor> getCacheUpdateProcessor() {
         Optional<CacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
             cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(

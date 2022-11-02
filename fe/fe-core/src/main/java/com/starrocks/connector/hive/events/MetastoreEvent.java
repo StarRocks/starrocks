@@ -96,7 +96,7 @@ public abstract class MetastoreEvent {
 
     /**
      * If the table key or partition key doesn't exist in the
-     * <code>{@link com.starrocks.external.hive.CachingHiveMetastore}</code> of fe. that is,
+     * <code>{@link com.starrocks.connector.hive.CachingHiveMetastore}</code> of fe. that is,
      * the user has never queried the table/partition or refreshed the table/partition manually since the start of fe.
      * When processing incremental events, the event corresponding to the table/partition will not be processed.
      */

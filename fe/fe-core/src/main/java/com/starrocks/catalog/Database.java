@@ -848,8 +848,7 @@ public class Database extends MetaObject implements Writable {
         this.exist = exist;
     }
 
-    public List<HiveTable> getHiveTables() {
-        return idToTable.values().stream().filter(tbl -> tbl.isHiveTable())
-                .map(tbl -> (HiveTable) tbl).collect(Collectors.toList());
+    public List<Table> getHiveTables() {
+        return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
     }
 }

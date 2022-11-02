@@ -5,9 +5,9 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.hive.HiveCommonStats;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HivePartitionName;
-import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
@@ -76,7 +76,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.existIncache(ALTER_PARTITION, getHivePartitionKey());
+        return cache.isPartitionPresent(getHivePartitionKey());
     }
 
     @Override
@@ -105,10 +105,14 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
         }
 
         try {
-            cache.refreshCacheByEvent(ALTER_PARTITION, HiveTableName.of(getDbName(), getTblName()),
-                    getHivePartitionKey(), toHiveCommonStats(hmsTbl.getParameters()),
-                    HiveMetastoreApiConverter.toPartition(hmsTbl.getSd(), hmsTbl.getParameters()),
-                    HiveMetastoreApiConverter.toHiveTable(hmsTbl, catalogName));
+            com.starrocks.connector.hive.Partition partition = HiveMetastoreApiConverter.toPartition(
+                    partitionAfter.getSd(), partitionAfter.getParameters());
+            HiveCommonStats hiveCommonStats = toHiveCommonStats(partitionAfter.getParameters());
+
+            LOG.info("Start to process ALTER_PARTITION event on [{}.{}.{}.{}]. Partition:[{}], HiveCommonStats:[{}]",
+                    catalogName, dbName, tblName, getHivePartitionKey(), partition, hiveCommonStats);
+
+            cache.refreshPartitionByEvent(getHivePartitionKey(), hiveCommonStats, partition);
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);
