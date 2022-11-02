@@ -84,6 +84,7 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, true));
 
     // 2. get broker client
+<<<<<<< HEAD
     BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
     if (!status.ok()) {
         std::stringstream ss;
@@ -91,6 +92,27 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
            << "broker addr: " << broker_addr << ". msg: " << status.get_error_msg();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
+=======
+    std::unique_ptr<BrokerServiceConnection> client;
+    std::unique_ptr<FileSystem> fs;
+    if (!upload.__isset.use_broker || upload.use_broker) {
+        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), upload.broker_addr,
+                                                           config::broker_write_timeout_seconds * 1000, &status);
+        if (!status.ok()) {
+            std::stringstream ss;
+            ss << "failed to get broker client. "
+               << "broker addr: " << upload.broker_addr << ". msg: " << status.get_error_msg();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+    } else {
+        std::string random_dest_path = src_to_dest_path.begin()->second;
+        auto maybe_fs = FileSystem::CreateUniqueFromString(random_dest_path, FSOptions(&upload));
+        if (!maybe_fs.ok()) {
+            return Status::InternalError("fail to create file system");
+        }
+        fs = std::move(maybe_fs.value());
+>>>>>>> 747dba6c3 ([BugFix] Fix some broker request using fixed timeout (#12649))
     }
 
     // 3. for each src path, upload it to remote storage
@@ -202,6 +224,7 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
     RETURN_IF_ERROR(_check_local_snapshot_paths(src_to_dest_path, false));
 
     // 2. get broker client
+<<<<<<< HEAD
     BrokerServiceConnection client(client_cache(_env), broker_addr, 10000, &status);
     if (!status.ok()) {
         std::stringstream ss;
@@ -209,6 +232,29 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
            << "broker addr: " << broker_addr << ". msg: " << status.get_error_msg();
         LOG(WARNING) << ss.str();
         return Status::InternalError(ss.str());
+=======
+    std::unique_ptr<BrokerServiceConnection> client;
+    std::unique_ptr<FileSystem> fs;
+    std::vector<TNetworkAddress> broker_addrs;
+    if (!download.__isset.use_broker || download.use_broker) {
+        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), download.broker_addr,
+                                                           config::broker_write_timeout_seconds * 1000, &status);
+        if (!status.ok()) {
+            std::stringstream ss;
+            ss << "failed to get broker client. "
+               << "broker addr: " << download.broker_addr << ". msg: " << status.get_error_msg();
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+        broker_addrs.push_back(download.broker_addr);
+    } else {
+        std::string random_src_path = src_to_dest_path.begin()->first;
+        auto maybe_fs = FileSystem::CreateUniqueFromString(random_src_path, FSOptions(&download));
+        if (!maybe_fs.ok()) {
+            return Status::InternalError("fail to create file system");
+        }
+        fs = std::move(maybe_fs.value());
+>>>>>>> 747dba6c3 ([BugFix] Fix some broker request using fixed timeout (#12649))
     }
 
     std::vector<TNetworkAddress> broker_addrs;
