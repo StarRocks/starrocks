@@ -54,6 +54,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -148,27 +149,26 @@ public class IcebergScanNode extends ScanNode {
                 .map(column -> column.getName()).collect(Collectors.toSet());
         Set<String> appendEqualityColumns = equalityDeleteColumns.stream()
                 .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
+        Map<String, Object> nameToColumns = referenceTable.getFullSchema().stream().collect(Collectors.toMap(Column::getName, item -> item));
         for (String eqName : appendEqualityColumns) {
-            for (Column column : referenceTable.getFullSchema()) {
-                if (column.getName().equals(eqName)) {
-                    Field field;
-                    TableName tableName = desc.getRef().getName();
-                    if (referenceTable.getBaseSchema().contains(column)) {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), true);
-                    } else {
-                        field = new Field(column.getName(), column.getType(), tableName,
-                                new SlotRef(tableName, column.getName(), column.getName()), false);
-                    }
-                    ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
-                            field.getType(), column.isAllowNull());
-                    SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
-                    slotDescriptor.setColumn(column);
-                    slotDescriptor.setIsNullable(column.isAllowNull());
-                    slotDescriptor.setIsMaterialized(true);
-                    context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
-                    break;
+            if (nameToColumns.containsKey(eqName)) {
+                Column column = (Column) nameToColumns.get(eqName);
+                Field field;
+                TableName tableName = desc.getRef().getName();
+                if (referenceTable.getBaseSchema().contains(column)) {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), true);
+                } else {
+                    field = new Field(column.getName(), column.getType(), tableName,
+                            new SlotRef(tableName, column.getName(), column.getName()), false);
                 }
+                ColumnRefOperator columnRef = columnRefFactory.create(field.getName(),
+                        field.getType(), column.isAllowNull());
+                SlotDescriptor slotDescriptor = context.getDescTbl().addSlotDescriptor(desc, new SlotId(columnRef.getId()));
+                slotDescriptor.setColumn(column);
+                slotDescriptor.setIsNullable(column.isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(columnRef, new SlotRef(columnRef.toString(), slotDescriptor));
             }
         }
     }
