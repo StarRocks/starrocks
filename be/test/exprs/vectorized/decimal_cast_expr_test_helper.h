@@ -147,7 +147,7 @@ struct CastParamCppTypeTrait {
     using type = RunTimeCppType<Type>;
 };
 template <PrimitiveType Type>
-struct CastParamCppTypeTrait<Type, BinaryPTGuard<Type>> {
+struct CastParamCppTypeTrait<Type, StringPTGuard<Type>> {
     using type = std::string;
 };
 
@@ -167,7 +167,7 @@ CastParamCppType<ToType> cast_value(CastParamCppType<FromType> const& value, int
     ColumnPtr column = cast<FromType, ToType, CONST>(RunTimeCppType<FromType>(value), from_type, to_type, 0, 0);
     DCHECK(column->is_constant() && !column->only_null());
     RunTimeCppType<ToType> result = ColumnHelper::get_const_value<ToType>(column);
-    if constexpr (pt_is_binary<ToType>) {
+    if constexpr (pt_is_string<ToType>) {
         return result.to_string();
     } else if constexpr (pt_is_decimalv2<ToType>) {
         return result.value();

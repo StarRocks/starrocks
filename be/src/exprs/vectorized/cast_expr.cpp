@@ -144,7 +144,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             value = JsonValue::from_double(viewer.value(row));
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (pt_is_binary<FromType>) {
+        } else if constexpr (pt_is_string<FromType>) {
             auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
             if (maybe.ok()) {
                 value = maybe.value();
@@ -219,7 +219,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 }
                 builder.append_null();
             }
-        } else if constexpr (pt_is_binary<ToType>) {
+        } else if constexpr (pt_is_string<ToType>) {
             // if the json already a string value, get the string directly
             // else cast it to string representation
             if (json->get_type() == JsonType::JSON_STRING) {
