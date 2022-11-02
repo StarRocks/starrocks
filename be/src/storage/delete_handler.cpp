@@ -23,7 +23,7 @@
 
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include <boost/regex.hpp>
+#include <regex>
 #include <limits>
 #include <sstream>
 #include <string>
@@ -39,10 +39,10 @@ using std::vector;
 using std::string;
 using std::stringstream;
 
-using boost::regex;
-using boost::regex_error;
-using boost::regex_match;
-using boost::smatch;
+using std::regex;
+using std::regex_error;
+using std::regex_match;
+using std::smatch;
 
 using google::protobuf::RepeatedPtrField;
 
