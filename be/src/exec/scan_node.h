@@ -108,18 +108,18 @@ public:
     bool is_shared_scan_enabled() const;
 
 protected:
-    RuntimeProfile::Counter* _bytes_read_counter; // # bytes read from the scanner
+    RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
-    RuntimeProfile::Counter* _rows_read_counter;
-    RuntimeProfile::Counter* _read_timer; // total read time
+    RuntimeProfile::Counter* _rows_read_counter = nullptr;
+    RuntimeProfile::Counter* _read_timer = nullptr; // total read time
     // Wall based aggregate read throughput [bytes/sec]
-    RuntimeProfile::Counter* _total_throughput_counter;
+    RuntimeProfile::Counter* _total_throughput_counter = nullptr;
     // Per thread read throughput [bytes/sec]
-    RuntimeProfile::Counter* _num_disks_accessed_counter;
-    RuntimeProfile::Counter* _materialize_tuple_timer; // time writing tuple slots
+    RuntimeProfile::Counter* _num_disks_accessed_counter = nullptr;
+    RuntimeProfile::Counter* _materialize_tuple_timer = nullptr; // time writing tuple slots
     // Aggregated scanner thread counters
-    RuntimeProfile::ThreadCounters* _scanner_thread_counters;
-    RuntimeProfile::Counter* _num_scanner_threads_started_counter;
+    RuntimeProfile::ThreadCounters* _scanner_thread_counters = nullptr;
+    RuntimeProfile::Counter* _num_scanner_threads_started_counter = nullptr;
     std::string _name;
     bool _enable_shared_scan = false;
 };
