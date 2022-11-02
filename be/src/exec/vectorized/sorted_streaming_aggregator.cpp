@@ -288,7 +288,7 @@ Status SortedStreamingAggregator::streaming_compute_agg_state(size_t chunk_size)
     std::vector<uint8_t> selector(chunk_size);
     size_t selected_size = 0;
     {
-        SCOPED_TIMER(_agg_compute_timer);
+        SCOPED_TIMER(_agg_stat->agg_compute_timer);
         for (size_t i = 1; i < _cmp_vector.size(); ++i) {
             selector[i - 1] = _cmp_vector[i] == 0;
             selected_size += !selector[i - 1];
@@ -334,7 +334,7 @@ Status SortedStreamingAggregator::_compute_group_by(size_t chunk_size) {
     // _cmp_vector[i] == 0 means group[i - 1].equals(group[i])
     _cmp_vector.assign(chunk_size, 0);
     const std::vector<uint8_t> dummy;
-    SCOPED_TIMER(_agg_compute_timer);
+    SCOPED_TIMER(_agg_stat->agg_compute_timer);
     for (size_t i = 0; i < _group_by_columns.size(); ++i) {
         ColumnSelfComparator cmp(_last_columns[i], _cmp_vector, dummy);
         RETURN_IF_ERROR(_group_by_columns[i]->accept(&cmp));
@@ -347,7 +347,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
     // TODO: split the states
     // allocate state stage
     {
-        SCOPED_TIMER(_allocate_state_timer);
+        SCOPED_TIMER(_agg_stat->allocate_state_timer);
         auto batch_allocated_states = _streaming_state_allocator->allocated(_last_state);
         vectorized::AggDataPtr last_state = _last_state;
         size_t cnt = 0;
@@ -378,7 +378,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
     // prepare output column
     // batch_update/merge stage
     {
-        SCOPED_TIMER(_agg_compute_timer);
+        SCOPED_TIMER(_agg_stat->agg_compute_timer);
         for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
             if (!_is_merge_funcs[i] && !use_intermediate) {
                 _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
@@ -396,7 +396,7 @@ Status SortedStreamingAggregator::_update_states(size_t chunk_size) {
 
 void SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const std::vector<uint8_t>& selector,
                                                         vectorized::Columns& agg_result_columns) {
-    SCOPED_TIMER(_get_results_timer);
+    SCOPED_TIMER(_agg_stat->get_results_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         _finalize_to_chunk(_last_state, agg_result_columns);
     }
@@ -409,7 +409,7 @@ void SortedStreamingAggregator::_get_agg_result_columns(size_t chunk_size, const
 
 void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const std::vector<uint8_t>& selector) {
     // close stage
-    SCOPED_TIMER(_state_destroy_timer);
+    SCOPED_TIMER(_agg_stat->state_destroy_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         _destroy_state(_last_state);
     }
@@ -423,7 +423,7 @@ void SortedStreamingAggregator::_close_group_by(size_t chunk_size, const std::ve
 Status SortedStreamingAggregator::_build_group_by_columns(size_t chunk_size, size_t selected_size,
                                                           const std::vector<uint8_t>& selector,
                                                           vectorized::Columns& agg_group_by_columns) {
-    SCOPED_TIMER(_agg_append_timer);
+    SCOPED_TIMER(_agg_stat->agg_append_timer);
     if (_cmp_vector[0] != 0 && _last_state) {
         for (size_t i = 0; i < agg_group_by_columns.size(); ++i) {
             agg_group_by_columns[i]->append(*_last_columns[i], 0, 1);

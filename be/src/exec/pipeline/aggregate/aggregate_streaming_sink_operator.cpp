@@ -2,6 +2,8 @@
 
 #include "aggregate_streaming_sink_operator.h"
 
+#include <variant>
+
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 namespace starrocks::pipeline {
@@ -58,18 +60,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_force_streaming() {
 
 Status AggregateStreamingSinkOperator::_push_chunk_by_force_preaggregation(const size_t chunk_size) {
     SCOPED_TIMER(_aggregator->agg_compute_timer());
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                *_aggregator->hash_map_variant().NAME, chunk_size));                                                   \
-    }
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+    TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit(
+            [&](auto& hash_map_with_key) { _aggregator->build_hash_map(*hash_map_with_key, chunk_size); }));
 
     if (_aggregator->is_none_group_by_exprs()) {
         _aggregator->compute_single_agg_state(chunk_size);
@@ -96,19 +88,8 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
                                                       _aggregator->hash_map_variant().size())) {
         // hash table is not full or allow expand the hash table according reduction rate
         SCOPED_TIMER(_aggregator->agg_compute_timer());
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                *_aggregator->hash_map_variant().NAME, chunk_size));                                                   \
-    }
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
-
+        TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { _aggregator->build_hash_map(*hash_map_with_key, chunk_size); }));
         if (_aggregator->is_none_group_by_exprs()) {
             _aggregator->compute_single_agg_state(chunk_size);
         } else {
@@ -122,19 +103,9 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_auto(const size_t chunk_si
     } else {
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            if (false) {
-            }
-#define HASH_MAP_METHOD(NAME)                                                                     \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) { \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map_with_selection<typename decltype(         \
-                                    _aggregator->hash_map_variant().NAME)::element_type>(         \
-                *_aggregator->hash_map_variant().NAME, chunk_size));                              \
-    }
-            APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-            else {
-                DCHECK(false);
-            }
+            TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+                _aggregator->build_hash_map_with_selection(*hash_map_with_key, chunk_size);
+            }));
         }
 
         size_t zero_count = SIMD::count_zero(_aggregator->streaming_selection());
