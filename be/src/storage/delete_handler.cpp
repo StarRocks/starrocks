@@ -23,8 +23,8 @@
 
 #include <thrift/protocol/TDebugProtocol.h>
 
-#include <regex>
 #include <limits>
+#include <regex>
 #include <sstream>
 #include <string>
 #include <vector>

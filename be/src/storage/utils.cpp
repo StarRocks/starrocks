@@ -29,7 +29,6 @@
 #include <unistd.h>
 
 #include <atomic>
-#include <regex>
 #include <cerrno>
 #include <chrono>
 #include <cstdarg>
@@ -40,6 +39,7 @@
 #include <ctime>
 #include <filesystem>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <vector>
 
