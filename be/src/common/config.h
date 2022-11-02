@@ -869,7 +869,9 @@ CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
 CONF_Bool(block_cache_checksum_enable, "true");
 
-CONF_mInt64(l0_l1_merge_ratio, "10");
+CONF_Double(l0_l1_merge_ratio, "0.1");
+CONF_Int64(flush_or_merge_compaction_l0_max_version, "10000");
+CONF_Int64(flush_or_merge_compaction_l0_max_file_size, "2147483648"); // 2GB
 
 // Used by query cache, cache entries are evicted when it exceeds its capacity(500MB in default)
 CONF_Int64(query_cache_capacity, "536870912");

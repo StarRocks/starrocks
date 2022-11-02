@@ -2641,7 +2641,7 @@ Status PersistentIndex::abort() {
 // case4 will append wals into l0 file
 Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     DCHECK_EQ(index_meta->key_size(), _key_size);
-    RETURN_IF_ERROR(_check_and_flush_l0());
+    RETURN_IF_ERROR(_check_and_flush_l0(index_meta));
     // for case1 and case2
     if (_flushed) {
         // update PersistentIndexMetaPB
@@ -2820,23 +2820,36 @@ Status PersistentIndex::_reload(const PersistentIndexMetaPB& index_meta) {
 // rebuild _l0 and _l1
 // In addition, there may be I/O waste because we append wals firstly and
 // do _flush_l0 or _merge_compaction.
-Status PersistentIndex::_check_and_flush_l0() {
+Status PersistentIndex::_check_and_flush_l0(PersistentIndexMetaPB* index_meta) {
     const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_file_size = 0;
     if (_l1 != nullptr) {
         _l1->file_size(&l1_file_size);
     }
-
-    // l1 is empty, if l0 memory usage is bigger than kL0SnapshotSizeMax, flush to l1
+    // if l1 is empty,
     if (l1_file_size == 0) {
+        // and l0 memory usage is not large enough,
         if (l0_mem_size <= kL0SnapshotSizeMax) {
+            // not flush to l1
             return Status::OK();
         }
     } else {
-        // l1 is not empty
-        // perform l0 l1 merge compaction if l0_memory * config::l0_l1_merge_ratio > l1_file_size
-        if (l0_mem_size * config::l0_l1_merge_ratio <= l1_file_size) {
-            return Status::OK();
+        // if l1 is not empty,
+        // and l0 memory usage is not large enough,
+        if (static_cast<double>(l0_mem_size) / l1_file_size <= config::l0_l1_merge_ratio) {
+            // and the accumulated version is not large enough,
+            if (_version.major() - index_meta->l0_meta().snapshot().version().major() <=
+                config::flush_or_merge_compaction_l0_max_version) {
+                uint64_t l0_file_size = _l0->file_size();
+                // and the l0 file size is not large enough,
+                if (l0_file_size <= config::flush_or_merge_compaction_l0_max_file_size) {
+                    // do not perform l0 l1 merge compaction
+                    return Status::OK();
+                } else {
+                    // should not be here normally, frequently, so log it.
+                    LOG(WARNING) << "l0 large file appeared, size=" << l0_file_size;
+                }
+            }
         }
     }
 
