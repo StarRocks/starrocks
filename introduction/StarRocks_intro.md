@@ -73,12 +73,12 @@
 <NavBoxPart>
 <NavBoxPartItem title="查询外部数据源​">
 
-- [Apache Hive™](/using_starrocks/Manage_data.md)
-- [Apache Iceberg](/using_starrocks/External_table.md#apache-iceberg-外部表)
-- [Apache Hudi](/using_starrocks/External_table.md#apache-hudi-外表)
-- [MySQL](/using_starrocks/External_table.md#mysql-外部表)
-- [Elasticsearch](/using_starrocks/External_table.md#elasticsearch-外部表)
-- [支持 JDBC 的数据库](/using_starrocks/External_table.md#更多数据库jdbc的外部表)
+- [Apache Hive™](/data_source/Manage_data.md)
+- [Apache Iceberg](/data_source/External_table.md#apache-iceberg-外部表)
+- [Apache Hudi](/data_source/External_table.md#apache-hudi-外表)
+- [MySQL](/data_source/External_table.md#mysql-外部表)
+- [Elasticsearch](/data_source/External_table.md#elasticsearch-外部表)
+- [支持 JDBC 的数据库](/data_source/External_table.md#更多数据库jdbc的外部表)
 
 </NavBoxPartItem>
 </NavBoxPart>

@@ -90,7 +90,7 @@ StarRocks 拓展支持多种函数、视图、以及外部表。
 
 ### 函数
 
-StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](/sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](/sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](/sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](/sql-reference/sql-functions/cast.md)，[hash 函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](/sql-reference/sql-functions/encryption-functions/md5.md)，[窗口函数](/using_starrocks/Window_function.md) 等。
+StarRocks 中支持多种函数，包括：[日期函数](/sql-reference/sql-functions/date-time-functions/convert_tz.md)，[地理位置函数](/sql-reference/sql-functions/spatial-functions/st_astext.md)，[字符串函数](/sql-reference/sql-functions/string-functions/append_trailing_char_if_absent.md)，[聚合函数](/sql-reference/sql-functions/aggregate-functions/approx_count_distinct.md)，[Bitmap 函数](/sql-reference/sql-functions/bitmap-functions/bitmap_and.md)，[数组函数](/sql-reference/sql-functions/array-functions/array_append.md)，[cast 函数](/sql-reference/sql-functions/cast.md)，[hash 函数](/sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)，[加密函数](/sql-reference/sql-functions/encryption-functions/md5.md)，[窗口函数](/sql-reference/sql-functions/Window_function.md) 等。
 
 ### 视图
 
@@ -98,7 +98,7 @@ StarRocks 支持创建 [逻辑视图](/sql-reference/sql-statements/data-definit
 
 ### 外部表
 
-StarRocks 支持多种外部表：[MySQL 外部表](/using_starrocks/External_table.md#mysql-外部表)，[Elasticsearch 外部表](/using_starrocks/External_table.md#elasticsearch-外部表)，[Apache Hive™ 外表](/using_starrocks/External_table.md#hive-外表)，[StarRocks 外部表](/using_starrocks/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/using_starrocks/External_table.md#apache-iceberg-外表)，[Apache Hudi 外表](/using_starrocks/External_table.md#apache-hudi-外表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
+StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#mysql-外部表)，[Elasticsearch 外部表](/data_source/External_table.md#elasticsearch-外部表)，[Apache Hive™ 外表](/data_source/External_table.md#hive-外表)，[StarRocks 外部表](/data_source/External_table.md#starrocks-外部表)，[Apache Iceberg 外表](/data_source/External_table.md#apache-iceberg-外表)，[Apache Hudi 外表](/data_source/External_table.md#apache-hudi-外表)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
 
 ## 慢查询分析
 
