@@ -1432,7 +1432,7 @@ unsupportedStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryRelation outfile?;
+    : (explainDesc | optimizerTrace) ? queryRelation outfile?;
 
 queryRelation
     : withClause? queryNoWith
@@ -1809,6 +1809,10 @@ restoreTableDesc
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
+    ;
+
+optimizerTrace
+    : TRACE OPTIMIZER
     ;
 
 partitionDesc
