@@ -8,6 +8,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -51,11 +52,11 @@ public class OptimizerTest extends PlanTestBase {
                 .transformWithSelectLimit(query.getQueryRelation());
         OptExpression expr = optimizer.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
-        Assert.assertNotNull(expr.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator);
+        Assert.assertTrue(expr.getInputs().get(0).getOp() instanceof PhysicalOlapScanOperator);
         Assert.assertNotNull(expr.getInputs().get(0).getOp().getPredicate());
 
         OptExpression expr1 = optimizer1.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
                 new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
-        Assert.assertNotNull(expr1.getInputs().get(0).getOp() instanceof PhysicalFilterOperator);
+        Assert.assertTrue(expr1.getInputs().get(0).getOp() instanceof LogicalFilterOperator);
     }
 }

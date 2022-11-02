@@ -17,7 +17,7 @@ public class OptimizerConfig {
     private BitSet ruleSetSwitches;
     private BitSet ruleSwitches;
 
-    private static OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
+    private static final OptimizerConfig DEFAULT_CONFIG = new OptimizerConfig();
 
     public static OptimizerConfig defaultConfig() {
         return DEFAULT_CONFIG;
