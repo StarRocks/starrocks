@@ -479,7 +479,7 @@ public:
 
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
-        size_t mem_usage = 0;
+        [[maybe_unused]] size_t mem_usage = 0;
         auto& agg_state = this->data(state);
         const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->impl()->mem_pool();

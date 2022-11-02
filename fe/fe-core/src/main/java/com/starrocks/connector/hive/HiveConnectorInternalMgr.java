@@ -14,6 +14,8 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
+import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
+
 public class HiveConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
@@ -29,6 +31,7 @@ public class HiveConnectorInternalMgr {
 
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
+    private final boolean enableHmsEventsIncrementalSync;
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
@@ -42,6 +45,8 @@ public class HiveConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+        this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
+                String.valueOf(Config.enable_hms_events_incremental_sync)));
     }
 
     public void shutdown() {
@@ -70,7 +75,7 @@ public class HiveConnectorInternalMgr {
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
-                    hmsConf.getCacheRefreshIntervalSec(),
+                    enableHmsEventsIncrementalSync ? NEVER_REFRESH : hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),
                     hmsConf.enableListNamesCache());
         }
@@ -93,7 +98,7 @@ public class HiveConnectorInternalMgr {
                     remoteFileIO,
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
                     remoteFileConf.getCacheTtlSec(),
-                    remoteFileConf.getCacheRefreshIntervalSec(),
+                    enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());
         }
 
@@ -119,5 +124,9 @@ public class HiveConnectorInternalMgr {
 
     public CachingRemoteFileConf getRemoteFileConf() {
         return remoteFileConf;
+    }
+
+    public boolean enableHmsEventsIncrementalSync() {
+        return enableHmsEventsIncrementalSync;
     }
 }

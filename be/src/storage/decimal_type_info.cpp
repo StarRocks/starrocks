@@ -80,8 +80,11 @@ public:
         unaligned_store<typeof(dst_datum)>(dst, dst_datum);                                                  \
         return overflow;                                                                                     \
     }
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+        DIAGNOSTIC_PUSH
+
+#if defined(__GNUC__) && !defined(__clang__)
+        DIAGNOSTIC_IGNORE("-Wmaybe-uninitialized")
+#endif
         TO_DECIMAL_MACRO(32, 32)
         TO_DECIMAL_MACRO(32, 64)
         TO_DECIMAL_MACRO(32, 128)
@@ -91,7 +94,8 @@ public:
         TO_DECIMAL_MACRO(128, 32)
         TO_DECIMAL_MACRO(128, 64)
         TO_DECIMAL_MACRO(128, 128)
-#pragma GCC diagnostic pop
+
+        DIAGNOSTIC_POP
 #undef TO_DECIMAL_MACRO
         return Status::InvalidArgument("Fail to cast to decimal.");
     }
@@ -134,8 +138,12 @@ public:
         dst_datum.set_int##m(dst_val);                                                                   \
         return overflow;                                                                                 \
     }
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wmaybe-uninitialized"
+
+        DIAGNOSTIC_PUSH
+
+#if defined(__GNUC__) && !defined(__clang__)
+        DIAGNOSTIC_IGNORE("-Wmaybe-uninitialized")
+#endif
         TO_DECIMAL_MACRO(32, 32)
         TO_DECIMAL_MACRO(32, 64)
         TO_DECIMAL_MACRO(32, 128)
@@ -145,8 +153,11 @@ public:
         TO_DECIMAL_MACRO(128, 32)
         TO_DECIMAL_MACRO(128, 64)
         TO_DECIMAL_MACRO(128, 128)
-#pragma GCC diagnostic pop
+
+        DIAGNOSTIC_POP
+
 #undef TO_DECIMAL_MACRO
+
         return Status::InvalidArgument("Fail to cast to decimal.");
     }
 

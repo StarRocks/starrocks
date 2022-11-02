@@ -645,6 +645,10 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     return exchange_sink;
 }
 
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wpotentially-evaluated-expression")
+#endif
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                           const UnifiedExecPlanFragmentParams& request,
                                                           std::unique_ptr<starrocks::DataSink>& datasink,
@@ -807,5 +811,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
     return Status::OK();
 }
+DIAGNOSTIC_POP
 
 } // namespace starrocks::pipeline

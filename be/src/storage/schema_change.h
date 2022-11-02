@@ -54,7 +54,6 @@ public:
     void set_row_len(size_t row_len) { _row_len = row_len; }
 
 private:
-    const TabletSchema& _tablet_schema;
     size_t _memory_allocated = 0;
     size_t _row_len;
     size_t _memory_limitation;
@@ -115,7 +114,7 @@ public:
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
     Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset);
+                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,

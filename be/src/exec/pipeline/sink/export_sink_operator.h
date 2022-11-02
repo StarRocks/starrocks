@@ -79,7 +79,6 @@ private:
     int32_t _num_sinkers;
     std::shared_ptr<ExportSinkIOBuffer> _export_sink_buffer;
 
-    RuntimeProfile* _profile = nullptr;
     FragmentContext* _fragment_ctx = nullptr;
 };
 

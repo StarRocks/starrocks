@@ -350,6 +350,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
 
             QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+            // make clang happy
+            (void)query_trace_ctx;
         }
     };
 

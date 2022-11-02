@@ -17,7 +17,7 @@ struct HLLUnionBuilder {
                     "hll_raw", false, AggregateFactory::MakeHllRawAggregateFunction<pt>());
 
             using IntersectCountState = BitmapIntersectAggregateState<BitmapRuntimeCppType<pt>>;
-            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, IntersectCountState>(
+            resolver->add_aggregate_mapping_variadic<pt, TYPE_BIGINT, IntersectCountState>(
                     "intersect_count", false, AggregateFactory::MakeIntersectCountAggregateFunction<pt>());
 
             resolver->add_aggregate_mapping<pt, TYPE_BIGINT, HyperLogLog>(

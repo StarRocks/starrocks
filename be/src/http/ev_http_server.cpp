@@ -98,7 +98,7 @@ Status EvHttpServer::start() {
     // bind to
     RETURN_IF_ERROR(_bind());
     for (int i = 0; i < _num_workers; ++i) {
-        auto worker = [this, i]() {
+        auto worker = [this]() {
             struct event_base* base = event_base_new();
             if (base == nullptr) {
                 LOG(WARNING) << "Couldn't create an event_base.";

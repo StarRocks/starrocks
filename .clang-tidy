@@ -1,6 +1,5 @@
 ---
 Checks: >
-
     -*,
     cppcoreguidelines-virtual-class-destructor,
     modernize-avoid-bind,
@@ -26,7 +25,7 @@ Checks: >
     modernize-use-equals-default,
     modernize-use-equals-delete,
     modernize-use-nullptr,
-    modernize-use-override
+    modernize-use-override,
     modernize-use-uncaught-exceptions,
     performance-faster-string-find,
     performance-for-range-copy,

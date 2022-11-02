@@ -11,83 +11,27 @@
 #include "column/nullable_column.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/aggregate/agg_hash_set.h"
+#include "exec/vectorized/aggregate/agg_hash_variant.h"
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
 
-using StringAggHashMap = phmap::flat_hash_map<std::string, AggDataPtr>;
-
-struct HashMapVariants {
-    enum class Type { empty = 0, int32, string, int32_two_level };
-    Type type;
-    std::unique_ptr<Int32AggHashMap<PhmapSeed1>> int32;
-    std::unique_ptr<Int32AggTwoLevelHashMap<PhmapSeed1>> int32_two_level;
-    std::unique_ptr<StringAggHashMap> string;
-
-    void init(Type type_) {
-        type = type_;
-        switch (type_) {
-        case Type::empty: {
-            string = std::make_unique<StringAggHashMap>();
-            break;
-        }
-        case Type::int32: {
-            int32 = std::make_unique<Int32AggHashMap<PhmapSeed1>>();
-            break;
-        }
-        case Type::int32_two_level: {
-            int32_two_level = std::make_unique<Int32AggTwoLevelHashMap<PhmapSeed1>>();
-            break;
-        }
-        case Type::string: {
-            string = std::make_unique<StringAggHashMap>();
-            break;
-        }
-        }
-    }
-};
-
-#define APPLY_FOR_VARIANTS_SINGLE_LEVEL(M) \
-    M(int32)                               \
-    M(string)                              \
-    M(int32_two_level)
-
-template <typename HashMap>
-HashMap& get_hash_map(HashMapVariants& variants);
-
-template <>
-Int32AggHashMap<PhmapSeed1>& get_hash_map<Int32AggHashMap<PhmapSeed1>>(HashMapVariants& variants) {
-    return *variants.int32;
-}
-
-template <>
-StringAggHashMap& get_hash_map<StringAggHashMap>(HashMapVariants& variants) {
-    return *variants.string;
-}
-
-template <>
-Int32AggTwoLevelHashMap<PhmapSeed1>& get_hash_map<Int32AggTwoLevelHashMap<PhmapSeed1>>(HashMapVariants& variants) {
-    return *variants.int32_two_level;
-}
-
 template <typename T>
-T get_keys();
+std::vector<T> get_keys() {
+    std::vector<T> keys(10);
+    for (int i = 0; i < 10; i++) {
+        keys[i] = DefaultValueGenerator<T>::next_value();
+    }
+    return keys;
+}
 
 template <>
-std::vector<int32_t> get_keys<std::vector<int32_t>>() {
+std::vector<int32_t> get_keys<int32_t>() {
     std::vector<int32_t> keys(10);
     for (int i = 0; i < 10; i++) {
         keys[i] = i;
-    }
-    return keys;
-};
-
-template <>
-std::vector<std::string> get_keys<std::vector<std::string>>() {
-    std::vector<std::string> keys(10);
-    for (int i = 0; i < 10; i++) {
-        keys[i] = std::to_string(i);
     }
     return keys;
 };
@@ -120,24 +64,28 @@ void exec(HashMap& hash_map, std::vector<key_type> keys) {
 }
 
 TEST(HashMapTest, Basic) {
-    std::any it_any;
+    std::vector<AggHashMapVariant::Type> hash_map_types = {
+            AggHashMapVariant::Type::phase1_string, AggHashMapVariant::Type::phase2_string,
+            AggHashMapVariant::Type::phase1_int32, AggHashMapVariant::Type::phase2_int32,
+            AggHashMapVariant::Type::phase1_int32_two_level};
+    for (auto hash_map_type : hash_map_types) {
+        std::any it_any;
 
-    HashMapVariants variants;
+        RuntimeState dummy;
+        RuntimeProfile profile("dummy");
+        AggStatistics statis(&profile);
 
-    variants.init(HashMapVariants::Type::string);
-
-#define M(NAME)                                                                                           \
-    else if (variants.type == HashMapVariants::Type::NAME)                                                \
-            exec<decltype(variants.NAME)::element_type, decltype(variants.NAME)::element_type::key_type>( \
-                    get_hash_map<decltype(variants.NAME)::element_type>(variants),                        \
-                    get_keys<std::vector<decltype(variants.NAME)::element_type::key_type>>());
-    if (false) {
-    }
-    APPLY_FOR_VARIANTS_SINGLE_LEVEL(M)
-#undef M
-    else {
-        std::cout << "shouldn't go here!"
-                  << "\n";
+        AggHashMapVariant variant;
+        variant.init(&dummy, hash_map_type, &statis);
+        variant.visit([](auto& hash_map_with_key) {
+            if constexpr (std::is_same_v<typename decltype(hash_map_with_key->hash_map)::key_type, int32_t>) {
+                exec(hash_map_with_key->hash_map, get_keys<int32_t>());
+            } else if constexpr (std::is_same_v<typename decltype(hash_map_with_key->hash_map)::key_type, Slice>) {
+                exec(hash_map_with_key->hash_map, get_keys<Slice>());
+            } else {
+                ASSERT_TRUE(false);
+            }
+        });
     }
 }
 
@@ -147,7 +95,9 @@ TEST(HashMapTest, Insert) {
         const int chunk_size = 64;
         using TestAggHashMap = FixedSize16SliceAggHashMap<PhmapSeed1>;
         using TestAggHashMapKey = AggHashMapWithSerializedKeyFixedSize<TestAggHashMap>;
-        TestAggHashMapKey key(chunk_size);
+        RuntimeProfile profile("dummy");
+        AggStatistics statis(&profile);
+        TestAggHashMapKey key(chunk_size, &statis);
         key.has_null_column = true;
         key.fixed_byte_size = 8;
         MemPool pool;

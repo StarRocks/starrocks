@@ -64,7 +64,6 @@ private:
 private:
     std::unique_ptr<uint8_t[]> _buf;
     RandomAccessFile* _file;
-    uint64_t _offset = 0;
     uint64_t _end_offset = 0;
 
     size_t _buf_capacity = 0;

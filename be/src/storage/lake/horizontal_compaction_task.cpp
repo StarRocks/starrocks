@@ -19,7 +19,6 @@ namespace starrocks::lake {
 HorizontalCompactionTask::~HorizontalCompactionTask() = default;
 
 Status HorizontalCompactionTask::execute() {
-    OlapReaderStatistics statistics;
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     const KeysType keys_type = tablet_schema->keys_type();
     if (keys_type == PRIMARY_KEYS) {

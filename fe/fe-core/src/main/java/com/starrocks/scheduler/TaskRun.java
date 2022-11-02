@@ -20,7 +20,7 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 
 public class TaskRun implements Comparable<TaskRun> {
 
@@ -34,7 +34,7 @@ public class TaskRun implements Comparable<TaskRun> {
 
     private Map<String, String> properties;
 
-    private Future<?> future;
+    private CompletableFuture<Constants.TaskRunState> future;
 
     private Task task;
 
@@ -43,6 +43,10 @@ public class TaskRun implements Comparable<TaskRun> {
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
+
+    TaskRun() {
+        future = new CompletableFuture<>();
+    }
 
     public long getTaskId() {
         return taskId;
@@ -60,12 +64,8 @@ public class TaskRun implements Comparable<TaskRun> {
         this.properties = properties;
     }
 
-    public Future<?> getFuture() {
+    public CompletableFuture<Constants.TaskRunState> getFuture() {
         return future;
-    }
-
-    public void setFuture(Future<?> future) {
-        this.future = future;
     }
 
     public Task getTask() {

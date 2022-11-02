@@ -5,11 +5,9 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergTable;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -19,11 +17,22 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
+
 /**
  * Factory class to create various MetastoreEvents.
  */
 public class MetastoreEventFactory implements EventFactory {
     private static final Logger LOG = LogManager.getLogger(MetastoreEventFactory.class);
+    private final List<String> externalTables;
+
+    public MetastoreEventFactory(List<String> externalTables) {
+        this.externalTables = externalTables;
+    }
+
+    public boolean needToProcess(String catalogTableName) {
+        return externalTables.contains(catalogTableName);
+    }
 
     /**
      * For an {@link AddPartitionEvent} and {@link DropPartitionEvent} drop event,
@@ -31,60 +40,54 @@ public class MetastoreEventFactory implements EventFactory {
      * It is convenient for creating batch tasks to parallel processing.
      */
     @Override
-    public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor metaCache, HiveTable table) {
+    public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor cacheProcessor,
+                                    String catalogName) {
         Preconditions.checkNotNull(event.getEventType());
         MetastoreEventType metastoreEventType = MetastoreEventType.from(event.getEventType());
         switch (metastoreEventType) {
             case CREATE_TABLE:
-                return CreateTableEvent.getEvents(event, metaCache);
+                return CreateTableEvent.getEvents(event, cacheProcessor, catalogName);
             case ALTER_TABLE:
-                return AlterTableEvent.getEvents(event, metaCache);
+                return AlterTableEvent.getEvents(event, cacheProcessor, catalogName);
             case DROP_TABLE:
-                return DropTableEvent.getEvents(event, metaCache);
-            case ADD_PARTITION:
-                return AddPartitionEvent.getEvents(event, metaCache, table.getPartitionColumns());
+                return DropTableEvent.getEvents(event, cacheProcessor, catalogName);
             case ALTER_PARTITION:
-                return AlterPartitionEvent.getEvents(event, metaCache);
+                return AlterPartitionEvent.getEvents(event, cacheProcessor, catalogName);
             case DROP_PARTITION:
-                return DropPartitionEvent.getEvents(event, metaCache, table.getPartitionColumns());
+                return DropPartitionEvent.getEvents(event, cacheProcessor, catalogName);
             case INSERT:
-                return InsertEvent.getEvents(event, metaCache);
+                return InsertEvent.getEvents(event, cacheProcessor, catalogName);
             default:
                 // ignore all the unknown events by creating a IgnoredEvent
-                return Lists.newArrayList(new IgnoredEvent(event, metaCache));
+                return Lists.newArrayList(new IgnoredEvent(event, cacheProcessor, catalogName));
         }
     }
 
-    List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events, String resourceName) {
+    List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events,
+                                           CacheUpdateProcessor cacheProcessor, String catalogName) {
         List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
-        CacheUpdateProcessor metaCache = null;
-        // TODO(stephen): refactor auto sync hive metatadata
-        // metaCache = GlobalStateMgr.getCurrentState().getHiveRepository().getMetaCache(resourceName);
-
-        if (metaCache == null) {
-            LOG.error("Meta cache is null on resource [{}]", resourceName);
-            return metastoreEvents;
-        }
 
         // Currently, the hive external table needs to be manually created in StarRocks to map with the hms table.
         // Therefore, it's necessary to filter the events pulled this time from the hms instance,
         // and the events of the tables that don't register in the fe MetastoreEventsProcessor need to be filtered out.
         for (NotificationEvent event : events) {
-            HiveTable table = null;
-            if (IcebergTable.isInternalCatalog(resourceName)) {
-                table = GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
-                        .getHiveTable(resourceName, event.getDbName(), event.getTableName());
+            String dbName = event.getDbName();
+            String tableName = event.getTableName();
+            if (isResourceMappingCatalog(catalogName)) {
+                if (!needToProcess(String.join(".", catalogName, dbName, tableName))) {
+                    LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
+                            catalogName, event.getDbName(), event.getTableName(), event);
+                    continue;
+                }
             } else {
-                // TODO(stephen): refactor auto sync hive metatadata
-                // table = (HiveTable) metaCache.getTableFromCache(HiveTableName.of(event.getDbName(), event.getTableName()));
+                if (!cacheProcessor.isTablePresent(HiveTableName.of(dbName, tableName))) {
+                    LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
+                            catalogName, event.getDbName(), event.getTableName(), event);
+                    continue;
+                }
             }
 
-            if (table == null) {
-                LOG.warn("Table is null on resource [{}], table [{}.{}]. Skipping notification event {}",
-                        resourceName, event.getDbName(), event.getTableName(), event);
-                continue;
-            }
-            metastoreEvents.addAll(get(event, metaCache, table));
+            metastoreEvents.addAll(get(event, cacheProcessor, catalogName));
         }
 
         List<MetastoreEvent> tobeProcessEvents = metastoreEvents.stream()
@@ -92,7 +95,7 @@ public class MetastoreEventFactory implements EventFactory {
                 .collect(Collectors.toList());
 
         if (tobeProcessEvents.isEmpty()) {
-            LOG.warn("The metastore events to process is empty on resource {}", resourceName);
+            LOG.warn("The metastore events to process is empty on catalog {}", catalogName);
             return Collections.emptyList();
         }
 

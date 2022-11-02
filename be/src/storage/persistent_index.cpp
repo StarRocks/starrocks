@@ -348,9 +348,6 @@ StatusOr<std::unique_ptr<ImmutableIndexShard>> ImmutableIndexShard::try_create(s
         auto bucket = h.bucket() % nbucket;
         auto bid = page * nbucket + bucket;
         auto& sz = bucket_sizes[bid];
-        if (sz >= kBucketSizeMax) {
-            return Status::InternalError("bucket size exceed kBucketSizeMax");
-        }
         sz++;
         auto& data_size = bucket_data_size[bid].first;
         data_size += kv_ref.size;
@@ -642,7 +639,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes) {
+                  const std::vector<size_t>& idxes) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[idx].data);
@@ -696,7 +693,7 @@ public:
         return Status::OK();
     }
 
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) {
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes) override {
         for (unsigned long replace_idxe : replace_idxes) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[replace_idxe].data);
             const auto value = values[replace_idxe];
@@ -711,7 +708,7 @@ public:
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
         faststring fixed_buf;
         fixed_buf.reserve(sizeof(size_t) + sizeof(size_t) + idxes.size() * (KeySize + sizeof(IndexValue)));
         put_fixed32_le(&fixed_buf, KeySize);
@@ -726,7 +723,7 @@ public:
         return Status::OK();
     }
 
-    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) {
+    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
         for (size_t i = 0; i < n; i++) {
             const auto& key = *reinterpret_cast<const KeyType*>(keys[i].data);
             const auto value = values[i];
@@ -738,9 +735,9 @@ public:
         return Status::OK();
     }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar) { return _map.load(ar); }
+    bool load_snapshot(phmap::BinaryInputArchive& ar) override { return _map.load(ar); }
 
-    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) {
+    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         size_t kv_header_size = 8;
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, kv_header_size);
@@ -777,9 +774,9 @@ public:
     // than sizeof(uint64_t) in order to improve count distinct streaming aggregate performance.
     // Howevevr, the real snapshot file will only wite a size_(type is size_t) into file. So we
     // will use `sizeof(size_t)` as return value.
-    size_t dump_bound() { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
+    size_t dump_bound() override { return _map.empty() ? sizeof(size_t) : _map.dump_bound(); }
 
-    bool dump(phmap::BinaryOutputArchive& ar) { return _map.dump(ar); }
+    bool dump(phmap::BinaryOutputArchive& ar) override { return _map.dump(ar); }
 
     std::vector<std::vector<KVRef>> get_kv_refs_by_shard(size_t nshard, size_t num_entry,
                                                          bool without_null) const override {
@@ -812,14 +809,14 @@ public:
 
     size_t size() const override { return _map.size(); }
 
-    size_t capacity() { return _map.capacity(); }
+    size_t capacity() override { return _map.capacity(); }
 
-    void reserve(size_t size) { _map.reserve(size); }
+    void reserve(size_t size) override { _map.reserve(size); }
 
-    size_t memory_usage() { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
+    size_t memory_usage() override { return _map.capacity() * (1 + (KeySize + 3) / 4 * 4 + kIndexValueSize); }
 
     void update_overlap_info(size_t overlap_size, size_t overlap_usage) override { _overlap_size += overlap_size; }
-    size_t overlap_size() { return _overlap_size; }
+    size_t overlap_size() override { return _overlap_size; }
 
 private:
     size_t _overlap_size = 0;
@@ -931,7 +928,7 @@ public:
     }
 
     Status upsert(const Slice* keys, const IndexValue* values, KeysInfo* not_found, size_t* num_found,
-                  const std::vector<size_t>& idxes) {
+                  const std::vector<size_t>& idxes) override {
         size_t nfound = 0;
         for (const auto idx : idxes) {
             std::string composite_key;
@@ -1010,7 +1007,7 @@ public:
         return Status::OK();
     }
 
-    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) {
+    Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes) override {
         for (const auto idx : idxes) {
             std::string composite_key;
             const auto& skey = keys[idx];
@@ -1033,7 +1030,7 @@ public:
     }
 
     Status append_wal(const Slice* keys, const IndexValue* values, const std::vector<size_t>& idxes,
-                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) {
+                      std::unique_ptr<WritableFile>& index_file, uint64_t* page_size) override {
         faststring fixed_buf;
         size_t keys_size = 0;
         auto n = idxes.size();
@@ -1056,7 +1053,7 @@ public:
         return Status::OK();
     }
 
-    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) {
+    Status load_wals(size_t n, const Slice* keys, const IndexValue* values) override {
         for (size_t i = 0; i < n; i++) {
             std::string composite_key;
             const auto& skey = keys[i];
@@ -1080,9 +1077,9 @@ public:
     //  ｜--------    snapshot file      --------｜
     //  |  size_t ||   size_t  ||  char[]  | ... |   size_t  ||  char[]  |
     //  |total num|| data size ||  data    | ... | data size ||  data    |
-    size_t dump_bound() { return sizeof(size_t) * (1 + size()) + _total_kv_pairs_usage; }
+    size_t dump_bound() override { return sizeof(size_t) * (1 + size()) + _total_kv_pairs_usage; }
 
-    bool dump(phmap::BinaryOutputArchive& ar) {
+    bool dump(phmap::BinaryOutputArchive& ar) override {
         if (!ar.dump(size())) {
             LOG(ERROR) << "Failed to dump size";
             return false;
@@ -1110,7 +1107,7 @@ public:
         // return _set.dump(ar);
     }
 
-    bool load_snapshot(phmap::BinaryInputArchive& ar) {
+    bool load_snapshot(phmap::BinaryInputArchive& ar) override {
         size_t size = 0;
         if (!ar.load(&size)) {
             LOG(ERROR) << "Failed to load size";
@@ -1151,7 +1148,7 @@ public:
     }
 
     // TODO: read data in less batch, not one by one.
-    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) {
+    Status load(size_t& offset, std::unique_ptr<RandomAccessFile>& file) override {
         const auto kv_header_size = 8;
         std::string buff;
         raw::stl_string_resize_uninitialized(&buff, kv_header_size);
@@ -1215,12 +1212,12 @@ public:
 
     size_t size() const override { return _set.size(); }
 
-    size_t capacity() { return _set.capacity(); }
+    size_t capacity() override { return _set.capacity(); }
 
-    void reserve(size_t size) { _set.reserve(size); }
+    void reserve(size_t size) override { _set.reserve(size); }
 
     // TODO: more accurate estimation for phmap::flat_hash_set<std::string, ...
-    size_t memory_usage() {
+    size_t memory_usage() override {
         auto ret = capacity() * (1 + 32);
         if (size() > 0 && _total_kv_pairs_usage / size() > 15) {
             // std::string with size > 15 will alloc new memory for storage
@@ -1236,7 +1233,7 @@ public:
         _overlap_size += overlap_size;
     }
 
-    size_t overlap_size() { return _overlap_size; }
+    size_t overlap_size() override { return _overlap_size; }
 
 private:
     friend ShardByLengthMutableIndex;
@@ -2017,7 +2014,7 @@ Status ImmutableIndex::_get_kvs_for_shard(std::vector<std::vector<KVRef>>& kvs_b
     if (shard_info.size == 0) {
         return Status::OK();
     }
-    *shard = std::move(std::make_unique<ImmutableIndexShard>(shard_info.npage));
+    *shard = std::make_unique<ImmutableIndexShard>(shard_info.npage);
     RETURN_IF_ERROR(_file->read_at_fully(shard_info.offset, (*shard)->pages.data(), shard_info.bytes));
     if (shard_info.key_size != 0) {
         return _get_fixlen_kvs_for_shard(kvs_by_shard, shard_idx, shard_bits, shard);
@@ -2603,7 +2600,6 @@ Status PersistentIndex::load_from_tablet(Tablet* tablet) {
                   << " #rowset:" << rowsets.size() << " #segment:" << total_segments << " #row:" << total_rows << " -"
                   << total_dels << "=" << total_rows - total_dels << " bytes:" << total_data_size;
     }
-    OlapReaderStatistics stats;
     std::unique_ptr<vectorized::Column> pk_column;
     if (pk_columns.size() > 1) {
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {

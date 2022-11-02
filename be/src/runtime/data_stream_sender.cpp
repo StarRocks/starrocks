@@ -367,7 +367,6 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
           _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
-          _ignore_not_found(!sink.__isset.ignore_not_found || sink.ignore_not_found),
           _profile(nullptr),
           _serialize_chunk_timer(nullptr),
           _bytes_sent_counter(nullptr),

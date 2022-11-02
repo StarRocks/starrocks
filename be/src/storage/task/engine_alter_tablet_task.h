@@ -42,10 +42,6 @@ private:
     std::unique_ptr<MemTracker> _mem_tracker;
 
     const TAlterTabletReqV2& _alter_tablet_req;
-    int64_t _signature;
-    const TTaskType::type _task_type;
-    vector<string>* _error_msgs;
-    const string& _process_name;
 
 }; // EngineTask
 

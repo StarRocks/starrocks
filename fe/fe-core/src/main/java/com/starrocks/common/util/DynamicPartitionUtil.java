@@ -54,6 +54,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TimeZone;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER;
+
 public class DynamicPartitionUtil {
     private static final Logger LOG = LogManager.getLogger(DynamicPartitionUtil.class);
 
@@ -234,6 +236,17 @@ public class DynamicPartitionUtil {
         }
     }
 
+    public static void registerOrRemovePartitionTTLTable(long dbId, OlapTable olapTable) {
+        if (olapTable.getTableProperty() != null
+                && olapTable.getTableProperty().getPartitionTTLNumber() > 0) {
+            GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                        .registerTtlPartitionTable(dbId, olapTable.getId());
+        } else {
+            GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler()
+                    .removeTtlPartitionTable(dbId, olapTable.getId());
+        }
+    }
+
     public static Map<String, String> analyzeDynamicPartition(Map<String, String> properties) throws DdlException {
         // properties should not be empty, check properties before call this function
         Map<String, String> analyzedProperties = new HashMap<>();
@@ -330,6 +343,22 @@ public class DynamicPartitionUtil {
         return rangePartitionInfo.getPartitionColumns().size() == 1 &&
                 tableProperty.getDynamicPartitionProperty().getEnable();
     }
+
+    public static boolean isTTLPartitionTable(Table table) {
+        if (!(table instanceof OlapTable) ||
+                !(((OlapTable) table).getPartitionInfo().getType().equals(PartitionType.RANGE))) {
+            return false;
+        }
+
+        TableProperty tableProperty = ((OlapTable) table).getTableProperty();
+        if (tableProperty == null || !tableProperty.getProperties().containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
+            return false;
+        }
+
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) ((OlapTable) table).getPartitionInfo();
+        return rangePartitionInfo.getPartitionColumns().size() == 1;
+    }
+
 
     /**
      * properties should be checked before call this method

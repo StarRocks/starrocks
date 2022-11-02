@@ -58,7 +58,7 @@ NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(paren
     _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
 }
 
-NodeChannel::~NodeChannel() {
+NodeChannel::~NodeChannel() noexcept {
     for (auto& _open_closure : _open_closures) {
         if (_open_closure != nullptr) {
             if (_open_closure->unref()) {
