@@ -826,7 +826,6 @@ install(FILES
     ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
 
-message(${CMAKE_BUILD_TYPE})
 if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
 install(FILES
     ${BASE_DIR}/../conf/asan_suppressions.conf
