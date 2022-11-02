@@ -53,30 +53,14 @@ StatusOr<vectorized::ChunkPtr> AggregateDistinctStreamingSourceOperator::pull_ch
 void AggregateDistinctStreamingSourceOperator::_output_chunk_from_hash_set(vectorized::ChunkPtr* chunk,
                                                                            RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                   \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) \
-            _aggregator->it_hash() = _aggregator->hash_set_variant().NAME->hash_set.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
+        _aggregator->hash_set_variant().visit(
+                [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME)                   \
-            _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, state->chunk_size(), chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, state->chunk_size(), chunk);
+    });
 }
 
 } // namespace starrocks::pipeline
