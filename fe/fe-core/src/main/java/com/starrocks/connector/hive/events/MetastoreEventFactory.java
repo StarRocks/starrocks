@@ -111,20 +111,20 @@ public class MetastoreEventFactory implements EventFactory {
         Map<HivePartitionName, MetastoreEvent> batchEvents = Maps.newHashMap();
         for (MetastoreEvent event : events) {
             MetastoreTableEvent metastoreTableEvent = (MetastoreTableEvent) event;
-            HivePartitionName hivePartitionKey = metastoreTableEvent.getHivePartitionKey();
+            HivePartitionName hivePartitionName = metastoreTableEvent.getHivePartitionName();
             switch (event.getEventType()) {
                 case ADD_PARTITION:
                 case DROP_PARTITION:
-                    batchEvents.put(hivePartitionKey, metastoreTableEvent);
+                    batchEvents.put(hivePartitionName, metastoreTableEvent);
                     break;
                 case ALTER_PARTITION:
                 case ALTER_TABLE:
                 case INSERT:
-                    MetastoreEvent batchEvent = batchEvents.get(hivePartitionKey);
+                    MetastoreEvent batchEvent = batchEvents.get(hivePartitionName);
                     if (batchEvent != null && batchEvent.canBeBatched(metastoreTableEvent)) {
-                        batchEvents.put(hivePartitionKey, batchEvent.addToBatchEvents(metastoreTableEvent));
+                        batchEvents.put(hivePartitionName, batchEvent.addToBatchEvents(metastoreTableEvent));
                     } else {
-                        batchEvents.put(hivePartitionKey, metastoreTableEvent);
+                        batchEvents.put(hivePartitionName, metastoreTableEvent);
                     }
                     if (batchEvent instanceof AlterTableEvent && ((AlterTableEvent) batchEvent).isSchemaChange()) {
                         return Lists.newArrayList(batchEvents.values());
@@ -136,7 +136,7 @@ public class MetastoreEventFactory implements EventFactory {
                     batchEvents = batchEvents.entrySet().stream()
                             .filter(entry -> !entry.getKey().approximateMatchTable(dbName, tblName))
                             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-                    batchEvents.put(hivePartitionKey, metastoreTableEvent);
+                    batchEvents.put(hivePartitionName, metastoreTableEvent);
                     return Lists.newArrayList(batchEvents.values());
                 default:
                     LOG.warn("Failed to create batch event on {}", event);

@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.hadoop.fs.Path;
@@ -113,18 +114,21 @@ public class PartitionUtil {
         return FileUtils.makePartName(partitionColumnNames, partitionValues);
     }
 
-    public static String toHivePartitionName(Map<String, String> partitionColNameToValue) {
+    public static String toHivePartitionName(List<String> partitionColNames, Map<String, String> partitionColNameToValue) {
         int i = 0;
         StringBuilder name = new StringBuilder();
-        for (Map.Entry<String, String> entry : partitionColNameToValue.entrySet()) {
+        for (String partitionColName : partitionColNames) {
             if (i++ > 0) {
                 name.append(Path.SEPARATOR);
             }
-            String partitionColName = entry.getKey();
-            String partitionValue = entry.getValue();
+            String partitionValue = partitionColNameToValue.get(partitionColName);
+            if (partitionValue == null) {
+                throw new StarRocksConnectorException("Can't find column {} in {}", partitionColName, partitionColNameToValue);
+            }
             name.append(escapePathName(partitionColName.toLowerCase(Locale.ROOT)));
             name.append('=');
             name.append(escapePathName(partitionValue.toLowerCase(Locale.ROOT)));
+
         }
         return name.toString();
     }
