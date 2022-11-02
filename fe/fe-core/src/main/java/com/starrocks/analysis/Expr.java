@@ -40,6 +40,8 @@ import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.LambdaFunctionExpr;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -290,7 +292,8 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     /**
      * Does subclass-specific analysis. Subclasses should override analyzeImpl().
      */
-    abstract protected void analyzeImpl(Analyzer analyzer) throws AnalysisException;
+     protected void analyzeImpl(Analyzer analyzer) throws AnalysisException {
+    }
 
     /**
      * Set the expr to be analyzed and computes isConstant_.
@@ -682,7 +685,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
      * Returns a SQL string representing this expr. Subclasses should override this method
      * instead of toSql() to ensure that parenthesis are properly added around the toSql().
      */
-    protected abstract String toSqlImpl();
+    protected String toSqlImpl() {
+        throw new StarRocksPlannerException("Not implement toSqlImpl function", ErrorType.INTERNAL_ERROR);
+    }
 
     protected String explainImpl() {
         return toSqlImpl();
@@ -695,14 +700,6 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     public String toJDBCSQL(boolean isMySQL) {
         return toSql();
     }
-
-    /**
-     * Return a column label for the expression
-     */
-    public String toColumnLabel() {
-        return toSql();
-    }
-
 
     // Convert this expr, including all children, to its Thrift representation.
     public TExpr treeToThrift() {
@@ -758,7 +755,9 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
 
     // Convert this expr into msg (excluding children), which requires setting
     // msg.op as well as the expr-specific field.
-    protected abstract void toThrift(TExprNode msg);
+    protected void toThrift(TExprNode msg) {
+        throw new StarRocksPlannerException("Not implement toThrift function", ErrorType.INTERNAL_ERROR);
+    }
 
     public List<String> childrenToSql() {
         List<String> result = Lists.newArrayList();
