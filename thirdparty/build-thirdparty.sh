@@ -468,7 +468,7 @@ build_brpc() {
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
     ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog
-    ${BUILD_SYSTEM} -j$PARALLEL
+    make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib64 
