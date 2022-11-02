@@ -27,7 +27,8 @@ struct ArrayAggDispatcher {
         if constexpr (pt_is_aggregate<pt> || pt_is_binary<pt>) {
             auto func = AggregateFactory::MakeArrayAggAggregateFunction<pt>();
             using AggState = ArrayAggAggregateState<pt>;
-            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState>("array_agg", false, func);
+            resolver->add_aggregate_mapping<pt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_agg", false,
+                                                                                                   func);
         }
     }
 };
