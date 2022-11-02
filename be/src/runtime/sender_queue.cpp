@@ -414,25 +414,36 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
+    auto defer_op = [&]() {
+        auto* closure = item.closure;
+        if (closure != nullptr) {
+#ifndef BE_TEST
+            MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
+            DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+#endif
+            _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
+            closure->Run();
+            chunk_queue_state.blocked_closure_num--;
+        }
+    };
+
     if (item.chunk_ptr == nullptr) {
         ChunkUniquePtr chunk_ptr = std::make_unique<vectorized::Chunk>();
         faststring uncompressed_buffer;
-        RETURN_IF_ERROR(_deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer));
+        auto status = _deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer);
+        if (!status.ok()) {
+            // closure must be run immediately if errors occur.
+            defer_op();
+            LOG(ERROR) << "Deserialize error but should defer to running closure.";
+            return status;
+        }
         *chunk = chunk_ptr.release();
     } else {
         *chunk = item.chunk_ptr.release();
     }
-    auto* closure = item.closure;
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
-    if (closure != nullptr) {
-#ifndef BE_TEST
-        MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(ExecEnv::GetInstance()->process_mem_tracker());
-        DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
-#endif
-        _recvr->_closure_block_timer->update(MonotonicNanos() - item.queue_enter_time);
-        closure->Run();
-        chunk_queue_state.blocked_closure_num--;
-    }
+    defer_op();
+
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;
     return Status::OK();
@@ -631,6 +642,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
 
+        if (_is_cancelled) {
+            LOG(ERROR) << "Cancelled receiver cannot add_chunk for keep order!";
+            return Status::OK();
+        }
+
         _max_processed_sequences.lazy_emplace(be_number, [be_number](const auto& ctor) { ctor(be_number, -1); });
 
         _buffered_chunk_queues.lazy_emplace(be_number, [be_number](const auto& ctor) {
@@ -678,6 +694,11 @@ Status DataStreamRecvr::PipelineSenderQueue::add_chunks(const PTransmitChunkPara
         ScopedTimer<MonotonicStopWatch> wait_timer(_recvr->_sender_wait_lock_timer);
         std::lock_guard<Mutex> l(_lock);
         wait_timer.stop();
+
+        if (_is_cancelled) {
+            LOG(ERROR) << "Cancelled receiver cannot add_chunk!";
+            return Status::OK();
+        }
 
         for (auto iter = chunks.begin(); iter != chunks.end();) {
             if (_is_pipeline_level_shuffle && _chunk_queue_states[iter->driver_sequence].is_short_circuited) {

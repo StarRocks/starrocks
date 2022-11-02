@@ -120,11 +120,8 @@ void GlobalDriverExecutor::_worker_thread() {
                 continue;
             }
             StatusOr<DriverState> maybe_state;
-#ifdef NDEBUG
-            TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
-#else
             maybe_state = driver->process(runtime_state, worker_id);
-#endif
+
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 

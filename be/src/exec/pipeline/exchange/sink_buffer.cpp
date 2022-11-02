@@ -106,6 +106,24 @@ void SinkBuffer::set_finishing() {
 }
 
 bool SinkBuffer::is_finished() const {
+    auto delta = MonotonicNanos() - _pending_timestamp;
+    if (delta % 60000000000 < 100000) {
+        std::string alive;
+        if (_total_in_flight_rpc) {
+            for (auto it = _num_in_flight_rpcs.begin(); it != _num_in_flight_rpcs.end(); ++it) {
+                if (it->second) {
+                    alive = alive + " | " + print_id(_instance_id2finst_id.at(it->first));
+                }
+            }
+        }
+
+        LOG(INFO) << fmt::format(
+                "query_id {}, fragment_id {} SinkBuffer is finishing {}, _num_sending_rpc = {}, _total_in_flight_rpc = "
+                "{},  alive = {}, cost time = {}.",
+                print_id(_fragment_ctx->query_id()), print_id(_fragment_ctx->fragment_instance_id()), _is_finishing,
+                _num_sending_rpc, _total_in_flight_rpc, alive, delta);
+    }
+
     if (!_is_finishing) {
         return false;
     }
