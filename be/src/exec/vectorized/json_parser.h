@@ -70,9 +70,6 @@ public:
     std::string left_bytes_string() noexcept override;
 
 private:
-    uint8_t* _data = nullptr;
-    size_t _len = 0;
-
     // data is parsed as a document in array type.
     simdjson::ondemand::document _doc;
 

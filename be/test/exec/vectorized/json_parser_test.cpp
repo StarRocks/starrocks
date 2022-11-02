@@ -414,7 +414,7 @@ PARALLEL_TEST(JsonParserTest, test_illegal_document_stream) {
 
 PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     // json array with ' ', '/t', '\n'
-    std::string input = R"( [  {"key1": 1}, {"key2": 2},    {"key3": 3},
+    std::string input = R"( [  {"key1": 1}, "key2": 2},    {"key3": 3},
     {"key4": 4}])";
     // Reserved for simdjson padding.
     auto size = input.size();
@@ -436,38 +436,13 @@ PARALLEL_TEST(JsonParserTest, test_illegal_json_array) {
     int64_t val = row.find_field("key1").get_int64();
     ASSERT_EQ(val, 1);
 
-    // double get.
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key1").get_int64();
-    ASSERT_EQ(val, 1);
-
     st = parser->advance();
     ASSERT_TRUE(st.ok());
 
     st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key2").get_int64();
-    ASSERT_EQ(val, 2);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key3").get_int64();
-    ASSERT_EQ(val, 3);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.ok());
-
-    st = parser->get_current(&row);
-    ASSERT_TRUE(st.ok());
-    val = row.find_field("key4").get_int64();
-    ASSERT_EQ(val, 4);
-
-    st = parser->advance();
-    ASSERT_TRUE(st.is_end_of_file());
+    ASSERT_TRUE(st.is_data_quality_error());
+    ASSERT_STREQ(parser->left_bytes_string().data(), R"("key2": 2},    {"key3": 3},
+    {"key4": 4}])");
 }
 
 } // namespace starrocks::vectorized
