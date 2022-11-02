@@ -32,6 +32,6 @@ jobs:
         if: steps.changes.outputs.be == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: 391d6539e2d09aed3d187353bfd85fefa7a4c281
+          SONAR_TOKEN: ed28a3f7ce16256fb8e607d8f6780da84b5cf6c3
         run: |
-          sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_starrocks -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+          sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_be -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
