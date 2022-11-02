@@ -22,10 +22,10 @@ template <typename T>
 constexpr bool IsWindowFunctionSliceState = false;
 
 template <>
-constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true;
 
 template <>
-constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
 
 struct NullableAggregateWindowFunctionState {
     // The following two fields are only used in "update_state_removable_cumulatively"
