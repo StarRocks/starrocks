@@ -130,6 +130,7 @@ void IntersectHashSet<HashSet>::_serialize_columns(const ChunkPtr& chunkPtr, con
 }
 
 // instantiation
-template class IntersectHashSet<phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
+template class IntersectHashSet<
+        phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
 
 } // namespace starrocks::vectorized
