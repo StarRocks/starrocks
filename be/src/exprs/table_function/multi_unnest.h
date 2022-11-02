@@ -26,8 +26,8 @@ public:
         long row_count = state->get_columns()[0]->size();
 
         std::vector<ColumnPtr> compacted_array_list;
-        for (int colIdx = 0; colIdx < state->get_columns().size(); ++colIdx) {
-            Column* column = state->get_columns()[colIdx].get();
+        for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
+            Column* column = state->get_columns()[col_idx].get();
 
             auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
             ColumnPtr compacted_array_elements = col_array->elements_column()->clone_empty();
@@ -39,8 +39,8 @@ public:
         compacted_offset_column->append(offset);
         for (int row_idx = 0; row_idx < row_count; ++row_idx) {
             long max_length_array_size = 0;
-            for (int colIdx = 0; colIdx < state->get_columns().size(); ++colIdx) {
-                Column* column = state->get_columns()[colIdx].get();
+            for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
+                Column* column = state->get_columns()[col_idx].get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
@@ -52,25 +52,25 @@ public:
             }
             compacted_offset_column->append(offset + max_length_array_size);
 
-            for (int colIdx = 0; colIdx < state->get_columns().size(); ++colIdx) {
-                Column* column = state->get_columns()[colIdx].get();
+            for (int col_idx = 0; col_idx < state->get_columns().size(); ++col_idx) {
+                Column* column = state->get_columns()[col_idx].get();
                 auto* col_array = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(column));
                 auto offset_column = col_array->offsets_column();
 
                 long array_element_length =
                         offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                compacted_array_list[colIdx]->append(*(col_array->elements_column()),
-                                                     offset_column->get(row_idx).get_int32(), array_element_length);
+                compacted_array_list[col_idx]->append(*(col_array->elements_column()),
+                                                      offset_column->get(row_idx).get_int32(), array_element_length);
 
                 if (array_element_length < max_length_array_size) {
-                    compacted_array_list[colIdx]->append_nulls(max_length_array_size - array_element_length);
+                    compacted_array_list[col_idx]->append_nulls(max_length_array_size - array_element_length);
                 }
             }
         }
 
         Columns result;
-        for (int colIdx = 0; colIdx < compacted_array_list.size(); ++colIdx) {
-            result.emplace_back(compacted_array_list[colIdx]);
+        for (int col_idx = 0; col_idx < compacted_array_list.size(); ++col_idx) {
+            result.emplace_back(compacted_array_list[col_idx]);
         }
 
         return std::make_pair(result, compacted_offset_column);
