@@ -1,20 +1,20 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include "exec/pipeline/scan/olap_meta_chunk_source.h"
+#include "exec/pipeline/scan/meta_chunk_source.h"
 
-#include "exec/pipeline/scan/olap_meta_scan_operator.h"
+#include "exec/pipeline/scan/meta_scan_operator.h"
 #include "exec/workgroup/work_group.h"
 
 namespace starrocks::pipeline {
 
-OlapMetaChunkSource::OlapMetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                                         const OlapMetaScanContextPtr& scan_ctx)
+MetaChunkSource::MetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                                         MetaScanContextPtr scan_ctx)
         : ChunkSource(scan_operator_id, runtime_profile, std::move(morsel), scan_ctx->get_chunk_buffer()),
           _scan_ctx(scan_ctx) {}
 
-OlapMetaChunkSource::~OlapMetaChunkSource() = default;
+MetaChunkSource::~MetaChunkSource() {}
 
-Status OlapMetaChunkSource::prepare(RuntimeState* state) {
+Status MetaChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     // use tablet id in morsel to get olap meta scanner
     auto scan_morsel = dynamic_cast<ScanMorsel*>(_morsel.get());
@@ -25,18 +25,18 @@ Status OlapMetaChunkSource::prepare(RuntimeState* state) {
     return Status::OK();
 }
 
-void OlapMetaChunkSource::close(RuntimeState* state) {
+void MetaChunkSource::close(RuntimeState* state) {
     _scanner->close(state);
 }
 
-Status OlapMetaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
+Status MetaChunkSource::_read_chunk(RuntimeState* state, ChunkPtr* chunk) {
     if (!_scanner->has_more()) {
         return Status::EndOfFile("end of file");
     }
     return _scanner->get_chunk(state, chunk);
 }
 
-const workgroup::WorkGroupScanSchedEntity* OlapMetaChunkSource::_scan_sched_entity(
+const workgroup::WorkGroupScanSchedEntity* MetaChunkSource::_scan_sched_entity(
         const workgroup::WorkGroup* wg) const {
     DCHECK(wg != nullptr);
     return wg->scan_sched_entity();

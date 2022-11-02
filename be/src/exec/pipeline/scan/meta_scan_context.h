@@ -6,31 +6,33 @@
 
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "gen_cpp/Types_types.h"
+#include "exec/vectorized/meta_scanner.h"
+#include "exec/vectorized/meta_scan_node.h"
 
 
 namespace starrocks {
 namespace vectorized {
-class OlapMetaScanner;
+class MetaScanner;
 class MetaScanNode;
 } // namespace vectorized
 
 namespace pipeline {
 class MetaScanContext;
 using MetaScanContextPtr = std::shared_ptr<MetaScanContext>;
-using OlapMetaScannerPtr = std::shared_ptr<vectorized::OlapMetaScanner>; 
+using MetaScannerPtr = std::shared_ptr<vectorized::MetaScanner>; 
 
 class MetaScanContext {
 public:
     MetaScanContext(BalancedChunkBuffer& chunk_buffer) : _chunk_buffer(chunk_buffer) {}
     ~MetaScanContext() = default;
 
-    OlapMetaScannerPtr get_scanner(TTabletId tablet_id) {
+    MetaScannerPtr get_scanner(TTabletId tablet_id) {
         auto iter = _scanners.find(tablet_id);
         DCHECK(iter != _scanners.end());
         return iter->second;
     }
 
-    void add_scanner(TTabletId tablet_id, OlapMetaScannerPtr scanner) {
+    void add_scanner(TTabletId tablet_id, MetaScannerPtr scanner) {
         DCHECK(_scanners.find(tablet_id) == _scanners.end());
         _scanners[tablet_id] = std::move(scanner);
     }
@@ -43,14 +45,14 @@ public:
 
 private:
     // tablet_id => olap_meta_scanner
-    std::unordered_map<TTabletId, OlapMetaScannerPtr> _scanners;
+    std::unordered_map<TTabletId, MetaScannerPtr> _scanners;
     BalancedChunkBuffer& _chunk_buffer;
     std::atomic_bool _is_prepare_finished = false;
 };
 
-class OlapMetaScanContextFactory {
+class MetaScanContextFactory {
 public:
-    OlapMetaScanContextFactory(vectorized::MetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
+    MetaScanContextFactory(vectorized::MetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
                                ChunkBufferLimiterPtr chunk_buffer_limiter)
             : _meta_scan_node(scan_node),
               _dop(dop),

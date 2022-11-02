@@ -24,6 +24,9 @@ public:
         *out << "vectorized:OlapMetaScanNode";
     }
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) override;
+
 private:
     friend class OlapMetaScanner;
     std::vector<OlapMetaScanner*> _scanners;

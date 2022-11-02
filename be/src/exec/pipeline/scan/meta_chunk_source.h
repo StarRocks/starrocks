@@ -4,18 +4,18 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/pipeline/scan/chunk_source.h"
-#include "exec/pipeline/scan/olap_meta_scan_context.h"
-#include "exec/vectorized/olap_meta_scan_node.h"
+#include "exec/pipeline/scan/meta_scan_context.h"
+#include "exec/vectorized/meta_scan_node.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::pipeline {
 
-class OlapMetaChunkSource final : public ChunkSource {
+class MetaChunkSource final : public ChunkSource {
 public:
-    OlapMetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                        const OlapMetaScanContextPtr& scan_ctx);
+    MetaChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
+                        MetaScanContextPtr scan_ctx);
 
-    ~OlapMetaChunkSource() override;
+    ~MetaChunkSource() override;
 
     Status prepare(RuntimeState* state) override;
 
@@ -26,9 +26,9 @@ private:
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
-    OlapMetaScanContextPtr _scan_ctx;
+    MetaScanContextPtr _scan_ctx;
 
-    std::shared_ptr<vectorized::OlapMetaScanner> _scanner;
+    std::shared_ptr<vectorized::MetaScanner> _scanner;
 };
 
 } // namespace starrocks::pipeline

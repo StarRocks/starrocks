@@ -31,11 +31,6 @@ struct MetaReaderParams {
     Version version = Version(-1, 0);
     const std::vector<SlotDescriptor*>* slots = nullptr;
     RuntimeState* runtime_state = nullptr;
-    void check_validation() const {
-        if (UNLIKELY(version.first == -1)) {
-            LOG(FATAL) << "version is not set. tablet=" << tablet->full_name();
-        }
-    }
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;
@@ -59,13 +54,9 @@ public:
     MetaReader();
     ~MetaReader();
 
-    Status init(const MetaReaderParams& read_params);
-
-    TabletSharedPtr tablet() { return _tablet; }
-
     Status open();
 
-    Status do_get_next(ChunkPtr* chunk);
+    virtual Status do_get_next(ChunkPtr* chunk) = 0;
 
     bool has_more();
 
@@ -78,29 +69,15 @@ public:
     };
 
 protected:
-    Status _init_seg_meta_collecters(const MetaReaderParams& read_params);
-    
     Version _version;
     int _chunk_size;
     CollectContext _collect_context;
     bool _is_init;
     bool _has_more;
 
-private:
-    TabletSharedPtr _tablet;
-    std::vector<RowsetSharedPtr> _rowsets;
-
     MetaReaderParams _params;
 
-    Status _init_params(const MetaReaderParams& read_params);
-
-    Status _build_collect_context(const MetaReaderParams& read_params);
-
-    Status _fill_result_chunk(Chunk* chunk);
-
-   Status _get_segments(const TabletSharedPtr& tablet, const Version& version,
-                         std::vector<SegmentSharedPtr>* segments);
-
+    virtual Status _fill_result_chunk(Chunk* chunk) = 0;
     Status _read(Chunk* chunk, size_t n);
 };
 

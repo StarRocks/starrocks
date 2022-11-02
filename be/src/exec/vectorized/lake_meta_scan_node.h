@@ -22,11 +22,12 @@ public:
         *out << "vectorized:LakeMetaScanNode";
     }
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) override;
+
 private:
     friend class LakeMetaScanner; 
-
     std::vector<LakeMetaScanner*> _scanners;
-
 };
 
 } // namespace vectorized

@@ -12,22 +12,13 @@
 #include "storage/lake/tablet.h"
 #include "storage/meta_reader.h"
 
-namespace starrocks {
-
-class RuntimeState;
-
-} // namespace starrocks
 
 namespace starrocks::vectorized {
-
-class SegmentMetaCollecter;
-struct SegmentMetaCollecterParams;
-
 // Params for MetaReader
 // mainly include tablet
-struct LakeMetaReaderParams : public MetaReaderParams {
+struct LakeMetaReaderParams : MetaReaderParams {
     LakeMetaReaderParams(){};
-    StatusOr<lake::Tablet> lake_tablet;
+    StatusOr<lake::Tablet> tablet;
     std::shared_ptr<const TabletSchema> tablet_schema;
 };
 
@@ -39,9 +30,11 @@ public:
     LakeMetaReader();
     ~LakeMetaReader();
 
-    Status _init(const LakeMetaReaderParams& read_params);
+    Status init(const LakeMetaReaderParams& read_params);
 
     lake::Tablet tablet() { return _tablet.value(); }
+
+    Status do_get_next(ChunkPtr* chunk) override;
 
 private:
     StatusOr<lake::Tablet> _tablet;
@@ -54,9 +47,12 @@ private:
 
     Status _build_collect_context(const LakeMetaReaderParams& read_params);
 
+    Status _init_seg_meta_collecters(const LakeMetaReaderParams& read_params);
+
     Status _get_segments(lake::Tablet tablet, const Version& version,
                          std::vector<SegmentSharedPtr>* segments);
 
+    Status _fill_result_chunk(Chunk* chunk) override;
 };
 
 } // namespace starrocks::vectorized

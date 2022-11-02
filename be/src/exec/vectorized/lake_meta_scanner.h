@@ -8,6 +8,7 @@
 #include "exec/olap_utils.h"
 #include "runtime/runtime_state.h"
 #include "storage/lake_meta_reader.h"
+#include "exec/vectorized/meta_scanner.h"
 
 
 namespace starrocks {
@@ -15,48 +16,36 @@ namespace vectorized {
 
 class LakeMetaScanNode;
 
-struct LakeMetaScannerParams {
-    const TInternalScanRange* scan_range = nullptr;
-};
-
-class LakeMetaScanner {
+class LakeMetaScanner : public MetaScanner{
 public:
     LakeMetaScanner(LakeMetaScanNode* parent);
-    ~LakeMetaScanner() = default;
+    virtual ~LakeMetaScanner() = default;
 
     LakeMetaScanner(const LakeMetaScanner&) = delete;
     LakeMetaScanner(LakeMetaScanner&) = delete;
     void operator=(const LakeMetaScanner&) = delete;
     void operator=(LakeMetaScanner&) = delete;
 
-    Status init(RuntimeState* runtime_state, const LakeMetaScannerParams& params);
+    Status init(RuntimeState* runtime_state, const MetaScannerParams& params) override;
 
-    Status open(RuntimeState* state);
+    Status open(RuntimeState* state) override;
 
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) override;
 
-    Status get_chunk(RuntimeState* state, ChunkPtr* chunk);
+    Status get_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
-    RuntimeState* runtime_state() { return _runtime_state; }
-
-    bool has_more();
+    bool has_more() override;
 
 private:
-    Status _get_tablet(const TInternalScanRange* scan_range);
-    Status _init_meta_reader_params();
-    Status _init_return_columns();
+    Status _get_tablet(const TInternalScanRange* scan_range) override;
+    Status _init_meta_reader_params() override;
 
     LakeMetaScanNode* _parent;
-    RuntimeState* _runtime_state;
     StatusOr<lake::Tablet> _tablet;
     std::shared_ptr<const TabletSchema> _tablet_schema;
 
     LakeMetaReaderParams _reader_params;
     std::shared_ptr<LakeMetaReader> _reader;
-
-    bool _is_open = false;
-    bool _is_closed = false;
-    int64_t _version = 0;
 };
 
 } // namespace vectorized

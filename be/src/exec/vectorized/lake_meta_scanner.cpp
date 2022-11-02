@@ -8,10 +8,10 @@ namespace starrocks {
 namespace vectorized {
 
 LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent)
-        : _parent(parent), _runtime_state(nullptr), _is_open(false) {}
+        : _parent(parent){}
   
 
-Status LakeMetaScanner::init(RuntimeState* runtime_state, const LakeMetaScannerParams& params) {
+Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
     // for debug
     LOG(INFO) << "enter LakeMetaScanner::init";
     _runtime_state = runtime_state;
@@ -30,7 +30,7 @@ Status LakeMetaScanner::init(RuntimeState* runtime_state, const LakeMetaScannerP
 Status LakeMetaScanner::_init_meta_reader_params() {
     // for debug
     LOG(INFO) << "enter LakeMetaScanner::_init_meta_reader_params";
-    _reader_params.lake_tablet = _tablet;
+    _reader_params.tablet = _tablet;
     _reader_params.tablet_schema = _tablet_schema;
     _reader_params.version = Version(0, _version);
     _reader_params.runtime_state = _runtime_state;
