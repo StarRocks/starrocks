@@ -366,7 +366,7 @@ PROPERTIES("replication_num" = "3",
 
 - 自 2.4.0 版本起，主键模型支持单表和多表物化视图。
 
-- 暂不支持使用 ALTER TABLE 修改列类型。 ALTER TABLE 的相关语法说明和示例，请参见 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md)。
+- 使用 [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md) 时暂不支持修改主键的列类型，不支持调整指标列的顺序。
 
 ### 下一步
 
