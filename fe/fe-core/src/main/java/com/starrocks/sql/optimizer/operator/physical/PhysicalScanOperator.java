@@ -39,21 +39,7 @@ public abstract class PhysicalScanOperator extends PhysicalOperator {
         this.projection = projection;
 
         if (this.projection != null) {
-            ColumnRefSet usedColumns = new ColumnRefSet();
-            for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
-                usedColumns.union(scalarOperator.getUsedColumns());
-            }
-            for (ScalarOperator scalarOperator : this.projection.getCommonSubOperatorMap().values()) {
-                usedColumns.union(scalarOperator.getUsedColumns());
-            }
-
-            ImmutableList.Builder<ColumnRefOperator> outputBuilder = ImmutableList.builder();
-            for (ColumnRefOperator columnRefOperator : colRefToColumnMetaMap.keySet()) {
-                if (usedColumns.contains(columnRefOperator)) {
-                    outputBuilder.add(columnRefOperator);
-                }
-            }
-            outputColumns = outputBuilder.build();
+            outputColumns = projection.getOutputColumns();
         } else {
             outputColumns = ImmutableList.copyOf(colRefToColumnMetaMap.keySet());
         }
