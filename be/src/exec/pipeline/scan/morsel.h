@@ -107,7 +107,9 @@ private:
     int64_t _tablet_id = 0;
     int64_t _version = 0;
 };
-
+// the last morsel to be split out for a ScanMorsel, it used to create EOSChunkSource. EOSMorsel
+// is used to indicate that morsel splitting is done and the exact number of EOS chunks would
+// be known to ScanOperator, so the ScanOperator can count down the EOS chunks.
 class EOSMorsel final : public ScanMorsel {
 public:
     using ScanMorsel::ScanMorsel;
@@ -259,7 +261,7 @@ protected:
         }
     }
 
-    int _inc_num_splits_unlocked() {
+    int _inc_num_splits() {
         return _use_ticket_checker<int>(
                 [](query_cache::TicketCheckerPtr& ticket_checker, int64_t tablet_id) {
                     ticket_checker->enter(tablet_id, false);

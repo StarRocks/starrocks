@@ -203,14 +203,20 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         return nullptr;
     }
 
-    auto tablet_id = res->owner_info().owner_id();
-    auto is_last_chunk = res->owner_info().is_last_chunk();
+    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+    auto [tablet_id, is_eos] = _should_emit_eos(res);
+    eval_runtime_bloom_filters(res.get());
+    res->owner_info().set_owner_id(tablet_id, is_eos);
+    return res;
+}
+
+std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) {
+    auto tablet_id = chunk->owner_info().owner_id();
+    auto is_last_chunk = chunk->owner_info().is_last_chunk();
     if (is_last_chunk && _ticket_checker != nullptr) {
         is_last_chunk = _ticket_checker->leave(tablet_id);
     }
-    eval_runtime_bloom_filters(res.get());
-    res->owner_info().set_owner_id(tablet_id, is_last_chunk);
-    return res;
+    return {tablet_id, is_last_chunk};
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {

@@ -94,6 +94,9 @@ private:
     void _merge_chunk_source_profiles();
     size_t _buffer_unplug_threshold() const;
 
+    // emit EOS chunk when we receive the last chunk of the tablet.
+    std::tuple<int64_t, bool> _should_emit_eos(const ChunkPtr& chunk);
+
     inline void _set_scan_status(const Status& status) {
         std::lock_guard<SpinLock> l(_scan_status_mutex);
         if (_scan_status.ok()) {

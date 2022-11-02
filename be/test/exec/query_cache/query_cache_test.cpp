@@ -16,6 +16,7 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 
@@ -1156,6 +1157,36 @@ TEST_F(CacheTest, testPartialHit) {
     };
     test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
                    eq_validator_gen(801.0 * 801.0));
+}
+
+TEST_F(CacheTest, testTicketChecker) {
+    auto test_func1 = [](int64_t id, int n) {
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        ASSERT_FALSE(ticket_checker->are_all_ready(id));
+        for (auto i = 0; i < n; ++i) {
+            ticket_checker->enter(1L, i + 1 == n);
+        }
+        for (auto i = 0; i < n; ++i) {
+            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
+        }
+    };
+
+    test_func1(1L, 1);
+    test_func1(1L, 10);
+    test_func1(1L, 100);
+
+    auto test_func2 = [](int64_t id, int n) {
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        ASSERT_FALSE(ticket_checker->are_all_ready(id));
+        for (auto i = 0; i < n; ++i) {
+            ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
+        }
+    };
+
+    test_func2(1L, 1);
+    test_func2(1L, 10);
+    test_func2(1L, 100);
 }
 
 } // namespace starrocks::vectorized

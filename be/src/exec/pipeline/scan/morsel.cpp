@@ -166,7 +166,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
 
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
-    _inc_num_splits_unlocked();
+    _inc_num_splits();
     return morsel;
 }
 
@@ -428,7 +428,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
-    _inc_num_splits_unlocked();
+    _inc_num_splits();
     return morsel;
 }
 
