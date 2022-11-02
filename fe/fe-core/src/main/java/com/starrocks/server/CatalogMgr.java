@@ -138,7 +138,9 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        if (connectorMgr.supportConnectorType.contains(type)) {
+            connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
+        }
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
@@ -155,7 +157,9 @@ public class CatalogMgr {
         } finally {
             readUnlock();
         }
-        connectorMgr.removeConnector(catalogName);
+        if (connectorMgr.supportConnectorType.contains(catalogs.get(catalogName).getType())) {
+            connectorMgr.removeConnector(catalogName);
+        }
 
         writeLock();
         try {

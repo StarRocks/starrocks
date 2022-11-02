@@ -2,6 +2,7 @@
 
 package com.starrocks.connector;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.hive.HiveConnectorFactory;
@@ -9,6 +10,7 @@ import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -22,6 +24,8 @@ public class ConnectorMgr {
 
     private final MetadataMgr metadataMgr;
 
+    public final List<String> supportConnectorType = Lists.newArrayList();
+
     public ConnectorMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
         init();
@@ -34,6 +38,7 @@ public class ConnectorMgr {
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
+        supportConnectorType.add(connectorFactory.name());
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
         Preconditions.checkArgument(existingConnectorFactory == null,
