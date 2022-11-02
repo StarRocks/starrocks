@@ -13,6 +13,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
 import org.junit.Assert;
@@ -89,12 +90,31 @@ public class PartitionUtilTest {
         Assert.assertEquals("HivePartitionName{databaseName='db', tableName='table'," +
                 " partitionValues=[1, 2, 3], partitionNames=Optional[a=1/b=2/c=3]}", hivePartitionName.toString());
 
+        List<String> partitionColNames = Lists.newArrayList("k1");
         Map<String, String> partitionColToValue = Maps.newHashMap();
         partitionColToValue.put("k1", "1");
-        Assert.assertEquals("k1=1", PartitionUtil.toHivePartitionName(partitionColToValue));
+        Assert.assertEquals("k1=1", PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
 
+        partitionColNames.add("k3");
         partitionColToValue.put("k3", "c");
-        Assert.assertEquals("k1=1/k3=c", PartitionUtil.toHivePartitionName(partitionColToValue));
-    }
+        Assert.assertEquals("k1=1/k3=c", PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
 
+        partitionColNames.add("k5");
+        partitionColNames.add("k4");
+        partitionColNames.add("k6");
+        partitionColToValue.put("k4", "d");
+        partitionColToValue.put("k5", "e");
+        partitionColToValue.put("k6", "f");
+
+        Assert.assertEquals("k1=1/k3=c/k5=e/k4=d/k6=f",
+                PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue));
+
+        partitionColNames.add("not_exists");
+        try {
+            PartitionUtil.toHivePartitionName(partitionColNames, partitionColToValue);
+            Assert.fail();
+        } catch (StarRocksConnectorException e) {
+            Assert.assertTrue(e.getMessage().contains("Can't find column"));
+        }
+    }
 }
