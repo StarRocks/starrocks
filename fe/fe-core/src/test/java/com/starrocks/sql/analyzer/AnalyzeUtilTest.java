@@ -52,5 +52,23 @@ public class AnalyzeUtilTest {
         com.starrocks.sql.analyzer.Analyzer.analyze(statementBase.get(0), session);
         stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
         Assert.assertEquals(stringDatabaseMap.size(), 2);
+
+        sql = "insert into test.t0 select * from db1.t0,db2.t1";
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
+        Assert.assertEquals(stringDatabaseMap.size(), 3);
+        Assert.assertEquals("[db1, test, db2]", stringDatabaseMap.keySet().toString());
+
+        sql = "update test.t0 set v1 = 1";
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
+        Assert.assertEquals(stringDatabaseMap.size(), 1);
+        Assert.assertEquals("[test]", stringDatabaseMap.keySet().toString());
+
+        sql = "delete from test.t0 where v1 = 1";
+        statementBase = SqlParser.parse(sql, AnalyzeTestUtil.getConnectContext().getSessionVariable().getSqlMode());
+        stringDatabaseMap = AnalyzerUtils.collectAllDatabase(AnalyzeTestUtil.getConnectContext(), statementBase.get(0));
+        Assert.assertEquals(stringDatabaseMap.size(), 1);
+        Assert.assertEquals("[test]", stringDatabaseMap.keySet().toString());
     }
 }
