@@ -19,7 +19,6 @@ Status JsonDocumentStreamParser::parse(uint8_t* data, size_t len, size_t allocat
 
         _doc_stream_itr = _doc_stream.begin();
 
-
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("Failed to parse json as document stream. error: $0",
                                            simdjson::error_message(e.error()));
