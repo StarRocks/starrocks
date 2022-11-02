@@ -1385,6 +1385,15 @@ public class PlanTestBase {
         }
     }
 
+    protected void assertLogicalPlanContains(String sql, String... explain) throws Exception {
+        String explainString = getLogicalFragmentPlan(sql);
+
+        for (String expected : explain) {
+            Assert.assertTrue("expected is: " + expected + " but plan is \n" + explainString,
+                    StringUtils.containsIgnoreCase(explainString.toLowerCase(), expected));
+        }
+    }
+
     protected void assertVerbosePlanContains(String sql, String... explain) throws Exception {
         String explainString = getVerboseExplain(sql);
 

@@ -2,16 +2,69 @@
 
 package com.starrocks.sql.optimizer.operator.physical.stream;
 
+import autovalue.shaded.com.google.common.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableList;
+import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.Projection;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-public class PhysicalStreamScanOperator extends PhysicalOperator {
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 
-    protected PhysicalStreamScanOperator() {
+public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
+
+    protected final Table table;
+    protected List<ColumnRefOperator> outputColumns;
+    protected final ImmutableMap<ColumnRefOperator, Column> colRefToColumnMetaMap;
+
+    public PhysicalStreamScanOperator(Table table,
+                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap,
+                                      ScalarOperator predicate,
+                                      Projection projection) {
         super(OperatorType.PHYSICAL_STREAM_SCAN);
+        this.table = Objects.requireNonNull(table, "table is null");
+        this.colRefToColumnMetaMap = ImmutableMap.copyOf(colRefToColumnMetaMap);
+        this.predicate = predicate;
+        this.projection = projection;
+        if (this.projection != null) {
+            ColumnRefSet usedColumns = new ColumnRefSet();
+            for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
+                usedColumns.union(scalarOperator.getUsedColumns());
+            }
+            for (ScalarOperator scalarOperator : this.projection.getCommonSubOperatorMap().values()) {
+                usedColumns.union(scalarOperator.getUsedColumns());
+            }
+
+            ImmutableList.Builder<ColumnRefOperator> outputBuilder = ImmutableList.builder();
+            for (ColumnRefOperator columnRefOperator : colRefToColumnMetaMap.keySet()) {
+                if (usedColumns.contains(columnRefOperator)) {
+                    outputBuilder.add(columnRefOperator);
+                }
+            }
+            outputColumns = outputBuilder.build();
+        } else {
+            outputColumns = ImmutableList.copyOf(colRefToColumnMetaMap.keySet());
+        }
+    }
+
+    public List<ColumnRefOperator> getOutputColumns() {
+        return outputColumns;
+    }
+
+    public Map<ColumnRefOperator, Column> getColRefToColumnMetaMap() {
+        return colRefToColumnMetaMap;
+    }
+
+    public Table getTable() {
+        return table;
     }
 
     @Override
@@ -29,4 +82,24 @@ public class PhysicalStreamScanOperator extends PhysicalOperator {
         return "PhysicalStreamScanOperator";
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        PhysicalStreamScanOperator that = (PhysicalStreamScanOperator) o;
+        return Objects.equals(table, that.table) && Objects.equals(outputColumns, that.outputColumns) &&
+                Objects.equals(colRefToColumnMetaMap, that.colRefToColumnMetaMap);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(super.hashCode(), table, outputColumns, colRefToColumnMetaMap);
+    }
 }

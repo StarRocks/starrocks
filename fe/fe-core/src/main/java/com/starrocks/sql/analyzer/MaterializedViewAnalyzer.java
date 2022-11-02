@@ -721,4 +721,8 @@ public class MaterializedViewAnalyzer {
             }
         }
     }
+
+    static class KeyPropertyInference {
+
+    }
 }
