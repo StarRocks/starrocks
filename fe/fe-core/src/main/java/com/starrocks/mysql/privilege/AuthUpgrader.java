@@ -73,14 +73,14 @@ public class AuthUpgrader {
         }
     }
 
-    public void replayUpgradeAsFollower(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoveredException {
-        LOG.info("start to replay upgrade as follower.");
+    public void replayUpgrade(Map<String, Long> roleNameToId) throws AuthUpgradeUnrecoveredException {
+        LOG.info("start to replay upgrade journal.");
         init();
         upgradeUser();
         upgradeRole(roleNameToId);
         authenticationManager.setLoaded();
         privilegeManager.setLoaded();
-        LOG.info("replayed upgrade as follower successfully.");
+        LOG.info("replayed upgrade journal successfully.");
     }
 
     private void init() throws AuthUpgradeUnrecoveredException {

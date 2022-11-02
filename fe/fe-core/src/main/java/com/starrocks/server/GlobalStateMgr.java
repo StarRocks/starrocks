@@ -3223,7 +3223,7 @@ public class GlobalStateMgr {
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
         AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-        upgrader.replayUpgradeAsFollower(info.getRoleNameToId());
+        upgrader.replayUpgrade(info.getRoleNameToId());
         usingNewPrivilege.set(true);
         domainResolver.setAuthenticationManager(authenticationManager);
         if (!isCheckpointThread()) {
