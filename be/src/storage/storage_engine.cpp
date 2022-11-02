@@ -110,6 +110,9 @@ StorageEngine::~StorageEngine() {
         _s_instance = _p_instance;
     }
 #endif
+    if (_s_instance != nullptr) {
+        _s_instance = nullptr;
+    }
 }
 
 void StorageEngine::load_data_dirs(const std::vector<DataDir*>& data_dirs) {
