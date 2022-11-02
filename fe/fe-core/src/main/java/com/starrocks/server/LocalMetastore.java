@@ -353,6 +353,9 @@ public class LocalMetastore implements ConnectorMetadata {
     public void unprotectCreateDb(Database db) {
         idToDb.put(db.getId(), db);
         fullNameToDb.put(db.getFullName(), db);
+        db.writeLock();
+        db.setExist(true);
+        db.writeUnlock();
         final Cluster cluster = nameToCluster.get(db.getClusterName());
         cluster.addDb(db.getFullName(), db.getId());
         stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
@@ -452,6 +455,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
@@ -546,6 +550,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 } else {
                     stateMgr.onEraseDatabase(db.getId());
                 }
+                db.setExist(false);
             } finally {
                 db.writeUnlock();
             }
