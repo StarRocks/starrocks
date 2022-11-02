@@ -34,4 +34,4 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SONAR_TOKEN: ed28a3f7ce16256fb8e607d8f6780da84b5cf6c3
         run: |
-          sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_be -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.projectBaseDir=. -Dsonar.scm.provider=git -Dsonar.pullrequest.github.repository=StarRocks/starrocks
+          sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_be -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.projectBaseDir=. -Dsonar.pullrequest.github.repository=StarRocks/starrocks
