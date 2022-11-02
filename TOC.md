@@ -301,6 +301,7 @@
       + [to_base64](/sql-reference/sql-functions/encryption-functions/to_base64.md)
       + [md5](/sql-reference/sql-functions/encryption-functions/md5.md)
       + [md5sum](/sql-reference/sql-functions/encryption-functions/md5sum.md)
+      + [md5sum_numeric](/sql-reference/sql-functions/encryption-functions/md5sum_numeric.md)
       + [sha2](/sql-reference/sql-functions/encryption-functions/sha2.md)
       + [sm3](/sql-reference/sql-functions/encryption-functions/sm3.md)
     + 地理位置函数
