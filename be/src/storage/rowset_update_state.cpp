@@ -218,6 +218,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         }
     }
 
+    auto read_column_schema = ChunkHelper::convert_schema_to_format_v2(tablet_schema, read_column_ids);
     std::vector<std::unique_ptr<vectorized::Column>> read_columns(read_column_ids.size());
     size_t num_segments = rowset->num_segments();
     _parital_update_states.resize(num_segments);
@@ -225,9 +226,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(Tablet* tablet, Rowset*
         _parital_update_states[i].write_columns.resize(read_columns.size());
         _parital_update_states[i].src_rss_rowids.resize(_upserts[i]->size());
         for (uint32_t j = 0; j < read_columns.size(); ++j) {
-            const auto read_column_id = read_column_ids[j];
-            auto tablet_column = tablet_schema.column(read_column_id);
-            auto column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
+            const auto column = ChunkHelper::column_from_field(*read_column_schema.field(j));
             read_columns[j] = column->clone_empty();
             _parital_update_states[i].write_columns[j] = column->clone_empty();
         }
