@@ -2,9 +2,9 @@
 
 ## 功能
 
-使用 AES_128_ECB 算法对字符串 `x` 进行加密并返回一个二进制字符串。
+使用 AES_128_ECB 算法对字符串 `str` 进行加密并返回一个二进制字符串。
 
-AES 全称为 Advanced Encryption Standard。ECB 全称为 Electronic Codebook Book，电码本模式。该算法使用一个长度为 128-bit 的 key 对字符串进行编码。
+AES 全称为 Advanced Encryption Standard。ECB 全称为 Electronic Code Book，电码本模式。该算法使用一个长度为 128-bit 的 key 对字符串进行编码。
 
 ## 语法
 
