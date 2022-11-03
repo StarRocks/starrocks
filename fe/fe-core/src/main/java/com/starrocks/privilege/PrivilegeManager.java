@@ -623,15 +623,11 @@ public class PrivilegeManager {
         }
     }
 
-    protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeTypes.SystemActions action) {
-        try {
-            short systemTypeId = analyzeType(PrivilegeTypes.SYSTEM.name());
-            Action want = provider.getAction(systemTypeId, action.name());
-            return provider.check(systemTypeId, want, null, collection);
-        } catch (PrivilegeException e) {
-            LOG.warn("caught exception when check system action {}", action, e);
-            return false;
-        }
+    protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeTypes.SystemActions action)
+            throws PrivilegeException {
+        short systemTypeId = analyzeType(PrivilegeTypes.SYSTEM.name());
+        Action want = provider.getAction(systemTypeId, action.name());
+        return provider.check(systemTypeId, want, null, collection);
     }
 
     protected boolean checkTableAction(
