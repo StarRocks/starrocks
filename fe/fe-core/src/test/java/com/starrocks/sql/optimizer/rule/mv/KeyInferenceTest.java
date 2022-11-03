@@ -7,15 +7,30 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.apache.commons.lang3.StringUtils;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
 public class KeyInferenceTest extends PlanTestBase {
+
+    @Before
+    public void before() {
+        connectContext.getSessionVariable().setMVPlanner(true);
+    }
+
+    @After
+    public void after() {
+        connectContext.getSessionVariable().setMVPlanner(false);
+    }
 
     private List<String> planAndInferenceKey(String sql) throws Exception {
         ExecPlan plan = getExecPlan(sql);
@@ -30,21 +45,98 @@ public class KeyInferenceTest extends PlanTestBase {
 
         List<String> res = new ArrayList<>();
         for (KeyInference.KeyProperty key : keys.getKeys()) {
-            String columnsStr = key.columns.getStream().mapToObj(columnNames::get).collect(Collectors.joining(","));
-            res.add(columnsStr);
+            res.add(key.format(columnNames));
         }
         return res;
     }
 
     private void assertInferenceContains(String sql, String key) throws Exception {
         List<String> keys = planAndInferenceKey(sql);
-        Assert.assertTrue("expected is " + key + "\n, but got " + keys.toString(), keys.contains(key));
+        if (StringUtils.isEmpty(key)) {
+            Assert.assertTrue("expect empty but got " + keys, keys.isEmpty());
+        } else {
+            Assert.assertTrue("expected is " + key + "\n, but got " + keys, keys.contains(key));
+        }
+    }
+
+    private void assertInferenceContains(String sql, List<String> expected) throws Exception {
+        List<String> keys = planAndInferenceKey(sql);
+        Assert.assertEquals(expected, keys);
     }
 
     @Test
     public void testProject() throws Exception {
-        assertInferenceContains("select t0.v1 from t0;", "v1");
-        assertInferenceContains("select t0.v1 + 1 from t0;", "expr");
-        assertInferenceContains("select t0.v1, t0.v2 from t0;", "v1,v2");
+        assertInferenceContains("select t0.v1 from t0;", "Key{unique=false, columns=v1}");
+        assertInferenceContains("select t0.v2 from t0;", "Key{unique=false, columns=v2}");
+        assertInferenceContains("select t0.v3 from t0;", "Key{unique=false, columns=v3}");
+        assertInferenceContains("select v1,v2 from t0;", "Key{unique=false, columns=v1,v2}");
+        assertInferenceContains("select t0.v1 + 1 from t0;", "Key{unique=false, columns=expr}");
+        assertInferenceContains("select t0.v1 + t0.v2 from t0;", "Key{unique=false, columns=expr}");
+
+        assertInferenceContains("select pk from tprimary;", "Key{unique=true, columns=pk}");
+        assertInferenceContains("select pk,v1 from tprimary;", "Key{unique=true, columns=pk,v1}");
+        assertInferenceContains("select v1 from tprimary;", "Key{unique=false, columns=v1}");
+        assertInferenceContains("select pk+1 from tprimary;", "Key{unique=false, columns=expr}");
+    }
+
+    @Test
+    public void testJoin() throws Exception {
+        // Non-Unique Key
+        assertInferenceContains("select * from t0 join t1 on t0.v1 = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=v1,v2,v3,v4,v5,v6}"));
+
+        assertInferenceContains("select v1,v2,v3 from t0 join t1 on t0.v1 = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=v1,v2,v3}"));
+
+        assertInferenceContains("select v4,v5,v6 from t0 join t1 on t0.v1 = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=v4,v5,v6}"));
+        assertInferenceContains("select v4 from t0 join t1 on t0.v1 = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=v4}"));
+
+        // Unique Key
+        assertInferenceContains("select * from tprimary join t1 on pk = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=pk,v1,v2,v4,v5,v6}"));
+        assertInferenceContains("select pk from tprimary join t1 on pk = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=pk}"));
+        assertInferenceContains("select pk, t1.v4 from tprimary join t1 on pk = t1.v4",
+                Collections.singletonList(
+                        "Key{unique=false, columns=pk,v4}"));
+        assertInferenceContains("select t1.v4 from tprimary join t1 on pk = t1.v4",
+                Collections.singletonList("Key{unique=false, columns=v4}"));
+
+        assertInferenceContains("select t0.pk, t1.pk1 from tprimary t0 join tprimary1 t1 on t0.pk = t1.pk1",
+                Arrays.asList(
+                        "Key{unique=true, columns=pk}",
+                        "Key{unique=true, columns=pk1}",
+                        "Key{unique=true, columns=pk,pk1}"));
+        assertInferenceContains("select t0.pk, t1.pk1, v1 from tprimary t0 join tprimary1 t1 on t0.pk = t1.pk1",
+                Arrays.asList(
+                        "Key{unique=true, columns=pk,v1}",
+                        "Key{unique=true, columns=pk1}",
+                        "Key{unique=true, columns=pk,v1,pk1}"));
+
+        assertInferenceContains("select t0.pk from tprimary t0 join tprimary1 t1 on t0.pk = t1.pk1",
+                Collections.singletonList("Key{unique=true, columns=pk}"));
+        assertInferenceContains("select t1.pk1 from tprimary t0 join tprimary1 t1 on t0.pk = t1.pk1",
+                Collections.singletonList("Key{unique=true, columns=pk1}"));
+        assertInferenceContains("select t0.pk, t1.pk1, v1,v3 from tprimary t0 join tprimary1 t1 on t0.pk = t1.pk1",
+                Arrays.asList(
+                        "Key{unique=true, columns=pk,v1}",
+                        "Key{unique=true, columns=pk1,v3}",
+                        "Key{unique=true, columns=pk,v1,pk1,v3}"));
+    }
+
+    @Test
+    public void testAgg() throws Exception {
+        assertInferenceContains("select v1, count(*) from t0 group by v1",
+                Collections.singletonList(
+                        "Key{unique=true, columns=v1"));
+
     }
 }

@@ -21,7 +21,7 @@ public class PhysicalStreamOperator extends PhysicalOperator {
         if (keyPropertySet == null) {
             this.keyPropertySet = new KeyInference.KeyPropertySet();
         }
-        this.keyPropertySet.addKeys(keyProperty);
+        this.keyPropertySet.addKey(keyProperty);
     }
 
     public void setKeyPropertySet(KeyInference.KeyPropertySet keyPropertySet) {

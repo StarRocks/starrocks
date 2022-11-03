@@ -71,6 +71,7 @@ import com.starrocks.planner.SetOperationNode;
 import com.starrocks.planner.SortNode;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
+import com.starrocks.planner.stream.StreamJoinNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -125,6 +126,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperat
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -166,7 +168,7 @@ public class PlanFragmentBuilder {
                                        TResultSinkType resultSinkType,
                                        boolean hasOutputFragment) {
         ExecPlan execPlan = new ExecPlan(connectContext, colNames, plan, outputColumns);
-        createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).visit(plan, execPlan), execPlan,
+        createOutputFragment(new PhysicalPlanTranslator(columnRefFactory).translate(plan, execPlan), execPlan,
                 outputColumns, hasOutputFragment);
         execPlan.setPlanCount(plan.getPlanCount());
         return finalizeFragments(execPlan, resultSinkType);
@@ -260,6 +262,18 @@ public class PlanFragmentBuilder {
             this.columnRefFactory = columnRefFactory;
         }
 
+        public PlanFragment translate(OptExpression optExpression, ExecPlan context) {
+            PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
+            Projection projection = (optExpression.getOp()).getProjection();
+
+            if (projection == null) {
+                return fragment;
+            } else {
+                return buildProjectNode(optExpression, projection, fragment, context);
+            }
+        }
+
+        @Override
         public PlanFragment visit(OptExpression optExpression, ExecPlan context) {
             PlanFragment fragment = optExpression.getOp().accept(this, optExpression, context);
             Projection projection = (optExpression.getOp()).getProjection();
@@ -2587,6 +2601,240 @@ public class PlanFragmentBuilder {
 
         @Override
         public PlanFragment visitPhysicalNoCTE(OptExpression optExpression, ExecPlan context) {
+            return visit(optExpression.inputAt(0), context);
+        }
+
+        @Override
+        public PlanFragment visitPhysicalStreamJoin(OptExpression optExpr, ExecPlan context) {
+            PhysicalStreamJoinOperator node = (PhysicalStreamJoinOperator) optExpr.getOp();
+            PlanFragment leftFragment = visit(optExpr.inputAt(0), context);
+            PlanFragment rightFragment = visit(optExpr.inputAt(1), context);
+
+            ColumnRefSet leftChildColumns = optExpr.inputAt(0).getLogicalProperty().getOutputColumns();
+            ColumnRefSet rightChildColumns = optExpr.inputAt(1).getLogicalProperty().getOutputColumns();
+
+            List<ScalarOperator> onPredicates = Utils.extractConjuncts(node.getOnPredicate());
+            List<BinaryPredicateOperator> eqOnPredicates = JoinHelper.getEqualsPredicate(
+                    leftChildColumns, rightChildColumns, onPredicates);
+
+            Preconditions.checkState(!node.getJoinType().isCrossJoin(), "should not be cross join");
+            Preconditions.checkState(!(node.getJoinType().isInnerJoin() && eqOnPredicates.isEmpty()),
+                    "should has eq conjuncts");
+
+            JoinOperator joinOperator = node.getJoinType();
+
+            PlanNode leftFragmentPlanRoot = leftFragment.getPlanRoot();
+            PlanNode rightFragmentPlanRoot = rightFragment.getPlanRoot();
+
+            // 1. Get distributionMode
+            JoinNode.DistributionMode distributionMode;
+            if (isExchangeWithDistributionType(leftFragmentPlanRoot, DistributionSpec.DistributionType.SHUFFLE) &&
+                    isExchangeWithDistributionType(rightFragmentPlanRoot,
+                            DistributionSpec.DistributionType.SHUFFLE)) {
+                distributionMode = JoinNode.DistributionMode.PARTITIONED;
+            } else if (isExchangeWithDistributionType(rightFragmentPlanRoot,
+                    DistributionSpec.DistributionType.BROADCAST)) {
+                distributionMode = JoinNode.DistributionMode.BROADCAST;
+            } else if (!(leftFragmentPlanRoot instanceof ExchangeNode) &&
+                    !(rightFragmentPlanRoot instanceof ExchangeNode)) {
+                if (isColocateJoin(optExpr)) {
+                    distributionMode = HashJoinNode.DistributionMode.COLOCATE;
+                } else if (ConnectContext.get().getSessionVariable().isEnableReplicationJoin() &&
+                        rightFragmentPlanRoot.canDoReplicatedJoin()) {
+                    distributionMode = JoinNode.DistributionMode.REPLICATED;
+                } else if (isShuffleJoin(optExpr)) {
+                    distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
+                } else {
+                    Preconditions.checkState(false, "Must be replicate join or colocate join");
+                    distributionMode = JoinNode.DistributionMode.COLOCATE;
+                }
+            } else if (isShuffleJoin(optExpr)) {
+                distributionMode = JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET;
+            } else {
+                distributionMode = JoinNode.DistributionMode.LOCAL_HASH_BUCKET;
+            }
+
+            for (BinaryPredicateOperator s : eqOnPredicates) {
+                if (!optExpr.inputAt(0).getLogicalProperty().getOutputColumns()
+                        .containsAll(s.getChild(0).getUsedColumns())) {
+                    s.swap();
+                }
+            }
+
+            List<Expr> eqJoinConjuncts =
+                    eqOnPredicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                            .collect(Collectors.toList());
+
+            for (Expr expr : eqJoinConjuncts) {
+                if (expr.isConstant()) {
+                    throw unsupportedException("Support join on constant predicate later");
+                }
+            }
+
+            List<ScalarOperator> otherJoin = Utils.extractConjuncts(node.getOnPredicate());
+            otherJoin.removeAll(eqOnPredicates);
+            List<Expr> otherJoinConjuncts = otherJoin.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+
+            // 3. Get conjuncts
+            List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+            List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                    .collect(Collectors.toList());
+
+            List<PlanFragment> nullablePlanFragments = new ArrayList<>();
+            if (joinOperator.isLeftOuterJoin()) {
+                nullablePlanFragments.add(rightFragment);
+            } else if (joinOperator.isRightOuterJoin()) {
+                nullablePlanFragments.add(leftFragment);
+            } else if (joinOperator.isFullOuterJoin()) {
+                nullablePlanFragments.add(leftFragment);
+                nullablePlanFragments.add(rightFragment);
+            }
+            for (PlanFragment planFragment : nullablePlanFragments) {
+                for (TupleId tupleId : planFragment.getPlanRoot().getTupleIds()) {
+                    context.getDescTbl().getTupleDesc(tupleId).getSlots().forEach(slot -> slot.setIsNullable(true));
+                }
+            }
+
+            JoinNode joinNode =
+                    new StreamJoinNode(context.getNextNodeId(), leftFragmentPlanRoot, rightFragmentPlanRoot,
+                            node.getJoinType(), eqJoinConjuncts, otherJoinConjuncts);
+
+            //Build outputColumns
+            if (node.getProjection() != null) {
+                ColumnRefSet outputColumns = new ColumnRefSet();
+                for (ScalarOperator s : node.getProjection().getColumnRefMap().values()) {
+                    outputColumns.union(s.getUsedColumns());
+                }
+                for (ScalarOperator s : node.getProjection().getCommonSubOperatorMap().values()) {
+                    outputColumns.union(s.getUsedColumns());
+                }
+
+                outputColumns.except(new ArrayList<>(node.getProjection().getCommonSubOperatorMap().keySet()));
+                joinNode.setOutputSlots(outputColumns.getStream().boxed().collect(Collectors.toList()));
+            }
+
+            joinNode.setDistributionMode(distributionMode);
+            joinNode.getConjuncts().addAll(conjuncts);
+            joinNode.setLimit(node.getLimit());
+            joinNode.computeStatistics(optExpr.getStatistics());
+
+            if (distributionMode.equals(JoinNode.DistributionMode.BROADCAST)) {
+                setJoinPushDown(joinNode);
+
+                // Connect parent and child fragment
+                rightFragment.getPlanRoot().setFragment(leftFragment);
+
+                // Currently, we always generate new fragment for PhysicalDistribution.
+                // So we need to remove exchange node only fragment for Join.
+                context.getFragments().remove(rightFragment);
+
+                // Move leftFragment to end, it depends on all of its children
+                context.getFragments().remove(leftFragment);
+                context.getFragments().add(leftFragment);
+                leftFragment.setPlanRoot(joinNode);
+                leftFragment.addChild(rightFragment.getChild(0));
+                leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                return leftFragment;
+            } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
+                DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                        leftFragment.getDataPartition().getPartitionExprs());
+                DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
+                        rightFragment.getDataPartition().getPartitionExprs());
+
+                leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
+                rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
+
+                // Currently, we always generate new fragment for PhysicalDistribution.
+                // So we need to remove exchange node only fragment for Join.
+                context.getFragments().remove(leftFragment);
+                context.getFragments().remove(rightFragment);
+
+                PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
+                        joinNode, lhsJoinPartition);
+                joinFragment.addChild(leftFragment.getChild(0));
+                joinFragment.addChild(rightFragment.getChild(0));
+
+                joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
+                joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                context.getFragments().add(joinFragment);
+
+                return joinFragment;
+            } else if (distributionMode.equals(JoinNode.DistributionMode.COLOCATE) ||
+                    distributionMode.equals(JoinNode.DistributionMode.REPLICATED)) {
+                if (distributionMode.equals(JoinNode.DistributionMode.COLOCATE)) {
+                    joinNode.setColocate(true, "");
+                } else {
+                    joinNode.setReplicated(true);
+                }
+                setJoinPushDown(joinNode);
+
+                joinNode.setChild(0, leftFragment.getPlanRoot());
+                joinNode.setChild(1, rightFragment.getPlanRoot());
+                leftFragment.setPlanRoot(joinNode);
+                leftFragment.addChildren(rightFragment.getChildren());
+                context.getFragments().remove(rightFragment);
+
+                context.getFragments().remove(leftFragment);
+                context.getFragments().add(leftFragment);
+
+                leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+
+                if (distributionMode.equals(HashJoinNode.DistributionMode.COLOCATE)) {
+                    leftFragment.setEnableSharedScan(false);
+                }
+
+                return leftFragment;
+            } else if (distributionMode.equals(JoinNode.DistributionMode.SHUFFLE_HASH_BUCKET)) {
+                setJoinPushDown(joinNode);
+
+                // distributionMode is SHUFFLE_HASH_BUCKET
+                if (!(leftFragment.getPlanRoot() instanceof ExchangeNode) &&
+                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                    joinNode.setChild(0, leftFragment.getPlanRoot());
+                    joinNode.setChild(1, rightFragment.getPlanRoot());
+                    leftFragment.setPlanRoot(joinNode);
+                    leftFragment.addChildren(rightFragment.getChildren());
+                    context.getFragments().remove(rightFragment);
+
+                    context.getFragments().remove(leftFragment);
+                    context.getFragments().add(leftFragment);
+
+                    leftFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
+                    return leftFragment;
+                } else if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
+                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                    return computeShuffleHashBucketPlanFragment(context, rightFragment,
+                            leftFragment, joinNode);
+                } else {
+                    return computeShuffleHashBucketPlanFragment(context, leftFragment,
+                            rightFragment, joinNode);
+                }
+            } else {
+                setJoinPushDown(joinNode);
+
+                // distributionMode is BUCKET_SHUFFLE
+                if (leftFragment.getPlanRoot() instanceof ExchangeNode &&
+                        !(rightFragment.getPlanRoot() instanceof ExchangeNode)) {
+                    leftFragment = computeBucketShufflePlanFragment(context, rightFragment,
+                            leftFragment, joinNode);
+                } else {
+                    leftFragment = computeBucketShufflePlanFragment(context, leftFragment,
+                            rightFragment, joinNode);
+                }
+
+                leftFragment.setEnableSharedScan(false);
+
+                return leftFragment;
+            }
+        }
+
+        @Override
+        public PlanFragment visitPhysicalStreamAgg(OptExpression optExpression, ExecPlan context) {
+            // TODO(murphy)
             return visit(optExpression.inputAt(0), context);
         }
     }

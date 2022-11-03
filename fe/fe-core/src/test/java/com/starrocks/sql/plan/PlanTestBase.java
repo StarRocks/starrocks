@@ -1037,6 +1037,19 @@ public class PlanTestBase {
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
 
+        starRocksAssert.withTable("CREATE TABLE `tprimary1` (\n" +
+                "  `pk1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `v3` string NOT NULL COMMENT \"\",\n" +
+                "  `v4` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(`pk1`)\n" +
+                "DISTRIBUTED BY HASH(`pk1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         starRocksAssert.withTable("CREATE TABLE `tjson` (\n" +
                 "  `v_int`  bigint NULL COMMENT \"\",\n" +
                 "  `v_json` json NULL COMMENT \"\" \n" +

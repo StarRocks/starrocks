@@ -14,10 +14,10 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -27,7 +27,9 @@ import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -57,13 +59,52 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
 
     @Override
     public KeyPropertySet visitPhysicalProject(OptExpression optExpression, ExecPlan ctx) {
-        KeyPropertySet keySet = visit(optExpression.inputAt(0), ctx);
+        KeyPropertySet input = infer(optExpression.inputAt(0), ctx);
         PhysicalProjectOperator project = (PhysicalProjectOperator) optExpression.getOp();
         ColumnRefSet projectColumns = new ColumnRefSet(project.getOutputColumns());
 
-        List<KeyProperty> projectKeys =
-                keySet.getKeys().stream().filter(key -> key.columns.containsAll(projectColumns)).collect(Collectors.toList());
-        return new KeyPropertySet(projectKeys);
+        KeyPropertySet res = new KeyPropertySet();
+        for (KeyProperty key : input.getKeys()) {
+            if (key.unique && key.columns.containsAll(projectColumns)) {
+                res.addKey(key);
+            }
+        }
+        res.addKey(KeyProperty.of(projectColumns, false));
+
+        return res;
+    }
+
+    private KeyPropertySet visitTable(OlapTable olapTable, PhysicalOperator scan, Projection projection,
+                                      List<ColumnRefOperator> outputColumns,
+                                      Map<ColumnRefOperator, Column> columnMap) {
+        List<ColumnRefOperator> keyColumnRefs;
+        boolean unique = false;
+        List<String> keyColumnNames = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
+        if (projection == null) {
+            keyColumnRefs = outputColumns;
+        } else {
+            // TODO(murphy) check monotonic project expression
+            keyColumnRefs = new ArrayList<>();
+            for (ColumnRefOperator columnRef : projection.getOutputColumns()) {
+                if (columnRef.getUsedColumns().cardinality() == 1) {
+                    ScalarOperator ref = projection.getColumnRefMap().get(columnRef).getChild(0);
+                    if (ref instanceof ColumnRefOperator) {
+                        Column realColumn = columnMap.get(ref);
+                        if (realColumn != null && realColumn.isKey()) {
+                            keyColumnRefs.add(columnRef);
+                        }
+                    }
+                }
+            }
+        }
+
+        Set<String> outputColumnNames = keyColumnRefs.stream().map(ColumnRefOperator::getName).collect(Collectors.toSet());
+        unique = outputColumnNames.containsAll(keyColumnNames) && olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS);
+
+        KeyProperty key = KeyProperty.of(new ColumnRefSet(keyColumnRefs), unique);
+        KeyPropertySet res = new KeyPropertySet();
+        res.addKey(key);
+        return res;
     }
 
     @Override
@@ -73,33 +114,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
 
-        List<ColumnRefOperator> keyColumnRefs;
-        boolean unique = olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS);
-        if (scan.getProjection() == null) {
-            keyColumnRefs = scan.getRealOutputColumns().stream()
-                    .filter(x -> olapTable.getColumn(x.getName()).isKey())
-                    .collect(Collectors.toList());
-        } else {
-            // TODO(murphy) support monotonic project expression
-            keyColumnRefs = new ArrayList<>();
-            Projection projection = scan.getProjection();
-            for (ColumnRefOperator columnRef : projection.getOutputColumns()) {
-                if (columnRef.getUsedColumns().cardinality() == 1) {
-                    ScalarOperator ref = projection.getColumnRefMap().get(columnRef).getChild(0);
-                    if (ref instanceof ColumnRefOperator) {
-                        Column realColumn = scan.getColRefToColumnMetaMap().get(ref);
-                        if (realColumn != null && realColumn.isKey()) {
-                            keyColumnRefs.add(columnRef);
-                        }
-                    }
-                }
-            }
-        }
-
-        KeyProperty key = KeyProperty.of(new ColumnRefSet(keyColumnRefs), unique);
-        KeyPropertySet res = new KeyPropertySet();
-        res.addKeys(key);
-        return res;
+        return visitTable(olapTable, scan, scan.getProjection(), scan.getRealOutputColumns(), scan.getColRefToColumnMetaMap());
     }
 
     @Override
@@ -109,20 +124,16 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
 
-        boolean unique = olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS);
-        List<ColumnRefOperator> keyColumnRefs = scan.getOutputColumns().stream()
-                .filter(x -> olapTable.getColumn(x.getName()).isKey())
-                .collect(Collectors.toList());
-        KeyProperty key = KeyProperty.of(new ColumnRefSet(keyColumnRefs), unique);
-        scan.addKeyProperty(key);
-
-        return scan.getKeyPropertySet();
+        KeyPropertySet res =
+                visitTable(olapTable, scan, scan.getProjection(), scan.getOutputColumns(), scan.getColRefToColumnMetaMap());
+        scan.setKeyPropertySet(res);
+        return res;
     }
 
     @Override
     public KeyPropertySet visitPhysicalStreamJoin(OptExpression optExpression, ExecPlan ctx) {
-        PhysicalStreamOperator lhsOp = (PhysicalStreamOperator) optExpression.inputAt(0).getOp();
-        PhysicalStreamOperator rhsOp = (PhysicalStreamOperator) optExpression.inputAt(1).getOp();
+        KeyPropertySet lhsKeySet = infer(optExpression.inputAt(0), ctx);
+        KeyPropertySet rhsKeySet = infer(optExpression.inputAt(1), ctx);
         PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
 
         if (!join.getJoinType().isInnerJoin()) {
@@ -133,28 +144,42 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         // 1. Combination of left unique-keys and right unique-keys
         // 2. Left unique keys if right join columns are unique on join conjuncts
         // 3. Right unique keys if left join columns are unique on join conjuncts
-        KeyPropertySet lhsKeySet = lhsOp.getKeyPropertySet();
-        KeyPropertySet rhsKeySet = rhsOp.getKeyPropertySet();
         JoinHelper joinHelper =
                 JoinHelper.of(join, optExpression.getChildOutputColumns(0), optExpression.getChildOutputColumns(1));
         List<Integer> lhsJoinColumns = joinHelper.getLeftOnColumns();
         List<Integer> rhsJoinColumns = joinHelper.getRightOnColumns();
+        ColumnRefSet outputColumns = optExpression.getOutputColumns();
         KeyPropertySet resKeySet = new KeyPropertySet();
 
-        boolean rhsUnique = rhsKeySet.getKeys().stream().anyMatch(key -> key.columns.containsAll(rhsJoinColumns));
-        boolean lhsUnique = lhsKeySet.getKeys().stream().anyMatch(key -> key.columns.containsAll(lhsJoinColumns));
+        boolean rhsUnique = rhsKeySet.getKeys().stream().anyMatch(key -> key.unique && key.columns.containsAll(rhsJoinColumns));
+        boolean lhsUnique = lhsKeySet.getKeys().stream().anyMatch(key -> key.unique && key.columns.containsAll(lhsJoinColumns));
         if (!lhsKeySet.empty() && rhsUnique) {
-            resKeySet.addKeys(lhsKeySet.getKeys());
+            for (KeyProperty key : lhsKeySet.getKeys()) {
+                if (key.unique && outputColumns.containsAll(key.columns)) {
+                    resKeySet.addKey(key);
+                }
+            }
         }
         if (!rhsKeySet.empty() && lhsUnique) {
-            resKeySet.addKeys(rhsKeySet.getKeys());
+            for (KeyProperty key : rhsKeySet.getKeys()) {
+                if (key.unique && outputColumns.containsAll(key.columns)) {
+                    resKeySet.addKey(key);
+                }
+            }
         }
 
         for (KeyProperty lhsKey : lhsKeySet.getKeys()) {
             for (KeyProperty rhsKey : rhsKeySet.getKeys()) {
-                KeyProperty joinUniqueKey = KeyProperty.combine(lhsKey, rhsKey);
-                resKeySet.addKeys(joinUniqueKey);
+                if (outputColumns.containsAll(lhsKey.columns) && outputColumns.containsAll(rhsKey.columns)) {
+                    KeyProperty joinUniqueKey = KeyProperty.combine(lhsKey, rhsKey);
+                    resKeySet.addKey(joinUniqueKey);
+                }
             }
+        }
+
+        // Fallback to treat output columns as non-unique key
+        if (resKeySet.empty()) {
+            resKeySet.addKey(KeyProperty.of(outputColumns));
         }
 
         join.setKeyPropertySet(resKeySet);
@@ -201,7 +226,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
             ColumnRefSet columns = new ColumnRefSet();
             columns.union(lhs.columns);
             columns.union(rhs.columns);
-            return new KeyProperty(columns, lhs.unique || rhs.unique);
+            return new KeyProperty(columns, lhs.unique && rhs.unique);
         }
 
         @Override
@@ -219,6 +244,22 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         @Override
         public int hashCode() {
             return Objects.hash(unique, columns);
+        }
+
+        public String format(Map<Integer, String> colMap) {
+            String colNames = columns.getStream().mapToObj(colMap::get).collect(Collectors.joining(","));
+            return "Key{" +
+                    "unique=" + unique +
+                    ", columns=" + colNames +
+                    "}";
+        }
+
+        @Override
+        public String toString() {
+            return "Key{" +
+                    "unique=" + unique +
+                    ", columns=" + columns +
+                    '}';
         }
     }
 
@@ -244,7 +285,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
             this.keySet.addAll(keys);
         }
 
-        public void addKeys(KeyProperty key) {
+        public void addKey(KeyProperty key) {
             this.keySet.add(key);
         }
     }
