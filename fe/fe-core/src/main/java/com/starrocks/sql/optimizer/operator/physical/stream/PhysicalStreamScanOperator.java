@@ -2,8 +2,8 @@
 
 package com.starrocks.sql.optimizer.operator.physical.stream;
 
-import autovalue.shaded.com.google.common.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
