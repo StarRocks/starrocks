@@ -120,6 +120,10 @@ public class WhiteList implements Writable {
         return passwordMap.containsKey(domain) && passwordMap.get(domain).length > 0;
     }
 
+    protected byte[] getPassword(String domain) {
+        return passwordMap.get(domain);
+    }
+
     @Override
     public String toString() {
         return Joiner.on(", ").join(passwordMap.keySet());

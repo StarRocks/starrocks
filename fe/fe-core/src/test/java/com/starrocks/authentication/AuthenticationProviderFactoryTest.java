@@ -3,6 +3,7 @@
 package com.starrocks.authentication;
 
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.mysql.privilege.Password;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -21,6 +22,12 @@ public class AuthenticationProviderFactoryTest {
             public void authenticate(String user, String host, byte[] password, byte[] randomString,
                                      UserAuthenticationInfo authenticationInfo) throws AuthenticationException {
 
+            }
+
+            @Override
+            public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+                    throws AuthenticationException {
+                return null;
             }
         };
         String fakeName = "fake";

@@ -89,6 +89,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
@@ -416,54 +417,19 @@ public class EditLog {
                     globalStateMgr.replayUpdateFrontend(fe);
                     break;
                 }
-                case OperationType.OP_CREATE_USER: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayCreateUser(privInfo);
-                    break;
-                }
-                case OperationType.OP_NEW_DROP_USER: {
-                    UserIdentity userIdent = (UserIdentity) journal.getData();
-                    globalStateMgr.getAuth().replayDropUser(userIdent);
-                    break;
-                }
-                case OperationType.OP_GRANT_PRIV: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrant(privInfo);
-                    break;
-                }
-                case OperationType.OP_REVOKE_PRIV: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevoke(privInfo);
-                    break;
-                }
-                case OperationType.OP_SET_PASSWORD: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replaySetPassword(privInfo);
-                    break;
-                }
-                case OperationType.OP_CREATE_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayCreateRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_DROP_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayDropRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_GRANT_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrantRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_REVOKE_ROLE: {
-                    PrivInfo privInfo = (PrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevokeRole(privInfo);
-                    break;
-                }
-                case OperationType.OP_UPDATE_USER_PROPERTY: {
-                    UserPropertyInfo propertyInfo = (UserPropertyInfo) journal.getData();
-                    globalStateMgr.getAuth().replayUpdateUserProperty(propertyInfo);
+                case OperationType.OP_CREATE_USER:
+                case OperationType.OP_NEW_DROP_USER:
+                case OperationType.OP_GRANT_PRIV:
+                case OperationType.OP_REVOKE_PRIV:
+                case OperationType.OP_SET_PASSWORD:
+                case OperationType.OP_CREATE_ROLE:
+                case OperationType.OP_DROP_ROLE:
+                case OperationType.OP_GRANT_ROLE:
+                case OperationType.OP_REVOKE_ROLE:
+                case OperationType.OP_UPDATE_USER_PROPERTY:
+                case OperationType.OP_GRANT_IMPERSONATE:
+                case OperationType.OP_REVOKE_IMPERSONATE: {
+                    GlobalStateMgr.getCurrentState().replayOldAuthJournal(opCode, journal.getData());
                     break;
                 }
                 case OperationType.OP_TIMESTAMP: {
@@ -863,16 +829,7 @@ public class EditLog {
                     globalStateMgr.getCatalogMgr().replayDropCatalog(dropCatalogLog);
                     break;
                 }
-                case OperationType.OP_GRANT_IMPERSONATE: {
-                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayGrantImpersonate(info);
-                    break;
-                }
-                case OperationType.OP_REVOKE_IMPERSONATE: {
-                    ImpersonatePrivInfo info = (ImpersonatePrivInfo) journal.getData();
-                    globalStateMgr.getAuth().replayRevokeImpersonate(info);
-                    break;
-                }
+
                 case OperationType.OP_CREATE_INSERT_OVERWRITE: {
                     CreateInsertOverwriteJobLog jobInfo = (CreateInsertOverwriteJobLog) journal.getData();
                     globalStateMgr.getInsertOverwriteJobManager().replayCreateInsertOverwrite(jobInfo);
@@ -937,6 +894,11 @@ public class EditLog {
                 case OperationType.OP_DROP_ROLE_V2: {
                     RolePrivilegeCollectionInfo info = (RolePrivilegeCollectionInfo) journal.getData();
                     globalStateMgr.getPrivilegeManager().replayDropRole(info);
+                    break;
+                }
+                case OperationType.OP_AUTH_UPGRDE_V2: {
+                    AuthUpgradeInfo info = (AuthUpgradeInfo) journal.getData();
+                    globalStateMgr.replayAuthUpgrade(info);
                     break;
                 }
                 default: {
@@ -1633,5 +1595,9 @@ public class EditLog {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(
                 roleId, privilegeCollection, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
+    }
+
+    public void logAuthUpgrade(Map<String, Long> roleNameToId) {
+        logEdit(OperationType.OP_AUTH_UPGRDE_V2, new AuthUpgradeInfo(roleNameToId));
     }
 }
