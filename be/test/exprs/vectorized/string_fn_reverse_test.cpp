@@ -9,12 +9,11 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class StringFunctionReverseTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -78,5 +77,4 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

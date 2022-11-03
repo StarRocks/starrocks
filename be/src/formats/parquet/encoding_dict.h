@@ -167,7 +167,7 @@ public:
     }
 
     Status get_dict_values(vectorized::Column* column) override {
-        column->append_strings_overflow(_dict, _max_value_length);
+        [[maybe_unused]] auto ret = column->append_strings_overflow(_dict, _max_value_length);
         return Status::OK();
     }
 
@@ -176,7 +176,7 @@ public:
         for (size_t i = 0; i < dict_codes.size(); i++) {
             slices[i] = _dict[dict_codes[i]];
         }
-        column->append_strings_overflow(slices, _max_value_length);
+        [[maybe_unused]] auto ret = column->append_strings_overflow(slices, _max_value_length);
         return Status::OK();
     }
 
@@ -204,7 +204,7 @@ public:
 
         switch (content_type) {
         case DICT_CODE: {
-            dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            [[maybe_unused]] auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
             break;
         }
         case VALUE: {
@@ -212,7 +212,7 @@ public:
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
-            dst->append_strings_overflow(_slices, _max_value_length);
+            [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);
             break;
         }
         default:

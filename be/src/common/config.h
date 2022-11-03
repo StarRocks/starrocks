@@ -754,6 +754,7 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(io_tasks_per_scan_operator, "4");
 CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
@@ -866,6 +867,7 @@ CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
 CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 

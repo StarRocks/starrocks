@@ -118,7 +118,7 @@ Status BitmapIndexIterator::read_union_bitmap(rowid_t from, rowid_t to, Roaring*
 }
 
 Status BitmapIndexIterator::read_union_bitmap(const vectorized::SparseRange& range, Roaring* result) {
-    for (size_t i = 0; i < range.size(); i++) {
+    for (size_t i = 0; i < range.size(); i++) { // NOLINT
         const vectorized::Range& r = range[i];
         RETURN_IF_ERROR(read_union_bitmap(r.begin(), r.end(), result));
     }

@@ -3,6 +3,8 @@
 
 #include <fmt/format.h>
 
+#include <utility>
+
 #include "block_cache/block_cache.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
@@ -10,8 +12,8 @@
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream)
-        : _filename(filename), _stream(stream), _offset(0) {
+CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<SeekableInputStream> stream)
+        : _filename(std::move(filename)), _stream(std::move(stream)), _offset(0) {
     _size = _stream->get_size().value();
 #ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;
@@ -67,7 +69,8 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
         // if not found, read from stream and write back to cache.
         int64_t load_size = std::min(BLOCK_SIZE, _size - block_offset);
         RETURN_IF_ERROR(_stream->read_at_fully(block_offset, src, load_size));
-        {
+
+        if (_enable_populate_cache) {
             SCOPED_RAW_TIMER(&_stats.write_cache_ns);
             Status r = cache->write_cache(_cache_key, block_offset, load_size, src);
             if (r.ok()) {
@@ -75,7 +78,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
                 _stats.write_cache_bytes += load_size;
             } else {
                 LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
-                return r;
+                // Failed to write cache, but we can keep processing query.
             }
         }
 

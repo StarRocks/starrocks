@@ -30,7 +30,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.external.PartitionUtil;
+import com.starrocks.connector.PartitionUtil;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
@@ -126,7 +126,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                     continue;
                 }
                 checked = true;
-                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView();
+                // refresh external table meta cache
+                refreshExternalTable(context);
+                Set<String> partitionsToRefresh = getPartitionsToRefreshForMaterializedView(context.getProperties());
                 LOG.debug("materialized view partitions to refresh:{}", partitionsToRefresh);
                 if (partitionsToRefresh.isEmpty()) {
                     LOG.info("no partitions to refresh for materialized view {}", materializedView.getName());
@@ -150,6 +152,17 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
 
         // insert execute successfully, update the meta of materialized view according to ExecPlan
         updateMeta(execPlan);
+    }
+
+    private void refreshExternalTable(TaskRunContext context) {
+        for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
+            MaterializedView.BaseTableInfo baseTableInfo = tablePair.first;
+            Table table = tablePair.second;
+            if (!table.isLocalTable()) {
+                context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
+                        baseTableInfo.getDbName(), table, Lists.newArrayList());
+            }
+        }
     }
 
     private void updateMeta(ExecPlan execPlan) {
@@ -364,47 +377,79 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return false;
     }
 
-    private Set<String> getPartitionsToRefreshForMaterializedView() {
+    private Set<String> getPartitionsToRefreshForMaterializedView(Map<String, String> properties)
+            throws AnalysisException {
+        String start = properties.get(TaskRun.PARTITION_START);
+        String end = properties.get(TaskRun.PARTITION_END);
+        boolean force = Boolean.parseBoolean(properties.get(TaskRun.FORCE));
+        if (force && start == null && end == null) {
+            return Sets.newHashSet(materializedView.getPartitionNames());
+        }
         Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
-
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
-            if (needToRefreshNonPartitionTable()) {
-                needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
+            if (force || needToRefreshNonPartitionTable()) {
+                return Sets.newHashSet(materializedView.getPartitionNames());
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
             Expr partitionExpr = getPartitionExpr();
             Pair<Table, Column> partitionTableAndColumn = getPartitionTableAndColumn(snapshotBaseTables);
             Table partitionTable = partitionTableAndColumn.first;
+            Set<String> mvRangePartitionNames = SyncPartitionUtils.getPartitionNamesByRange(materializedView, start, end);
 
             if (needToRefreshNonPartitionTable(partitionTable)) {
                 // if non partition table changed, should refresh all partitions of materialized view
-                needRefreshMvPartitionNames.addAll(materializedView.getPartitionNames());
-                return needRefreshMvPartitionNames;
+                return Sets.newHashSet(materializedView.getPartitionNames());
             }
-
             // check partition table
             if (partitionExpr instanceof SlotRef) {
-                Set<String> baseChangedPartitionNames = materializedView.getNeedRefreshPartitionNames(partitionTable);
-                for (String basePartitionName : baseChangedPartitionNames) {
-                    needRefreshMvPartitionNames.addAll(mvContext.baseToMvNameRef.get(basePartitionName));
-                }
+                return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(mvRangePartitionNames, force);
             } else if (partitionExpr instanceof FunctionCallExpr) {
-                // check if there is a load in the base table and add it to the refresh candidate
-                Set<String> baseChangedPartitionNames = materializedView.getNeedRefreshPartitionNames(partitionTable);
-                for (String baseChangedPartitionName : baseChangedPartitionNames) {
-                    needRefreshMvPartitionNames.addAll(mvContext.baseToMvNameRef.get(baseChangedPartitionName));
-                }
+                needRefreshMvPartitionNames = getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+                        mvRangePartitionNames, force);
+                Set<String> baseChangedPartitionNames = getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
                 // because the relation of partitions between materialized view and base partition table is n : m,
                 // should calculate the candidate partitions recursively.
+                LOG.debug("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
                 SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
                         mvContext.baseToMvNameRef, mvContext.mvToBaseNameRef);
+                LOG.debug("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
             }
         } else {
             throw new DmlException("unsupported partition info type:" + partitionInfo.getClass().getName());
         }
         return needRefreshMvPartitionNames;
+    }
+
+    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+            Set<String> mvRangePartitionNames, boolean force) {
+        if (force) {
+            return Sets.newHashSet(mvRangePartitionNames);
+        }
+        // check if there is a load in the base table and add it to the refresh candidate
+        Set<String> result = getMVPartitionNamesByBasePartitionNames(
+                materializedView.getNeedRefreshPartitionNames(getPartitionTableAndColumn(snapshotBaseTables).first));
+        result.retainAll(mvRangePartitionNames);
+        return result;
+    }
+
+    private Set<String> getMVPartitionNamesByBasePartitionNames(Set<String> basePartitionNames) {
+        Set<String> result = Sets.newHashSet();
+        for (String basePartitionName : basePartitionNames) {
+            result.addAll(mvContext.baseToMvNameRef.get(basePartitionName));
+        }
+        return result;
+    }
+
+    private Set<String> getBasePartitionNamesByMVPartitionNames(Set<String> mvPartitionNames) {
+        Set<String> result = Sets.newHashSet();
+        for (String mvPartitionName : mvPartitionNames) {
+            result.addAll(mvContext.mvToBaseNameRef.get(mvPartitionName));
+        }
+        return result;
     }
 
     private Map<String, Set<String>> getSourceTablePartitions(Set<String> affectedMaterializedViewPartitions) {

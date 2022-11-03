@@ -30,8 +30,8 @@ namespace starrocks {
 
 class OlapTablePartitionParamTest : public testing::Test {
 public:
-    OlapTablePartitionParamTest() {}
-    virtual ~OlapTablePartitionParamTest() {}
+    OlapTablePartitionParamTest() = default;
+    ~OlapTablePartitionParamTest() override = default;
     void SetUp() override {}
 };
 

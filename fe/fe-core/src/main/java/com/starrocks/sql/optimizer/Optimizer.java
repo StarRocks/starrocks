@@ -6,6 +6,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
+import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -30,7 +31,6 @@ import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRankingW
 import com.starrocks.sql.optimizer.rule.transformation.PushDownProjectLimitRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushLimitAndFilterToCTEProduceRule;
 import com.starrocks.sql.optimizer.rule.transformation.RemoveAggregationFromAggTable;
-import com.starrocks.sql.optimizer.rule.transformation.ReorderIntersectRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteGroupingSetsByCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.SemiReorderRule;
 import com.starrocks.sql.optimizer.rule.tree.AddDecodeNodeForDictStringRule;
@@ -41,6 +41,7 @@ import com.starrocks.sql.optimizer.rule.tree.PruneAggregateNodeRule;
 import com.starrocks.sql.optimizer.rule.tree.PruneShuffleColumnRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
+import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -85,8 +86,9 @@ public class Optimizer {
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
         TaskContext rootTaskContext =
                 new TaskContext(context, requiredProperty, requiredColumns.clone(), Double.MAX_VALUE);
-
-        logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.RuleBaseOptimize")) {
+            logicOperatorTree = logicalRuleRewrite(logicOperatorTree, rootTaskContext);
+        }
 
         memo.init(logicOperatorTree);
         OptimizerTraceUtil.log(connectContext, "after logical rewrite, root group:\n%s", memo.getRootGroup());
@@ -103,7 +105,9 @@ public class Optimizer {
         memo.deriveAllGroupLogicalProperty();
 
         // Phase 3: optimize based on memo and group
-        memoOptimize(connectContext, memo, rootTaskContext);
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.CostBaseOptimize")) {
+            memoOptimize(connectContext, memo, rootTaskContext);
+        }
 
         OptExpression result;
         if (!connectContext.getSessionVariable().isSetUseNthExecPlan()) {
@@ -121,11 +125,13 @@ public class Optimizer {
         final CostEstimate costs = Explain.buildCost(result);
         connectContext.getAuditEventBuilder().setPlanCpuCosts(costs.getCpuCost())
                 .setPlanMemCosts(costs.getMemoryCost());
+        try (PlannerProfile.ScopedTimer ignored = PlannerProfile.getScopedTimer("Optimizer.PhysicalRewrite")) {
+            OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
+            OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
+            OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
 
-        OptExpression finalPlan = physicalRuleRewrite(rootTaskContext, result);
-        OptimizerTraceUtil.logOptExpression(connectContext, "final plan after physical rewrite:\n%s", finalPlan);
-        OptimizerTraceUtil.log(connectContext, context.getTraceInfo());
-        return finalPlan;
+            return finalPlan;
+        }
     }
 
     private OptExpression logicalRuleRewrite(OptExpression tree, TaskContext rootTaskContext) {
@@ -227,7 +233,7 @@ public class Optimizer {
         ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new GroupByCountDistinctRewriteRule());
-        ruleRewriteOnlyOnce(tree, rootTaskContext, new ReorderIntersectRule());
+        ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
         return tree.getInputs().get(0);
@@ -287,12 +293,19 @@ public class Optimizer {
             context.getRuleSet().addAutoJoinImplementationRule();
         }
 
+        // add realtime mv rules
+        if (sessionVariable.isMVPlanner() && sessionVariable.isEnableRealtimeRefreshMV()) {
+            context.getRuleSet().addRealtimeMVRules();
+        }
+
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
         context.getTaskScheduler().executeTasks(rootTaskContext);
     }
 
     private OptExpression physicalRuleRewrite(TaskContext rootTaskContext, OptExpression result) {
         Preconditions.checkState(result.getOp().isPhysical());
+
+        int planCount = result.getPlanCount();
 
         // Since there may be many different plans in the logic phase, it's possible
         // that this switch can't turned on after logical optimization, so we only determine
@@ -309,6 +322,9 @@ public class Optimizer {
         // Reorder predicates
         result = new PredicateReorderRule(rootTaskContext.getOptimizerContext().getSessionVariable()).rewrite(result,
                 rootTaskContext);
+        result = new UseSortAggregateRule().rewrite(result, rootTaskContext);
+
+        result.setPlanCount(planCount);
         return result;
     }
 

@@ -342,7 +342,7 @@ struct RunTimeTypeLimits<TYPE_LARGEINT> {
 };
 
 template <PrimitiveType ptype>
-struct RunTimeTypeLimits<ptype, BinaryPTGuard<ptype>> {
+struct RunTimeTypeLimits<ptype, StringPTGuard<ptype>> {
     using value_type = RunTimeCppType<ptype>;
 
     static constexpr value_type min_value() { return Slice(&_min, 0); }

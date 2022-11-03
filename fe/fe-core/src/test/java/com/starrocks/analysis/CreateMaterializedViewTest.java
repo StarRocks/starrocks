@@ -17,6 +17,7 @@ import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.qe.ConnectContext;
@@ -44,7 +45,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
 import java.time.LocalDateTime;
 import java.util.Collection;
@@ -52,8 +55,10 @@ import java.util.List;
 import java.util.Map;
 
 public class CreateMaterializedViewTest {
-
     private static final Logger LOG = LogManager.getLogger(CreateMaterializedViewTest.class);
+
+    @Rule
+    public ExpectedException expectedException = ExpectedException.none();
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -339,7 +344,7 @@ public class CreateMaterializedViewTest {
             Table baseTable = testDb.getTable(baseTableName.getTbl());
             Assert.assertNotNull(baseTable);
             Assert.assertEquals(baseTableInfos.get(0).getTableId(), baseTable.getId());
-            Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
             Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
@@ -500,7 +505,7 @@ public class CreateMaterializedViewTest {
             Assert.assertNotNull(baseTable);
             Assert.assertTrue(baseTableInfos.stream().anyMatch(baseTableInfo ->
                     baseTableInfo.getTableId() == baseTable.getId()));
-            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
+            Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
             Column baseColumn = baseTable.getColumn(slotRef.getColumnName());
             Assert.assertNotNull(baseColumn);
             Assert.assertEquals("k1", baseColumn.getName());
@@ -555,7 +560,7 @@ public class CreateMaterializedViewTest {
             List<MaterializedView.BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
             Assert.assertEquals(1, baseTableInfos.size());
             Table baseTable = testDb.getTable(baseTableInfos.iterator().next().getTableId());
-            Assert.assertEquals(1, ((OlapTable) baseTable).getRelatedMaterializedViews().size());
+            Assert.assertTrue(1 <= baseTable.getRelatedMaterializedViews().size());
             // test sql
             Assert.assertEquals("SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\nFROM `test`.`tbl1`",
                     materializedView.getViewDefineSql());
@@ -1961,6 +1966,7 @@ public class CreateMaterializedViewTest {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
         Assert.assertEquals(1, mv.getAllPartitions().size());
+        starRocksAssert.dropMaterializedView("supplier_hive_mv");
     }
 
     @Test
@@ -1976,6 +1982,7 @@ public class CreateMaterializedViewTest {
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
         Assert.assertEquals(1, mv.getAllPartitions().size());
+        starRocksAssert.dropMaterializedView("supplier_nation_hive_mv");
     }
 
     @Test
@@ -1998,6 +2005,53 @@ public class CreateMaterializedViewTest {
         Column partColumn = expressionRangePartitionInfo.getPartitionColumns().get(0);
         Assert.assertEquals("l_shipdate", partColumn.getName());
         Assert.assertTrue(partColumn.getType().isDate());
+        starRocksAssert.dropMaterializedView("lineitem_supplier_hive_mv");
+    }
+
+    @Test
+    public void testHiveMVAsyncRefresh() throws Exception {
+        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC  START('2122-12-31') EVERY(INTERVAL 1 HOUR) " +
+                "AS select     s_suppkey,     s_nationkey, sum(s_acctbal) as total_s_acctbal,      " +
+                "count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;");
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        Table table = db.getTable("supplier_hive_mv");
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        Assert.assertTrue(partitionInfo instanceof SinglePartitionInfo);
+        Assert.assertEquals(1, mv.getAllPartitions().size());
+        MaterializedView.MvRefreshScheme mvRefreshScheme = mv.getRefreshScheme();
+        Assert.assertEquals(mvRefreshScheme.getType(), MaterializedView.RefreshType.ASYNC);
+        MaterializedView.AsyncRefreshContext asyncRefreshContext = mvRefreshScheme.getAsyncRefreshContext();
+        Assert.assertEquals(asyncRefreshContext.getTimeUnit(), "HOUR");
+        starRocksAssert.dropMaterializedView("supplier_hive_mv");
+    }
+
+    @Test
+    public void testHiveMVAsyncRefreshWithException() throws Exception {
+        expectedException.expect(DdlException.class);
+        expectedException.expectMessage("Materialized view which type is ASYNC need to specify refresh interval " +
+                "for external table");
+        starRocksAssert.withNewMaterializedView("CREATE MATERIALIZED VIEW supplier_hive_mv " +
+                "DISTRIBUTED BY HASH(`s_suppkey`) BUCKETS 10 REFRESH ASYNC AS select     s_suppkey,     s_nationkey," +
+                "sum(s_acctbal) as total_s_acctbal,      count(s_phone) as s_phone_count from hive0.tpch.supplier as supp " +
+                "group by s_suppkey, s_nationkey order by s_suppkey;");
+    }
+
+    @Test
+    public void testCreateRealtimeMV() throws Exception {
+        String sql = "create materialized view rtmv \n" +
+                "refresh incremental as " +
+                "select l_shipdate, l_orderkey, l_quantity, l_linestatus, s_name from " +
+                "hive0.partitioned_db.lineitem_par join hive0.tpch.supplier where l_suppkey = s_suppkey\n";
+        try {
+            UtFrameUtils.getPlanAndFragment(connectContext, sql);
+            Assert.fail();
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Realtime materialized view is not supported", e.getMessage());
+        }
     }
 }
 

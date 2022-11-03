@@ -104,6 +104,7 @@ public class FunctionSet {
     public static final String ADDDATE = "adddate";
     public static final String SUBDATE = "subdate";
     public static final String TIME_SLICE = "time_slice";
+    public static final String DATE_SLICE = "date_slice";
     public static final String DATE_FLOOR = "date_floor";
     public static final String STRFTIME = "strftime";
     public static final String TIME_FORMAT = "time_format";
@@ -624,7 +625,7 @@ public class FunctionSet {
             return null;
         }
 
-        // Finally check for non-strict supertypes
+        // Finally, check for non-strict supertypes
         for (Function f : fns) {
             if (f.compare(desc, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF) && isCastMatchAllowed(desc, f)) {
                 return checkPolymorphicFunction(f, desc.getArgs());
@@ -775,15 +776,15 @@ public class FunctionSet {
             // Max
             addBuiltin(AggregateFunction.createBuiltin(MAX,
                     Lists.newArrayList(t), t, t, true, true, false));
-                    
+
             // max_by        
             for (Type t1 : Type.getSupportedTypes()) {
                 if (t1.isFunctionType() || t1.isNull() || t1.isChar() || t1.isPseudoType()) {
                     continue;
                 }
                 addBuiltin(AggregateFunction.createBuiltin(MAX_BY, Lists.newArrayList(t1, t), t1, Type.VARCHAR, true, true, false));
-            }    
-            
+            }
+
             // NDV
             // ndv return string
             addBuiltin(AggregateFunction.createBuiltin(NDV,
@@ -1155,6 +1156,7 @@ public class FunctionSet {
         Type[] realTypes = Arrays.copyOf(declTypes, declTypes.length);
         ArrayType typeArray = null;
         Type typeElement = null;
+        MapType typeMap = null;
         Type retType = fn.getReturnType();
         for (int i = 0; i < declTypes.length; i++) {
             Type declType = declTypes[i];
@@ -1167,6 +1169,16 @@ public class FunctionSet {
                     typeArray = (ArrayType) realType;
                 } else if ((typeArray = (ArrayType) getSuperType(typeArray, realType)) == null) {
                     LOGGER.warn("could not determine polymorphic type because input has non-match types");
+                    return null;
+                }
+            } else if (declType instanceof AnyMapType) {
+                if (realType.isNull()) {
+                    continue;
+                }
+                if (typeMap == null) {
+                    typeMap = (MapType) realType;
+                } else {
+                    LOGGER.warn("could not determine polymorphic type because input has two map types");
                     return null;
                 }
             } else if (declType instanceof AnyElementType) {
@@ -1208,17 +1220,32 @@ public class FunctionSet {
             return null;
         }
 
-        if (retType instanceof AnyArrayType) {
-            retType = typeArray;
-        } else if (retType instanceof AnyElementType) {
-            retType = typeElement;
-        } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
-            assert !retType.isPseudoType();
+        if (typeMap != null) {
+            if (retType instanceof AnyArrayType) {
+                if (fn.functionName().equals("map_keys")) {
+                    retType = new ArrayType(typeMap.getKeyType());
+                } else if (fn.functionName().equals("map_values")) {
+                    retType = new ArrayType(typeMap.getValueType());
+                } else {
+                    LOGGER.warn("not supported map function");
+                    return null;
+                }
+            }
+        } else {
+            if (retType instanceof AnyArrayType) {
+                retType = typeArray;
+            } else if (retType instanceof AnyElementType) {
+                retType = typeElement;
+            } else if (!(fn instanceof TableFunction)) { //TableFunction don't use retType
+                assert !retType.isPseudoType();
+            }
         }
 
         for (int i = 0; i < declTypes.length; i++) {
             if (declTypes[i] instanceof AnyArrayType) {
                 realTypes[i] = typeArray;
+            } else if(declTypes[i] instanceof AnyMapType) {
+                realTypes[i] = typeMap;
             } else if (declTypes[i] instanceof AnyElementType) {
                 realTypes[i] = typeElement;
             } else {
@@ -1250,6 +1277,22 @@ public class FunctionSet {
             return newFn;
         }
         if (fn instanceof TableFunction) {
+            // Because unnest is a variadic function, and the types of multiple parameters may be inconsistent,
+            // the current SR variadic function parsing can only support variadic parameters of the same type.
+            // The unnest is treated specially here, and the type of the child is directly used as the unnest function type.
+            if (fn.functionName().equals("unnest")) {
+                List<Type> realTableFnRetTypes = new ArrayList<>();
+                for (Type paramType : paramTypes) {
+                    if (!paramType.isArrayType()) {
+                        return null;
+                    }
+                    Type t = ((ArrayType) paramType).getItemType();
+                    realTableFnRetTypes.add(t);
+                }
+                return new TableFunction(fn.getFunctionName(), ((TableFunction) fn).getDefaultColumnNames(),
+                        Arrays.asList(paramTypes), realTableFnRetTypes);
+            }
+
             TableFunction tableFunction = (TableFunction) fn;
             List<Type> tableFnRetTypes = tableFunction.getTableFnReturnTypes();
             List<Type> realTableFnRetTypes = new ArrayList<>();
@@ -1287,6 +1330,11 @@ public class FunctionSet {
         if (t1.isArrayType() && t2.isArrayType()) {
             Type superElementType = getSuperType(((ArrayType) t1).getItemType(), ((ArrayType) t2).getItemType());
             return superElementType != null ? new ArrayType(superElementType) : null;
+        }
+        if (t1.isMapType() && t2.isMapType()) {
+            Type superKeyType = getSuperType(((MapType) t1).getKeyType(), ((MapType) t2).getKeyType());
+            Type superValueType = getSuperType(((MapType) t1).getValueType(), ((MapType) t2).getValueType());
+            return superKeyType != null && superValueType != null ? new MapType(superKeyType, superValueType) : null;
         }
         return null;
     }

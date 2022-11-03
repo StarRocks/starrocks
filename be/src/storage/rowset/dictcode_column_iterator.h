@@ -84,7 +84,7 @@ public:
     using LowCardDictColumn = starrocks::vectorized::LowCardDictColumn;
 
     GlobalDictCodeColumnIterator(ColumnId cid, ColumnIterator* iter, int16_t* code_convert_data, GlobalDictMap* gdict)
-            : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data), _global_dict(gdict) {}
+            : _cid(cid), _col_iter(iter), _local_to_global(code_convert_data) {}
 
     ~GlobalDictCodeColumnIterator() = default;
 
@@ -156,8 +156,6 @@ private:
     // _local_to_global[-1] is accessable
     int16_t* _local_to_global;
 
-    // global dict
-    GlobalDictMap* _global_dict;
     vectorized::ColumnPtr _local_dict_code_col;
 };
 

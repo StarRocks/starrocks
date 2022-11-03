@@ -14,7 +14,9 @@
 + Table Design
   + [Understand StarRocks table design](./table_design/StarRocks_table_design.md)
   + [Data models](./table_design/Data_model.md)
-  + [Data distribution](./table_design/Data_distribution.md)
+  + Data distribution
+    + [Data distribution](./table_design/Data_distribution.md)
+    + [Dynamic partitioning](./table_design/dynamic_partitioning.md)
   + [Sort keys and prefix indexes](./table_design/Sort_key.md)
 + Data Loading
   + [Overview of data loading](./loading/Loading_intro.md)
@@ -28,31 +30,26 @@
   + [Continuously load data from Apache Flink®](./loading/Flink-connector-starrocks.md)
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
-+ Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Spark connector](./unloading/Spark_connector.md)
-  + [Flink connector](./unloading/Flink_connector.md)
-+ Using StarRocks
++ Data Source
+  + Catalog
+    + [Overview](./data_source/catalog/catalog_overview.md)
+    + [Default catalog](./data_source/catalog/default_catalog.md)
+    + [Hive catalog](./data_source/catalog/hive_catalog.md)
+    + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
+    + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
+    + [Query external data](./data_source/catalog/query_external_data.md)
+  + [External tables](./data_source/External_table.md)
++ Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [External tables](./using_starrocks/External_table.md)
-  + Catalog
-    + [Overview](./using_starrocks/catalog/catalog_overview.md)
-    + [Default catalog](./using_starrocks/catalog/default_catalog.md)
-    + [Hive catalog](./using_starrocks/catalog/hive_catalog.md)
-    + [Iceberg catalog](./using_starrocks/catalog/iceberg_catalog.md)
-    + [Hudi catalog](./using_starrocks/catalog/hudi_catalog.md)
-    + [Query external data](./using_starrocks/catalog/query_external_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
-  + [Window functions](./using_starrocks/Window_function.md)
-  + [Java UDFs](./using_starrocks/JAVA_UDF.md)
-  + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
-  + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
-  + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
-  + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
-  + [Configure a time zone](./using_starrocks/timezone.md)
-  + [File manager](./using_starrocks/filemanager.md)
+  + Index
+    + [Bitmap indexing](./using_starrocks/Bitmap_index.md)
+    + [Bloomfilter indexing](./using_starrocks/Bloomfilter_index.md)
+  + Computing the Number of Distinct Values
+    + [Use Bitmap for exact count distinct](./using_starrocks/Using_bitmap.md)
+    + [Use HLL for approximate count distinct](./using_starrocks/Using_HLL.md)
 + Administration
   + Deployment
     + [Deploy StarRocks with StarGo](./administration/stargo.md)
@@ -68,6 +65,7 @@
     + [Monitor and alert](./administration/Monitor_and_Alert.md)
     + [Manage a cluster](./administration/Cluster_administration.md)
     + [Enable FQDN access](./administration/enable_fqdn.md)
+    + [Configure a time zone](./administration/timezone.md)
     + Resource Management
       + [Resource group](./administration/resource_group.md)
       + [Query management](./administration/Query_management.md)
@@ -75,6 +73,7 @@
       + [Load balance](./administration/Load_balance.md)
       + [Replica](./administration/Replica.md)
       + [Blacklist](./administration/Blacklist.md)
+      + [File manager](./administration/filemanager.md)
   + Data Recovery
     + [Data recovery](./administration/Data_recovery.md)
     + [Restore FEs](./administration/Metadata_recovery.md)
@@ -133,6 +132,7 @@
       + [ALTER RESOURCE](./sql-reference/sql-statements/data-definition/ALTER%20RESOURCE.md)
       + [ANALYZE TABLE](./sql-reference/sql-statements/data-definition/ANALYZE%20TABLE.md)
       + [BACKUP](./sql-reference/sql-statements/data-definition/BACKUP.md)
+      + [CANCEL ALTER TABLE](./sql-reference/sql-statements/data-definition/CANCEL%20ALTER%20TABLE.md)
       + [CANCEL BACKUP](./sql-reference/sql-statements/data-definition/CANCEL%20BACKUP.md)
       + [CANCEL RESTORE](./sql-reference/sql-statements/data-definition/CANCEL%20RESTORE.md)
       + [CREATE ANALYZE](./sql-reference/sql-statements/data-definition/CREATE%20ANALYZE.md)
@@ -211,6 +211,8 @@
       + [SPARK LOAD](./sql-reference/sql-statements/data-manipulation/SPARK%20LOAD.md)
       + [STOP ROUTINE LOAD](./sql-reference/sql-statements/data-manipulation/STOP%20ROUTINE%20LOAD.md)
       + [STREAM LOAD](./sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)
+    + Auxiliary Commands
+      + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
     + Data Types
       + Numeric
         + [BIGINT](./sql-reference/sql-statements/data-types/BIGINT.md)
@@ -230,13 +232,13 @@
         + [DATE](./sql-reference/sql-statements/data-types/DATE.md)
         + [DATETIME](./sql-reference/sql-statements/data-types/DATETIME.md)
       + Others
-        + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
-        + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
-        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
         + [ARRAY](./sql-reference/sql-statements/data-types/ARRAY.md)
-    + Auxiliary Commands
-      + [DESC](./sql-reference/sql-statements/Utility/DESCRIBE.md)
+        + [JSON](./sql-reference/sql-statements/data-types/JSON.md)
+        + [BITMAP](./sql-reference/sql-statements/data-types/BITMAP.md)
+        + [HLL](./sql-reference/sql-statements/data-types/HLL.md)
   + Function Reference
+    + [Java UDFs](./sql-reference/sql-functions/JAVA_UDF.md)
+    + [Window functions](./sql-reference/sql-functions/Window_function.md)
     + Date Functions
       + [convert_tz](./sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](./sql-reference/sql-functions/date-time-functions/curdate.md)
@@ -407,8 +409,15 @@
     + [cast function](./sql-reference/sql-functions/cast.md)
     + [hash function](./sql-reference/sql-functions/hash-functions/murmur_hash3_32.md)
     + Cryptographic Functions
+      + [aes_encrypt](./sql-reference/sql-functions/crytographic-functions/aes_encrypt.md)
+      + [aes_decrypt](./sql-reference/sql-functions/crytographic-functions/aes_decrypt.md)
+      + [to_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
+      + [from_base64](./sql-reference/sql-functions/crytographic-functions/from_base64.md)
       + [md5](./sql-reference/sql-functions/crytographic-functions/md5.md)
+      + [md5sum](./sql-reference/sql-functions/crytographic-functions/md5sum.md)
+      + [md5sum_numeric](./sql-reference/sql-functions/crytographic-functions/md5sum_numeric.md)
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
+      + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
     + Math Functions
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
@@ -422,6 +431,10 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
+  + [Spark connector](./unloading/Spark_connector.md)
+  + [Flink connector](./unloading/Flink_connector.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -435,6 +448,7 @@
       + [DataX](./faq/loading/DataX_faq.md)
     + [Data Unloading](./faq/Exporting_faq.md)
   + [SQL](./faq/Sql_faq.md)
+  + [Query Dump](./faq/Dump_query.md)
   + [Other FAQs](./faq/Others.md)
 + Benchmark
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
@@ -442,6 +456,7 @@
 + Developers
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
+    + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes

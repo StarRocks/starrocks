@@ -125,27 +125,27 @@ TEST_F(FileUtilsTest, TestRemove) {
     save_string_file("./file_test/s2", "123");
 
     std::vector<std::string> ps;
-    ps.push_back("./file_test/123/456/789");
-    ps.push_back("./file_test/123/456");
-    ps.push_back("./file_test/123");
+    ps.emplace_back("./file_test/123/456/789");
+    ps.emplace_back("./file_test/123/456");
+    ps.emplace_back("./file_test/123");
 
     ASSERT_TRUE(fs::path_exist("./file_test/123"));
     ASSERT_TRUE(fs::remove(ps).ok());
     ASSERT_FALSE(fs::path_exist("./file_test/123"));
 
     ps.clear();
-    ps.push_back("./file_test/s1");
-    ps.push_back("./file_test/abc/def");
+    ps.emplace_back("./file_test/s1");
+    ps.emplace_back("./file_test/abc/def");
 
     ASSERT_FALSE(fs::remove(ps).ok());
     ASSERT_FALSE(fs::path_exist("./file_test/s1"));
     ASSERT_TRUE(fs::path_exist("./file_test/abc/def/"));
 
     ps.clear();
-    ps.push_back("./file_test/abc/def/zxc");
-    ps.push_back("./file_test/s2");
-    ps.push_back("./file_test/abc/def");
-    ps.push_back("./file_test/abc");
+    ps.emplace_back("./file_test/abc/def/zxc");
+    ps.emplace_back("./file_test/s2");
+    ps.emplace_back("./file_test/abc/def");
+    ps.emplace_back("./file_test/abc");
 
     ASSERT_TRUE(fs::remove(ps).ok());
     ASSERT_FALSE(fs::path_exist("./file_test/s2"));

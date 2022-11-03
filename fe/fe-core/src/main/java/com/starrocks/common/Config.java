@@ -1799,4 +1799,10 @@ public class Config extends ConfigBase {
      **/
     @ConfField(mutable = true)
     public static int privilege_max_role_depth = 16;
+
+    /**
+     * ignore invalid privilege & authentication when upgraded to new RBAC privilege framework in 3.0
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_invalid_privilege_authentications = false;
 }

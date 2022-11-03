@@ -50,7 +50,6 @@ private:
     uint64_t _offset = 0;
     uint64_t _next_header_pos = 0;
 
-    uint64_t _start_offset = 0;
     uint64_t _finish_offset = 0;
 };
 

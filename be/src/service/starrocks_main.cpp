@@ -187,6 +187,7 @@ int main(int argc, char** argv) {
             }
         }
         cache_options.block_size = starrocks::config::block_cache_block_size;
+        cache_options.checksum = starrocks::config::block_cache_checksum_enable;
         cache->init(cache_options);
     }
 #endif

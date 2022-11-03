@@ -5,6 +5,8 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.mysql.privilege.Password;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -64,6 +66,9 @@ public class AuthenticationManager {
 
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
 
+    // set by load() to distinguish brand-new environment with upgraded environment
+    private boolean isLoaded = false;
+
     private void readLock() {
         lock.readLock().lock();
     }
@@ -86,8 +91,6 @@ public class AuthenticationManager {
                 PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider());
 
         // default user
-        UserIdentity rootUser = new UserIdentity(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        rootUser.setIsAnalyzed();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
         try {
             info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
@@ -96,8 +99,8 @@ public class AuthenticationManager {
         }
         info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
         info.setPassword(new byte[0]);
-        userToAuthenticationInfo.put(rootUser, info);
-        userNameToProperty.put(rootUser.getQualifiedUser(), new UserProperty());
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getQualifiedUser(), new UserProperty());
     }
 
     public boolean doesUserExist(UserIdentity userIdentity) {
@@ -198,7 +201,7 @@ public class AuthenticationManager {
             globalStateMgr.getEditLog().logCreateUser(
                     userIdentity, info, userProperty, collection, pluginId, pluginVersion);
 
-        } catch (AuthenticationException e) {
+        } catch (AuthenticationException | PrivilegeException e) {
             throw new DdlException("failed to create user " + userIdentity, e);
         } finally {
             writeUnlock();
@@ -425,9 +428,39 @@ public class AuthenticationManager {
             }
             assert ret != null; // can't be NULL
             LOG.info("loaded {} users", ret.userToAuthenticationInfo.size());
+            // mark data is loaded
+            ret.isLoaded = true;
             return ret;
         } catch (SRMetaBlockException | AuthenticationException e) {
             throw new DdlException("failed to load AuthenticationManager!", e);
         }
+    }
+
+    public boolean isLoaded() {
+        return isLoaded;
+    }
+
+    public void setLoaded() {
+        isLoaded = true;
+    }
+
+    /**
+     * these public interfaces are for AuthUpgrader to upgrade from 2.x
+     */
+    public void upgradeUserUnlocked(UserIdentity userIdentity, Password password) throws AuthenticationException {
+        AuthPlugin plugin = password.getAuthPlugin();
+        if (plugin == null) {
+            plugin = AuthPlugin.MYSQL_NATIVE_PASSWORD;
+        }
+        AuthenticationProvider provider = AuthenticationProviderFactory.create(plugin.toString());
+        UserAuthenticationInfo info = provider.upgradedFromPassword(userIdentity, password);
+        userToAuthenticationInfo.put(userIdentity, info);
+        LOG.info("upgrade user {}", userIdentity);
+    }
+
+    public void upgradeUserProperty(String userName, long maxConn) {
+        UserProperty userProperty = new UserProperty();
+        userProperty.setMaxConn(maxConn);
+        userNameToProperty.put(userName, new UserProperty());
     }
 }

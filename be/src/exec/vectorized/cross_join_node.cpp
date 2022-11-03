@@ -572,10 +572,10 @@ StatusOr<std::list<ExprContext*>> CrossJoinNode::rewrite_runtime_filter(
         const std::vector<ExprContext*>& ctxs) {
     std::list<ExprContext*> filters;
 
-    for (int i = 0; i < rf_descs.size(); ++i) {
-        DCHECK_LT(rf_descs[i]->build_expr_order(), ctxs.size());
+    for (auto rf_desc : rf_descs) {
+        DCHECK_LT(rf_desc->build_expr_order(), ctxs.size());
         ASSIGN_OR_RETURN(auto expr, RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join_node(
-                                            pool, ctxs[rf_descs[i]->build_expr_order()], chunk));
+                                            pool, ctxs[rf_desc->build_expr_order()], chunk));
         filters.push_back(expr);
     }
     return filters;

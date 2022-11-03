@@ -14,9 +14,9 @@ Release date: October 20th, 2022
 
 - Outer Join supports non-equi joins in which join items are related by comparison operators including `<`, `<=`, `>`, `>=`, and `<>`. For more information, see [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md).
 
-- Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](../using_starrocks/catalog/iceberg_catalog.md) and [Hudi catalog](../using_starrocks/catalog/hudi_catalog.md).
+- Supports creating Iceberg catalogs and Hudi catalogs, which allow direct queries on data from Apache Iceberg and Apache Hudi. For more information, see [Iceberg catalog](../data_source/catalog/iceberg_catalog.md) and [Hudi catalog](../data_source/catalog/hudi_catalog.md).
 
-- Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](../using_starrocks/External_table.md).
+- Supports querying ARRAY-type columns from Apache Hive™ tables in CSV format. For more information, see [External table](../data_source/External_table.md).
 
 - Supports viewing the schema of external data via DESC. For more information, see [DESC](../sql-reference/sql-statements/Utility/DESCRIBE.md).
 
@@ -59,7 +59,7 @@ Release date: October 20th, 2022
 - Functions:
 
   - You can use multiple COUNT(DISTINCT) in one statement. For more information, see [count](../sql-reference/sql-functions/aggregate-functions/count.md).
-  - Window functions min() and max() support sliding windows. For more information, see [Window functions](../using_starrocks/Window_function.md).
+  - Window functions min() and max() support sliding windows. For more information, see [Window functions](../sql-reference/sql-functions/Window_function.md).
   - Optimized the performance of the window_funnel function. For more information, see [window_funnel](../sql-reference/sql-functions/aggregate-functions/window_funnel.md).
 
 ### Bug Fixes

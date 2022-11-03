@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/scan/olap_meta_scan_operator.h"
 
+#include <utility>
+
 #include "exec/pipeline/scan/olap_meta_chunk_source.h"
 #include "exec/pipeline/scan/olap_meta_scan_context.h"
 #include "exec/vectorized/olap_meta_scanner.h"
@@ -10,7 +12,7 @@ namespace starrocks::pipeline {
 
 OlapMetaScanOperatorFactory::OlapMetaScanOperatorFactory(int32_t id, ScanNode* meta_scan_node, size_t dop,
                                                          std::shared_ptr<OlapMetaScanContextFactory> ctx_factory)
-        : ScanOperatorFactory(id, meta_scan_node), _ctx_factory(ctx_factory) {}
+        : ScanOperatorFactory(id, meta_scan_node), _ctx_factory(std::move(ctx_factory)) {}
 
 Status OlapMetaScanOperatorFactory::do_prepare(RuntimeState* state) {
     return Status::OK();
@@ -25,9 +27,9 @@ OperatorPtr OlapMetaScanOperatorFactory::do_create(int32_t dop, int32_t driver_s
 
 OlapMetaScanOperator::OlapMetaScanOperator(OperatorFactory* factory, int32_t id, int32_t driver_sequence, int32_t dop,
                                            ScanNode* meta_scan_node, OlapMetaScanContextPtr ctx)
-        : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(ctx) {}
+        : ScanOperator(factory, id, driver_sequence, dop, meta_scan_node), _ctx(std::move(ctx)) {}
 
-OlapMetaScanOperator::~OlapMetaScanOperator() {}
+OlapMetaScanOperator::~OlapMetaScanOperator() = default;
 
 bool OlapMetaScanOperator::has_output() const {
     if (!_ctx->is_prepare_finished()) {

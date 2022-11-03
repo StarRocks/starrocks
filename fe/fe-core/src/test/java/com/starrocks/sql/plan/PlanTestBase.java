@@ -15,6 +15,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1086,9 +1087,13 @@ public class PlanTestBase {
     }
 
     public String getFragmentPlan(String sql) throws Exception {
-        String s = UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
+        return UtFrameUtils.getPlanAndFragment(connectContext, sql).second.
                 getExplainString(TExplainLevel.NORMAL);
-        return s;
+    }
+
+    public String getLogicalFragmentPlan(String sql) throws Exception {
+        return LogicalPlanPrinter.print(UtFrameUtils.getPlanAndFragment(
+                connectContext, sql).second.getPhysicalPlan());
     }
 
     public String getVerboseExplain(String sql) throws Exception {
@@ -1138,6 +1143,7 @@ public class PlanTestBase {
         boolean hasFragmentStatistics = false;
         boolean isDump = false;
         boolean isEnumerate = false;
+        int planCount = -1;
 
         File debugFile = new File(file.getPath() + ".debug");
         BufferedWriter writer = null;
@@ -1189,6 +1195,9 @@ public class PlanTestBase {
                             writer = new BufferedWriter(new FileWriter(debugFile, true));
                             System.out.println("DEBUG MODE!");
                         }
+                        continue;
+                    case "[planCount]":
+                        mode = "planCount";
                         continue;
                     case "[sql]":
                         sql = new StringBuilder();
@@ -1251,6 +1260,7 @@ public class PlanTestBase {
                                         sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString());
                             }
                             if (isEnumerate) {
+                                Assert.assertEquals("plan count mismatch", planCount, pair.second.getPlanCount());
                                 checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
                                 connectContext.getSessionVariable().setUseNthExecPlan(0);
                             }
@@ -1269,6 +1279,9 @@ public class PlanTestBase {
                 switch (mode) {
                     case "sql":
                         sql.append(tempStr).append("\n");
+                        break;
+                    case "planCount":
+                        planCount = Integer.parseInt(tempStr);
                         break;
                     case "result":
                         result.append(tempStr).append("\n");

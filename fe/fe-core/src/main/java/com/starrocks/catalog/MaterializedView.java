@@ -61,7 +61,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
     public enum RefreshType {
         SYNC,
         ASYNC,
-        MANUAL
+        MANUAL,
+        INCREMENTAL
     }
 
     public static class BaseTableInfo {
@@ -499,7 +500,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 active = false;
                 continue;
             }
-            table.addRelatedMaterializedView(id);
+            MvId mvId = new MvId(db.getId(), id);
+            table.addRelatedMaterializedView(mvId);
         }
         if (partitionInfo instanceof SinglePartitionInfo) {
             return;
@@ -609,16 +611,21 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
 
         // storageCooldownTime
         Map<String, String> properties = this.getTableProperty().getProperties();
-        if (!properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
-            sb.append("\n");
-        } else {
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)) {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)
                     .append("\" = \"");
             sb.append(TimeUtils.longToTimeString(
                     Long.parseLong(properties.get(PropertyAnalyzer.PROPERTIES_STORAGE_COLDOWN_TIME)))).append("\"");
-            sb.append("\n");
         }
-        sb.append(")");
+
+        // partition TTL
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
+        }
+
+        sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
             define = this.getViewDefineSql();

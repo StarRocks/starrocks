@@ -52,7 +52,7 @@ bool BackendOptions::init() {
     }
 
     std::string loopback;
-    std::vector<InetAddress>::iterator addr_it = hosts.begin();
+    auto addr_it = hosts.begin();
     for (; addr_it != hosts.end(); ++addr_it) {
         if ((*addr_it).is_address_v4()) {
             VLOG(2) << "check ip=" << addr_it->get_host_address_v4();

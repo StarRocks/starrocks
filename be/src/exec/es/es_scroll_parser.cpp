@@ -108,12 +108,7 @@ static Status get_int_value(const rapidjson::Value& col, PrimitiveType type, voi
 }
 
 ScrollParser::ScrollParser(bool doc_value_mode)
-        : _tuple_desc(nullptr),
-          _doc_value_context(nullptr),
-          _size(0),
-          _cur_line(0),
-          _doc_value_mode(doc_value_mode),
-          _temp_writer(_scratch_buffer) {}
+        : _tuple_desc(nullptr), _doc_value_context(nullptr), _size(0), _cur_line(0), _temp_writer(_scratch_buffer) {}
 
 Status ScrollParser::parse(const std::string& scroll_result, bool exactly_once) {
     _size = 0;
@@ -277,7 +272,7 @@ template <PrimitiveType type, typename CppType>
 void ScrollParser::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
         using ColumnType = typename vectorized::RunTimeColumnType<type>;
-        ColumnType* runtime_column = down_cast<ColumnType*>(column);
+        auto* runtime_column = down_cast<ColumnType*>(column);
         runtime_column->append(value);
     };
 
@@ -585,7 +580,7 @@ Status ScrollParser::_append_date_val(const rapidjson::Value& col, Column* colum
         TimestampValue value;
         value.from_unixtime(col.GetInt64() / 1000, TimezoneUtils::default_time_zone);
         if constexpr (type == TYPE_DATE) {
-            DateValue date_val = DateValue(value);
+            auto date_val = DateValue(value);
             _append_data<TYPE_DATE>(column, date_val);
         } else if constexpr (type == TYPE_DATETIME) {
             _append_data<TYPE_DATETIME>(column, value);

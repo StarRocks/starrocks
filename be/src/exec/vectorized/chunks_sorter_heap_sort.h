@@ -246,7 +246,6 @@ private:
     template <PrimitiveType TYPE>
     void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Column::Filter* filter, int row_sz);
 
-    bool _init_status = false;
     using CursorContainer = std::vector<detail::ChunkRowCursor>;
     using CommonCursorSortHeap =
             detail::SortingHeap<detail::ChunkRowCursor, CursorContainer, detail::ChunkCursorComparator>;

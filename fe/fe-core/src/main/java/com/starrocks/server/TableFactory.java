@@ -12,7 +12,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
-import com.starrocks.external.ColumnTypeConverter;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
@@ -114,6 +114,11 @@ public class TableFactory {
         metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HUDI, HUDI);
+        if (table == null) {
+            throw new DdlException("Can not find hudi table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HudiTable oHudiTable = (HudiTable) table;
         validateHudiColumnType(columns, oHudiTable);
 

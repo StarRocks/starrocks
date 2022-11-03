@@ -7,19 +7,27 @@
 #include "exprs/agg/sum.h"
 #include "exprs/vectorized/arithmetic_operation.h"
 #include "gutil/casts.h"
+#include "runtime/primitive_type.h"
+#include "udf/udf.h"
 
 namespace starrocks::vectorized {
 
 // AvgResultPT for final result
 template <PrimitiveType PT, typename = guard::Guard>
-inline constexpr PrimitiveType AvgResultPT = PT;
+struct AvgResultTrait {
+    static const PrimitiveType value = PT;
+};
+template <PrimitiveType PT>
+struct AvgResultTrait<PT, ArithmeticPTGuard<PT>> {
+    static const PrimitiveType value = TYPE_DOUBLE;
+};
+template <PrimitiveType PT>
+struct AvgResultTrait<PT, DecimalPTGuard<PT>> {
+    static const PrimitiveType value = TYPE_DECIMAL128;
+};
 
 template <PrimitiveType PT>
-inline constexpr PrimitiveType AvgResultPT<PT, ArithmeticPTGuard<PT>> = TYPE_DOUBLE;
-
-// final result of avg on decimal32/64/128 is DECIMAL128
-template <PrimitiveType PT>
-inline constexpr PrimitiveType AvgResultPT<PT, DecimalPTGuard<PT>> = TYPE_DECIMAL128;
+inline constexpr PrimitiveType AvgResultPT = AvgResultTrait<PT>::value;
 
 // ImmediateAvgResultPT for immediate accumulated result
 template <PrimitiveType PT, typename = guard::Guard>
@@ -33,7 +41,7 @@ inline constexpr PrimitiveType ImmediateAvgResultPT<PT, AvgDecimal64PTGuard<PT>>
 
 // Only for compile
 template <PrimitiveType PT>
-inline constexpr PrimitiveType ImmediateAvgResultPT<PT, BinaryPTGuard<PT>> = TYPE_DOUBLE;
+inline constexpr PrimitiveType ImmediateAvgResultPT<PT, StringPTGuard<PT>> = TYPE_DOUBLE;
 
 template <typename T>
 struct AvgAggregateState {

@@ -13,11 +13,11 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.external.iceberg.IcebergCatalog;
-import com.starrocks.external.iceberg.IcebergCatalogType;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.external.iceberg.StarRocksIcebergException;
-import com.starrocks.external.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
+import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
@@ -269,24 +269,28 @@ public class IcebergTable extends Table {
 
     private void validateColumn(IcebergCatalog catalog) throws DdlException {
         org.apache.iceberg.Table icebergTable = catalog.loadTable(IcebergUtil.getIcebergTableIdentifier(db, table));
-        // TODO: use TypeUtil#indexByName to handle nested field
-        Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
-                .collect(Collectors.toMap(Types.NestedField::name, field -> field));
-        for (Column column : this.fullSchema) {
-            Types.NestedField icebergColumn = icebergColumns.get(column.getName());
-            if (icebergColumn == null) {
-                throw new DdlException("column [" + column.getName() + "] not exists in iceberg");
+        try {
+            // TODO: use TypeUtil#indexByName to handle nested field
+            Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
+                    .collect(Collectors.toMap(Types.NestedField::name, field -> field));
+            for (Column column : this.fullSchema) {
+                Types.NestedField icebergColumn = icebergColumns.get(column.getName());
+                if (icebergColumn == null) {
+                    throw new DdlException("column [" + column.getName() + "] not exists in iceberg");
+                }
+                if (!validateColumnType(icebergColumn.type(), column.getType())) {
+                    throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
+                            "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
+                }
+                if (!column.isAllowNull()) {
+                    throw new DdlException(
+                            "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
+                }
             }
-            if (!validateColumnType(icebergColumn.type(), column.getType())) {
-                throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
-                        "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
-            }
-            if (!column.isAllowNull()) {
-                throw new DdlException(
-                        "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
-            }
+            LOG.debug("successfully validating columns for " + catalog);
+        } catch (NullPointerException e) {
+            throw new DdlException("Can not find iceberg table " + db + "." + table + " from the resource " + resourceName);
         }
-        LOG.debug("successfully validating columns for " + catalog);
     }
 
     private boolean validateColumnType(Type icebergType, com.starrocks.catalog.Type type) {

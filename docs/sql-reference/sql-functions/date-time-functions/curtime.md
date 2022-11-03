@@ -2,9 +2,9 @@
 
 ## Description
 
-Obtains the current time and returns a vlue of the TIME type.
+Obtains the current time and returns a value of the TIME type.
 
-This function may return different results for different time zones. For more information, see [Configure a time zone](../../../using_starrocks/timezone.md).
+This function may return different results for different time zones. For more information, see [Configure a time zone](../../../administration/timezone.md).
 
 ## Syntax
 

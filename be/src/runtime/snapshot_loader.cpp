@@ -69,8 +69,6 @@ inline const std::string& client_id(ExecEnv* env, const TNetworkAddress& addr) {
 SnapshotLoader::SnapshotLoader(ExecEnv* env, int64_t job_id, int64_t task_id)
         : _env(env), _job_id(job_id), _task_id(task_id) {}
 
-SnapshotLoader::~SnapshotLoader() = default;
-
 Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                               std::map<int64_t, std::vector<std::string>>* tablet_files) {
     if (!upload.__isset.use_broker || upload.use_broker) {
@@ -93,7 +91,8 @@ Status SnapshotLoader::upload(const std::map<std::string, std::string>& src_to_d
     std::unique_ptr<BrokerServiceConnection> client;
     std::unique_ptr<FileSystem> fs;
     if (!upload.__isset.use_broker || upload.use_broker) {
-        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), upload.broker_addr, 10000, &status);
+        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), upload.broker_addr,
+                                                           config::broker_write_timeout_seconds * 1000, &status);
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "
@@ -236,7 +235,8 @@ Status SnapshotLoader::download(const std::map<std::string, std::string>& src_to
     std::unique_ptr<FileSystem> fs;
     std::vector<TNetworkAddress> broker_addrs;
     if (!download.__isset.use_broker || download.use_broker) {
-        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), download.broker_addr, 10000, &status);
+        client = std::make_unique<BrokerServiceConnection>(client_cache(_env), download.broker_addr,
+                                                           config::broker_write_timeout_seconds * 1000, &status);
         if (!status.ok()) {
             std::stringstream ss;
             ss << "failed to get broker client. "

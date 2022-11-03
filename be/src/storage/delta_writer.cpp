@@ -2,6 +2,8 @@
 
 #include "storage/delta_writer.h"
 
+#include <utility>
+
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
 #include "storage/memtable.h"
@@ -24,9 +26,9 @@ StatusOr<std::unique_ptr<DeltaWriter>> DeltaWriter::open(const DeltaWriterOption
     return std::move(writer);
 }
 
-DeltaWriter::DeltaWriter(const DeltaWriterOptions& opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
+DeltaWriter::DeltaWriter(DeltaWriterOptions opt, MemTracker* mem_tracker, StorageEngine* storage_engine)
         : _state(kUninitialized),
-          _opt(opt),
+          _opt(std::move(opt)),
           _mem_tracker(mem_tracker),
           _storage_engine(storage_engine),
           _tablet(nullptr),
@@ -245,7 +247,7 @@ Status DeltaWriter::get_err_status() const {
     return _err_status;
 }
 
-void DeltaWriter::_set_state(State state, Status st) {
+void DeltaWriter::_set_state(State state, const Status& st) {
     std::lock_guard l(_state_lock);
     _state = state;
     if (!st.ok() && _err_status.ok()) {
@@ -377,7 +379,7 @@ Status DeltaWriter::_flush_memtable() {
 
 void DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
-        _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema, _opt.slots));
+        _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
     }
     _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,

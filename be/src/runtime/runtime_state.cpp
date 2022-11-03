@@ -280,10 +280,12 @@ Status RuntimeState::check_query_state(const std::string& msg) {
 }
 
 Status RuntimeState::check_mem_limit(const std::string& msg) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wnonnull-compare"
+    DIAGNOSTIC_PUSH
+#if defined(__GNUC__) && !defined(__clang__)
+    DIAGNOSTIC_IGNORE("-Wnonnull-compare")
+#endif
     RETURN_IF_LIMIT_EXCEEDED(this, msg);
-#pragma pop
+    DIAGNOSTIC_POP
     return Status::OK();
 }
 
@@ -349,8 +351,6 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
         (*_error_log_file) << out.str() << std::endl;
     }
 }
-
-const int64_t HUB_MAX_ERROR_NUM = 10;
 
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {

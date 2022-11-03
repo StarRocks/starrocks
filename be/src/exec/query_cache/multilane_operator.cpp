@@ -5,8 +5,7 @@
 
 #include "util/defer_op.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,
                                      pipeline::Operators&& processors, bool can_passthrough)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
@@ -15,7 +14,7 @@ MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t
     DCHECK_EQ(processors.size(), _num_lanes);
     _lanes.reserve(_num_lanes);
     for (auto i = 0; i < _num_lanes; ++i) {
-        _lanes.push_back(Lane(std::move(processors[i]), i));
+        _lanes.emplace_back(std::move(processors[i]), i);
     }
 }
 
@@ -111,7 +110,7 @@ bool MultilaneOperator::is_finished() const {
 }
 
 Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
-                                  starrocks::query_cache::MultilaneOperator::FinishCallback finish_cb) {
+                                  const starrocks::query_cache::MultilaneOperator::FinishCallback& finish_cb) {
     _input_finished = true;
     auto status = Status::OK();
     for (auto it : _owner_to_lanes) {
@@ -245,8 +244,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
         }
     }
 
-    for (int i = 0; i < _lanes.size(); ++i) {
-        auto& lane = _lanes[i];
+    for (auto& lane : _lanes) {
         auto chunk = _pull_chunk_from_lane(state, lane, passthrough_mode);
         if (!chunk.ok() || chunk.value() != nullptr) {
             return chunk;
@@ -276,7 +274,7 @@ Status MultilaneOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_own
     return lane.processor->reset_state(state, chunks);
 }
 
-MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, OperatorFactoryPtr factory, size_t num_lanes)
+MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, const OperatorFactoryPtr& factory, size_t num_lanes)
         : pipeline::OperatorFactory(id, strings::Substitute("ml_$0", factory->get_raw_name()), factory->plan_node_id()),
           _factory(factory),
           _num_lanes(num_lanes) {}
@@ -303,5 +301,4 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     return op;
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

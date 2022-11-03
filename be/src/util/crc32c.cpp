@@ -158,8 +158,8 @@ static inline uint64_t LE_LOAD64(const uint8_t* p) {
 }
 #endif
 
-static inline void Slow_CRC32(uint64_t* l, uint8_t const** p) {
-    uint32_t c = static_cast<uint32_t>(*l ^ LE_LOAD32(*p));
+[[maybe_unused]] static inline void Slow_CRC32(uint64_t* l, uint8_t const** p) {
+    auto c = static_cast<uint32_t>(*l ^ LE_LOAD32(*p));
     *p += 4;
     *l = table3_[c & 0xff] ^ table2_[(c >> 8) & 0xff] ^ table1_[(c >> 16) & 0xff] ^ table0_[c >> 24];
     // DO it twice.
@@ -184,7 +184,7 @@ static inline void Fast_CRC32(uint64_t* l, uint8_t const** p) {
 
 template <void (*CRC32)(uint64_t*, uint8_t const**)>
 uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(buf);
+    const auto* p = reinterpret_cast<const uint8_t*>(buf);
     const uint8_t* e = p + size;
     uint64_t l = crc ^ 0xffffffffu;
 
@@ -199,8 +199,8 @@ uint32_t ExtendImpl(uint32_t crc, const char* buf, size_t size) {
 
     // Point x at first 16-byte aligned byte in string.  This might be
     // just past the end of the string.
-    const uintptr_t pval = reinterpret_cast<uintptr_t>(p);
-    const uint8_t* x = reinterpret_cast<const uint8_t*>(ALIGN(pval, 4));
+    const auto pval = reinterpret_cast<uintptr_t>(p);
+    const auto* x = reinterpret_cast<const uint8_t*>(ALIGN(pval, 4));
     if (x <= e) {
         // Process bytes until finished or p is 16-byte aligned
         while (p != x) {

@@ -1,6 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #include <algorithm>
+#include <utility>
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
@@ -30,7 +31,7 @@ public:
               _sort_desc(sort_desc),
               _permutation(permutation),
               _tie(tie),
-              _range(range),
+              _range(std::move(range)),
               _build_tie(build_tie) {}
 
     Status do_visit(const vectorized::NullableColumn& column) {
@@ -73,6 +74,11 @@ public:
 
         return sort_and_tie_helper(_cancel, &column, _sort_desc.asc_order(), _permutation, _tie, cmp, _range,
                                    _build_tie);
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
     }
 
     template <typename T>
@@ -136,16 +142,16 @@ private:
 // Sort multiple a column from multiple chunks(vertical column)
 class VerticalColumnSorter final : public ColumnVisitorAdapter<VerticalColumnSorter> {
 public:
-    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, const std::vector<ColumnPtr>& columns,
+    explicit VerticalColumnSorter(const std::atomic<bool>& cancel, std::vector<ColumnPtr> columns,
                                   const SortDesc& sort_desc, Permutation& permutation, Tie& tie,
                                   std::pair<int, int> range, bool build_tie, size_t limit)
             : ColumnVisitorAdapter(this),
               _cancel(cancel),
               _sort_desc(sort_desc),
-              _vertical_columns(columns),
+              _vertical_columns(std::move(columns)),
               _permutation(permutation),
               _tie(tie),
-              _range(range),
+              _range(std::move(range)),
               _build_tie(build_tie),
               _limit(limit),
               _pruned_limit(permutation.size()) {}
@@ -287,6 +293,11 @@ public:
                                             _build_tie, _limit, &_pruned_limit));
         _prune_limit();
         return Status::OK();
+    }
+
+    Status do_visit(const vectorized::StructColumn& column) {
+        // TODO(SmithCruise)
+        return Status::NotSupported("Not support");
     }
 
     template <typename T>
@@ -476,6 +487,7 @@ Status sort_vertical_chunks(const std::atomic<bool>& cancel, const std::vector<C
         DCHECK_GT(perm.size(), 0);
 
         std::vector<ColumnPtr> vertical_columns;
+        vertical_columns.reserve(vertical_chunks.size());
         for (const auto& columns : vertical_chunks) {
             vertical_columns.push_back(columns[col]);
         }

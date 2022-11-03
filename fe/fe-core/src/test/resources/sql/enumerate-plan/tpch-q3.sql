@@ -21,6 +21,8 @@ group by
 order by
     revenue desc,
     o_orderdate limit 10;
+[planCount]
+2
 [plan-1]
 TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
     TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
@@ -40,33 +42,8 @@ TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
             INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
                 SCAN (columns[20: L_ORDERKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT, 30: L_SHIPDATE] predicate[30: L_SHIPDATE > 1995-03-11])
                 EXCHANGE SHUFFLE[10]
-                    INNER JOIN (join-predicate [1: C_CUSTKEY = 11: O_CUSTKEY] post-join-predicate [null])
-                        SCAN (columns[1: C_CUSTKEY, 7: C_MKTSEGMENT] predicate[7: C_MKTSEGMENT = HOUSEHOLD])
-                        EXCHANGE SHUFFLE[11]
-                            SCAN (columns[17: O_SHIPPRIORITY, 10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE < 1995-03-11])
-[end]
-[plan-3]
-TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
-    TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{38: sum=sum(37: expr)}] group by [[20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY]] having [null]
-            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
-                SCAN (columns[20: L_ORDERKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT, 30: L_SHIPDATE] predicate[30: L_SHIPDATE > 1995-03-11])
-                EXCHANGE SHUFFLE[10]
                     INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
                         SCAN (columns[17: O_SHIPPRIORITY, 10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE < 1995-03-11])
                         EXCHANGE BROADCAST
-                            SCAN (columns[1: C_CUSTKEY, 7: C_MKTSEGMENT] predicate[7: C_MKTSEGMENT = HOUSEHOLD])
-[end]
-[plan-4]
-TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
-    TOP-N (order by [[38: sum DESC NULLS LAST, 14: O_ORDERDATE ASC NULLS FIRST]])
-        AGGREGATE ([GLOBAL] aggregate [{38: sum=sum(37: expr)}] group by [[20: L_ORDERKEY, 14: O_ORDERDATE, 17: O_SHIPPRIORITY]] having [null]
-            INNER JOIN (join-predicate [20: L_ORDERKEY = 10: O_ORDERKEY] post-join-predicate [null])
-                SCAN (columns[20: L_ORDERKEY, 25: L_EXTENDEDPRICE, 26: L_DISCOUNT, 30: L_SHIPDATE] predicate[30: L_SHIPDATE > 1995-03-11])
-                EXCHANGE SHUFFLE[10]
-                    INNER JOIN (join-predicate [11: O_CUSTKEY = 1: C_CUSTKEY] post-join-predicate [null])
-                        EXCHANGE SHUFFLE[11]
-                            SCAN (columns[17: O_SHIPPRIORITY, 10: O_ORDERKEY, 11: O_CUSTKEY, 14: O_ORDERDATE] predicate[14: O_ORDERDATE < 1995-03-11])
-                        EXCHANGE SHUFFLE[1]
                             SCAN (columns[1: C_CUSTKEY, 7: C_MKTSEGMENT] predicate[7: C_MKTSEGMENT = HOUSEHOLD])
 [end]

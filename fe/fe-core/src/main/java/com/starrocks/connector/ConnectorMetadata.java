@@ -11,7 +11,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -25,6 +24,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -105,7 +105,7 @@ public interface ConnectorMetadata {
     default void clear() {
     }
 
-    default void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
+    default void refreshTable(String srDbName, Table table, List<String> partitionNames) {
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
@@ -169,6 +169,11 @@ public interface ConnectorMetadata {
     }
 
     default void refreshMaterializedView(String dbName, String mvName, int priority)
+            throws DdlException, MetaNotFoundException {
+    }
+
+    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                         int priority)
             throws DdlException, MetaNotFoundException {
     }
 

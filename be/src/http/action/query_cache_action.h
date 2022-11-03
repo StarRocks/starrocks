@@ -24,7 +24,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    void _handle(HttpRequest* req, std::function<void(rapidjson::Document& root)> func);
+    void _handle(HttpRequest* req, const std::function<void(rapidjson::Document& root)>& func);
     void _handle_stat(HttpRequest* req);
     void _handle_invalidate_all(HttpRequest* req);
     void _handle_error(HttpRequest* req, const std::string& error_msg);

@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <bthread/mutex.h>
+
 #include <algorithm>
 #include <future>
 #include <list>
@@ -9,13 +11,8 @@
 #include <queue>
 #include <unordered_set>
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <bthread/mutex.h>
-DIAGNOSTIC_POP
-
 #include "column/chunk.h"
+#include "common/compiler_util.h"
 #include "exec/pipeline/fragment_context.h"
 #include "gen_cpp/BackendService.h"
 #include "runtime/current_thread.h"
@@ -99,7 +96,7 @@ private:
 
     // Try to send rpc if buffer is not empty and channel is not busy
     // And we need to put this function and other extra works(pre_works) together as an atomic operation
-    void _try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works);
+    void _try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works);
 
     // Roughly estimate network time which is defined as the time between sending a and receiving a packet,
     // and the processing time of both sides are excluded

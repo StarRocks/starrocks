@@ -7,7 +7,7 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.hive.IHiveMetastore;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

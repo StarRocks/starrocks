@@ -64,8 +64,8 @@ extern Status k_stream_load_plan_status;
 
 class StreamLoadActionTest : public testing::Test {
 public:
-    StreamLoadActionTest() {}
-    virtual ~StreamLoadActionTest() {}
+    StreamLoadActionTest() = default;
+    ~StreamLoadActionTest() override = default;
     void SetUp() override {
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();

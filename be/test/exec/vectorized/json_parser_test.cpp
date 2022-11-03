@@ -15,8 +15,8 @@ namespace starrocks::vectorized {
 
 class JsonParserTest : public ::testing::Test {
 public:
-    JsonParserTest() {}
-    virtual ~JsonParserTest() {}
+    JsonParserTest() = default;
+    ~JsonParserTest() override = default;
 
     void SetUp() override {}
 };

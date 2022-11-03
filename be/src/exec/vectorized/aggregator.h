@@ -18,6 +18,7 @@
 #include "common/statusor.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/vectorized/aggregate/agg_hash_variant.h"
+#include "exec/vectorized/aggregate/agg_profile.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/expr.h"
 #include "gen_cpp/QueryPlanExtra_constants.h"
@@ -82,6 +83,7 @@ inline uint8_t* RawHashTableIterator::value() {
 }
 
 class Aggregator;
+class SortedStreamingAggregator;
 
 template <class HashMapWithKey>
 struct AllocateState {
@@ -139,18 +141,19 @@ using AggregatorPtr = std::shared_ptr<Aggregator>;
 
 // Component used to process aggregation including bloking aggregate and streaming aggregate
 // it contains common data struct and algorithm of aggregation
-class Aggregator final : public pipeline::ContextWithDependency {
+class Aggregator : public pipeline::ContextWithDependency {
 public:
     Aggregator(const TPlanNode& tnode);
 
-    ~Aggregator() {
+    virtual ~Aggregator() {
         if (_state != nullptr) {
             close(_state);
         }
     }
 
     Status open(RuntimeState* state);
-    Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile, MemTracker* mem_tracker);
+    virtual Status prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* runtime_profile,
+                           MemTracker* mem_tracker);
 
     void close(RuntimeState* state) override;
 
@@ -178,13 +181,13 @@ public:
     const vectorized::AggHashSetVariant& hash_set_variant() { return _hash_set_variant; }
     std::any& it_hash() { return _it_hash; }
     const std::vector<uint8_t>& streaming_selection() { return _streaming_selection; }
-    RuntimeProfile::Counter* get_results_timer() { return _get_results_timer; }
-    RuntimeProfile::Counter* agg_compute_timer() { return _agg_compute_timer; }
-    RuntimeProfile::Counter* streaming_timer() { return _streaming_timer; }
-    RuntimeProfile::Counter* input_row_count() { return _input_row_count; }
-    RuntimeProfile::Counter* rows_returned_counter() { return _rows_returned_counter; }
-    RuntimeProfile::Counter* hash_table_size() { return _hash_table_size; }
-    RuntimeProfile::Counter* pass_through_row_count() { return _pass_through_row_count; }
+    RuntimeProfile::Counter* agg_compute_timer() { return _agg_stat->agg_compute_timer; }
+    RuntimeProfile::Counter* agg_expr_timer() { return _agg_stat->agg_function_compute_timer; }
+    RuntimeProfile::Counter* streaming_timer() { return _agg_stat->streaming_timer; }
+    RuntimeProfile::Counter* input_row_count() { return _agg_stat->input_row_count; }
+    RuntimeProfile::Counter* rows_returned_counter() { return _agg_stat->rows_returned_counter; }
+    RuntimeProfile::Counter* hash_table_size() { return _agg_stat->hash_table_size; }
+    RuntimeProfile::Counter* pass_through_row_count() { return _agg_stat->pass_through_row_count; }
 
     void sink_complete() { _is_sink_complete.store(true, std::memory_order_release); }
 
@@ -244,7 +247,7 @@ public:
 #endif
     HashTableKeyAllocator _state_allocator;
 
-private:
+protected:
     bool _is_closed = false;
     RuntimeState* _state = nullptr;
 
@@ -342,22 +345,12 @@ private:
 
     bool _has_udaf = false;
 
-    RuntimeProfile::Counter* _get_results_timer{};
-    RuntimeProfile::Counter* _agg_compute_timer{};
-    RuntimeProfile::Counter* _streaming_timer{};
-    RuntimeProfile::Counter* _input_row_count{};
-    RuntimeProfile::Counter* _rows_returned_counter;
-    RuntimeProfile::Counter* _hash_table_size{};
-    RuntimeProfile::Counter* _iter_timer{};
-    RuntimeProfile::Counter* _agg_append_timer{};
-    RuntimeProfile::Counter* _group_by_append_timer{};
-    RuntimeProfile::Counter* _pass_through_row_count{};
-    RuntimeProfile::Counter* _expr_compute_timer{};
-    RuntimeProfile::Counter* _expr_release_timer{};
+    AggStatistics* _agg_stat;
 
 public:
     template <typename HashMapWithKey>
-    void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size, bool agg_group_by_with_limit = false) {
+    ATTRIBUTE_NOINLINE void build_hash_map(HashMapWithKey& hash_map_with_key, size_t chunk_size,
+                                           bool agg_group_by_with_limit = false) {
         if (agg_group_by_with_limit) {
             if (hash_map_with_key.hash_map.size() >= _limit) {
                 build_hash_map_with_selection(hash_map_with_key, chunk_size);
@@ -371,24 +364,25 @@ public:
     }
 
     template <typename HashMapWithKey>
-    void build_hash_map_with_selection(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
+    ATTRIBUTE_NOINLINE void build_hash_map_with_selection(HashMapWithKey& hash_map_with_key, size_t chunk_size) {
         hash_map_with_key.compute_agg_states(chunk_size, _group_by_columns, AllocateState<HashMapWithKey>(this),
                                              &_tmp_agg_states, &_streaming_selection);
     }
 
     template <typename HashSetWithKey>
-    void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size) {
+    ATTRIBUTE_NOINLINE void build_hash_set(HashSetWithKey& hash_set, size_t chunk_size) {
         hash_set.build_set(chunk_size, _group_by_columns, _mem_pool.get());
     }
 
     template <typename HashSetWithKey>
-    void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
+    ATTRIBUTE_NOINLINE void build_hash_set_with_selection(HashSetWithKey& hash_set, size_t chunk_size) {
         hash_set.build_set(chunk_size, _group_by_columns, &_streaming_selection);
     }
 
     template <typename HashMapWithKey>
-    void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
-        SCOPED_TIMER(_get_results_timer);
+    ATTRIBUTE_NOINLINE void convert_hash_map_to_chunk(HashMapWithKey& hash_map_with_key, int32_t chunk_size,
+                                                      vectorized::ChunkPtr* chunk) {
+        SCOPED_TIMER(_agg_stat->get_results_timer);
 
         auto it = std::any_cast<RawHashTableIterator>(_it_hash);
         auto end = _state_allocator.end();
@@ -401,7 +395,7 @@ public:
         auto use_intermediate = _use_intermediate_as_output();
         int32_t read_index = 0;
         {
-            SCOPED_TIMER(_iter_timer);
+            SCOPED_TIMER(_agg_stat->iter_timer);
             hash_map_with_key.results.resize(chunk_size);
             // get key/value from hashtable
             while ((it != end) & (read_index < chunk_size)) {
@@ -414,12 +408,12 @@ public:
         }
 
         {
-            SCOPED_TIMER(_group_by_append_timer);
+            SCOPED_TIMER(_agg_stat->group_by_append_timer);
             hash_map_with_key.insert_keys_to_columns(hash_map_with_key.results, group_by_columns, read_index);
         }
 
         {
-            SCOPED_TIMER(_agg_append_timer);
+            SCOPED_TIMER(_agg_stat->agg_append_timer);
             if (!use_intermediate) {
                 for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
                     _agg_functions[i]->batch_finalize(_agg_fn_ctxs[i], read_index, _tmp_agg_states,
@@ -460,34 +454,16 @@ public:
         }
 
         _it_hash = it;
-
-        vectorized::ChunkPtr _result_chunk = std::make_shared<vectorized::Chunk>();
-        // For different agg phase, we should use different TupleDescriptor
-        if (!use_intermediate) {
-            for (size_t i = 0; i < group_by_columns.size(); i++) {
-                _result_chunk->append_column(group_by_columns[i], _output_tuple_desc->slots()[i]->id());
-            }
-            for (size_t i = 0; i < agg_result_columns.size(); i++) {
-                size_t id = group_by_columns.size() + i;
-                _result_chunk->append_column(agg_result_columns[i], _output_tuple_desc->slots()[id]->id());
-            }
-        } else {
-            for (size_t i = 0; i < group_by_columns.size(); i++) {
-                _result_chunk->append_column(group_by_columns[i], _intermediate_tuple_desc->slots()[i]->id());
-            }
-            for (size_t i = 0; i < agg_result_columns.size(); i++) {
-                size_t id = group_by_columns.size() + i;
-                _result_chunk->append_column(agg_result_columns[i], _intermediate_tuple_desc->slots()[id]->id());
-            }
-        }
+        auto result_chunk = _build_output_chunk(group_by_columns, agg_result_columns);
         _num_rows_returned += read_index;
         _num_rows_processed += read_index;
-        *chunk = std::move(_result_chunk);
+        *chunk = std::move(result_chunk);
     }
 
     template <typename HashSetWithKey>
-    void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size, vectorized::ChunkPtr* chunk) {
-        SCOPED_TIMER(_get_results_timer);
+    ATTRIBUTE_NOINLINE void convert_hash_set_to_chunk(HashSetWithKey& hash_set, int32_t chunk_size,
+                                                      vectorized::ChunkPtr* chunk) {
+        SCOPED_TIMER(_agg_stat->get_results_timer);
         using Iterator = typename HashSetWithKey::Iterator;
         auto it = std::any_cast<Iterator>(_it_hash);
         auto end = hash_set.hash_set.end();
@@ -506,7 +482,7 @@ public:
         }
 
         {
-            SCOPED_TIMER(_group_by_append_timer);
+            SCOPED_TIMER(_agg_stat->group_by_append_timer);
             hash_set.insert_keys_to_columns(hash_set.results, group_by_columns, read_index);
         }
 
@@ -548,7 +524,7 @@ public:
         *chunk = std::move(result_chunk);
     }
 
-private:
+protected:
     bool _reached_limit() { return _limit != -1 && _num_rows_returned >= _limit; }
 
     bool _use_intermediate_as_input() {
@@ -578,6 +554,10 @@ private:
                              const vectorized::Columns& agg_result_columns);
     void _finalize_to_chunk(vectorized::ConstAggDataPtr __restrict state,
                             const vectorized::Columns& agg_result_columns);
+    void _destroy_state(vectorized::AggDataPtr __restrict state);
+
+    vectorized::ChunkPtr _build_output_chunk(const vectorized::Columns& group_by_columns,
+                                             const vectorized::Columns& agg_result_columns);
 
     void _set_passthrough(bool flag) { _is_passthrough = flag; }
     bool is_passthrough() const { return _is_passthrough; }
@@ -594,7 +574,7 @@ private:
     void _init_agg_hash_variant(HashVariantType& hash_variant);
 
     template <typename HashMapWithKey>
-    void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
+    ATTRIBUTE_NOINLINE void _release_agg_memory(HashMapWithKey* hash_map_with_key) {
         // If all function states are of POD type,
         // then we don't have to traverse the hash table to call destroy method.
         //
@@ -643,19 +623,18 @@ inline vectorized::AggDataPtr AllocateState<HashMapWithKey>::operator()(std::nul
     return agg_state;
 }
 
-class AggregatorFactory;
-using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
-
-class AggregatorFactory {
+template <class T>
+class AggregatorFactoryBase {
 public:
-    AggregatorFactory(const TPlanNode& tnode) : _tnode(tnode) {}
+    using Ptr = std::shared_ptr<T>;
+    AggregatorFactoryBase(const TPlanNode& tnode) : _tnode(tnode) {}
 
-    AggregatorPtr get_or_create(size_t id) {
+    Ptr get_or_create(size_t id) {
         auto it = _aggregators.find(id);
         if (it != _aggregators.end()) {
             return it->second;
         }
-        auto aggregator = std::make_shared<Aggregator>(_tnode);
+        auto aggregator = std::make_shared<T>(_tnode);
         aggregator->set_aggr_mode(_aggr_mode);
         _aggregators[id] = aggregator;
         return aggregator;
@@ -665,8 +644,14 @@ public:
 
 private:
     const TPlanNode& _tnode;
+    std::unordered_map<size_t, Ptr> _aggregators;
     AggrMode _aggr_mode = AggrMode::AM_DEFAULT;
-    std::unordered_map<size_t, AggregatorPtr> _aggregators;
 };
+
+using AggregatorFactory = AggregatorFactoryBase<Aggregator>;
+using AggregatorFactoryPtr = std::shared_ptr<AggregatorFactory>;
+
+using StreamingAggregatorFactory = AggregatorFactoryBase<SortedStreamingAggregator>;
+using StreamingAggregatorFactoryPtr = std::shared_ptr<StreamingAggregatorFactory>;
 
 } // namespace starrocks

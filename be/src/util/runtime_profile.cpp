@@ -21,7 +21,6 @@
 
 #include "util/runtime_profile.h"
 
-#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/thread/thread_time.hpp>
 #include <iomanip>
 #include <iostream>
@@ -38,6 +37,7 @@
 #include "util/monotime.h"
 #include "util/pretty_printer.h"
 #include "util/thread.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -137,7 +137,7 @@ void RuntimeProfile::merge(RuntimeProfile* other) {
         // Recursively merge children with matching names
         for (auto& i : other->_children) {
             RuntimeProfile* other_child = i.first;
-            ChildMap::iterator j = _child_map.find(other_child->_name);
+            auto j = _child_map.find(other_child->_name);
             RuntimeProfile* child = nullptr;
 
             if (j != _child_map.end()) {
@@ -171,7 +171,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
         std::map<std::string, Counter*>::iterator dst_iter;
 
         for (const auto& tcounter : node.counters) {
-            CounterMap::iterator j = _counter_map.find(tcounter.name);
+            auto j = _counter_map.find(tcounter.name);
 
             if (j == _counter_map.end()) {
                 // TODO(hcf) pass correct parent counter name
@@ -204,9 +204,9 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
             // are new strings, add them to the end of the display order.
             // TODO: Is nodes.info_strings always a superset of
             // _info_strings? If so, can just copy the display order.
-            InfoStrings::const_iterator it = info_strings.find(key);
+            auto it = info_strings.find(key);
             DCHECK(it != info_strings.end());
-            InfoStrings::iterator existing = _info_strings.find(key);
+            auto existing = _info_strings.find(key);
 
             if (existing == _info_strings.end()) {
                 _info_strings.emplace(key, it->second);
@@ -224,7 +224,7 @@ void RuntimeProfile::update(const std::vector<TRuntimeProfileNode>& nodes, int* 
         // update children with matching names; create new ones if they don't match
         for (int i = 0; i < node.num_children; ++i) {
             const TRuntimeProfileNode& tchild = nodes[*idx];
-            ChildMap::iterator j = _child_map.find(tchild.name);
+            auto j = _child_map.find(tchild.name);
             RuntimeProfile* child = nullptr;
 
             if (j != _child_map.end()) {
@@ -302,7 +302,7 @@ RuntimeProfile* RuntimeProfile::create_child(const std::string& name, bool inden
         return iter->second;
     }
     RuntimeProfile* child = _pool->add(new RuntimeProfile(name));
-    ChildVector::iterator pos = prepend ? _children.begin() : _children.end();
+    auto pos = prepend ? _children.begin() : _children.end();
     add_child_unlock(child, indent, pos);
     return child;
 }
@@ -346,7 +346,7 @@ void RuntimeProfile::add_child(RuntimeProfile* child, bool indent, RuntimeProfil
         add_child_unlock(child, indent, _children.end());
     } else {
         auto f = [loc](const std::pair<RuntimeProfile*, bool>& pair) { return pair.first == loc; };
-        ChildVector::iterator pos = std::find_if(_children.begin(), _children.end(), f);
+        auto pos = std::find_if(_children.begin(), _children.end(), f);
         DCHECK(pos != _children.end());
         add_child_unlock(child, indent, ++pos);
     }
@@ -391,7 +391,7 @@ void RuntimeProfile::get_all_children(std::vector<RuntimeProfile*>* children) {
 
 void RuntimeProfile::add_info_string(const std::string& key, const std::string& value) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
-    InfoStrings::iterator it = _info_strings.find(key);
+    auto it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
         _info_strings.emplace(key, value);
@@ -403,7 +403,7 @@ void RuntimeProfile::add_info_string(const std::string& key, const std::string& 
 
 const std::string* RuntimeProfile::get_info_string(const std::string& key) {
     std::lock_guard<std::mutex> l(_info_strings_lock);
-    InfoStrings::const_iterator it = _info_strings.find(key);
+    auto it = _info_strings.find(key);
 
     if (it == _info_strings.end()) {
         return nullptr;
@@ -637,7 +637,7 @@ void RuntimeProfile::pretty_print(std::ostream* s, const std::string& prefix) co
         child_counter_map = _child_counter_map;
     }
 
-    decltype(_counter_map)::const_iterator total_time = counter_map.find("TotalTime");
+    auto total_time = counter_map.find("TotalTime");
     DCHECK(total_time != counter_map.end());
 
     stream.flags(std::ios::fixed);
@@ -720,11 +720,11 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         node.child_counters_map = _child_counter_map;
     }
 
-    for (decltype(_counter_map)::const_iterator iter = counter_map.begin(); iter != counter_map.end(); ++iter) {
+    for (auto& iter : counter_map) {
         TCounter counter;
-        counter.name = iter->first;
-        counter.value = iter->second.first->value();
-        counter.type = iter->second.first->type();
+        counter.name = iter.first;
+        counter.value = iter.second.first->value();
+        counter.type = iter.second.first->type();
         node.counters.push_back(counter);
     }
 
@@ -837,7 +837,7 @@ void RuntimeProfile::add_bucketing_counters(const std::string& name, const std::
 
 RuntimeProfile::EventSequence* RuntimeProfile::add_event_sequence(const std::string& name) {
     std::lock_guard<std::mutex> l(_event_sequences_lock);
-    EventSequenceMap::iterator timer_it = _event_sequence_map.find(name);
+    auto timer_it = _event_sequence_map.find(name);
 
     if (timer_it != _event_sequence_map.end()) {
         return timer_it->second;
@@ -899,8 +899,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
     int64_t num_sampled = 0;
     {
         std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
-        PeriodicCounterUpdateState::BucketCountersMap::const_iterator itr =
-                _s_periodic_counter_update_state.bucketing_counters.find(buckets);
+        auto itr = _s_periodic_counter_update_state.bucketing_counters.find(buckets);
 
         if (itr != _s_periodic_counter_update_state.bucketing_counters.end()) {
             num_sampled = itr->second.num_sampled;
@@ -916,7 +915,7 @@ void RuntimeProfile::stop_bucketing_counters_updates(std::vector<Counter*>* buck
     }
 }
 
-RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() {}
+RuntimeProfile::PeriodicCounterUpdateState::PeriodicCounterUpdateState() = default;
 
 RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
     if (_s_periodic_counter_update_state.update_thread != nullptr) {
@@ -931,15 +930,13 @@ RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
 
 void RuntimeProfile::periodic_counter_update_loop() {
     while (!_s_periodic_counter_update_state._done) {
-        boost::system_time before_time = boost::get_system_time();
+        auto before_time = MonotonicMillis();
         SleepFor(MonoDelta::FromMilliseconds(config::periodic_counter_update_period_ms));
-        boost::posix_time::time_duration elapsed = boost::get_system_time() - before_time;
-        int elapsed_ms = elapsed.total_milliseconds();
+        int64_t elapsed_ms = MonotonicMillis() - before_time;
 
         std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 
-        for (PeriodicCounterUpdateState::RateCounterMap::iterator it =
-                     _s_periodic_counter_update_state.rate_counters.begin();
+        for (auto it = _s_periodic_counter_update_state.rate_counters.begin();
              it != _s_periodic_counter_update_state.rate_counters.end(); ++it) {
             it->second.elapsed_ms += elapsed_ms;
             int64_t value;
@@ -955,8 +952,7 @@ void RuntimeProfile::periodic_counter_update_loop() {
             it->first->set(rate);
         }
 
-        for (PeriodicCounterUpdateState::SamplingCounterMap::iterator it =
-                     _s_periodic_counter_update_state.sampling_counters.begin();
+        for (auto it = _s_periodic_counter_update_state.sampling_counters.begin();
              it != _s_periodic_counter_update_state.sampling_counters.end(); ++it) {
             ++it->second.num_sampled;
             int64_t value;
@@ -1076,8 +1072,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             int64_t min_value = std::numeric_limits<int64_t>::max();
             int64_t max_value = std::numeric_limits<int64_t>::min();
             bool already_merged = false;
-            for (auto j = 0; j < profiles.size(); j++) {
-                auto* profile = profiles[j];
+            for (auto profile : profiles) {
                 auto* counter = profile->get_counter(name);
 
                 // Allow some counters which only attach to one of the isomorphic profiles
@@ -1196,12 +1191,12 @@ void RuntimeProfile::print_child_counters(const std::string& prefix, const std::
                                           const CounterMap& counter_map, const ChildCounterMap& child_counter_map,
                                           std::ostream* s) {
     std::ostream& stream = *s;
-    ChildCounterMap::const_iterator itr = child_counter_map.find(counter_name);
+    auto itr = child_counter_map.find(counter_name);
 
     if (itr != child_counter_map.end()) {
         const std::set<std::string>& child_counters = itr->second;
         for (const std::string& child_counter : child_counters) {
-            CounterMap::const_iterator iter = counter_map.find(child_counter);
+            auto iter = counter_map.find(child_counter);
             DCHECK(iter != counter_map.end());
             stream << prefix << "   - " << iter->first << ": "
                    << PrettyPrinter::print(iter->second.first->value(), iter->second.first->type()) << std::endl;

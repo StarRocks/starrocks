@@ -31,7 +31,7 @@ struct SortedRun {
         DCHECK_LT(end, Column::MAX_CAPACITY_LIMIT);
     }
 
-    SortedRun(ChunkPtr ichunk, const std::vector<ExprContext*>* exprs);
+    SortedRun(const ChunkPtr& ichunk, const std::vector<ExprContext*>* exprs);
 
     size_t num_columns() const { return orderby.size(); }
     size_t start_index() const { return range.first; }
@@ -104,7 +104,7 @@ public:
     // Return nullptr if no output
     StatusOr<ChunkUniquePtr> next();
 
-    Status consume_all(ChunkConsumer output);
+    Status consume_all(const ChunkConsumer& output);
     std::unique_ptr<SimpleChunkSortCursor> as_chunk_cursor();
 
 private:
@@ -130,7 +130,7 @@ public:
     bool is_data_ready();
     bool is_eos();
     ChunkUniquePtr try_get_next();
-    Status consume_all(ChunkConsumer consumer);
+    Status consume_all(const ChunkConsumer& consumer);
 
 private:
     std::vector<std::unique_ptr<MergeTwoCursor>> _mergers;
@@ -147,7 +147,7 @@ Status merge_sorted_chunks(const SortDescs& descs, const std::vector<ExprContext
                            const std::vector<ChunkPtr>& chunks, SortedRuns* output);
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   ChunkConsumer consumer);
+                                   const ChunkConsumer& consumer);
 
 // Merge in rowwise, which is slow and used only in benchmark
 Status merge_sorted_chunks_two_way_rowwise(const SortDescs& descs, const Columns& left, const Columns& right,

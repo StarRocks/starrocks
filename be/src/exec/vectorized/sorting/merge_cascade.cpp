@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
@@ -17,7 +19,7 @@ struct CursorAlgo {
         return left.compare_row(desc, right, lhs_tail, rhs_tail);
     }
 
-    static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
+    static void trim_permutation(const SortedRun& left, const SortedRun& right, Permutation& perm) {
         if (perm.size() <= left.num_rows() + right.num_rows()) {
             return;
         }
@@ -66,7 +68,7 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
 }
 
 // Consume all inputs and produce output through the callback function
-Status MergeTwoCursor::consume_all(ChunkConsumer output) {
+Status MergeTwoCursor::consume_all(const ChunkConsumer& output) {
     for (auto chunk = next(); chunk.ok() && !is_eos(); chunk = next()) {
         if (chunk.value()) {
             output(std::move(chunk.value()));
@@ -227,7 +229,7 @@ ChunkUniquePtr MergeCursorsCascade::try_get_next() {
     return _root_cursor->try_get_next().first;
 }
 
-Status MergeCursorsCascade::consume_all(ChunkConsumer consumer) {
+Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
     while (!is_eos()) {
         ChunkUniquePtr chunk = try_get_next();
         if (!!chunk) {
@@ -238,18 +240,18 @@ Status MergeCursorsCascade::consume_all(ChunkConsumer consumer) {
 }
 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
-                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output) {
+                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
-    return merger.consume_all(output);
+    return merger.consume_all(std::move(output));
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   ChunkConsumer consumer) {
+                                   const ChunkConsumer& consumer) {
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
-    merger.consume_all(consumer);
+    merger.consume_all(std::move(consumer));
     return Status::OK();
 }
 

@@ -18,7 +18,7 @@ namespace starrocks::vectorized {
 // =====================
 // one level agg hash set
 template <PhmapSeed seed>
-using Int8AggHashSet = SmallFixedSizeHashSet<int8_t>;
+using Int8AggHashSet = SmallFixedSizeHashSet<int8_t, seed>;
 template <PhmapSeed seed>
 using Int16AggHashSet = phmap::flat_hash_set<int16_t, StdHashWithSeed<int16_t, seed>>;
 template <PhmapSeed seed>

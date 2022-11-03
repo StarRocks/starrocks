@@ -31,22 +31,21 @@
 namespace starrocks {
 
 struct BfdFindCtx {
-    BfdFindCtx(bfd_symbol** syms_, bfd_vma pc_)
-            : found(false), syms(syms_), pc(pc_), file_name(nullptr), func_name(nullptr), lineno(0) {}
+    BfdFindCtx(bfd_symbol** syms_, bfd_vma pc_) : syms(syms_), pc(pc_) {}
 
-    bool found;
+    bool found{false};
     bfd_symbol** syms;
     bfd_vma pc;
-    const char* file_name;
-    const char* func_name;
-    unsigned int lineno;
+    const char* file_name{nullptr};
+    const char* func_name{nullptr};
+    unsigned int lineno{0};
 };
 
 std::mutex BfdParser::_bfd_mutex;
 bool BfdParser::_is_bfd_inited = false;
 
 static void find_addr_in_section(bfd* abfd, asection* sec, void* arg) {
-    BfdFindCtx* ctx = (BfdFindCtx*)arg;
+    auto* ctx = (BfdFindCtx*)arg;
     if (ctx->found) {
         return;
     }
@@ -80,7 +79,7 @@ static void find_addr_in_section(bfd* abfd, asection* sec, void* arg) {
 }
 
 static void section_print(bfd* bfd, asection* sec, void* arg) {
-    std::string* str = (std::string*)arg;
+    auto* str = (std::string*)arg;
     str->append(sec->name);
     str->push_back('\n');
 }

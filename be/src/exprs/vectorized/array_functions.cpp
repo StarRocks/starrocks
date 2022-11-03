@@ -223,13 +223,13 @@ private:
         const NullColumn::Container* null_map_targets = nullptr;
 
         if constexpr (NullableElement) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_elements);
+            const auto& nullable = down_cast<const NullableColumn&>(array_elements);
             elements_ptr = nullable.data_column().get();
             null_map_elements = &(nullable.null_column()->get_data());
         }
 
         if constexpr (NullableTarget) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(argument);
+            const auto& nullable = down_cast<const NullableColumn&>(argument);
             targets_ptr = nullable.data_column().get();
             null_map_targets = &(nullable.null_column()->get_data());
         }
@@ -343,21 +343,21 @@ struct ArrayCumSumImpl {
 public:
     static ColumnPtr evaluate(const ColumnPtr& col) {
         if (col->is_constant()) {
-            ConstColumn* input = down_cast<ConstColumn*>(col.get());
+            auto* input = down_cast<ConstColumn*>(col.get());
             auto arr_col_h = input->data_column()->clone();
-            ArrayColumn* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
+            auto* arr_col = down_cast<ArrayColumn*>(arr_col_h.get());
             call_cum_sum(arr_col, nullptr);
             return ConstColumn::create(std::move(arr_col_h));
         } else if (col->is_nullable()) {
             auto res = col->clone();
-            NullableColumn* input = down_cast<NullableColumn*>(res.get());
+            auto* input = down_cast<NullableColumn*>(res.get());
             NullColumn* null_column = input->mutable_null_column();
-            ArrayColumn* arr_col = down_cast<ArrayColumn*>(input->data_column().get());
+            auto* arr_col = down_cast<ArrayColumn*>(input->data_column().get());
             call_cum_sum(arr_col, null_column);
             return res;
         } else {
             auto res = col->clone();
-            ArrayColumn* arr_col = down_cast<ArrayColumn*>(res.get());
+            auto* arr_col = down_cast<ArrayColumn*>(res.get());
             call_cum_sum(arr_col, nullptr);
             return res;
         }
@@ -545,13 +545,13 @@ private:
         const NullColumn::Container* null_map_targets = nullptr;
 
         if constexpr (NullableElement) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_elements);
+            const auto& nullable = down_cast<const NullableColumn&>(array_elements);
             elements_ptr = nullable.data_column().get();
             null_map_elements = &(nullable.null_column()->get_data());
         }
 
         if constexpr (NullableTarget) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(argument);
+            const auto& nullable = down_cast<const NullableColumn&>(argument);
             targets_ptr = nullable.data_column().get();
             null_map_targets = &(nullable.null_column()->get_data());
         }
@@ -781,13 +781,13 @@ private:
         const NullColumn::Container* null_map_targets = nullptr;
 
         if constexpr (NullableElement) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_elements);
+            const auto& nullable = down_cast<const NullableColumn&>(array_elements);
             elements_ptr = nullable.data_column().get();
             null_map_elements = &(nullable.null_column()->get_data());
         }
 
         if constexpr (NullableTarget) {
-            const NullableColumn& nullable = down_cast<const NullableColumn&>(array_targets);
+            const auto& nullable = down_cast<const NullableColumn&>(array_targets);
             targets_ptr = nullable.data_column().get();
             null_map_targets = &(nullable.null_column()->get_data());
         }
@@ -1079,7 +1079,7 @@ public:
                 ResultType result;
 
                 size_t index;
-                if constexpr (!pt_is_binary<value_type>) {
+                if constexpr (!pt_is_string<value_type>) {
                     if constexpr (is_min) {
                         result = RunTimeTypeLimits<value_type>::max_value();
                     } else {
@@ -1121,7 +1121,7 @@ public:
                     }
                 }
 
-                if constexpr (!pt_is_binary<value_type>) {
+                if constexpr (!pt_is_string<value_type>) {
                     if (has_data) {
                         result_column->append(result);
                     } else {

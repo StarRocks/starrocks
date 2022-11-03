@@ -152,7 +152,7 @@ Status MysqlTableWriter::_build_insert_sql(int from, int to, std::string_view* s
                             fmt::format_to(_stmt_buffer, "'{}'", vectorized::date::to_string(y, m, d));
                         } else if constexpr (pt_is_datetime<type>) {
                             fmt::format_to(_stmt_buffer, "'{}'", viewer.value(i).to_string());
-                        } else if constexpr (pt_is_binary<type>) {
+                        } else if constexpr (pt_is_string<type>) {
                             auto slice = viewer.value(i);
                             _escape_buffer.resize(slice.size * 2 + 1);
 

@@ -152,6 +152,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
+    public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
+    public static final String ENABLE_REALTIME_REFRESH_MV = "enable_realtime_mv";
+
     /**
      * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
      * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
@@ -284,7 +287,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
+    public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
@@ -311,6 +318,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VarAttr(name = ENABLE_MV_PLANNER)
+    private boolean enableMVPlanner = false;
+    @VarAttr(name = ENABLE_REALTIME_REFRESH_MV)
+    private boolean enableRealtimeRefreshMV = false;
 
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
@@ -606,10 +618,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int newPlannerAggStage = 0;
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
-    private String transmissionCompressionType = "LZ4";
+    private String transmissionCompressionType = "NO_COMPRESSION";
 
     @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
-    private int transmissionEncodeLevel = 0;
+    private int transmissionEncodeLevel = 7;
 
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
@@ -692,8 +704,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
+    @VarAttr(name = ENABLE_SORT_AGGREGATE)
+    private boolean enableSortAggregate = false;
+
+    public boolean isEnableSortAggregate() {
+        return enableSortAggregate;
+    }
+
+    public void setEnableSortAggregate(boolean enableSortAggregate) {
+        this.enableSortAggregate = enableSortAggregate;
+    }
+    
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateBlockCache = true;
 
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
@@ -710,6 +736,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
+    
+    public boolean getEnablePopulateBlockCache() {
+        return enablePopulateBlockCache;
+    }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1082,6 +1112,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableDeliverBatchFragments() {
         return enableDeliverBatchFragments;
+    }
+
+    public boolean isMVPlanner() {
+        return enableMVPlanner;
+    }
+
+    public void setMVPlanner(boolean enable) {
+        this.enableMVPlanner = enable;
+    }
+
+    public boolean isEnableRealtimeRefreshMV() {
+        return enableRealtimeRefreshMV;
+    }
+
+    public void setEnableRealtimeRefreshMv(boolean enable) {
+        this.enableRealtimeRefreshMV = enable;
     }
 
     public boolean isEnablePipelineEngine() {

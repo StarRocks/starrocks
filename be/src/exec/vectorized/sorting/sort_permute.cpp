@@ -13,6 +13,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "column/object_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/vectorized/sorting/sorting.h"
@@ -65,7 +66,7 @@ public:
         uint32_t orig_size = dst->size();
         Columns null_columns, data_columns;
         for (auto& col : _columns) {
-            const NullableColumn* src_column = down_cast<const NullableColumn*>(col.get());
+            const auto* src_column = down_cast<const NullableColumn*>(col.get());
             null_columns.push_back(src_column->null_column());
             data_columns.push_back(src_column->data_column());
         }
@@ -159,6 +160,19 @@ public:
         return Status::OK();
     }
 
+    Status do_visit(StructColumn* dst) {
+        // TODO(SmithCruise) Not tested.
+        if (_columns.empty() || _perm.empty()) {
+            return Status::OK();
+        }
+
+        for (auto& p : _perm) {
+            dst->append(*_columns[p.chunk_index], p.index_in_chunk, 1);
+        }
+
+        return Status::OK();
+    }
+
     template <typename T>
     Status do_visit(BinaryColumnBase<T>* dst) {
         using Container = typename BinaryColumnBase<T>::Container;
@@ -233,7 +247,7 @@ void materialize_by_permutation(Chunk* dst, const std::vector<ChunkPtr>& chunks,
     for (size_t col_index = 0; col_index < dst->num_columns(); col_index++) {
         Columns tmp_columns;
         tmp_columns.reserve(chunks.size());
-        for (auto chunk : chunks) {
+        for (const auto& chunk : chunks) {
             tmp_columns.push_back(chunk->get_column_by_index(col_index));
         }
         materialize_column_by_permutation(dst->get_column_by_index(col_index).get(), tmp_columns, perm);

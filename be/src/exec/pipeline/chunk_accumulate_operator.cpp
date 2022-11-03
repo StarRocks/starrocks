@@ -5,8 +5,7 @@
 #include "column/chunk.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 Status ChunkAccumulateOperator::push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) {
     _acc.push(chunk);
@@ -35,5 +34,4 @@ Status ChunkAccumulateOperator::reset_state(RuntimeState* state, const std::vect
     return Status::OK();
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

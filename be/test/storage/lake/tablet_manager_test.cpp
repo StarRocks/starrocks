@@ -23,7 +23,7 @@ namespace starrocks {
 
 class LakeTabletManagerTest : public testing::Test {
 public:
-    LakeTabletManagerTest() : _tablet_manager(nullptr), _test_dir(), _location_provider(nullptr){};
+    LakeTabletManagerTest() : _test_dir(){};
 
     ~LakeTabletManagerTest() override = default;
 
@@ -44,9 +44,9 @@ public:
         (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
-    starrocks::lake::TabletManager* _tablet_manager;
+    starrocks::lake::TabletManager* _tablet_manager{nullptr};
     std::string _test_dir;
-    lake::LocationProvider* _location_provider;
+    lake::LocationProvider* _location_provider{nullptr};
 };
 
 // NOLINTNEXTLINE

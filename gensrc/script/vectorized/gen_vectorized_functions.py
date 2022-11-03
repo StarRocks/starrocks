@@ -57,6 +57,7 @@ ${license}
 
 #include "exprs/vectorized/array_functions.h"
 #include "exprs/vectorized/builtin_functions.h"
+#include "exprs/vectorized/map_functions.h"
 #include "exprs/vectorized/math_functions.h"
 #include "exprs/vectorized/bit_functions.h"
 #include "exprs/vectorized/string_functions.h"

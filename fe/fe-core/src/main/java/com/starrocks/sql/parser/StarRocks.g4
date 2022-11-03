@@ -496,7 +496,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1432,7 +1432,7 @@ unsupportedStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryRelation outfile?;
+    : (explainDesc | optimizerTrace) ? queryRelation outfile?;
 
 queryRelation
     : withClause? queryNoWith
@@ -1677,7 +1677,7 @@ primaryExpression
     | CASE caseExpr=expression whenClause+ (ELSE elseExpression=expression)? END          #simpleCase
     | CASE whenClause+ (ELSE elseExpression=expression)? END                              #searchedCase
     | arrayType? '[' (expressionList)? ']'                                                #arrayConstructor
-    | value=primaryExpression '[' index=valueExpression ']'                               #arraySubscript
+    | value=primaryExpression '[' index=valueExpression ']'                               #collectionSubscript
     | primaryExpression '[' start=INTEGER_VALUE? ':' end=INTEGER_VALUE? ']'               #arraySlice
     | primaryExpression ARROW string                                                      #arrowExpression
     | (identifier | identifierList) '->' expression                                       #lambdaFunctionExpr
@@ -1811,6 +1811,10 @@ explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
+optimizerTrace
+    : TRACE OPTIMIZER
+    ;
+
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
@@ -1847,6 +1851,10 @@ multiRangePartition
     | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
     ;
 
+partitionRangeDesc
+    : START '(' string ')' END '(' string ')'
+    ;
+
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
     | '[' partitionValueList ',' partitionValueList ')'
@@ -1873,6 +1881,7 @@ distributionDesc
 refreshSchemeDesc
     : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | INCREMENTAL
     | MANUAL)
     ;
 

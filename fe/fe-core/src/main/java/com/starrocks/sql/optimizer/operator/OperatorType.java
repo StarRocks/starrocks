@@ -74,12 +74,16 @@ public enum OperatorType {
     PHYSICAL_CTE_CONSUME,
     PHYSICAL_NO_CTE,
 
+    PHYSICAL_STREAM_SCAN,
+    PHYSICAL_STREAM_JOIN,
+    PHYSICAL_STREAM_AGG,
+
     /**
      * Scalar operator
      */
     SCALAR,
     ARRAY,
-    ARRAY_ELEMENT,
+    COLLECTION_ELEMENT,
     ARRAY_SLICE,
     VARIABLE,
     CONSTANT,

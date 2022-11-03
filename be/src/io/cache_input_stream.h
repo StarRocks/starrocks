@@ -21,7 +21,7 @@ public:
     };
 
     static constexpr int64_t BLOCK_SIZE = 1 * 1024 * 1024;
-    explicit CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream);
+    explicit CacheInputStream(std::string filename, std::shared_ptr<SeekableInputStream> stream);
 
     ~CacheInputStream() override = default;
 
@@ -35,6 +35,8 @@ public:
 
     const Stats& stats() { return _stats; }
 
+    void set_enable_populate_cache(bool v) { _enable_populate_cache = v; }
+
 private:
     std::string _cache_key;
     std::string _filename;
@@ -43,7 +45,7 @@ private:
     std::string _buffer;
     Stats _stats;
     int64_t _size;
-    int64_t _block_size;
+    bool _enable_populate_cache = false;
 };
 
 } // namespace starrocks::io

@@ -293,7 +293,6 @@ private:
     // _mutex protects the following state.
     std::mutex _mutex;
     size_t _usage{0};
-    uint64_t _last_id{0};
 
     // Dummy head of LRU list.
     // lru.prev is newest entry, lru.next is oldest entry.

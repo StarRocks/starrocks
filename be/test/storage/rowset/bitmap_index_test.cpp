@@ -170,7 +170,7 @@ TEST_F(BitmapIndexTest, test_invert_2) {
 
 TEST_F(BitmapIndexTest, test_multi_pages) {
     size_t num_uint8_rows = 1024 * 1024;
-    int64_t* val = new int64_t[num_uint8_rows];
+    auto* val = new int64_t[num_uint8_rows];
     for (int i = 0; i < num_uint8_rows; ++i) {
         val[i] = random() + 10000;
     }
@@ -202,7 +202,7 @@ TEST_F(BitmapIndexTest, test_multi_pages) {
 
 TEST_F(BitmapIndexTest, test_null) {
     size_t num_uint8_rows = 1024;
-    int64_t* val = new int64_t[num_uint8_rows];
+    auto* val = new int64_t[num_uint8_rows];
     for (int i = 0; i < num_uint8_rows; ++i) {
         val[i] = i;
     }
@@ -227,7 +227,7 @@ TEST_F(BitmapIndexTest, test_null) {
 
 TEST_F(BitmapIndexTest, test_concurrent_load) {
     size_t num_uint8_rows = 1024;
-    int64_t* val = new int64_t[num_uint8_rows];
+    auto* val = new int64_t[num_uint8_rows];
     for (int i = 0; i < num_uint8_rows; ++i) {
         val[i] = i;
     }

@@ -415,7 +415,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 }
 
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
-    const auto fragment_instance_id = request.fragment_instance_id();
+    const auto& fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
@@ -451,8 +451,7 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
     size_t driver_id = 0;
-    for (auto n = 0; n < pipelines.size(); ++n) {
-        const auto& pipeline = pipelines[n];
+    for (const auto& pipeline : pipelines) {
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
         VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << cur_pipeline_dop
@@ -646,6 +645,10 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
     return exchange_sink;
 }
 
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wpotentially-evaluated-expression")
+#endif
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                           const UnifiedExecPlanFragmentParams& request,
                                                           std::unique_ptr<starrocks::DataSink>& datasink,
@@ -653,7 +656,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                                                           const std::vector<TExpr>& output_exprs) {
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
-        ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+        auto* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
         // Result sink doesn't have plan node id;
         OpFactoryPtr op = nullptr;
         if (result_sink->get_sink_type() == TResultSinkType::FILE) {
@@ -667,7 +670,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
-        DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
+        auto* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto& t_stream_sink = request.output_sink().stream_sink;
 
@@ -686,7 +689,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
         // Further workflow explanation is in mcast_local_exchange.h file.
-        MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
+        auto* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
@@ -786,10 +789,10 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                     std::make_shared<Pipeline>(context->next_pipe_id(), operators_source_with_local_exchange);
             fragment_ctx->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
         } else {
-            fragment_ctx->pipelines().back()->add_op_factory(std::move(tablet_sink_op));
+            fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
         }
     } else if (typeid(*datasink) == typeid(starrocks::ExportSink)) {
-        ExportSink* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
+        auto* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto output_expr = export_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
@@ -797,7 +800,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::MysqlTableSink)) {
-        MysqlTableSink* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
+        auto* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto output_expr = mysql_table_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
@@ -808,5 +811,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
     return Status::OK();
 }
+DIAGNOSTIC_POP
 
 } // namespace starrocks::pipeline

@@ -80,7 +80,7 @@ private:
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
 
     connector::DataSourcePtr _data_source;
-    vectorized::ConnectorScanNode* _scan_node;
+    [[maybe_unused]] vectorized::ConnectorScanNode* _scan_node;
     const int64_t _limit; // -1: no limit
     const std::vector<ExprContext*>& _runtime_in_filters;
     const vectorized::RuntimeFilterProbeCollector* _runtime_bloom_filters;
@@ -95,7 +95,6 @@ private:
     bool _opened = false;
     bool _closed = false;
     uint64_t _rows_read = 0;
-    uint64_t _bytes_read = 0;
 };
 
 } // namespace pipeline

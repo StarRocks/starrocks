@@ -50,42 +50,42 @@ Status PartRangeKey::from_thrift(ObjectPool* pool, const TPartitionKey& t_key, P
     switch (key->_type) {
     case TYPE_TINYINT: {
         key->_key = pool->add(new int8_t());
-        int8_t* int_value = reinterpret_cast<int8_t*>(key->_key);
+        auto* int_value = reinterpret_cast<int8_t*>(key->_key);
         *int_value = StringParser::string_to_int<int8_t>(t_key.key.c_str(), t_key.key.length(), &parse_result);
         break;
     }
 
     case TYPE_SMALLINT: {
         key->_key = pool->add(new int16_t());
-        int16_t* int_value = reinterpret_cast<int16_t*>(key->_key);
+        auto* int_value = reinterpret_cast<int16_t*>(key->_key);
         *int_value = StringParser::string_to_int<int16_t>(t_key.key.c_str(), t_key.key.length(), &parse_result);
         break;
     }
 
     case TYPE_INT: {
         key->_key = pool->add(new int32_t());
-        int32_t* int_value = reinterpret_cast<int32_t*>(key->_key);
+        auto* int_value = reinterpret_cast<int32_t*>(key->_key);
         *int_value = StringParser::string_to_int<int32_t>(t_key.key.c_str(), t_key.key.length(), &parse_result);
         break;
     }
 
     case TYPE_BIGINT: {
         key->_key = pool->add(new int64_t());
-        int64_t* int_value = reinterpret_cast<int64_t*>(key->_key);
+        auto* int_value = reinterpret_cast<int64_t*>(key->_key);
         *int_value = StringParser::string_to_int<int64_t>(t_key.key.c_str(), t_key.key.length(), &parse_result);
         break;
     }
 
     case TYPE_LARGEINT: {
         key->_key = pool->add(new __int128());
-        __int128* int_value = reinterpret_cast<__int128*>(key->_key);
+        auto* int_value = reinterpret_cast<__int128*>(key->_key);
         *int_value = StringParser::string_to_int<__int128>(t_key.key.c_str(), t_key.key.length(), &parse_result);
         break;
     }
 
     case TYPE_DATE: {
         key->_key = pool->add(new DateTimeValue());
-        DateTimeValue* datetime = reinterpret_cast<DateTimeValue*>(key->_key);
+        auto* datetime = reinterpret_cast<DateTimeValue*>(key->_key);
         if (!(datetime->from_date_str(t_key.key.c_str(), t_key.key.length()))) {
             std::stringstream error_msg;
             error_msg << "Fail to convert date string:" << t_key.key;
@@ -97,7 +97,7 @@ Status PartRangeKey::from_thrift(ObjectPool* pool, const TPartitionKey& t_key, P
 
     case TYPE_DATETIME: {
         key->_key = pool->add(new DateTimeValue());
-        DateTimeValue* datetime = reinterpret_cast<DateTimeValue*>(key->_key);
+        auto* datetime = reinterpret_cast<DateTimeValue*>(key->_key);
         if (!(datetime->from_date_str(t_key.key.c_str(), t_key.key.length()))) {
             std::stringstream error_msg;
             error_msg << "Fail to convert datetime string:" << t_key.key;

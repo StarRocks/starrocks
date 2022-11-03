@@ -129,7 +129,7 @@ static void alter_tablet(const TAlterTabletReqV2& agent_task_req, int64_t signat
     finish_task_request->__set_task_status(task_status);
 }
 
-static void unify_finish_agent_task(TStatusCode::type status_code, std::vector<std::string> error_msgs,
+static void unify_finish_agent_task(TStatusCode::type status_code, const std::vector<std::string>& error_msgs,
                                     const TTaskType::type task_type, int64_t signature, bool report_version = false) {
     TStatus task_status;
     task_status.__set_status_code(status_code);
@@ -148,7 +148,7 @@ static void unify_finish_agent_task(TStatusCode::type status_code, std::vector<s
     remove_task_info(task_type, signature);
 }
 
-void run_drop_tablet_task(std::shared_ptr<DropTabletAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     StarRocksMetrics::instance()->clone_requests_total.increment(1);
 
     const TDropTabletReq& drop_tablet_req = agent_task_req->task_req;
@@ -176,7 +176,7 @@ void run_drop_tablet_task(std::shared_ptr<DropTabletAgentTaskRequest> agent_task
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_create_tablet_task(std::shared_ptr<CreateTabletAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_create_tablet_task(const std::shared_ptr<CreateTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const auto& create_tablet_req = agent_task_req->task_req;
     TFinishTaskRequest finish_task_request;
     TStatusCode::type status_code = TStatusCode::OK;
@@ -212,7 +212,7 @@ void run_create_tablet_task(std::shared_ptr<CreateTabletAgentTaskRequest> agent_
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature, true);
 }
 
-void run_alter_tablet_task(std::shared_ptr<AlterTabletAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_alter_tablet_task(const std::shared_ptr<AlterTabletAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     int64_t signatrue = agent_task_req->signature;
     LOG(INFO) << "get alter table task, signature: " << agent_task_req->signature;
     bool is_task_timeout = false;
@@ -234,7 +234,8 @@ void run_alter_tablet_task(std::shared_ptr<AlterTabletAgentTaskRequest> agent_ta
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_clear_transaction_task(std::shared_ptr<ClearTransactionAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_clear_transaction_task(const std::shared_ptr<ClearTransactionAgentTaskRequest>& agent_task_req,
+                                ExecEnv* exec_env) {
     const TClearTransactionTaskRequest& clear_transaction_task_req = agent_task_req->task_req;
     LOG(INFO) << "get clear transaction task task, signature:" << agent_task_req->signature
               << ", txn_id: " << clear_transaction_task_req.transaction_id
@@ -264,7 +265,7 @@ void run_clear_transaction_task(std::shared_ptr<ClearTransactionAgentTaskRequest
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_clone_task(const std::shared_ptr<CloneAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TCloneReq& clone_req = agent_task_req->task_req;
     AgentStatus status = STARROCKS_SUCCESS;
 
@@ -335,7 +336,7 @@ void run_clone_task(std::shared_ptr<CloneAgentTaskRequest> agent_task_req, ExecE
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_storage_medium_migrate_task(std::shared_ptr<StorageMediumMigrateTaskRequest> agent_task_req,
+void run_storage_medium_migrate_task(const std::shared_ptr<StorageMediumMigrateTaskRequest>& agent_task_req,
                                      ExecEnv* exec_env) {
     const TStorageMediumMigrateReq& storage_medium_migrate_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
@@ -414,7 +415,7 @@ void run_storage_medium_migrate_task(std::shared_ptr<StorageMediumMigrateTaskReq
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_check_consistency_task(std::shared_ptr<CheckConsistencyTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_check_consistency_task(const std::shared_ptr<CheckConsistencyTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TCheckConsistencyReq& check_consistency_req = agent_task_req->task_req;
     TStatusCode::type status_code = TStatusCode::OK;
     std::vector<std::string> error_msgs;
@@ -454,7 +455,7 @@ void run_check_consistency_task(std::shared_ptr<CheckConsistencyTaskRequest> age
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_upload_task(std::shared_ptr<UploadAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_upload_task(const std::shared_ptr<UploadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TUploadReq& upload_request = agent_task_req->task_req;
 
     LOG(INFO) << "Got upload task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
@@ -488,7 +489,7 @@ void run_upload_task(std::shared_ptr<UploadAgentTaskRequest> agent_task_req, Exe
     LOG(INFO) << "Uploaded task signature=" << agent_task_req->signature << " job id=" << upload_request.job_id;
 }
 
-void run_download_task(std::shared_ptr<DownloadAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_download_task(const std::shared_ptr<DownloadAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TDownloadReq& download_request = agent_task_req->task_req;
     LOG(INFO) << "Got download task signature=" << agent_task_req->signature << " job id=" << download_request.job_id;
 
@@ -523,7 +524,7 @@ void run_download_task(std::shared_ptr<DownloadAgentTaskRequest> agent_task_req,
     LOG(INFO) << "Downloaded task signature=" << agent_task_req->signature << " job id=" << download_request.job_id;
 }
 
-void run_make_snapshot_task(std::shared_ptr<SnapshotAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_make_snapshot_task(const std::shared_ptr<SnapshotAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TSnapshotRequest& snapshot_request = agent_task_req->task_req;
     LOG(INFO) << "Got snapshot task signature=" << agent_task_req->signature;
 
@@ -576,7 +577,8 @@ void run_make_snapshot_task(std::shared_ptr<SnapshotAgentTaskRequest> agent_task
     remove_task_info(agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_release_snapshot_task(std::shared_ptr<ReleaseSnapshotAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_release_snapshot_task(const std::shared_ptr<ReleaseSnapshotAgentTaskRequest>& agent_task_req,
+                               ExecEnv* exec_env) {
     const TReleaseSnapshotRequest& release_snapshot_request = agent_task_req->task_req;
     LOG(INFO) << "Got release snapshot task signature=" << agent_task_req->signature;
 
@@ -625,7 +627,7 @@ AgentStatus move_dir(TTabletId tablet_id, TSchemaHash schema_hash, const std::st
     return STARROCKS_SUCCESS;
 }
 
-void run_move_dir_task(std::shared_ptr<MoveDirAgentTaskRequest> agent_task_req, ExecEnv* exec_env) {
+void run_move_dir_task(const std::shared_ptr<MoveDirAgentTaskRequest>& agent_task_req, ExecEnv* exec_env) {
     const TMoveDirReq& move_dir_req = agent_task_req->task_req;
     LOG(INFO) << "Got move dir task signature=" << agent_task_req->signature << " job id=" << move_dir_req.job_id;
 
@@ -650,7 +652,7 @@ void run_move_dir_task(std::shared_ptr<MoveDirAgentTaskRequest> agent_task_req, 
     unify_finish_agent_task(status_code, error_msgs, agent_task_req->task_type, agent_task_req->signature);
 }
 
-void run_update_meta_info_task(std::shared_ptr<UpdateTabletMetaInfoAgentTaskRequest> agent_task_req,
+void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTaskRequest>& agent_task_req,
                                ExecEnv* exec_env) {
     const TUpdateTabletMetaInfoReq& update_tablet_meta_req = agent_task_req->task_req;
 

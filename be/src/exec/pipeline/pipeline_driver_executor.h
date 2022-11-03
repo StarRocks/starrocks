@@ -46,7 +46,7 @@ protected:
 
 class GlobalDriverExecutor final : public FactoryMethod<DriverExecutor, GlobalDriverExecutor> {
 public:
-    GlobalDriverExecutor(std::string name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
+    GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool, bool enable_resource_group);
     ~GlobalDriverExecutor() override;
     void initialize(int32_t num_threads) override;
     void change_num_threads(int32_t num_threads) override;
@@ -66,7 +66,6 @@ private:
 
 private:
     LimitSetter _num_threads_setter;
-    const bool _enable_resource_group;
     std::unique_ptr<DriverQueue> _driver_queue;
     // _thread_pool must be placed after _driver_queue, because worker threads in _thread_pool use _driver_queue.
     std::unique_ptr<ThreadPool> _thread_pool;

@@ -22,7 +22,7 @@ public:
     explicit Schema(Fields fields);
 #endif
 
-    explicit Schema(Fields fields, KeysType keys_type, const std::vector<ColumnId>& sort_key_idxes);
+    explicit Schema(Fields fields, KeysType keys_type, std::vector<ColumnId> sort_key_idxes);
 
     // if we use this constructor and share the name_to_index with another schema,
     // we must make sure another shema is read only!!!

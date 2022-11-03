@@ -21,14 +21,9 @@
 
 #include "storage/tablet_meta_manager.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
-#include <rapidjson/writer.h>
-DIAGNOSTIC_POP
-
 #include <json2pb/json_to_pb.h>
 #include <json2pb/pb_to_json.h>
+#include <rapidjson/writer.h>
 #include <rocksdb/write_batch.h>
 
 #include <boost/algorithm/string/trim.hpp>
@@ -37,6 +32,7 @@ DIAGNOSTIC_POP
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "common/logging.h"
 #include "common/tracer.h"
 #include "gen_cpp/olap_file.pb.h"
@@ -984,21 +980,21 @@ StatusOr<size_t> TabletMetaManager::delete_del_vector_before_version(KVStore* me
         auto& versions = segment.second;
         bool del = false;
         bool added = false;
-        for (size_t i = 0; i < versions.size(); i++) {
+        for (long i : versions) {
             if (del) {
-                std::string key = encode_del_vector_key(tablet_id, segment.first, versions[i]);
+                std::string key = encode_del_vector_key(tablet_id, segment.first, i);
                 rocksdb::Status st = batch.Delete(cf_handle, key);
                 if (!st.ok()) {
                     return to_status(st);
                 }
                 num_delete++;
                 if (!added) {
-                    vlog_delvec_maplist << " " << segment.first << ":" << versions[i];
+                    vlog_delvec_maplist << " " << segment.first << ":" << i;
                     added = true;
                 } else {
-                    vlog_delvec_maplist << "," << versions[i];
+                    vlog_delvec_maplist << "," << i;
                 }
-            } else if (versions[i] <= version) {
+            } else if (i <= version) {
                 // versions after this version can be deleted
                 del = true;
             }

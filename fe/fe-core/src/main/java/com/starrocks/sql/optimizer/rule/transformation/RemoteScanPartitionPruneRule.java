@@ -35,8 +35,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-import static com.starrocks.external.PartitionUtil.createPartitionKey;
-import static com.starrocks.external.PartitionUtil.toPartitionValues;
+import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
 public class RemoteScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);

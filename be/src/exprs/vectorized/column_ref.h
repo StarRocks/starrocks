@@ -48,7 +48,6 @@ private:
     SlotId _column_id;
 
     TupleId _tuple_id = 0; // used for desc this slot from
-    bool _is_nullable = false;
 };
 
 } // namespace vectorized

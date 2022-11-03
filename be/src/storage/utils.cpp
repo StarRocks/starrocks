@@ -21,10 +21,7 @@
 
 #include "storage/utils.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 #include <dirent.h>
 #include <fmt/format.h>
 #include <lz4/lz4.h>
@@ -32,7 +29,6 @@ DIAGNOSTIC_POP
 #include <unistd.h>
 
 #include <atomic>
-#include <boost/regex.hpp>
 #include <cerrno>
 #include <chrono>
 #include <cstdarg>
@@ -43,6 +39,7 @@ DIAGNOSTIC_POP
 #include <ctime>
 #include <filesystem>
 #include <mutex>
+#include <regex>
 #include <string>
 #include <vector>
 
@@ -283,9 +280,9 @@ bool valid_signed_number<int128_t>(const std::string& value_str) {
 
 bool valid_decimal(const string& value_str, uint32_t precision, uint32_t frac) {
     const char* decimal_pattern = "-?\\d+(.\\d+)?";
-    boost::regex e(decimal_pattern);
-    boost::smatch what;
-    if (!boost::regex_match(value_str, what, e) || what[0].str().size() != value_str.size()) {
+    std::regex e(decimal_pattern);
+    std::smatch what;
+    if (!std::regex_match(value_str, what, e) || what[0].str().size() != value_str.size()) {
         LOG(WARNING) << "invalid decimal value. [value=" << value_str << "]";
         return false;
     }
@@ -320,10 +317,10 @@ bool valid_datetime(const string& value_str) {
     const char* datetime_pattern =
             "((?:\\d){4})-((?:\\d){2})-((?:\\d){2})[ ]*"
             "(((?:\\d){2}):((?:\\d){2}):((?:\\d){2}))?";
-    boost::regex e(datetime_pattern);
-    boost::smatch what;
+    std::regex e(datetime_pattern);
+    std::smatch what;
 
-    if (boost::regex_match(value_str, what, e)) {
+    if (std::regex_match(value_str, what, e)) {
         if (what[0].str().size() != value_str.size()) {
             LOG(WARNING) << "datetime str does not fully match. value_str=" << value_str << " match=" << what[0].str();
             return false;

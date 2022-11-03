@@ -61,7 +61,7 @@ class SnapshotLoader {
 public:
     SnapshotLoader(ExecEnv* env, int64_t job_id, int64_t task_id);
 
-    ~SnapshotLoader();
+    ~SnapshotLoader() = default;
 
     Status upload(const std::map<std::string, std::string>& src_to_dest_path, const TUploadReq& upload,
                   std::map<int64_t, std::vector<std::string>>* tablet_files);

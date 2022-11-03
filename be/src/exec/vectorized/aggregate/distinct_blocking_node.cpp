@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
 
+#include <variant>
+
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
@@ -52,16 +54,9 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            if (false) {
-            }
-#define HASH_SET_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
-    }
-            APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
-
+            TRY_CATCH_BAD_ALLOC(_aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+                _aggregator->build_hash_set(*hash_set_with_key, chunk->num_rows());
+            }));
             _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
             TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
@@ -81,14 +76,8 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
     if (_aggregator->hash_set_variant().size() == 0) {
         _aggregator->set_ht_eos();
     }
-
-    if (false) {
-    }
-#define HASH_SET_METHOD(NAME)                                                                                \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->hash_set_variant().NAME->hash_set.begin();
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+    _aggregator->hash_set_variant().visit(
+            [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
@@ -110,14 +99,9 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     }
     int32_t chunk_size = runtime_state()->chunk_size();
 
-    if (false) {
-    }
-#define HASH_SET_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME)                               \
-            _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, chunk_size, chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, chunk_size, chunk);
+    });
 
     size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
@@ -147,6 +131,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
         aggregator_factory->set_aggr_mode(aggr_mode);
         std::vector<ExprContext*> partition_expr_ctxs;
         Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs);
+        Expr::prepare(partition_expr_ctxs, runtime_state());
+        Expr::open(partition_expr_ctxs, runtime_state());
         auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory, std::move(partition_expr_ctxs));
         auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(

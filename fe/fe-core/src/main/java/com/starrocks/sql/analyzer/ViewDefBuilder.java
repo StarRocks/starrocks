@@ -25,8 +25,8 @@ public class ViewDefBuilder {
 
     public static String buildSimple(StatementBase statement) {
         Map<TableName, Table> tables = AnalyzerUtils.collectAllTableAndViewWithAlias(statement);
-        boolean sameDb = tables.keySet().stream().map(TableName::getDb).distinct().count() == 1;
-        return new ViewDefBuilderVisitor(sameDb).visit(statement);
+        boolean sameCatalogDb = tables.keySet().stream().map(TableName::getCatalogAndDb).distinct().count() == 1;
+        return new ViewDefBuilderVisitor(sameCatalogDb).visit(statement);
     }
 
     public static String build(StatementBase statement) {
@@ -151,11 +151,8 @@ public class ViewDefBuilder {
         @Override
         public String visitTable(TableRelation node, Void outerScope) {
             StringBuilder sqlBuilder = new StringBuilder();
-            if (simple) {
-                sqlBuilder.append("`").append(node.getName().getTbl()).append("`");
-            } else {
-                sqlBuilder.append(node.getName().toSql());
-            }
+            sqlBuilder.append(node.getName().toSql());
+
             if (node.getPartitionNames() != null) {
                 List<String> partitionNames = node.getPartitionNames().getPartitionNames();
                 if (partitionNames != null && !partitionNames.isEmpty()) {

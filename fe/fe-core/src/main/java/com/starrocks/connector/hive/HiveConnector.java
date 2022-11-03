@@ -8,12 +8,13 @@ import com.starrocks.common.util.Util;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 public class HiveConnector implements Connector {
     public static final String HIVE_METASTORE_URIS = "hive.metastore.uris";
@@ -63,16 +64,23 @@ public class HiveConnector implements Connector {
                 internalMgr.getHiveMetastoreConf(),
                 internalMgr.getRemoteFileConf(),
                 internalMgr.getPullRemoteFileExecutor(),
-                internalMgr.isSearchRecursive()
+                internalMgr.isSearchRecursive(),
+                internalMgr.enableHmsEventsIncrementalSync()
         );
     }
 
     public void onCreate() {
+        if (internalMgr.enableHmsEventsIncrementalSync()) {
+            Optional<CacheUpdateProcessor> updateProcessor = metadataFactory.getCacheUpdateProcessor();
+            updateProcessor.ifPresent(processor -> GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor()
+                    .registerCacheUpdateProcessor(catalogName, updateProcessor.get()));
+        }
     }
 
     @Override
     public void shutdown() {
         internalMgr.shutdown();
         metadataFactory.getCacheUpdateProcessor().ifPresent(CacheUpdateProcessor::invalidateAll);
+        GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterCacheUpdateProcessor(catalogName);
     }
 }

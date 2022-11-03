@@ -2,6 +2,7 @@
 
 #include "storage/primary_index.h"
 
+#include <memory>
 #include <mutex>
 
 #include "common/tracer.h"
@@ -66,9 +67,6 @@ struct RowIdPack4 {
     RowIdPack4(uint64_t v) : value(v) {}
 };
 #pragma pack(pop)
-
-static const size_t large_mem_alloc_threhold = 2 * 1024 * 1024 * 1024UL;
-static const size_t phmap_hash_table_shard = 16;
 
 template <class T>
 class TraceAlloc {
@@ -256,7 +254,7 @@ public:
 
     Status insert(uint32_t rssid, const vector<uint32_t>& rowids, const vectorized::Column& pks, uint32_t idx_begin,
                   uint32_t idx_end) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         DCHECK(idx_end <= rowids.size());
         uint64_t base = (((uint64_t)rssid) << 32);
         uint32_t n = idx_end - idx_begin;
@@ -310,7 +308,7 @@ public:
 
     void upsert(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, uint32_t idx_begin,
                 uint32_t idx_end, DeletesMap* deletes) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -360,7 +358,7 @@ public:
     [[maybe_unused]] void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks,
                                       const vector<uint32_t>& src_rssid, uint32_t idx_begin, uint32_t idx_end,
                                       vector<uint32_t>* failed) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -404,7 +402,7 @@ public:
 
     void try_replace(uint32_t rssid, uint32_t rowid_start, const vectorized::Column& pks, const uint32_t max_src_rssid,
                      uint32_t idx_begin, uint32_t idx_end, vector<uint32_t>* failed) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint64_t base = (((uint64_t)rssid) << 32) + rowid_start;
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
@@ -447,7 +445,7 @@ public:
     }
 
     void erase(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end, DeletesMap* deletes) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
@@ -486,7 +484,7 @@ public:
 
     void get(const vectorized::Column& pks, uint32_t idx_begin, uint32_t idx_end,
              std::vector<uint64_t>* rowids) override {
-        const Slice* keys = reinterpret_cast<const Slice*>(pks.raw_data());
+        const auto* keys = reinterpret_cast<const Slice*>(pks.raw_data());
         uint32_t n = idx_end - idx_begin;
         if (n >= PREFETCHN * 2) {
             FixSlice<S> prefetch_keys[PREFETCHN];
@@ -720,7 +718,7 @@ private:
             CASE_LEN(39)
         default: {
             auto& p = _maps[0];
-            if (!p) p.reset(new SliceHashIndex());
+            if (!p) p = std::make_unique<SliceHashIndex>();
             return p.get();
         }
         }
@@ -733,9 +731,9 @@ public:
 
     size_t size() const override {
         size_t ret = 0;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                ret += _maps[i]->size();
+        for (const auto& _map : _maps) {
+            if (_map) {
+                ret += _map->size();
             }
         }
         return ret;
@@ -743,9 +741,9 @@ public:
 
     size_t capacity() const override {
         size_t ret = 0;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                ret += _maps[i]->capacity();
+        for (const auto& _map : _maps) {
+            if (_map) {
+                ret += _map->capacity();
             }
         }
         return ret;
@@ -847,9 +845,9 @@ public:
 
     std::size_t memory_usage() const final {
         size_t ret = 0;
-        for (int i = 0; i < max_fix_length; i++) {
-            if (_maps[i]) {
-                ret += _maps[i]->memory_usage();
+        for (const auto& _map : _maps) {
+            if (_map) {
+                ret += _map->memory_usage();
             }
         }
         return ret;
@@ -930,7 +928,7 @@ void PrimaryIndex::_set_schema(const vectorized::Schema& pk_schema) {
     }
     _enc_pk_type = PrimaryKeyEncoder::encoded_primary_key_type(_pk_schema, sort_key_idxes);
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
-    _pkey_to_rssid_rowid = std::move(create_hash_index(_enc_pk_type, _key_size));
+    _pkey_to_rssid_rowid = create_hash_index(_enc_pk_type, _key_size);
 }
 
 Status PrimaryIndex::load(Tablet* tablet) {
@@ -1187,8 +1185,7 @@ void PrimaryIndex::_upsert_into_persistent_index(uint32_t rssid, uint32_t rowid_
     _build_persistent_values(rssid, rowid_start, 0, pks.size(), &values);
     _persistent_index->upsert(pks.size(), vkeys, reinterpret_cast<IndexValue*>(values.data()),
                               reinterpret_cast<IndexValue*>(old_values.data()));
-    for (uint32_t i = 0; i < old_values.size(); ++i) {
-        uint64_t old = old_values[i];
+    for (unsigned long old : old_values) {
         if ((old != NullIndexValue) && (old >> 32) == rssid) {
             LOG(ERROR) << "found duplicate in upsert data rssid:" << rssid;
         }
@@ -1206,8 +1203,7 @@ void PrimaryIndex::_erase_persistent_index(const vectorized::Column& key_col, De
     if (!st.ok()) {
         LOG(WARNING) << "erase persistent index failed";
     }
-    for (uint32_t i = 0; i < old_values.size(); ++i) {
-        uint64_t old = old_values[i];
+    for (unsigned long old : old_values) {
         if (old != NullIndexValue) {
             (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
         }

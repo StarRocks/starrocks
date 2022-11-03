@@ -53,7 +53,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":1},\"fields\":{\"array\":[1]}}");
+        document.Parse(R"({"_source":{"array":1},"fields":{"array":[1]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -81,7 +81,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":[1,2,3]},\"fields\":{\"array\":[1,2,3]}}");
+        document.Parse(R"({"_source":{"array":[1,2,3]},"fields":{"array":[1,2,3]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -109,7 +109,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":[1,[2,3]]},\"fields\":{\"array\":[1,2,3]}}");
+        document.Parse(R"({"_source":{"array":[1,[2,3]]},"fields":{"array":[1,2,3]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -136,7 +136,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":[1,null,2]},\"fields\":{\"array\":[1,2]}}");
+        document.Parse(R"({"_source":{"array":[1,null,2]},"fields":{"array":[1,2]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);
@@ -161,7 +161,7 @@ TEST(ScrollParserTest, ArrayTest) {
         };
 
         rapidjson::Document document;
-        document.Parse("{\"_source\":{\"array\":null},\"fields\":{\"array\":[]}}");
+        document.Parse(R"({"_source":{"array":null},"fields":{"array":[]}})");
 
         auto doc_column = get_parsed_column(document, t, true);
         auto source_column = get_parsed_column(document, t, false);

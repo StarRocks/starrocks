@@ -32,7 +32,7 @@ public:
         uint64_t value = 0;
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_binary<PT>) {
+        if constexpr (pt_is_string<PT>) {
             Slice s = column->get_slice(row_num);
             value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
         } else {
@@ -50,7 +50,7 @@ public:
                                               int64_t frame_end) const override {
         const ColumnType* column = down_cast<const ColumnType*>(columns[0]);
 
-        if constexpr (pt_is_binary<PT>) {
+        if constexpr (pt_is_string<PT>) {
             uint64_t value = 0;
             for (size_t i = frame_start; i < frame_end; ++i) {
                 Slice s = column->get_slice(i);
@@ -117,7 +117,7 @@ public:
         uint64_t value = 0;
         for (size_t i = 0; i < chunk_size; ++i) {
             HyperLogLog hll;
-            if constexpr (pt_is_binary<PT>) {
+            if constexpr (pt_is_string<PT>) {
                 Slice s = column->get_slice(i);
                 value = HashUtil::murmur_hash64A(s.data, s.size, HashUtil::MURMUR_SEED);
             } else {

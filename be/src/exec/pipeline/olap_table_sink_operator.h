@@ -66,7 +66,6 @@ public:
               _sink0(down_cast<starrocks::stream_load::OlapTableSink*>(_data_sink.get())),
               _fragment_ctx(fragment_ctx),
               _cur_sender_id(start_sender_id),
-              _tablet_sink_dop(tablet_sink_dop),
               _sinks(std::move(tablet_sinks)) {}
 
     ~OlapTableSinkOperatorFactory() override = default;
@@ -82,7 +81,6 @@ private:
     starrocks::stream_load::OlapTableSink* _sink0;
     FragmentContext* const _fragment_ctx;
     int32_t _cur_sender_id;
-    size_t _tablet_sink_dop;
     std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>> _sinks;
 };
 

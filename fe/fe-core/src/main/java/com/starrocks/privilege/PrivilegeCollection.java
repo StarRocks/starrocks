@@ -108,7 +108,8 @@ public class PrivilegeCollection {
         }
     }
 
-    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
+    public void grant(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+            throws PrivilegeException {
         typeToPrivilegeEntryList.computeIfAbsent(type, k -> new ArrayList<>());
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (objects == null) {
@@ -148,7 +149,8 @@ public class PrivilegeCollection {
         }
     }
 
-    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant) {
+    public void revoke(short type, ActionSet actionSet, List<PEntryObject> objects, boolean isGrant)
+            throws PrivilegeException {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (privilegeEntryList == null) {
             LOG.debug("revoke a non-existence type {}", type);
@@ -271,5 +273,9 @@ public class PrivilegeCollection {
                 } // for privilege entry in other.list
             }
         } // for typeId, privilegeEntryList in other
+    }
+
+    public boolean isEmpty() {
+        return typeToPrivilegeEntryList.isEmpty();
     }
 }

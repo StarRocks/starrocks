@@ -6,10 +6,9 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-
 
 public class TaskRunExecutor {
     private static final Logger LOG = LogManager.getLogger(TaskRunExecutor.class);
@@ -29,7 +28,7 @@ public class TaskRunExecutor {
             return;
         }
 
-        Future<?> future = taskRunPool.submit(() -> {
+        CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
             status.setState(Constants.TaskRunState.RUNNING);
             try {
                 boolean isSuccess = taskRun.executeTaskRun();
@@ -46,8 +45,15 @@ public class TaskRunExecutor {
             } finally {
                 status.setFinishTime(System.currentTimeMillis());
             }
+            return status.getState();
+        }, taskRunPool);
+        future.whenComplete((r, e) -> {
+            if (e == null) {
+                taskRun.getFuture().complete(r);
+            } else {
+                taskRun.getFuture().completeExceptionally(e);
+            }
         });
-        taskRun.setFuture(future);
     }
 
 }
