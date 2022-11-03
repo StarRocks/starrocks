@@ -2,11 +2,11 @@
 
 #include "storage/rowset/default_value_column_iterator.h"
 
-#include "gtest/gtest.h"
-#include "storage/types.h"
-#include "storage/rowset/column_iterator.h"
-#include "storage/vectorized_column_predicate.h"
 #include "column/column_helper.h"
+#include "gtest/gtest.h"
+#include "storage/rowset/column_iterator.h"
+#include "storage/types.h"
+#include "storage/vectorized_column_predicate.h"
 
 namespace starrocks::vectorized {
 class DefaultValueColumnIteratorTest : public testing::Test {
@@ -25,9 +25,9 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     ASSERT_TRUE(st.ok());
 
     std::vector<const ColumnPredicate*> preds;
-    ColumnPredicate* del_pred = new_column_null_predicate(type_info, 1, true);
+    std::unique_ptr<ColumnPredicate> del_pred(new_column_null_predicate(type_info, 1, true));
     SparseRange row_ranges;
-    st = iter.get_row_ranges_by_zone_map(preds, del_pred, &row_ranges);
+    st = iter.get_row_ranges_by_zone_map(preds, del_pred.get(), &row_ranges);
     ASSERT_TRUE(st.ok());
 
     TypeDescriptor type_desc(PrimitiveType::TYPE_INT);
