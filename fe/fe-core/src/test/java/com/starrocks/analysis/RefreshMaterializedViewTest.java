@@ -1,29 +1,49 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.analysis;
 
+import com.google.common.collect.Sets;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.scheduler.Task;
+import com.starrocks.scheduler.TaskBuilder;
+import com.starrocks.scheduler.TaskManager;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.Set;
+
 public class RefreshMaterializedViewTest {
     private static ConnectContext connectContext;
+    private static PseudoCluster cluster;
+    private static StarRocksAssert starRocksAssert;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        AnalyzeTestUtil.init();
-        connectContext = AnalyzeTestUtil.getConnectContext();
-    }
+        Config.bdbje_heartbeat_timeout_second = 60;
+        Config.bdbje_replica_ack_timeout_second = 60;
+        Config.bdbje_lock_timeout_second = 60;
+        // set some parameters to speedup test
+        Config.tablet_sched_checker_interval_seconds = 1;
+        Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.enable_new_publish_mechanism = true;
+        PseudoCluster.getOrCreateWithRandomPort(true, 3);
+        GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
+        cluster = PseudoCluster.getInstance();
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.withDatabase("test").useDatabase("test");
 
-    @Test
-    public void testNormal() throws Exception {
         Config.enable_experimental_mv = true;
-        StarRocksAssert starRocksAssert = AnalyzeTestUtil.getStarRocksAssert();
         starRocksAssert.useDatabase("test")
                 .withTable("CREATE TABLE test.tbl_with_mv\n" +
                         "(\n" +
@@ -47,6 +67,15 @@ public class RefreshMaterializedViewTest {
                         "distributed by hash(k2) buckets 3\n" +
                         "refresh manual\n" +
                         "as select k1, k2, v1  from tbl_with_mv;");
+    }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        PseudoCluster.getInstance().shutdown(true);
+    }
+
+    @Test
+    public void testNormal() throws Exception {
         String refreshMvSql = "refresh materialized view test.mv_to_refresh";
         RefreshMaterializedViewStatement alterMvStmt =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(refreshMvSql, connectContext);
@@ -81,5 +110,44 @@ public class RefreshMaterializedViewTest {
         } catch (Exception e) {
             Assert.assertEquals("Batch build partition EVERY is date type but START or END does not type match.", e.getMessage());
         }
+    }
+
+    private MaterializedView getMv(String dbName, String mvName) {
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+        Table table = db.getTable(mvName);
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table instanceof MaterializedView);
+        MaterializedView mv = (MaterializedView) table;
+        return mv;
+    }
+
+    private void refreshMaterializedView(String dbName, String mvName) throws Exception {
+        MaterializedView mv = getMv(dbName, mvName);
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        final String mvTaskName = TaskBuilder.getMvTaskName(mv.getId());
+        if (!taskManager.containTask(mvTaskName)) {
+            Task task = TaskBuilder.buildMvTask(mv, "test");
+            TaskBuilder.updateTaskInfo(task, mv);
+            taskManager.createTask(task, false);
+        }
+        taskManager.executeTaskSync(mvTaskName);
+    }
+
+    @Test
+    public void testRefreshExecution() throws Exception {
+        cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
+        refreshMaterializedView("test", "mv_to_refresh");
+        MaterializedView mv1 = getMv("test", "mv_to_refresh");
+        Set<String> partitionsToRefresh1 = mv1.getPartitionNamesToRefresh();
+        Assert.assertTrue(partitionsToRefresh1.isEmpty());
+        refreshMaterializedView("test", "mv2_to_refresh");
+        MaterializedView mv2 = getMv("test", "mv2_to_refresh");
+        Set<String> partitionsToRefresh2 = mv2.getPartitionNamesToRefresh();
+        Assert.assertTrue(partitionsToRefresh2.isEmpty());
+        cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
+        partitionsToRefresh1 = mv1.getPartitionNamesToRefresh();
+        Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
+        partitionsToRefresh2 = mv2.getPartitionNamesToRefresh();
+        Assert.assertEquals(Sets.newHashSet("p2"), partitionsToRefresh2);
     }
 }
