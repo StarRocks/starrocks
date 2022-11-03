@@ -158,8 +158,18 @@ endif()
 add_library(glog STATIC IMPORTED)
 set_target_properties(glog PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libglog.a)
 
-add_library(re2 STATIC IMPORTED)
-set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
+
+if ("${USE_STAROS}" STREQUAL "ON")
+    find_package(re2 REQUIRED)
+    get_target_property(re2_INCLUDE_DIR re2::re2 INTERFACE_INCLUDE_DIRECTORIES)
+    message(STATUS "Using staros re2 includes: ${re2_INCLUDE_DIR}")
+    include_directories(${re2_INCLUDE_DIR})
+    set(RE2_RE2 re2::re2)
+else()
+    add_library(re2 STATIC IMPORTED)
+    set_target_properties(re2 PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libre2.a)
+    set(RE2_RE2 re2)
+endif()
 
 add_library(pprof STATIC IMPORTED)
 set_target_properties(pprof PROPERTIES IMPORTED_LOCATION
@@ -602,7 +612,7 @@ set(STARROCKS_DEPENDENCIES
     thrift
     thriftnb
     glog
-    re2
+    ${RE2_RE2}
     pprof
     # Put lz4 in front of librdkafka to make sure that segment use the native lz4 library to compress/decompress page
     # Otherwise, he will use the lz4 Library in librdkafka
