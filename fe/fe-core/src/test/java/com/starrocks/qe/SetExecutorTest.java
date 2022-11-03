@@ -19,6 +19,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
@@ -29,10 +30,12 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.UserVariable;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -41,6 +44,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
+
+import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class SetExecutorTest {
     private ConnectContext ctx;
@@ -116,5 +121,28 @@ public class SetExecutorTest {
         executor.execute();
         Assert.assertEquals(1, ctx.getModifiedSessionVariables().getSetVars().size());
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
+    }
+
+    @Test
+    public void testUserDefineVariable() throws Exception {
+        AnalyzeTestUtil.init();
+        ConnectContext context = AnalyzeTestUtil.getConnectContext();
+        String sql = "set @var = cast(1 as boolean)";
+        SetStmt stmt = (SetStmt) analyzeSuccess(sql);
+        SetExecutor executor = new SetExecutor(context, stmt);
+        executor.execute();
+        UserVariable userVariable = context.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
+        BoolLiteral literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(literal.getValue());
+
+        sql = "set @var = cast(0 as boolean)";
+        stmt = (SetStmt) analyzeSuccess(sql);
+        executor = new SetExecutor(context, stmt);
+        executor.execute();
+        userVariable = context.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
+        literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertFalse(literal.getValue());
     }
 }
