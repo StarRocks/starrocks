@@ -9,7 +9,7 @@ Iceberg catalog 是一个外部数据目录 (external catalog)。在 StarRocks �
 
 ## 使用限制
 
-- StarRocks 当前支持查询如下格式的 Iceberg 数据文件：Parquet 和 ORC
+- StarRocks 当前支持查询如下格式的 Iceberg 数据文件：Parquet 和 ORC。
 - StarRocks 当前支持查询如下压缩格式的 Iceberg 数据文件：gzip、Zstd、LZ4 和 Snappy。
 - StarRocks 当前支持查询如下类型的 Iceberg 数据：BOOLEAN、INT、LONG、FLOAT、DOUBLE、DECIMAL(P, S)、DATE、TIME、TIMESTAMP、STRING、UUID、LIST、FIXED(L) 和 BINARY。注意查询命中不支持的数据类型（TIMESTAMPTZ、STRUCT 和 MAP）会报错。
 - StarRocks 当前支持查询 Versions 1 表 (Analytic Data Tables) 。暂不支持查询 Versions 2 表 (Row-level Deletes) 。有关两种表的详细信息，请参见 [Iceberg Table Spec](https://iceberg.apache.org/spec/)。
