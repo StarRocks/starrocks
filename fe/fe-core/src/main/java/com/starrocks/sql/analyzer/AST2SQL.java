@@ -367,7 +367,14 @@ public class AST2SQL {
             sqlBuilder.append(")");
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias());
+
+                if (node.getColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(")");
+                }
             }
+
             return sqlBuilder.toString();
         }
 
