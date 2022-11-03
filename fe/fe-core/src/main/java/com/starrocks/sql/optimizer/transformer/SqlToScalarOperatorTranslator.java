@@ -779,8 +779,7 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitSlot(SlotRef node, Context context) {
-            return new ColumnRefOperator(node.getSlotId().asInt(),
-                    node.getType(), node.getColumnName(), node.isNullable());
+            return new ColumnRefOperator(-1, node.getType(), node.getColumnName(), node.isNullable());
         }
     }
 }

@@ -100,6 +100,9 @@ public class AnalyzeSetVariableTest {
 
         sql = "set @var = percentile_empty()";
         analyzeFail(sql, "Can't set variable with type PERCENTILE");
+
+        sql = "set @var=foo";
+        analyzeFail(sql, "Column 'foo' cannot be resolved");
     }
 
     @Test
