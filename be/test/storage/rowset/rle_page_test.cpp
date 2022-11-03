@@ -41,7 +41,7 @@ namespace starrocks {
 
 class RlePageTest : public testing::Test {
 public:
-    virtual ~RlePageTest() {}
+    ~RlePageTest() override = default;
 
     template <FieldType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
@@ -99,7 +99,7 @@ public:
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        CppType* values = reinterpret_cast<CppType*>(block.data());
+        auto* values = reinterpret_cast<CppType*>(block.data());
         for (uint i = 0; i < size; i++) {
             if (src[i] != values[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];

@@ -17,8 +17,7 @@
 #include "runtime/mem_pool.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 template <PrimitiveType child_type>
 struct VectorizedCaseExprTestBuilder {
@@ -89,7 +88,7 @@ private:
 
 class VectorizedCaseExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -554,5 +553,4 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

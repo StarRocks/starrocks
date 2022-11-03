@@ -8,8 +8,7 @@
 #include "glog/logging.h"
 #include "gtest/gtest.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 static int max_size = 20480 * 2;
 
@@ -243,7 +242,6 @@ TEST(AvxTest, simd) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 #endif

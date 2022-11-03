@@ -1,5 +1,7 @@
 #include "exec/pipeline/table_function_operator.h"
 
+#include <utility>
+
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
 
@@ -9,7 +11,7 @@ public:
     TableFunctionOperatorTest() : _runtime_state(TQueryGlobals()) {}
 
 protected:
-    virtual void SetUp() override;
+    void SetUp() override;
 
 private:
     RuntimeState _runtime_state;
@@ -65,7 +67,9 @@ using CounterPtr = std::shared_ptr<Counter>;
 class TestNormalOperatorFactory final : public OperatorFactory {
 public:
     TestNormalOperatorFactory(int32_t id, int32_t plan_node_id, CounterPtr counter, TPlanNode* tnode)
-            : OperatorFactory(id, "test_normal", plan_node_id), _counter(counter), _tnode(tnode) {}
+            : OperatorFactory(id, "test_normal", plan_node_id),
+              _counter(std::move(counter)),
+              _tnode(tnode) {}
 
     ~TestNormalOperatorFactory() override = default;
 

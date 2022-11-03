@@ -30,8 +30,8 @@ namespace starrocks {
 
 class StorageLayerTypesTest : public testing::Test {
 public:
-    StorageLayerTypesTest() {}
-    virtual ~StorageLayerTypesTest() {}
+    StorageLayerTypesTest() = default;
+    ~StorageLayerTypesTest() override = default;
 };
 
 template <FieldType field_type>

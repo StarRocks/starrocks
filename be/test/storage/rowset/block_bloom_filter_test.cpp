@@ -29,7 +29,7 @@ namespace starrocks {
 
 class BlockBloomFilterTest : public testing::Test {
 public:
-    virtual ~BlockBloomFilterTest() {}
+    ~BlockBloomFilterTest() override = default;
 
 private:
     uint64_t _expected_num = 1024;
@@ -173,7 +173,7 @@ TEST_F(BlockBloomFilterTest, slice) {
     }
 
     std::string value_not_exist = "char_value_not_exist";
-    Slice s = Slice(value_not_exist);
+    auto s = Slice(value_not_exist);
     ASSERT_FALSE(bf->test_bytes(s.data, s.size));
 }
 

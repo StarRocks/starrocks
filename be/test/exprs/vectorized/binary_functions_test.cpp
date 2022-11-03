@@ -7,8 +7,7 @@
 #include "exprs/vectorized/math_functions.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 template <PrimitiveType TYPE>
 ColumnPtr create_nullable_column() {
@@ -67,5 +66,4 @@ TEST_F(VectorizedBinaryNullableTest, allArgsNull) {
     auto result = MathFunctions::pow(function_context, columns);
     ASSERT_TRUE(result->is_null(0));
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

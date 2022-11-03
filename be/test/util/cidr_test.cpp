@@ -18,9 +18,9 @@
 #include "util/cidr.h"
 
 #include <gtest/gtest.h>
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 
 #include "common/configbase.h"
