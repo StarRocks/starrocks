@@ -2,6 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
+import com.google.common.collect.Sets;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -12,6 +13,8 @@ import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
+
+import java.util.Set;
 
 public class OptimizerContext {
     private final Memo memo;
@@ -25,6 +28,7 @@ public class OptimizerContext {
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
+    private Set<MaterializationContext> candidateMvs;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -34,6 +38,7 @@ public class OptimizerContext {
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
+        this.candidateMvs = Sets.newHashSet();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
@@ -55,6 +60,7 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
+        this.candidateMvs = Sets.newHashSet();
     }
 
     public Memo getMemo() {
@@ -111,5 +117,13 @@ public class OptimizerContext {
 
     public OptimizerConfig getOptimizerConfig() {
         return optimizerConfig;
+    }
+
+    public Set<MaterializationContext> getCandidateMvs() {
+        return candidateMvs;
+    }
+
+    public void addCandidateMvs(MaterializationContext candidateMv) {
+        this.candidateMvs.add(candidateMv);
     }
 }

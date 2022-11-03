@@ -196,7 +196,7 @@ public class Optimizer {
 
         // process materialized views
         // TODO: add session variable
-        if (Config.enable_experimental_mv) {
+        if (Config.enable_experimental_mv && !optimizerConfig.isRuleBased()) {
             // TODO: register materialized views
             // register materialized views
             registerMaterializedViews(logicOperatorTree, connectContext);
@@ -204,17 +204,18 @@ public class Optimizer {
     }
 
     private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
-        List<Table> tables = RewriteUtils.getAllTables(logicOperatorTree);
+        List<Table> tables = Utils.getAllTables(logicOperatorTree);
 
         // include nested materialized views
         Set<MaterializedView> relatedMvs = Sets.newHashSet();
-        getRelatedMvs(tables, relatedMvs);
+        Utils.getRelatedMvs(tables, relatedMvs);
 
         for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
                 continue;
             }
-            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
+            Set<String> partitionNamesToRefresh = Sets.newHashSet();
+            // Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
                 if (!partitionNamesToRefresh.isEmpty()) {
@@ -222,46 +223,45 @@ public class Optimizer {
                 }
             } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
                 // if the mv is partitioned, and all partitions need refresh,
-                // then it can not be candidate
+                // then it can not be an candidate
                 continue;
             }
 
             // 1. build mv query logical plan
             String mvSql = mv.getViewDefineSql();
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            Pair<OptExpression, LogicalPlan> plans = getOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+            Pair<OptExpression, LogicalPlan> plans = Utils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
             if (plans == null) {
                 continue;
             }
-            OptExpression optimizedPlan = plans.first;
-            if (!isValidSPJGPlan(optimizedPlan)) {
+            OptExpression mvPlan = plans.first;
+            if (!Utils.isValidMVPlan(mvPlan)) {
                 continue;
             }
             if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
-                updatePartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, optimizedPlan);
+                Utils.updatePartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, mvPlan);
             }
 
             List<ColumnRefOperator> outputExpressions = plans.second.getOutputColumn();
-            MaterializationContext materializationContext = new MaterializationContext(mv, optimizedPlan,
+            MaterializationContext materializationContext = new MaterializationContext(mv, mvPlan,
                     columnRefFactory, outputExpressions, partitionNamesToRefresh);
 
             // generate scan mv plan
             Database db = context.getCatalog().getDb(mv.getDbId());
             TableName tableName = new TableName(db.getFullName(), mv.getName());
             String selectMvSql = "select * from " + tableName.toSql();
-            Pair<OptExpression, LogicalPlan> mvPlans =
-                    getOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
-            OptExpression mvOptimizedPlan = mvPlans.first;
-            if (!RewriteUtils.isLogicalSPJ(mvOptimizedPlan)) {
+            Pair<OptExpression, LogicalPlan> scanMvPlans =
+                    Utils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
+            OptExpression mvOptimizedPlan = scanMvPlans.first;
+            if (!Utils.isLogicalSPJ(mvOptimizedPlan)) {
                 continue;
             }
             if (!(mvOptimizedPlan.getOp() instanceof LogicalOlapScanOperator)) {
                 continue;
             }
             materializationContext.setScanMvOperator(mvOptimizedPlan.getOp());
-            List<ColumnRefOperator> mvOutputExpressions = mvPlans.second.getOutputColumn();
+            List<ColumnRefOperator> mvOutputExpressions = scanMvPlans.second.getOutputColumn();
             materializationContext.setScanMvOutputExpressions(mvOutputExpressions);
-
             context.addCandidateMvs(materializationContext);
         }
     }
