@@ -451,8 +451,20 @@ void StringFunctions::money_format_decimal_impl(FunctionContext* context, Column
         CppType rounded_cent_money;
         auto overflow = DecimalV3Cast::round<CppType, ROUND_HALF_EVEN, scale_up, check_overflow>(
                 money_value, scale_factor, &rounded_cent_money);
-        auto str = DecimalV3Cast::to_string<CppType>(rounded_cent_money, max_precision, 0);
-        std::string concurr_format = transform_currency_format(context, str);
+        std::string concurr_format;
+        if (rounded_cent_money == 0) {
+            concurr_format = "0.00";
+        } else {
+            bool is_negative = rounded_cent_money < 0;
+            CppType abs_rounded_cent_money = is_negative ? -rounded_cent_money : rounded_cent_money;
+            auto str = DecimalV3Cast::to_string<CppType>(abs_rounded_cent_money, max_precision, 0);
+            std::string prefix = is_negative ? "-" : "";
+            // if there is only fractional part, we need to add leading zeros so that transform_currency_format can work
+            if (abs_rounded_cent_money < 100) {
+                prefix.append(abs_rounded_cent_money < 10 ? "00" : "0");
+            }
+            concurr_format = transform_currency_format(context, prefix + str);
+        }
         result->append(Slice(concurr_format.data(), concurr_format.size()), overflow);
     }
 }
