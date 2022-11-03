@@ -50,7 +50,7 @@ import java.util.Map;
  */
 public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
-    public static final int NO_TTL = -1;
+    public static final int INVALID = -1;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -60,7 +60,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private Short replicationNum = FeConstants.default_replication_num;
 
     // partition time to live number, -1 means no ttl
-    private int partitionTTLNumber = NO_TTL;
+    private int partitionTTLNumber = INVALID;
+
+    private int partitionRefreshNumber = INVALID;
 
     private boolean isInMemory = false;
 
@@ -148,7 +150,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TableProperty buildPartitionTTL() {
         partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
-                String.valueOf(NO_TTL)));
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildPartitionRefreshNumber() {
+        partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+                String.valueOf(INVALID)));
         return this;
     }
 
@@ -207,6 +215,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public int getPartitionTTLNumber() {
         return partitionTTLNumber;
+    }
+
+    public int getPartitionRefreshNumber() {
+        return partitionRefreshNumber;
+    }
+
+    public void setPartitionRefreshNumber(int partitionRefreshNumber) {
+        this.partitionRefreshNumber = partitionRefreshNumber;
     }
 
     public boolean isInMemory() {
@@ -272,5 +288,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildCompressionType();
         buildWriteQuorum();
         buildPartitionTTL();
+        buildPartitionRefreshNumber();
     }
 }

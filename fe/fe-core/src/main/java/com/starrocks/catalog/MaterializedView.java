@@ -411,9 +411,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
         Set<String> result = Sets.newHashSet();
-        // check whether there are partitions added
+        // check whether there are partitions added and have data
         for (String partitionName : baseTable.getPartitionNames()) {
-            if (!baseTableVisibleVersionMap.containsKey(partitionName)) {
+            if (!baseTableVisibleVersionMap.containsKey(partitionName)
+                    && baseTable.getPartition(partitionName).getVisibleVersion() != 1) {
                 result.add(partitionName);
             }
         }
@@ -623,6 +624,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
+        }
+
+        // partition refresh number
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
         }
 
         sb.append("\n)");
