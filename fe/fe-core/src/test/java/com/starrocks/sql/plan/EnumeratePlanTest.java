@@ -48,7 +48,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCHQ5EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q5", true);
+        runFileUnitTest("enumerate-plan/tpch-q5");
     }
 
     @Test
@@ -68,12 +68,12 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCHQ9EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q9", true);
+        runFileUnitTest("enumerate-plan/tpch-q9");
     }
 
     @Test
     public void testTPCHQ10EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q10", true);
+        runFileUnitTest("enumerate-plan/tpch-q10");
     }
 
     @Test
@@ -113,7 +113,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCHQ18EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q18", true);
+        runFileUnitTest("enumerate-plan/tpch-q18");
     }
 
     @Test
@@ -128,7 +128,7 @@ public class EnumeratePlanTest extends DistributedEnvPlanTestBase {
 
     @Test
     public void testTPCHQ21EnumPlan() {
-        runFileUnitTest("enumerate-plan/tpch-q21", true);
+        runFileUnitTest("enumerate-plan/tpch-q21");
     }
 
     @Test
