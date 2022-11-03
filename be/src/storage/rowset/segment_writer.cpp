@@ -248,6 +248,9 @@ Status SegmentWriter::finalize_footer(uint64_t* segment_file_size, uint64_t* foo
     }
     RETURN_IF_ERROR(_write_footer());
     *segment_file_size = _wfile->size();
+    if (config::sync_tablet_meta) {
+        RETURN_IF_ERROR(_wfile->sync());
+    }
     return _wfile->close();
 }
 

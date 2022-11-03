@@ -34,6 +34,7 @@
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
 #include "runtime/string_value.h"
+#include "types/timestamp_value.h"
 #include "util/debug/leakcheck_disabler.h"
 
 namespace starrocks {
@@ -657,4 +658,25 @@ TEST_F(BooleanQueryBuilderTest, validate_compound_and) {
             "{\"fv\":[\"8.0\",\"16.0\"]}}]}}]}}]}},{\"wildcard\":{\"content\":\"a*e*g?\"}}]}}]}}";
     ASSERT_STREQ(expected_json.c_str(), actual_bool_json.c_str());
 }
+
+TEST_F(BooleanQueryBuilderTest, validate_timezone) {
+    ObjectPool pool;
+    vectorized::TimestampValue time = vectorized::TimestampValue::create(1997, 2, 3, 12, 0, 0);
+
+    // default timezone convert(UTC +8:00)
+    auto time_literal =
+            pool.add(new VExtLiteral(TYPE_DATETIME, ColumnHelper::create_const_column<TYPE_DATETIME>(time, 1)));
+    EXPECT_EQ("854942400000", time_literal->to_string());
+
+    // use custom timezone(UTC +8:00)
+    time_literal = pool.add(
+            new VExtLiteral(TYPE_DATETIME, ColumnHelper::create_const_column<TYPE_DATETIME>(time, 1), "Asia/Shanghai"));
+    EXPECT_EQ("854942400000", time_literal->to_string());
+
+    // use custom timezone(UTC +0:00)
+    time_literal = pool.add(
+            new VExtLiteral(TYPE_DATETIME, ColumnHelper::create_const_column<TYPE_DATETIME>(time, 1), "+00:00"));
+    EXPECT_EQ("854971200000", time_literal->to_string());
+}
+
 } // namespace starrocks

@@ -6,7 +6,7 @@ StarRocks has started to support user-defined functions (UDFs) since v2.2.0. You
 
 StarRocks supports scalar UDFs, user-defined aggregate functions (UDAFs), user-defined window functions (UDWFs), and user-defined table functions (UDTFs).
 
-- Scalar UDFs: A scalar UDF takes a single row and returns a single row as a result. When you use a scalar UDF as part of your query, each returned row is in cluded as a single row in the result set. Typical scalar UDFs include UPPER, LOWER, ROUND, and ABS.
+- Scalar UDFs: A scalar UDF takes a single row and returns a single row as a result. When you use a scalar UDF as part of your query, each returned row is included as a single row in the result set. Typical scalar UDFs include UPPER, LOWER, ROUND, and ABS.
 
 - UDAFs: A UDAF takes multiple rows and returns a single row as a result. Typical UDAFs include SUM, COUNT, MAX, and MIN. These UDAFs aggregate multiple rows in each GROUP BY clause and return one aggregated row.
 
@@ -155,7 +155,7 @@ In the **$FE_HOME/conf/fe.conf** file of each frontend (FE), set `enable_ud``f` 
 
     > Note: The input and return data types in the method must be the same as the data types declared in the CREATE FUNCTION statement that is to be executed in Step 3. Additionally, the input and return data types in the method and the declared data types must conform to the mapping that is provided in the "Mapping between SQL data types and Java data types" section of this topic.
 
-    | od                         | Descrition                                                   |
+    | od                         | Description                                                   |
     | -------------------------- | ------------------------------------------------------------ |
     | TYPE1 evaluate(TYPE2, ...) | The evaluate method requires the public member access level. |
 
@@ -289,7 +289,7 @@ For more information, see "Step 1: Create a Maven project" in the "Create and us
 
     > Note: The input and return data types in the methods must be the same as the data types declared in the CREATE FUNCTION statement that is to be executed in Step 3. Additionally, the input and return data types in the methods and the declared data types must conform to the mapping that is provided in the "Mapping between SQL data types and Java data types" section of this topic.
 
-    | Method                            | Descrition                                                   |
+    | Method                            | Description                                                   |
     | --------------------------------- | ------------------------------------------------------------ |
     | State create()                    | Creates a state.                                             |
     | void destroy(State)               | Destroys a state.                                            |
@@ -315,7 +315,7 @@ For more information, see "Step 1: Create a Maven project" in the "Create and us
 
 2. Run `mvn package` to package the code.
 
-    The following two JAR files are generated in the **target** foler: **udf-1.0-SNAPSHOT.jar** and **udf-1.0-SNAPSHOT-jar-with-dependencies.jar**.
+    The following two JAR files are generated in the **target** folder: **udf-1.0-SNAPSHOT.jar** and **udf-1.0-SNAPSHOT-jar-with-dependencies.jar**.
 
 3. Upload the **udf-1.0-SNAPSHOT-jar-with-dependencies.jar** file to an HTTP server that is accessible to all FEs and BEs in your cluster. Make sure that the HTTP service remains enabled.
 
@@ -473,7 +473,7 @@ For more information, see "Step 1: Create a Maven project" in the "Create and us
 
     | Method                                                   | Description                                                  |
     | -------------------------------------------------------- | ------------------------------------------------------------ |
-    | void windowUpdate(State state, int, int, int , int, ...) | Updates the data of a window. For more information about UDWFs, see [Window functions](./Window_function.md). Every time when you enter a row as input, this method obtains the window information and updates intermediate results accordingly. - peer_group_start: the start position of the current partition. PARTITION BY is used in the OVER clause to specify a partition column. Rows with the same values in the partition column are considered to be in the same partition. - peer_group_end: the end position of the current partition. - frame_start: the start position of the current window frame. The window frame clause specifies a calculation range, which covers the current row and the rows that are within a specified distance to the currrent row. For example, ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING specifies a calculation range that covers the current row, the previous row before the current row, and the following row after the current row. - frame_end: the end position of the current window frame. - inputs: the data that is entered as the input to a window. The data is an array package that supports only specific data types. In this example, INT values are entered as input, and the array package is Integer[]. |
+    | void windowUpdate(State state, int, int, int , int, ...) | Updates the data of a window. For more information about UDWFs, see [Window functions](./Window_function.md). Every time when you enter a row as input, this method obtains the window information and updates intermediate results accordingly. - peer_group_start: the start position of the current partition. PARTITION BY is used in the OVER clause to specify a partition column. Rows with the same values in the partition column are considered to be in the same partition. - peer_group_end: the end position of the current partition. - frame_start: the start position of the current window frame. The window frame clause specifies a calculation range, which covers the current row and the rows that are within a specified distance to the current row. For example, ROWS BETWEEN 1 PRECEDING AND 1 FOLLOWING specifies a calculation range that covers the current row, the previous row before the current row, and the following row after the current row. - frame_end: the end position of the current window frame. - inputs: the data that is entered as the input to a window. The data is an array package that supports only specific data types. In this example, INT values are entered as input, and the array package is Integer[]. |
 
 2. Run `mvn package` to package the code.
 
@@ -511,7 +511,7 @@ properties
 
 - > The value of the `analytic` parameter is fixed as `true`, which specifies that the UDWF is a window function (not a aggregate function).
 
-- > The other parameters for a UDWF are similar to those for a scalar UDF. For more information, see [Create a scalar UDF in StarRocks](https://docs.starrocks.com/zh-cn/2.2/using_starrocks/JAVA_UDF/#步骤三在-starrocks-中创建-scalar-udf-函数).
+- > The other parameters for a UDWF are similar to those for a scalar UDF. For more information, see [Create a scalar UDF in StarRocks](#step-3-create-a-scalar-udf-in-starrocks).
 
 #### Step 4: Use the UDWF that you created
 
