@@ -30,7 +30,11 @@
   + [Continuously load data from Apache Flink®](./loading/Flink-connector-starrocks.md)
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
-+ Data Source
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
+  + [Spark connector](./unloading/Spark_connector.md)
+  + [Flink connector](./unloading/Flink_connector.md)
++ Query Data Sources
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
@@ -431,10 +435,6 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Spark connector](./unloading/Spark_connector.md)
-  + [Flink connector](./unloading/Flink_connector.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -453,6 +453,7 @@
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
+  + [Contribute to StarRocks](./developers/How%20to%20Contribute.md)
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
   + Trace Tools
