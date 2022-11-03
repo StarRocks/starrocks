@@ -20,11 +20,11 @@ import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOpe
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -77,28 +77,18 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
                                       List<ColumnRefOperator> outputColumns,
                                       Map<ColumnRefOperator, Column> columnMap) {
         List<ColumnRefOperator> keyColumnRefs;
-        boolean unique = false;
-        List<String> keyColumnNames = olapTable.getKeyColumns().stream().map(Column::getName).collect(Collectors.toList());
         if (projection == null) {
             keyColumnRefs = outputColumns;
         } else {
-            // TODO(murphy) check monotonic project expression
-            keyColumnRefs = new ArrayList<>();
-            for (ColumnRefOperator columnRef : projection.getOutputColumns()) {
-                if (columnRef.getUsedColumns().cardinality() == 1) {
-                    ScalarOperator ref = projection.getColumnRefMap().get(columnRef).getChild(0);
-                    if (ref instanceof ColumnRefOperator) {
-                        Column realColumn = columnMap.get(ref);
-                        if (realColumn != null && realColumn.isKey()) {
-                            keyColumnRefs.add(columnRef);
-                        }
-                    }
-                }
-            }
+            // TODO(murphy) support monotonic project expression
+            keyColumnRefs = projection.getOutputColumns();
         }
 
-        Set<String> outputColumnNames = keyColumnRefs.stream().map(ColumnRefOperator::getName).collect(Collectors.toSet());
-        unique = outputColumnNames.containsAll(keyColumnNames) && olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS);
+        // If the table contains unique key and output the whole unique-keys
+        List<Column> tableKeyColumns = olapTable.getKeyColumns();
+        Set<Column> keyRefs = keyColumnRefs.stream().map(columnMap::get).collect(Collectors.toSet());
+        boolean unique = olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) &&
+                keyRefs.containsAll(tableKeyColumns);
 
         KeyProperty key = KeyProperty.of(new ColumnRefSet(keyColumnRefs), unique);
         KeyPropertySet res = new KeyPropertySet();
@@ -113,7 +103,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
 
-        return visitTable(olapTable, scan, scan.getProjection(), scan.getRealOutputColumns(), scan.getColRefToColumnMetaMap());
+        return visitTable(olapTable, scan, scan.getProjection(), scan.getOutputColumns(), scan.getColRefToColumnMetaMap());
     }
 
     @Override
@@ -192,7 +182,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
 
         if (CollectionUtils.isNotEmpty(agg.getGroupBys())) {
             KeyProperty keyProperty = KeyProperty.ofUnique(new ColumnRefSet(agg.getGroupBys()));
-            agg.addKeyProperty(keyProperty);
+            agg.setKeyPropertySet(new KeyPropertySet(keyProperty));
         } else {
             throw new NotImplementedException("StreamAggregation without group by is not supported");
         }
@@ -266,6 +256,10 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         private List<KeyProperty> keySet = new ArrayList<>();
 
         public KeyPropertySet() {
+        }
+
+        public KeyPropertySet(KeyProperty key) {
+            this.keySet = Collections.singletonList(key);
         }
 
         public KeyPropertySet(List<KeyProperty> keys) {
