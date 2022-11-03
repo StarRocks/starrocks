@@ -932,4 +932,28 @@ void BitmapValue::_convert_to_smaller_type() {
     }
 }
 
+int64_t BitmapValue::sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap) {
+    if (offset > 0 && offset >= _bitmap->cardinality()) {
+        return 0;
+    }
+    if (offset < 0 && std::abs(offset) > _bitmap->cardinality()) {
+        return 0;
+    }
+    int64_t abs_offset = offset;
+    if (offset < 0) {
+        abs_offset = _bitmap->cardinality() + offset;
+    }
+
+    int64_t count = 0;
+    int64_t offset_count = 0;
+    auto it = _bitmap->begin();
+    for (; it != _bitmap->end() && offset_count < abs_offset; ++it) {
+        ++offset_count;
+    }
+    for (; it != _bitmap->end() && count < len; ++it, ++count) {
+        ret_bitmap->add(*it);
+    }
+    return count;
+}
+
 } // namespace starrocks

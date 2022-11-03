@@ -134,6 +134,8 @@ public:
 
     void clear();
 
+    int64_t sub_bitmap_internal(const int64_t& offset, const int64_t& len, BitmapValue* ret_bitmap);
+
 private:
     void _convert_to_smaller_type();
     void _from_set_to_bitmap();

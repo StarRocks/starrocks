@@ -135,6 +135,13 @@ public:
      * @return TYPE_OBJECT
      */
     DEFINE_VECTORIZED_FN(base64_to_bitmap);
+
+    /**
+     * @param:
+     * @paramType columns: [TYPE_OBJECT, TYPE_BIGINT, TYPE_BIGINT]
+     * @return TYPE_OBJECT
+     */
+    DEFINE_VECTORIZED_FN(sub_bitmap);
 };
 
 } // namespace vectorized
