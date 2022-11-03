@@ -22,15 +22,15 @@ StarRocks 默认定期采集如下表和列的基础信息：
 
 - data_size: 列的数据大小
 
-- ndv: 列基数，即distinct value的个数
+- ndv: 列基数，即 distinct value 的个数
 
-- null_count: 列中NULL值的数据量
+- null_count: 列中 NULL 值的数据量
 
 - min: 列的最小值
 
 - max: 列的最大值
 
-基础统计信息存储在`_statistics_.table_statistic_v1`表中，您可以在 StarRocks 集群`_statistics_`数据库下查看。
+基础统计信息存储在 `_statistics_.table_statistic_v1` 表中，您可以在 StarRocks 集群 `_statistics_` 数据库下查看。
 
 ### 直方图
 
