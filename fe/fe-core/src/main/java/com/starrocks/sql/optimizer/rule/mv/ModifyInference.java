@@ -7,13 +7,14 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamOperator;
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import org.apache.commons.lang3.NotImplementedException;
 
 import java.util.EnumSet;
+import java.util.Objects;
 
 /**
  * Infer the ModifyOp for operator, include INSERT/UPDATE/DELETE
@@ -41,51 +42,56 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
         return visit(optExpression.inputAt(0), ctx);
     }
 
-    @Override
-    public ModifyOp visitPhysicalStreamScan(OptExpression optExpression, Void ctx) {
-        PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
-        Table table = scan.getTable();
-
+    // TODO(murphy) read from user property, support custom the ModifyOp behavior
+    private ModifyOp visitOlapTable(Table table) {
         if (!table.isOlapTable()) {
             throw new NotImplementedException("Only OLAP table is supported");
         }
         OlapTable olapTable = (OlapTable) table;
-        // TODO(murphy) read from user property, support custom the ModifyOp behavior
         ModifyOp res;
         if (olapTable.getKeysType().equals(KeysType.DUP_KEYS)) {
             res = ModifyOp.INSERT_ONLY;
         } else {
             res = ModifyOp.ALL;
         }
-        scan.setModifyOp(res);
         return res;
     }
 
     @Override
+    public ModifyOp visitPhysicalOlapScan(OptExpression optExpression, Void ctx) {
+        PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
+        return visitOlapTable(scan.getTable());
+    }
+
+    @Override
+    public ModifyOp visitPhysicalStreamScan(OptExpression optExpression, Void ctx) {
+        PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
+        ModifyOp op = visitOlapTable(scan.getTable());
+        scan.setModifyOp(op);
+        return op;
+    }
+
+    @Override
     public ModifyOp visitPhysicalStreamJoin(OptExpression optExpression, Void ctx) {
-        visit(optExpression.inputAt(0), ctx);
-        visit(optExpression.inputAt(1), ctx);
-        PhysicalStreamOperator lhs = (PhysicalStreamOperator) optExpression.inputAt(0).getOp();
-        PhysicalStreamOperator rhs = (PhysicalStreamOperator) optExpression.inputAt(0).getOp();
+        ModifyOp lhsOp = infer(optExpression.inputAt(0));
+        ModifyOp rhsOp = infer(optExpression.inputAt(1));
         PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
 
         // TODO(murphy) support outer join
         if (!join.getJoinType().isInnerJoin()) {
             throw new NotImplementedException("Only INNER JOIN is supported");
         }
-        ModifyOp joinModify = ModifyOp.union(lhs.getModifyOp(), rhs.getModifyOp());
+        ModifyOp joinModify = ModifyOp.union(lhsOp, rhsOp);
         join.setModifyOp(joinModify);
         return joinModify;
     }
 
     @Override
     public ModifyOp visitPhysicalStreamAgg(OptExpression optExpression, Void ctx) {
-        visit(optExpression.inputAt(0), ctx);
-        PhysicalStreamOperator inputOp = (PhysicalStreamOperator) optExpression.inputAt(0).getOp();
-        PhysicalStreamAggOperator agg = (PhysicalStreamAggOperator) optExpression.inputAt(0).getOp();
+        ModifyOp inputModify = infer(optExpression.inputAt(0));
+        PhysicalStreamAggOperator agg = (PhysicalStreamAggOperator) optExpression.getOp();
 
         // TODO(murphy) optimize for non-retractable scenario
-        ModifyOp inputModify = inputOp.getModifyOp();
         ModifyOp res;
         if (inputModify.isInsertOnly()) {
             res = ModifyOp.UPSERT;
@@ -102,7 +108,7 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
 
         public static final ModifyOp NONE = new ModifyOp(ModifyKind.NONE, UpdateKind.NONE);
         public static final ModifyOp INSERT_ONLY = new ModifyOp(ModifyKind.INSERT_ONLY, UpdateKind.NONE);
-        public static final ModifyOp UPSERT = new ModifyOp(ModifyKind.INSERT_ONLY, UpdateKind.ONLY_AFTER);
+        public static final ModifyOp UPSERT = new ModifyOp(ModifyKind.UPSERT, UpdateKind.ONLY_AFTER);
         public static final ModifyOp ALL = new ModifyOp(ModifyKind.ALL, UpdateKind.ALL);
 
         public ModifyOp(EnumSet<ModifyKind> modifySet, EnumSet<UpdateKind> updateSet) {
@@ -126,6 +132,30 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
             return new ModifyOp(modifySet, updateSet);
         }
 
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) {
+                return true;
+            }
+            if (o == null || getClass() != o.getClass()) {
+                return false;
+            }
+            ModifyOp modifyOp = (ModifyOp) o;
+            return Objects.equals(modifySet, modifyOp.modifySet) && Objects.equals(updateSet, modifyOp.updateSet);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(modifySet, updateSet);
+        }
+
+        @Override
+        public String toString() {
+            return "ModifyOp{" +
+                    "modifySet=" + modifySet +
+                    ", updateSet=" + updateSet +
+                    '}';
+        }
     }
 
     public static enum ModifyKind {
@@ -136,7 +166,7 @@ public class ModifyInference extends OptExpressionVisitor<ModifyInference.Modify
         public static final EnumSet<ModifyKind> ALL = EnumSet.of(INSERT, UPDATE, DELETE);
         public static final EnumSet<ModifyKind> NONE = EnumSet.noneOf(INSERT.getDeclaringClass());
         public static final EnumSet<ModifyKind> INSERT_ONLY = EnumSet.of(INSERT);
-
+        public static final EnumSet<ModifyKind> UPSERT = EnumSet.of(INSERT, UPDATE);
     }
 
     public static enum UpdateKind {
