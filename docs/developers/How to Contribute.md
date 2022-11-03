@@ -1,28 +1,25 @@
-# Contributing to StarRocks
+# Contribute to StarRocks
 
-Contributions to StarRocks are cordially welcome from everyone. Contributing to StarRocks is not limited to contributing code. Below, we list different approaches to contributing to our community.
+Contributing to StarRocks is cordially welcome from everyone. Contributing to StarRocks is not limited to contributing code. Below, we list different approaches to contributing to our community.
 
-| Report a bug                        | You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRock. |
+| Report a bug                        | You can [file an issue](https://github.com/StarRocks/starrocks/issues/new/choose) to report a bug with StarRocks. You can also click `Feedback` in the upper-right corner of the page you are reading in the [Documentation Center](https://docs.starrocks.io/en-us/latest/introduction/StarRocks_intro) to report a bug. |
 | ----------------------------------- | ------------------------------------------------------------ |
 | **Contribute code**                 | You can contribute your code by fixing a bug or implementing a feature. |
 | **Contribute test case**            | You can contribute your test cases.                          |
 | **Help review code**                | If you are an active contributor or committer of StarRocks, you can help us review the pull requests (PRs). |
 | **Contribute documentation**        | StarRocks community maintains a tremendous amount of documentation both in Chinese and English. You can contribute documentation changes by fixing a documentation bug or proposing a new piece of content. |
 | **Help StarRocks users**            | You can help newcomers who meet difficulties in our community. |
-| **Spread the word about StarRocks** | You can author an article or give a talk about us to help us spread our technology to the world. |
+| **Spread the word about StarRocks** | You can author an article or give a talk about us to help spread our technology to the world. |
 
 **Community resources**
 
-The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack ](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ)Channel. For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
+The best place to get a wide variety of help about StarRocks is via StarRocks's [Slack Channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ). For contribution-related discussions, please go to the **#contributing-to-starrocks** channel.
 
 You can also report issues and problems, or suggest new features, on [GitHub](https://github.com/StarRocks/starrocks/).
-
-
 
 **Code of conduct**
 
 Our community strictly adheres to the [code of conduct](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md).
-
 
 
 # Community roles
@@ -33,10 +30,7 @@ Everyone is encouraged to participate in the StarRocks project. Anyone can make 
 
 The roles listed below are a few possible ways to get involved in the community, it also defines what is expected from each role.
 
-
-
 ## User group 
-
 
 
 ### Participants
@@ -56,7 +50,6 @@ Expectations and responsibilities:
 - Suggest improvements.
 
 
-
 ### Champions
 
 StarRocks Community Champions are a group of passionate community evangelists and pioneers who are well-versed in StarRocks technology. They enjoy sharing the latest developments and products in the community, and their enthusiasm drives the progress and development of the community. 
@@ -65,7 +58,7 @@ StarRocks Community Champions are a group of passionate community evangelists an
 
 **Product**
 
-- New products/features early access. 
+- Early access to new products/features. 
 
 - Participate in exclusive meetings with the project core team.
 
@@ -95,9 +88,7 @@ StarRocks Community Champions are a group of passionate community evangelists an
 2. StarRocks Champions are eligible for one year, and must reapply each year based on their contributions in the past year.
 
 
-
 ## Developer Group 
-
 
 
 ### Contributor
@@ -123,10 +114,9 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 - Be awarded a StarRocks Contributor e-certificate.
 
 
-
 ## Active Contributor
 
-Active contributors are contributors who have made outstanding contributions and sustained commitment to StarRocks. They actively participate in the community by contributing code, improving docs and helping others.
+Active contributors are contributors who have made outstanding contributions and sustained commitment to StarRocks. They actively participate in the community by contributing code, improving docs, and helping others.
 
 ### How to become an Active Contributor?
 
@@ -142,17 +132,16 @@ Active contributors are contributors who have made outstanding contributions and
 
 - Mentor and guide new contributors.
 
-- Be listed as a StarRocks Active Contributor .
+- Be listed as a StarRocks Active Contributor.
 
 - Be awarded a StarRocks Active Contributor e-certificate.
-
 
 
 ## Committer
 
 Committers are promoted from Active Contributors.
 
-They have the authority to merge master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
+They have the authority to merge PRs into master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
 
 ### How to become a Committer?
 
@@ -177,10 +166,9 @@ They have the authority to merge master branches and are responsible for the pla
 - Be awarded a StarRocks Committer e-certificate.
 
 
-
 ## PMC
 
-PMCs are promoted from Committers. They have the authority to merge master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
+PMCs are promoted from Committers. They have the authority to merge merge PRs into master branches and are responsible for the planning and maintenance of StarRocks. They also are active members in sharing their knowledge with the community.
 
 ### How to become a PMC?
 
@@ -209,42 +197,41 @@ PMCs are promoted from Committers. They have the authority to merge master branc
 - Be awarded a StarRocks PMC e-certificate.
 
 
-
 # Contribution process
 
 If you don't know how to get started, this is the process we suggest for contributions. This process is designed to help reduce your learning curve and get your pull requests merged more efficiently!
 
 1. Sign the [Contributor License Agreement (CLA)](https://cla-assistant.io/StarRocks/starrocks).
-2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack ](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ)(unless the change is trivial).
+2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ)(unless the change is trivial).
 
-- Before getting your hands on codes, you should comment  in the issue body, and inform the maintainer to assign to you the issue that you wish to solve. It is recommended to share your plan on how to solve this problem in the issue body as well.
+- Before getting your hands on codes, you should comment in the issue body, and inform the maintainer to assign you the issue that you wish to solve. It is recommended to share your plan on how to solve this problem in the issue body as well.
 
 - - This step helps you identify possible collaborators and reviewers.
   - Will the change conflict with another change in progress? If so, work with others to minimize impact.
-  - Is this change large? If so, work with others to break into smaller steps.
+  - Is this change major? If so, work with others to break the change into smaller steps.
 
 3. Implement the change:
 
-   * If the change is large, split it into smaller PRs.
+   * If the change is major, split it into smaller PRs.
 
    * Include tests and documentation as necessary.
 
-4. Create a Github [pull request](https://github.com/StarRocks/starrocks/pulls) (PR):
+4. Create a Github [pull request](https://github.com/StarRocks/starrocks/pulls):
 
 - In StarRocks community, we follow the fork-and-merge GitHub workflow when contributing code.
 
 - - Create a fork of StarRocks in your GitHub account.
-  - Clone this forked repository to your local device.
-  - Check out a new branch based on the branch you expect to contribute.
+  - Clone this forked repository to your computer.
+  - Check out a new branch based on the branch you expect to contribute to.
   - Commit your code changes to the new branch.
   - Push the branch with code changes to GitHub.
   - Create a PR to submit your code changes. It is recommended to submit ONE commit in ONE PR. You can follow the [PR templated](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a PR. 
   - Make sure the pull request passes the tests in CI.
 
-5. Review is performed by at least 2 reviewers:
+5. Review is required by at least 2 reviewers:
 
    * For StarRocks project, we require at least 2 lgtm from reviewers (committers) to merge the pull request. 
 
-   * This normally happens within a few days, but may take longer if the change is large, complex, or if a critical reviewer is unavailable. (feel free to ping the reviewer on the pull request).
+   * This normally happens within a few days, but may take longer if the change is major, complex, or if a critical reviewer is unavailable. (feel free to ping the reviewer on the pull request).
 
 6. Maintainers merge the pull request after the final changes are accepted.
