@@ -154,9 +154,9 @@ PROPERTIES (property [,property]);
 
 - `WITH SYNC | ASYNC MODE`: 如果不指定，默认为同步采集。
 
-- `WITH ``N`` BUCKETS`: `N`为直方图的分桶数。如果不指定，则使用`fe.conf`中的默认值。
+- `WITH ``N`` BUCKETS`: `N`为直方图的分桶数。如果不指定，则使用 `fe.conf` 中的默认值。
 
-- PROPERTIES: 采集任务的自定义参数。如果不指定，则使用`fe.conf`中的默认配置。
+- PROPERTIES: 采集任务的自定义参数。如果不指定，则使用 `fe.conf` 中的默认配置。
 
 | **PROPERTIES**                 | **类型** | **默认值** | **说明**                                                     |
 | ------------------------------ | -------- | ---------- | ------------------------------------------------------------ |
@@ -167,7 +167,7 @@ PROPERTIES (property [,property]);
 
 直方图的采样行数由多个参数共同控制，采样行数取 `statistic_sample_collect_rows` 和表总行数 `histogram_sample_ratio` 两者中的最大值。最多不超过 `histogram_max_sample_row_count` 指定的行数。如果超过，则按照该参数定义的上限行数进行采集。
 
-直方图任务实际执行中使用的**PROPERTIES**，可以通过 SHOW ANALYZE STATUS 中的**PROPERTIES**列查看。
+直方图任务实际执行中使用的 **PROPERTIES**，可以通过 SHOW ANALYZE STATUS 中的 **PROPERTIES** 列查看。
 
 **示例**
 
