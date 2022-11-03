@@ -21,7 +21,6 @@
 
 #include "storage/types.h"
 
-#include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
