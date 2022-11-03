@@ -28,7 +28,6 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -49,14 +48,8 @@ public class PrivilegeManager {
     public static final long USER_ADMIN_ROLE_ID = -4;
     public static final long PUBLIC_ROLE_ID = -5;
 
-    @SerializedName(value = "t")
-    private final Map<String, Short> typeStringToId;
-    @SerializedName(value = "a")
-    private final Map<Short, Map<String, Action>> typeToActionMap;
     @SerializedName(value = "r")
     private final Map<String, Long> roleNameToId;
-    @SerializedName(value = "p")
-    private final Map<String, String> pluralToType;
     @SerializedName(value = "i")
     private short pluginId;
     @SerializedName(value = "v")
@@ -77,12 +70,9 @@ public class PrivilegeManager {
 
     // only when deserialized
     protected PrivilegeManager() {
-        typeStringToId = new HashMap<>();
-        typeToActionMap = new HashMap<>();
         roleNameToId = new HashMap<>();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
-        pluralToType = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
     }
@@ -99,15 +89,11 @@ public class PrivilegeManager {
         }
         pluginId = this.provider.getPluginId();
         pluginVersion = this.provider.getPluginVersion();
-        typeStringToId = new HashMap<>();
-        typeToActionMap = new HashMap<>();
-        pluralToType = new HashMap<>();
         roleNameToId = new HashMap<>();
         userLock = new ReentrantReadWriteLock();
         roleLock = new ReentrantReadWriteLock();
         userToPrivilegeCollection = new HashMap<>();
         roleIdToPrivilegeCollection = new HashMap<>();
-        initIdNameMaps();
         initBuiltinRolesAndUsers();
     }
 
@@ -118,9 +104,9 @@ public class PrivilegeManager {
             RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(ROOT_ROLE_ID, ROOT_ROLE_NAME);
             if (rolePrivilegeCollection != null) {
                 // GRANT ALL ON ALL
-                for (String typeStr : typeStringToId.keySet()) {
+                for (String typeStr : provider.getAllTypes()) {
                     PrivilegeTypes t = PrivilegeTypes.valueOf(typeStr);
-                    initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+                    initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
                 }
                 rolePrivilegeCollection.disableMutable();  // not mutable
             }
@@ -130,11 +116,11 @@ public class PrivilegeManager {
             PrivilegeTypes systemTypes = PrivilegeTypes.SYSTEM;
             if (rolePrivilegeCollection != null) {
                 // ALL system but GRANT AND NODE
-                List<String> actionWithoutNodeGrant = systemTypes.getValidActions().stream().filter(
+                List<String> actionWithoutNodeGrant = systemTypes.getActionMap().keySet().stream().filter(
                         x -> !x.equals("GRANT") && !x.equals("NODE")).collect(Collectors.toList());
                 initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null, false);
                 for (PrivilegeTypes t : Arrays.asList(PrivilegeTypes.DATABASE, PrivilegeTypes.TABLE)) {
-                    initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+                    initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
                 }
                 rolePrivilegeCollection.disableMutable(); // not mutable
             }
@@ -163,7 +149,7 @@ public class PrivilegeManager {
                         null,
                         false);
                 PrivilegeTypes t = PrivilegeTypes.USER;
-                initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, t.getValidActions());
+                initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
                 rolePrivilegeCollection.disableMutable(); // not mutable
             }
 
@@ -172,12 +158,10 @@ public class PrivilegeManager {
             rolePrivilegeCollection = initBuiltinRoleUnlocked(PUBLIC_ROLE_ID, publicRoleName);
             if (rolePrivilegeCollection != null) {
                 // GRANT SELECT ON ALL TABLES IN infomation_schema
-                String tableTypeStr = PrivilegeTypes.TABLE.name();
                 List<PEntryObject> object = Arrays.asList(new TablePEntryObject(
                         SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
-                short tableTypeId = typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
-                ActionSet selectAction = analyzeActionSet(
-                        tableTypeStr, tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
+                short tableTypeId = provider.getTypeIdByName(PrivilegeTypes.TABLE.name());
+                ActionSet selectAction = analyzeActionSet(tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
                 rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
             }
 
@@ -191,35 +175,12 @@ public class PrivilegeManager {
         }
     }
 
-    private void initIdNameMaps() {
-        Map<String, List<String>> map = this.provider.getValidPrivilegeTypeToActions();
-        List<String> typeStrings = new ArrayList<>(map.keySet());
-        Collections.sort(typeStrings);
-        for (short typeId = 0; typeId != typeStrings.size(); typeId++) {
-            String typeStr = typeStrings.get(typeId);
-            typeStringToId.put(typeStr, typeId);
-            PrivilegeTypes types = PrivilegeTypes.valueOf(typeStr);
-            if (types.getPlural() != null) {
-                pluralToType.put(types.getPlural(), typeStr);
-            }
-            Map<String, Action> actionMap = new HashMap<>();
-            typeToActionMap.put(typeId, actionMap);
-
-            List<String> actionStrings = new ArrayList<>(map.get(typeStr));
-            Collections.sort(actionStrings);
-            for (short actionId = 0; actionId != actionStrings.size(); actionId++) {
-                String actionStr = actionStrings.get(actionId);
-                actionMap.put(actionStr, new Action(actionId, actionStr));
-            }
-        }
-    }
-
     // called by initBuiltinRolesAndUsers()
     private void initPrivilegeCollections(
             PrivilegeCollection collection, String type, List<String> actionList, List<String> tokens, boolean isGrant)
             throws PrivilegeException {
         short typeId = analyzeType(type);
-        ActionSet actionSet = analyzeActionSet(type, typeId, actionList);
+        ActionSet actionSet = analyzeActionSet(typeId, actionList);
         List<PEntryObject> object = null;
         if (tokens != null) {
             object = Arrays.asList(provider.generateObject(type, tokens, globalStateMgr));
@@ -231,7 +192,7 @@ public class PrivilegeManager {
     private void initPrivilegeCollecionAllObjects(
             PrivilegeCollection collection, PrivilegeTypes type, List<String> actionList) throws PrivilegeException {
         short typeId = analyzeType(type.name());
-        ActionSet actionSet = analyzeActionSet(type.name(), typeId, actionList);
+        ActionSet actionSet = analyzeActionSet(typeId, actionList);
         List<PEntryObject> objects = new ArrayList<>();
         switch (type) {
             case TABLE:
@@ -626,7 +587,7 @@ public class PrivilegeManager {
             // 1. check for any action in db
             PEntryObject dbObject = manager.provider.generateObject(
                     PrivilegeTypes.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
-            short dbTypeId = manager.typeStringToId.getOrDefault(PrivilegeTypes.DATABASE.name(), (short) -1);
+            short dbTypeId = manager.analyzeType(PrivilegeTypes.DATABASE.name());
             if (manager.provider.checkAnyAction(dbTypeId, dbObject, collection)) {
                 return true;
             }
@@ -637,7 +598,7 @@ public class PrivilegeManager {
                     PrivilegeTypes.DATABASE.name(),
                     db,
                     manager.globalStateMgr);
-            short tableTypeId = manager.typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
+            short tableTypeId = manager.analyzeType(PrivilegeTypes.TABLE.name());
             return manager.provider.checkAnyAction(tableTypeId, allTableInDbObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
@@ -654,7 +615,7 @@ public class PrivilegeManager {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             PEntryObject tableObject = manager.provider.generateObject(
                     PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
-            short tableTypeId = manager.typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
+            short tableTypeId = manager.analyzeType(PrivilegeTypes.TABLE.name());
             return manager.provider.checkAnyAction(tableTypeId, tableObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
@@ -663,16 +624,21 @@ public class PrivilegeManager {
     }
 
     protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeTypes.SystemActions action) {
-        short systemTypeId = typeStringToId.getOrDefault(PrivilegeTypes.SYSTEM.name(), (short) -1);
-        Action want = typeToActionMap.get(systemTypeId).get(action.name());
-        return provider.check(systemTypeId, want, null, collection);
+        try {
+            short systemTypeId = analyzeType(PrivilegeTypes.SYSTEM.name());
+            Action want = provider.getAction(systemTypeId, action.name());
+            return provider.check(systemTypeId, want, null, collection);
+        } catch (PrivilegeException e) {
+            LOG.warn("caught exception when check system action {}", action, e);
+            return false;
+        }
     }
 
     protected boolean checkTableAction(
             PrivilegeCollection collection, String db, String table, PrivilegeTypes.TableActions action)
             throws PrivilegeException {
-        short tableTypeId = typeStringToId.getOrDefault(PrivilegeTypes.TABLE.name(), (short) -1);
-        Action want = typeToActionMap.get(tableTypeId).get(action.name());
+        short tableTypeId = analyzeType(PrivilegeTypes.TABLE.name());
+        Action want = provider.getAction(tableTypeId, action.name());
         PEntryObject object = provider.generateObject(
                 PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), globalStateMgr);
         return provider.check(tableTypeId, want, object, collection);
@@ -680,8 +646,8 @@ public class PrivilegeManager {
 
     protected boolean checkDbAction(PrivilegeCollection collection, String db, PrivilegeTypes.DbActions action)
             throws PrivilegeException {
-        short dbTypeId = typeStringToId.getOrDefault(PrivilegeTypes.DATABASE.name(), (short) -1);
-        Action want = typeToActionMap.get(dbTypeId).get(action.name());
+        short dbTypeId = analyzeType(PrivilegeTypes.DATABASE.name());
+        Action want = provider.getAction(dbTypeId, action.name());
         PEntryObject object = provider.generateObject(
                 PrivilegeTypes.DATABASE.name(), Arrays.asList(db), globalStateMgr);
         return provider.check(dbTypeId, want, object, collection);
@@ -693,7 +659,7 @@ public class PrivilegeManager {
             String typeStr = PrivilegeTypes.USER.toString();
             short typeId = analyzeType(typeStr);
             PEntryObject object = provider.generateUserObject(typeStr, impersonateUser, globalStateMgr);
-            Action want = typeToActionMap.get(typeId).get(PrivilegeTypes.UserActions.IMPERSONATE.toString());
+            Action want = provider.getAction(typeId, PrivilegeTypes.UserActions.IMPERSONATE.toString());
             return provider.check(typeId, want, object, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception in canExecuteAs() user[{}]", impersonateUser, e);
@@ -826,42 +792,29 @@ public class PrivilegeManager {
         return collection;
     }
 
-    public ActionSet analyzeActionSet(String typeName, short typeId, List<String> actionNameList)
-            throws PrivilegeException {
-        Map<String, Action> actionMap = typeToActionMap.get(typeId);
+    public ActionSet analyzeActionSet(short typeId, List<String> actionNameList) throws PrivilegeException {
         List<Action> actions = new ArrayList<>();
         for (String actionName : actionNameList) {
             // grant ALL on xx
             if (actionName.equals(ALL_ACTIONS)) {
-                return new ActionSet(new ArrayList<>(actionMap.values()));
+                return new ActionSet(provider.getAllActions(typeId));
             }
             // in consideration of legacy format such as SELECT_PRIV
             if (actionName.endsWith("_PRIV")) {
                 actionName = actionName.substring(0, actionName.length() - 5);
             }
-            Action action = actionMap.get(actionName);
-            if (action == null) {
-                throw new PrivilegeException("invalid action " + actionName + " for " + typeName);
-            }
+            Action action = provider.getAction(typeId, actionName);
             actions.add(action);
         }
         return new ActionSet(actions);
     }
 
     public String analyzeTypeInPlural(String plural) throws PrivilegeException {
-        String type = pluralToType.get(plural);
-        if (type == null) {
-            throw new PrivilegeException("invalid plural privilege type " + plural);
-        }
-        return type;
+        return provider.getTypeNameByPlural(plural);
     }
 
     public short analyzeType(String typeName) throws PrivilegeException {
-        Short typeId = typeStringToId.get(typeName);
-        if (typeId == null) {
-            throw new PrivilegeException("cannot find type " + typeName + " in " + typeStringToId.keySet());
-        }
-        return typeId;
+        return provider.getTypeIdByName(typeName);
     }
 
     public void createRole(CreateRoleStmt stmt) throws DdlException {

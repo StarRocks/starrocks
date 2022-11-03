@@ -40,7 +40,6 @@ import java.util.stream.Collectors;
 public class PrivilegeManagerTest {
     private ConnectContext ctx;
     private static final String DB_NAME = "db";
-    private static final String INFORMATION_SCHEMA = "information_schema";
     private static final String TABLE_NAME_0 = "tbl0";
     private static final String TABLE_NAME_1 = "tbl1";
     private UserIdentity testUser = UserIdentity.createAnalyzedUserIdentWithIp("test_user", "%");

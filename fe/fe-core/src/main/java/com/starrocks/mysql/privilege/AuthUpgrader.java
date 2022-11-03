@@ -91,11 +91,9 @@ public class AuthUpgrader {
                     Arrays.asList(PrivilegeTypes.TABLE.getPlural(), PrivilegeTypes.DATABASE.getPlural()),
                     null, null));
             selectActionSet = privilegeManager.analyzeActionSet(
-                    tableTypeStr,
                     tableTypeId,
                     Arrays.asList(PrivilegeTypes.TableActions.SELECT.toString()));
             impersonateActionSet = privilegeManager.analyzeActionSet(
-                    userTypeStr,
                     userTypeId,
                     Arrays.asList(PrivilegeTypes.UserActions.IMPERSONATE.toString()));
         } catch (PrivilegeException e) {

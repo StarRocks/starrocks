@@ -114,7 +114,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid action SELECT for DATABASE"));
+            Assert.assertTrue(e.getMessage().contains("cannot find action SELECT in"));
         }
 
         sql = "grant insert on table dbx to test_user";
