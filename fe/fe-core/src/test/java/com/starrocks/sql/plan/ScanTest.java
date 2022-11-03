@@ -2,6 +2,8 @@
 
 package com.starrocks.sql.plan;
 
+import org.junit.Test;
+
 public class ScanTest extends PlanTestBase {
     @Test
     public void testPushDownExternalTableMissNot() throws Exception {
