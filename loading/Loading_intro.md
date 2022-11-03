@@ -146,7 +146,7 @@ StarRocks 提供 [Stream Load](../loading/StreamLoad.md)、[Broker Load](../load
 
 - `write_buffer_size`
 
-  BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远端程序呼叫（Remote Procedure Call，简称 RPC）超时，这时候需要配合下面的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。
+  BE 上内存块的大小阈值，默认阈值为 100 MB。导入的数据在 BE 上会先写入一个内存块，当内存块的大小达到这个阈值以后才会写回磁盘。如果阈值过小，可能会导致 BE 上存在大量的小文件，影响查询的性能，这时候可以适当提高这个阈值来减少文件数量。如果阈值过大，可能会导致远程过程调用（Remote Procedure Call，简称 RPC）超时，这时候需要配合下面的 `tablet_writer_rpc_timeout_sec` 参数来适当地调整 `write_buffer_size` 参数的取值。
 
 - `tablet_writer_rpc_timeout_sec`
 
