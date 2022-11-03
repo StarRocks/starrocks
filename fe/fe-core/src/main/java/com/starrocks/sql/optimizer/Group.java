@@ -29,7 +29,6 @@ import java.util.Set;
  * which came from the initial query tree.
  */
 public class Group {
-
     private final int id;
 
     private final List<GroupExpression> logicalExpressions;
