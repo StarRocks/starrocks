@@ -7,7 +7,7 @@ namespace starrocks {
 class RandomAccessFile;
 class SharedBufferedInputStream;
 namespace vectorized {
-class HdfsScanStats;
+struct HdfsScanStats;
 }
 } // namespace starrocks
 

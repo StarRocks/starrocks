@@ -19,7 +19,7 @@ class Column;
 
 namespace starrocks::parquet {
 
-class ParquetField;
+struct ParquetField;
 
 class ColumnConverter {
 public:
