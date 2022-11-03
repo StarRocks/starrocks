@@ -319,7 +319,7 @@ protected:
                 auto t0 = std::chrono::steady_clock::now();
                 for (int i = 0; i < kMaxRowset; i++) {
                     RowsetMetaPB rowset_meta_pb;
-                    rowset_meta_pb.set_creation_time(time(NULL));
+                    rowset_meta_pb.set_creation_time(time(nullptr));
                     rowset_meta_pb.set_start_version(i);
                     rowset_meta_pb.set_end_version(i);
                     rowset_meta_pb.set_num_rows(10000);
@@ -336,7 +336,7 @@ protected:
                     auto v = edit.mutable_version();
                     v->set_major(i + 1);
                     v->set_minor(0);
-                    edit.set_creation_time(time(NULL));
+                    edit.set_creation_time(time(nullptr));
                     edit.add_rowsets_add(rowset_meta_pb.rowset_seg_id());
                     edit.add_deltas(rowset_meta_pb.rowset_seg_id());
                     edit.set_rowsetid_add(1);

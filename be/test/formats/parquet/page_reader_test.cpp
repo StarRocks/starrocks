@@ -15,8 +15,8 @@ namespace starrocks::parquet {
 
 class ParquetPageReaderTest : public testing::Test {
 public:
-    ParquetPageReaderTest() {}
-    ~ParquetPageReaderTest() override {}
+    ParquetPageReaderTest() = default;
+    ~ParquetPageReaderTest() override = default;
 };
 
 TEST_F(ParquetPageReaderTest, Normal) {

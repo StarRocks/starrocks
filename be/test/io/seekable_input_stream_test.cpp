@@ -12,7 +12,7 @@ namespace starrocks::io {
 class TestInputStream : public io::SeekableInputStream {
 public:
     explicit TestInputStream(std::string contents, int64_t block_size)
-            : _contents(std::move(contents)), _block_size(block_size), _offset(0) {}
+            : _contents(std::move(contents)), _block_size(block_size) {}
 
     StatusOr<int64_t> read(void* data, int64_t count) override {
         count = std::min(count, _block_size);
@@ -34,7 +34,7 @@ public:
 private:
     std::string _contents;
     int64_t _block_size;
-    int64_t _offset;
+    int64_t _offset{0};
 };
 
 // NOLINTNEXTLINE

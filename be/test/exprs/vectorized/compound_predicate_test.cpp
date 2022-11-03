@@ -8,12 +8,11 @@
 #include "column/fixed_length_column.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedCompoundPredicateTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::BIGINT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -386,5 +385,4 @@ TEST_F(VectorizedCompoundPredicateTest, testOnlyNullAndZeroRow) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

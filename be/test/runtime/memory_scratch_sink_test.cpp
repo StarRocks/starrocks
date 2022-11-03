@@ -33,9 +33,9 @@
 #include <arrow/visitor.h>
 #include <arrow/visitor_inline.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 
 #include "column/chunk.h"
@@ -90,9 +90,9 @@ public:
         }
     }
 
-    ~MemoryScratchSinkTest() { delete _state; }
+    ~MemoryScratchSinkTest() override { delete _state; }
 
-    virtual void SetUp() {
+    void SetUp() override {
         config::periodic_counter_update_period_ms = 500;
         config::storage_root_path = "./data";
 
@@ -103,7 +103,7 @@ public:
         init();
     }
 
-    virtual void TearDown() {
+    void TearDown() override {
         _obj_pool.clear();
         system("rm -rf ./test_run");
     }

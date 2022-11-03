@@ -76,14 +76,14 @@ public:
 
     CacheTest() : _cache(new_lru_cache(kCacheSize)) { _s_current = this; }
 
-    ~CacheTest() { delete _cache; }
+    ~CacheTest() override { delete _cache; }
 
     int Lookup(int key) {
         std::string result;
         Cache::Handle* handle = _cache->lookup(EncodeKey(&result, key));
-        const int r = (handle == NULL) ? -1 : DecodeValue(_cache->value(handle));
+        const int r = (handle == nullptr) ? -1 : DecodeValue(_cache->value(handle));
 
-        if (handle != NULL) {
+        if (handle != nullptr) {
             _cache->release(handle);
         }
 
@@ -106,9 +106,9 @@ public:
         _cache->erase(EncodeKey(&result, key));
     }
 
-    void SetUp() {}
+    void SetUp() override {}
 
-    void TearDown() {}
+    void TearDown() override {}
 };
 CacheTest* CacheTest::_s_current;
 

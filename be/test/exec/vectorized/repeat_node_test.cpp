@@ -20,15 +20,14 @@
 #include "runtime/runtime_state.h"
 #include "runtime/user_function_cache.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class MockExchangeNode : public ExecNode {
 public:
     MockExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
-            : ExecNode(pool, tnode, descs), times(0) {}
+            : ExecNode(pool, tnode, descs) {}
 
-    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
+    Status get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) override {
         if (times == 0) {
             ++times;
             auto first_column = FixedLengthColumn<int32_t>::create();
@@ -54,16 +53,16 @@ public:
         return Status::OK();
     }
 
-    Status init(const TPlanNode& tnode, RuntimeState* state) { return Status::OK(); }
+    Status init(const TPlanNode& tnode, RuntimeState* state) override { return Status::OK(); }
 
-    Status prepare(RuntimeState* state) { return Status::OK(); }
+    Status prepare(RuntimeState* state) override { return Status::OK(); }
 
-    Status open(RuntimeState* state) { return Status::OK(); }
+    Status open(RuntimeState* state) override { return Status::OK(); }
 
-    Status close(RuntimeState* state) { return Status::OK(); }
+    Status close(RuntimeState* state) override { return Status::OK(); }
 
 private:
-    int times;
+    int times{0};
 };
 
 class RepeatNodeTest : public testing::Test {
@@ -71,7 +70,7 @@ public:
     RepeatNodeTest() : _runtime_state(TQueryGlobals()) {}
 
 protected:
-    virtual void SetUp() {
+    void SetUp() override {
         TDescriptorTable t_desc_table;
 
         // table descriptors
@@ -188,7 +187,7 @@ protected:
         _tnode.nullable_tuples.push_back(false);
     }
 
-    virtual void TearDown() {}
+    void TearDown() override {}
 
 private:
     RuntimeState _runtime_state;
@@ -299,5 +298,4 @@ TEST_F(RepeatNodeTest, repeat_node_test) {
     ASSERT_TRUE(rows == 9);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

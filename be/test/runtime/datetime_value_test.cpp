@@ -33,11 +33,11 @@ namespace starrocks {
 
 class DateTimeValueTest : public testing::Test {
 public:
-    DateTimeValueTest() {}
+    DateTimeValueTest() = default;
 
 protected:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 // Assert size
@@ -106,7 +106,7 @@ TEST_F(DateTimeValueTest, random_convert) {
 
     DateTimeValue value_check;
 
-    DateTimeValue* value = (DateTimeValue*)buf;
+    auto* value = (DateTimeValue*)buf;
     value->from_date_daynr(366);
     value_check.from_date_daynr(366);
     ASSERT_STREQ("0001-01-01", value->debug_string().c_str());
