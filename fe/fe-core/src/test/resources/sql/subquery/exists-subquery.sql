@@ -313,16 +313,16 @@ LEFT OUTER JOIN (join-predicate [2: v2 = 8: v4] post-join-predicate [3: v3 = 3 O
 [sql]
 select v3, v1 from t0 where (t0.v3 = 3 or exists (select v6 from t1 where v5 = v1)) and not exists (select v5 from t1 where v4 = v2);
 [result]
-LEFT ANTI JOIN (join-predicate [2: v2 = 8: v4] post-join-predicate [null])
-    LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [3: v3 = 3 OR 12: countRows IS NOT NULL])
+LEFT OUTER JOIN (join-predicate [1: v1 = 5: v5] post-join-predicate [3: v3 = 3 OR 12: countRows IS NOT NULL])
+    LEFT ANTI JOIN (join-predicate [2: v2 = 8: v4] post-join-predicate [null])
         SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-        EXCHANGE SHUFFLE[5]
-            AGGREGATE ([GLOBAL] aggregate [{12: countRows=count(12: countRows)}] group by [[5: v5]] having [null]
-                EXCHANGE SHUFFLE[5]
-                    AGGREGATE ([LOCAL] aggregate [{12: countRows=count(1)}] group by [[5: v5]] having [null]
-                        SCAN (columns[5: v5] predicate[null])
-    EXCHANGE BROADCAST
-        SCAN (columns[8: v4] predicate[null])
+        EXCHANGE BROADCAST
+            SCAN (columns[8: v4] predicate[null])
+    EXCHANGE SHUFFLE[5]
+        AGGREGATE ([GLOBAL] aggregate [{12: countRows=count(12: countRows)}] group by [[5: v5]] having [null]
+            EXCHANGE SHUFFLE[5]
+                AGGREGATE ([LOCAL] aggregate [{12: countRows=count(1)}] group by [[5: v5]] having [null]
+                    SCAN (columns[5: v5] predicate[null])
 [end]
 
 [sql]

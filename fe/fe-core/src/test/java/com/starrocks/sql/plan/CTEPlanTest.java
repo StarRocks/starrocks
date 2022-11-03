@@ -113,13 +113,13 @@ public class CTEPlanTest extends PlanTestBase {
         String sql = "with x0 as (select * from t0) " +
                 "select * from x0 x,t1 y where v1 in (select v2 from x0 z where z.v1 = x.v1)";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  MultiCastDataSinks\n" +
+        assertContains(plan, "  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 01\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
                 "    EXCHANGE ID: 03\n" +
-                "    RANDOM"));
+                "    RANDOM");
 
         sql = "with x0 as (select * from t0) " +
                 "select * from x0 t,t1 where v1 in (select v2 from x0 where t.v1 = v1)";

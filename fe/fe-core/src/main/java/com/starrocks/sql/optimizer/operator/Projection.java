@@ -156,7 +156,8 @@ public class Projection {
             return false;
         }
         Projection that = (Projection) o;
-        return columnRefMap.keySet().equals(that.columnRefMap.keySet());
+        return columnRefMap.keySet().equals(that.columnRefMap.keySet())
+                && columnRefMap.entrySet().equals(that.columnRefMap.entrySet());
     }
 
     @Override

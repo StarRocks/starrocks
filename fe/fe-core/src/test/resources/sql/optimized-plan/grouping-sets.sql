@@ -181,28 +181,28 @@ TOP-N (order by [[6: sum ASC NULLS FIRST]])
         CTEAnchor(cteid=2)
             CTEProducer(cteid=2)
                 SCAN (columns[1: v1, 2: v2, 3: v3] predicate[null])
-            INNER JOIN (join-predicate [divide(cast(9: sum as double), cast(11: count as double)) > 0.0] post-join-predicate [null])
+            CROSS JOIN (join-predicate [null] post-join-predicate [null])
                 CROSS JOIN (join-predicate [null] post-join-predicate [null])
-                    CROSS JOIN (join-predicate [null] post-join-predicate [null])
-                        AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
-                            EXCHANGE GATHER
-                                AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(7: v1)}] group by [[]] having [null]
-                                    CTEConsumer(cteid=2)
-                        EXCHANGE BROADCAST
-                            AGGREGATE ([GLOBAL] aggregate [{6: sum=multi_distinct_sum(6: sum)}] group by [[]] having [null]
-                                EXCHANGE GATHER
-                                    AGGREGATE ([LOCAL] aggregate [{6: sum=multi_distinct_sum(8: v2)}] group by [[]] having [null]
-                                        CTEConsumer(cteid=2)
+                    AGGREGATE ([GLOBAL] aggregate [{4: count=multi_distinct_count(4: count)}] group by [[]] having [null]
+                        EXCHANGE GATHER
+                            AGGREGATE ([LOCAL] aggregate [{4: count=multi_distinct_count(7: v1)}] group by [[]] having [null]
+                                CTEConsumer(cteid=2)
                     EXCHANGE BROADCAST
+                        AGGREGATE ([GLOBAL] aggregate [{6: sum=multi_distinct_sum(6: sum)}] group by [[]] having [null]
+                            EXCHANGE GATHER
+                                AGGREGATE ([LOCAL] aggregate [{6: sum=multi_distinct_sum(8: v2)}] group by [[]] having [null]
+                                    CTEConsumer(cteid=2)
+                EXCHANGE BROADCAST
+                    INNER JOIN (join-predicate [divide(cast(9: sum as double), cast(11: count as double)) > 0.0] post-join-predicate [null])
                         AGGREGATE ([GLOBAL] aggregate [{9: sum=multi_distinct_sum(9: sum)}] group by [[]] having [null]
                             EXCHANGE GATHER
                                 AGGREGATE ([LOCAL] aggregate [{9: sum=multi_distinct_sum(10: v3)}] group by [[]] having [null]
                                     CTEConsumer(cteid=2)
-                EXCHANGE BROADCAST
-                    AGGREGATE ([GLOBAL] aggregate [{11: count=multi_distinct_count(11: count)}] group by [[]] having [null]
-                        EXCHANGE GATHER
-                            AGGREGATE ([LOCAL] aggregate [{11: count=multi_distinct_count(12: v3)}] group by [[]] having [null]
-                                CTEConsumer(cteid=2)
+                        EXCHANGE BROADCAST
+                            AGGREGATE ([GLOBAL] aggregate [{11: count=multi_distinct_count(11: count)}] group by [[]] having [null]
+                                EXCHANGE GATHER
+                                    AGGREGATE ([LOCAL] aggregate [{11: count=multi_distinct_count(12: v3)}] group by [[]] having [null]
+                                        CTEConsumer(cteid=2)
 [end]
 
 [sql]

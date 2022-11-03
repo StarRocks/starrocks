@@ -66,6 +66,7 @@ import com.starrocks.sql.optimizer.rule.transformation.IntersectAddDistinctRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinAssociativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinCommutativityWithOutInnerRule;
+import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeApplyWithTableFunction;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitDirectRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeLimitWithLimitRule;
@@ -383,6 +384,7 @@ public class RuleSet {
     public void addJoinTransformationRules() {
         transformRules.add(JoinCommutativityRule.getInstance());
         transformRules.add(JoinAssociativityRule.getInstance());
+        transformRules.add(JoinLeftAsscomRule.getInstance());
     }
 
     public void addJoinCommutativityWithOutInnerRule() {

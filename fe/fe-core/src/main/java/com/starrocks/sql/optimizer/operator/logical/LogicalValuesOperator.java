@@ -14,9 +14,12 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.google.common.base.Objects;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
@@ -25,6 +28,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public class LogicalValuesOperator extends LogicalOperator {
     private final List<ColumnRefOperator> columnRefSet;
@@ -60,6 +65,11 @@ public class LogicalValuesOperator extends LogicalOperator {
     }
 
     @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        return new RowInfoImpl(columnRefSet.stream().collect(Collectors.toMap(Function.identity(), Function.identity())));
+    }
+
+    @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitLogicalValues(this, context);
     }
@@ -70,12 +80,22 @@ public class LogicalValuesOperator extends LogicalOperator {
 
     @Override
     public boolean equals(Object o) {
-        return this == o;
+        if (this == o) {
+            return true;
+        }
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        if (!super.equals(o)) {
+            return false;
+        }
+        LogicalValuesOperator that = (LogicalValuesOperator) o;
+        return Objects.equal(columnRefSet, that.columnRefSet) && Objects.equal(rows, that.rows);
     }
 
     @Override
     public int hashCode() {
-        return System.identityHashCode(this);
+        return Objects.hashCode(columnRefSet);
     }
 
     public static class Builder extends LogicalOperator.Builder<LogicalValuesOperator, LogicalValuesOperator.Builder> {

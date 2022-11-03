@@ -21,8 +21,12 @@ import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnEntryImpl;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -84,6 +88,18 @@ public class LogicalWindowOperator extends LogicalOperator {
             columns.union(expressionContext.getChildLogicalProperty(0).getOutputColumns());
             return columns;
         }
+    }
+
+    @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        List<ColumnEntry> columnEntryList = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, CallOperator> entry : windowCall.entrySet()) {
+            columnEntryList.add(new ColumnEntryImpl(entry.getKey(), entry.getValue()));
+        }
+        for (ColumnEntry entry : inputs.get(0).getRowInfo().getColumnEntries()) {
+            columnEntryList.add(new ColumnEntryImpl(entry.getColumnRef(), entry.getValue()));
+        }
+        return new RowInfoImpl(columnEntryList);
     }
 
     @Override

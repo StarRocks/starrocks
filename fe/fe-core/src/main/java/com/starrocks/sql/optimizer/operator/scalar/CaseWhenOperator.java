@@ -202,6 +202,7 @@ public class CaseWhenOperator extends CallOperator {
                 whenEnd == that.whenEnd;
     }
 
+
     @Override
     public int hashCode() {
         return Objects.hash(super.hashCode(), hasCase, hasElse, whenStart, whenEnd);

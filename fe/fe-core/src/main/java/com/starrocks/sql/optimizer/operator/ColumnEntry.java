@@ -12,22 +12,21 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+package com.starrocks.sql.optimizer.operator;
 
-package com.starrocks.sql.optimizer.rule.transformation;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
-import com.starrocks.sql.optimizer.rule.Rule;
-import com.starrocks.sql.optimizer.rule.RuleType;
+import java.util.Map;
 
-/**
- * Transformation rules: logical -> logical
- */
-public abstract class TransformationRule extends Rule {
+public interface ColumnEntry extends Map.Entry<ColumnRefOperator, ScalarOperator> {
 
+    ColumnRefOperator getColumnRef();
 
-    protected TransformationRule(RuleType type, Pattern pattern) {
-        super(type, pattern);
-    }
+    int getColId();
 
+    ScalarOperator getScalarOp();
 
+    ColumnRefSet getUsedColumns();
 }

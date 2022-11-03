@@ -23,6 +23,8 @@ import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
@@ -38,6 +40,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
     protected final Table table;
@@ -80,6 +84,12 @@ public abstract class LogicalScanOperator extends LogicalOperator {
 
     public Map<Column, ColumnRefOperator> getColumnMetaToColRefMap() {
         return columnMetaToColRefMap;
+    }
+
+    @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        return new RowInfoImpl(colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(Function.identity(), Function.identity())));
     }
 
     public void buildColumnFilters(ScalarOperator predicate) {

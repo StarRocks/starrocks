@@ -17,6 +17,8 @@ package com.starrocks.sql.optimizer.operator.logical;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -24,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -52,6 +55,11 @@ public final class LogicalProjectOperator extends LogicalOperator {
             columns.union(kv.getKey());
         }
         return columns;
+    }
+
+    @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        return new RowInfoImpl(columnRefMap);
     }
 
     @Override

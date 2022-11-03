@@ -14,11 +14,16 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnEntryImpl;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -127,6 +132,18 @@ public class LogicalTopNOperator extends LogicalOperator {
             }
             return columns;
         }
+    }
+
+    @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        List<ColumnEntry> entryList = Lists.newArrayList();
+        for (ColumnEntry entry : inputs.get(0).getRowInfo().getColumnEntries()) {
+            entryList.add(new ColumnEntryImpl(entry.getColumnRef(), entry.getScalarOp()));
+        }
+        for (Ordering ordering : orderByElements) {
+            entryList.add(new ColumnEntryImpl(ordering.getColumnRef(), ordering.getColumnRef()));
+        }
+        return new RowInfoImpl(entryList);
     }
 
     @Override

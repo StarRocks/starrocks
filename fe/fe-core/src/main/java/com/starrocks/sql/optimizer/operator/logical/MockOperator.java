@@ -16,11 +16,15 @@
 package com.starrocks.sql.optimizer.operator.logical;
 
 import com.starrocks.sql.optimizer.ExpressionContext;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 
+import java.util.List;
 import java.util.Objects;
 
 public class MockOperator extends LogicalOperator {
@@ -53,6 +57,11 @@ public class MockOperator extends LogicalOperator {
     @Override
     public ColumnRefSet getOutputColumns(ExpressionContext expressionContext) {
         return new ColumnRefSet();
+    }
+
+    @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        return RowInfoImpl.createEmptyRowInfo();
     }
 
     @Override

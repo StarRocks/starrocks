@@ -15,16 +15,22 @@
 
 package com.starrocks.sql.optimizer.operator.logical;
 
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnEntry;
+import com.starrocks.sql.optimizer.operator.ColumnEntryImpl;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -56,6 +62,15 @@ public class LogicalCTEConsumeOperator extends LogicalOperator {
         } else {
             return new ColumnRefSet(new ArrayList<>(cteOutputColumnRefMap.keySet()));
         }
+    }
+
+    @Override
+    public RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        List<ColumnEntry> entryList = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : cteOutputColumnRefMap.entrySet()) {
+            entryList.add(new ColumnEntryImpl(entry.getKey(), entry.getValue()));
+        }
+        return new RowInfoImpl(entryList);
     }
 
     public int getCteId() {

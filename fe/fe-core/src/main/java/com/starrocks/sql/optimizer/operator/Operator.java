@@ -14,10 +14,14 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import com.clearspring.analytics.util.Lists;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
+import com.starrocks.sql.optimizer.RowInfo;
+import com.starrocks.sql.optimizer.RowInfoImpl;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
 
 public abstract class Operator {
@@ -34,6 +38,8 @@ public abstract class Operator {
      * such as Join reorder
      */
     protected Projection projection;
+
+    protected RowInfo rowInfo;
 
     public Operator(OperatorType opType) {
         this.opType = opType;
@@ -91,6 +97,31 @@ public abstract class Operator {
 
     public void setProjection(Projection projection) {
         this.projection = projection;
+    }
+
+    public RowInfo getRowInfo(List<OptExpression> inputs) {
+        if (rowInfo != null) {
+            return  rowInfo;
+        }
+
+        if (projection != null) {
+            rowInfo = new RowInfoImpl(projection.getColumnRefMap());
+        } else if (rowInfo == null) {
+            rowInfo = deriveRowInfo(inputs);
+        }
+        return rowInfo;
+    }
+
+    protected RowInfo deriveRowInfo(List<OptExpression> inputs) {
+        throw new UnsupportedOperationException();
+    }
+
+    protected RowInfo projectInputRowInfo(RowInfo inputRow) {
+        List<ColumnEntry> entryList = Lists.newArrayList();
+        for (ColumnEntry columnEntry : inputRow.getColumnEntries()) {
+            entryList.add(new ColumnEntryImpl(columnEntry.getColumnRef(), columnEntry.getColumnRef()));
+        }
+        return new RowInfoImpl(entryList);
     }
 
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
