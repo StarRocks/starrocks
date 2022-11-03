@@ -330,12 +330,12 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         *output = std::move(reader);
     } else if (field->type.type == PrimitiveType::TYPE_STRUCT) {
         // build tmp mapping for ParquetField
-        std::unordered_map<std::string, size_t> mapping;
+        std::unordered_map<std::string, size_t> field_name_2_pos;
         for (size_t i = 0; i < field->children.size(); i++) {
             if (opts.case_sensitive) {
-                mapping.emplace(field->children.at(i).name, i);
+                field_name_2_pos.emplace(field->children.at(i).name, i);
             } else {
-                mapping.emplace(boost::algorithm::to_lower_copy(field->children.at(i).name), i);
+                field_name_2_pos.emplace(boost::algorithm::to_lower_copy(field->children.at(i).name), i);
             }
         }
 
@@ -348,8 +348,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             std::string required_subfield_name =
                     opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
 
-            auto it = mapping.find(required_subfield_name);
-            if (it == mapping.end()) {
+            auto it = field_name_2_pos.find(required_subfield_name);
+            if (it == field_name_2_pos.end()) {
                 return Status::NotFound("Struct subfield name: " + required_subfield_name + " not found.");
             }
 
