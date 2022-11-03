@@ -250,8 +250,7 @@ class TestNormalOperator : public TestOperator {
 public:
     TestNormalOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        CounterPtr counter)
-            : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence),
-              _counter(std::move(counter)) {}
+            : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
     ~TestNormalOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -304,8 +303,7 @@ class TestSinkOperator : public TestOperator {
 public:
     TestSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                      CounterPtr counter)
-            : TestOperator(factory, id, "test_sink", plan_node_id, driver_sequence),
-              _counter(std::move(counter)) {}
+            : TestOperator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(counter)) {}
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
