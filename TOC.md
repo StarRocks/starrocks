@@ -33,6 +33,10 @@
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
++ 数据导出
+  + [导出总览](/unloading/Export.md)
+  + [Spark Connector](/unloading/Spark_connector.md)
+  + [Flink Connector](/unloading/Flink_connector.md)
 + 查询数据源
   + Catalog
     + [概述](/data_source/catalog/catalog_overview.md)
@@ -514,10 +518,6 @@
   + [SQL FAQ](/faq/Sql_faq.md)
   + [视频资源](/faq/Video.md)
   + [其他](/faq/Others.md)
-+ 数据导出
-  + [导出总览](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
 + 性能测试
   + [SSB 性能测试](/benchmarking/SSB_Benchmarking.md)
   + [TPC-H 基准测试](/benchmarking/TPC-H_Benchmark.md)
