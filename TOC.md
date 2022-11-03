@@ -26,10 +26,6 @@
   + [使用 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
-+ 数据导出
-  + [导出总览](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
 + 使用StarRocks
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
@@ -443,6 +439,10 @@
   + 性能调优
     + [查询分析](/administration/Query_planning.md)
     + [性能优化](/administration/Profiling.md)
++ 数据导出
+  + [导出总览](/unloading/Export.md)
+  + [Spark Connector](/unloading/Spark_connector.md)
+  + [Flink Connector](/unloading/Flink_connector.md)
 + 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
   + 数据迁移
