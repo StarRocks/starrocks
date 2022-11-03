@@ -3,7 +3,6 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -38,7 +37,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PartitionBasedMaterializedViewRefreshProcessorTest {
