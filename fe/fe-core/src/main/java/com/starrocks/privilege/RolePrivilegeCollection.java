@@ -20,7 +20,7 @@ public class RolePrivilegeCollection extends PrivilegeCollection {
     @SerializedName(value = "s")
     private Set<Long> subRoleIds;
 
-    enum RoleFlags {
+    public enum RoleFlags {
         MUTABLE(1),
         REMOVABLE(2);
 

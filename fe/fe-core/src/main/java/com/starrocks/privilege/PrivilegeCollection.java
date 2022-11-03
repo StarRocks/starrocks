@@ -274,4 +274,8 @@ public class PrivilegeCollection {
             }
         } // for typeId, privilegeEntryList in other
     }
+
+    public boolean isEmpty() {
+        return typeToPrivilegeEntryList.isEmpty();
+    }
 }

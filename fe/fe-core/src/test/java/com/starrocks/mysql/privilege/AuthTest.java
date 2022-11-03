@@ -2064,6 +2064,10 @@ public class AuthTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.isUsingNewPrivilege();
+                minTimes = 0;
+                result = false;
             }
         };
 

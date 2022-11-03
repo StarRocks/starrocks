@@ -28,6 +28,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -42,6 +43,11 @@ public class PrivilegeManager {
     private static final String ALL_ACTIONS = "ALL";
     // builtin roles and users
     private static final String ROOT_ROLE_NAME = "root";
+    public static final long ROOT_ROLE_ID = -1;
+    public static final long DB_ADMIN_ROLE_ID = -2;
+    public static final long CLUSTER_ADMIN_ROLE_ID = -3;
+    public static final long USER_ADMIN_ROLE_ID = -4;
+    public static final long PUBLIC_ROLE_ID = -5;
 
     @SerializedName(value = "t")
     private final Map<String, Short> typeStringToId;
@@ -51,6 +57,10 @@ public class PrivilegeManager {
     private final Map<String, Long> roleNameToId;
     @SerializedName(value = "p")
     private final Map<String, String> pluralToType;
+    @SerializedName(value = "i")
+    private short pluginId;
+    @SerializedName(value = "v")
+    private short pluginVersion;
 
     protected AuthorizationProvider provider;
 
@@ -61,6 +71,9 @@ public class PrivilegeManager {
     private final ReentrantReadWriteLock userLock;
 
     private String publicRoleName = null; // ut may be null
+
+    // set by load() to distinguish brand-new environment with upgraded environment
+    private boolean isLoaded = false;
 
     // only when deserialized
     protected PrivilegeManager() {
@@ -84,6 +97,8 @@ public class PrivilegeManager {
         } else {
             this.provider = provider;
         }
+        pluginId = this.provider.getPluginId();
+        pluginVersion = this.provider.getPluginVersion();
         typeStringToId = new HashMap<>();
         typeToActionMap = new HashMap<>();
         pluralToType = new HashMap<>();
@@ -99,9 +114,8 @@ public class PrivilegeManager {
     public void initBuiltinRolesAndUsers() {
         try {
             // built-in role ids are hard-coded negative numbers because globalStateMgr.getNextId() cannot be called by a follower
-            long builtinRoleId = -1;
             // 1. builtin root role
-            RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, ROOT_ROLE_NAME);
+            RolePrivilegeCollection rolePrivilegeCollection = initBuiltinRoleUnlocked(ROOT_ROLE_ID, ROOT_ROLE_NAME);
             if (rolePrivilegeCollection != null) {
                 // GRANT ALL ON ALL
                 for (String typeStr : typeStringToId.keySet()) {
@@ -112,7 +126,7 @@ public class PrivilegeManager {
             }
 
             // 2. builtin db_admin role
-            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "db_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(DB_ADMIN_ROLE_ID, "db_admin");
             PrivilegeTypes systemTypes = PrivilegeTypes.SYSTEM;
             if (rolePrivilegeCollection != null) {
                 // ALL system but GRANT AND NODE
@@ -126,7 +140,7 @@ public class PrivilegeManager {
             }
 
             // 3. cluster_admin
-            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "cluster_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(CLUSTER_ADMIN_ROLE_ID, "cluster_admin");
             if (rolePrivilegeCollection != null) {
                 // GRANT NODE ON SYSTEM
                 initPrivilegeCollections(
@@ -139,7 +153,7 @@ public class PrivilegeManager {
             }
 
             // 4. user_admin
-            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, "user_admin");
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(USER_ADMIN_ROLE_ID, "user_admin");
             if (rolePrivilegeCollection != null) {
                 // GRANT GRANT ON SYSTEM
                 initPrivilegeCollections(
@@ -155,7 +169,7 @@ public class PrivilegeManager {
 
             // 5. public
             publicRoleName = "public";
-            rolePrivilegeCollection = initBuiltinRoleUnlocked(builtinRoleId--, publicRoleName);
+            rolePrivilegeCollection = initBuiltinRoleUnlocked(PUBLIC_ROLE_ID, publicRoleName);
             if (rolePrivilegeCollection != null) {
                 // GRANT SELECT ON ALL TABLES IN infomation_schema
                 String tableTypeStr = PrivilegeTypes.TABLE.name();
@@ -179,21 +193,23 @@ public class PrivilegeManager {
 
     private void initIdNameMaps() {
         Map<String, List<String>> map = this.provider.getValidPrivilegeTypeToActions();
-        short typeId = 0;
-        for (Map.Entry<String, List<String>> entry : map.entrySet()) {
-            typeStringToId.put(entry.getKey(), typeId);
-            PrivilegeTypes types = PrivilegeTypes.valueOf(entry.getKey());
+        List<String> typeStrings = new ArrayList<>(map.keySet());
+        Collections.sort(typeStrings);
+        for (short typeId = 0; typeId != typeStrings.size(); typeId++) {
+            String typeStr = typeStrings.get(typeId);
+            typeStringToId.put(typeStr, typeId);
+            PrivilegeTypes types = PrivilegeTypes.valueOf(typeStr);
             if (types.getPlural() != null) {
-                pluralToType.put(types.getPlural(), entry.getKey());
+                pluralToType.put(types.getPlural(), typeStr);
             }
             Map<String, Action> actionMap = new HashMap<>();
             typeToActionMap.put(typeId, actionMap);
-            typeId++;
 
-            short actionId = 0;
-            for (String actionName : map.get(entry.getKey())) {
-                actionMap.put(actionName, new Action(actionId, actionName));
-                actionId++;
+            List<String> actionStrings = new ArrayList<>(map.get(typeStr));
+            Collections.sort(actionStrings);
+            for (short actionId = 0; actionId != actionStrings.size(); actionId++) {
+                String actionStr = actionStrings.get(actionId);
+                actionMap.put(actionStr, new Action(actionId, actionStr));
             }
         }
     }
@@ -1219,6 +1235,8 @@ public class PrivilegeManager {
                     UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
                     UserPrivilegeCollection collection =
                             (UserPrivilegeCollection) reader.readJson(UserPrivilegeCollection.class);
+                    // upgrade meta to current version
+                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
                     ret.userToPrivilegeCollection.put(userIdentity, collection);
                 }
                 // 1 json for num roles
@@ -1229,6 +1247,8 @@ public class PrivilegeManager {
                     Long roleId = (Long) reader.readJson(Long.class);
                     RolePrivilegeCollection collection =
                             (RolePrivilegeCollection) reader.readJson(RolePrivilegeCollection.class);
+                    // upgrade meta to current version
+                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
                     ret.roleIdToPrivilegeCollection.put(roleId, collection);
                 }
             } catch (SRMetaBlockEOFException eofException) {
@@ -1240,9 +1260,42 @@ public class PrivilegeManager {
             assert ret != null; // can't be NULL
             LOG.info("loaded {} users, {} roles",
                     ret.userToPrivilegeCollection.size(), ret.roleIdToPrivilegeCollection.size());
+            // mark data is loaded
+            ret.isLoaded = true;
             return ret;
-        } catch (SRMetaBlockException e) {
+        } catch (SRMetaBlockException | PrivilegeException e) {
             throw new DdlException("failed to load PrivilegeManager!", e);
+        }
+    }
+
+    public boolean isLoaded() {
+        return isLoaded;
+    }
+
+    public void setLoaded() {
+        isLoaded = true;
+    }
+
+    /**
+     * these public interfaces are for AuthUpgrader to upgrade from 2.x
+     */
+    public void upgradeUserInitPrivilegeUnlock(UserIdentity userIdentity, UserPrivilegeCollection collection) {
+        collection.grantRole(PUBLIC_ROLE_ID);
+        userToPrivilegeCollection.put(userIdentity, collection);
+        LOG.info("upgrade user {}", userIdentity);
+    }
+
+    public void upgradeRoleInitPrivilegeUnlock(long roleId, RolePrivilegeCollection collection) {
+        // will produce journal in bdb
+        roleIdToPrivilegeCollection.put(roleId, collection);
+        roleNameToId.put(collection.getName(), roleId);
+        LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
+    }
+
+    public void upgradeUserRoleUnlock(UserIdentity user, long... roleIds) {
+        UserPrivilegeCollection collection = userToPrivilegeCollection.get(user);
+        for (long roleId : roleIds) {
+            collection.grantRole(roleId);
         }
     }
 }

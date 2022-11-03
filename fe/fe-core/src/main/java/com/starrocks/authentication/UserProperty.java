@@ -11,4 +11,8 @@ public class UserProperty {
     public long getMaxConn() {
         return maxConn;
     }
+
+    public void setMaxConn(long maxConn) {
+        this.maxConn = maxConn;
+    }
 }
