@@ -46,7 +46,9 @@ public final class GlobalVariable {
     public static final String DEFAULT_ROWSET_TYPE = "default_rowset_type";
     public static final String CHARACTER_SET_DATABASE = "character_set_database";
 
-    public static final String QUERY_QUEUE_ENABLE = "query_queue_enable";
+    public static final String QUERY_QUEUE_SELECT_ENABLE = "query_queue_select_enable";
+    public static final String QUERY_QUEUE_STATISTIC_ENABLE = "query_queue_statistic_enable";
+    public static final String QUERY_QUEUE_INSERT_ENABLE = "query_queue_insert_enable";
     public static final String QUERY_QUEUE_CONCURRENCY_HARD_LIMIT = "query_queue_concurrency_hard_limit";
     public static final String QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT = "query_queue_mem_used_pct_hard_limit";
     public static final String QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT = "query_queue_cpu_used_permille_hard_limit";
@@ -111,8 +113,12 @@ public final class GlobalVariable {
      * The queries only using schema meta will never been queued, because a MySQL client will
      * query schema meta after the connection is established.
      */
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_ENABLE, flag = VariableMgr.GLOBAL)
-    private static boolean queryQueueEnable = false;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_SELECT_ENABLE, flag = VariableMgr.GLOBAL)
+    private static boolean queryQueueSelectEnable = false;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_STATISTIC_ENABLE, flag = VariableMgr.GLOBAL)
+    private static boolean queryQueueStatisticEnable = false;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_INSERT_ENABLE, flag = VariableMgr.GLOBAL)
+    private static boolean queryQueueInsertEnable = false;
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_HARD_LIMIT, flag = VariableMgr.GLOBAL)
     private static int queryQueueConcurrencyHardLimit = 0;
@@ -128,12 +134,28 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = QUERY_QUEUE_MAX_QUEUED_QUERIES, flag = VariableMgr.GLOBAL)
     private static int queryQueueMaxQueuedQueries = 1024;
 
-    public static boolean isQueryQueueEnable() {
-        return queryQueueEnable;
+    public static boolean isQueryQueueSelectEnable() {
+        return queryQueueSelectEnable;
     }
 
-    public static void setQueryQueueEnable(boolean queryQueueEnable) {
-        GlobalVariable.queryQueueEnable = queryQueueEnable;
+    public static void setQueryQueueSelectEnable(boolean queryQueueSelectEnable) {
+        GlobalVariable.queryQueueSelectEnable = queryQueueSelectEnable;
+    }
+
+    public static boolean isQueryQueueStatisticEnable() {
+        return queryQueueStatisticEnable;
+    }
+
+    public static void setQueryQueueStatisticEnable(boolean queryQueueStatisticEnable) {
+        GlobalVariable.queryQueueStatisticEnable = queryQueueStatisticEnable;
+    }
+
+    public static boolean isQueryQueueInsertEnable() {
+        return queryQueueInsertEnable;
+    }
+
+    public static void setQueryQueueInsertEnable(boolean queryQueueInsertEnable) {
+        GlobalVariable.queryQueueInsertEnable = queryQueueInsertEnable;
     }
 
     public static boolean isQueryQueueConcurrencyHardLimitEffective() {

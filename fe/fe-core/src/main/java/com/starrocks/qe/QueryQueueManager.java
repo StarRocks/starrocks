@@ -4,12 +4,19 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.common.UserException;
+import com.starrocks.planner.DataSink;
+import com.starrocks.planner.MysqlTableSink;
+import com.starrocks.planner.OlapTableSink;
+import com.starrocks.planner.ResultSink;
+import com.starrocks.planner.ScanNode;
+import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
@@ -20,13 +27,15 @@ public class QueryQueueManager {
     private static final Logger LOG = LogManager.getLogger(QueryQueueManager.class);
 
     private static class PendingQueryInfo {
+        private final Coordinator coordinator;
         private final ConnectContext connectCtx;
         private final ReentrantLock lock;
         private final Condition condition;
         private boolean isCancelled = false;
 
-        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock) {
+        private PendingQueryInfo(ConnectContext connectCtx, ReentrantLock lock, Coordinator coordinator) {
             Preconditions.checkState(connectCtx != null);
+            this.coordinator = coordinator;
             this.connectCtx = connectCtx;
             this.lock = lock;
             this.condition = this.lock.newCondition();
@@ -100,6 +109,51 @@ public class QueryQueueManager {
         }
     }
 
+    public void maybeWait(ConnectContext connectCtx, Coordinator coord) throws UserException, InterruptedException {
+        if (!needCheckQueue(coord) || canRunMore()) {
+            return;
+        }
+
+        long startMs = System.currentTimeMillis();
+        long timeoutMs = startMs + GlobalVariable.getQueryQueuePendingTimeoutSecond() * 1000L;
+        PendingQueryInfo info = new PendingQueryInfo(connectCtx, lock, coord);
+
+        try {
+            lock.lock();
+            if (!needCheckQueue(coord) || canRunMore()) {
+                return;
+            }
+
+            if (!canQueueMore()) {
+                throw new UserException("Need be queued but exceed query queue capacity");
+            }
+            info.connectCtx.setPending(true);
+            pendingQueryInfoMap.put(info.connectCtx, info);
+
+            while (!canRunMore()) {
+                long currentMs = System.currentTimeMillis();
+                if (currentMs >= timeoutMs) {
+                    throw new UserException("Pending timeout");
+                }
+
+                boolean timeout = !info.await(timeoutMs - currentMs, TimeUnit.MILLISECONDS);
+                if (timeout) {
+                    throw new UserException("Pending timeout");
+                }
+
+                if (info.isCancelled) {
+                    throw new UserException("Cancelled");
+                }
+            }
+        } finally {
+            info.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
+            info.connectCtx.setPending(false);
+            pendingQueryInfoMap.remove(info.connectCtx);
+
+            lock.unlock();
+        }
+    }
+
     // Public for test.
     public void maybeNotifyAfterLock() {
         Preconditions.checkState(lock.isHeldByCurrentThread());
@@ -107,12 +161,10 @@ public class QueryQueueManager {
         if (pendingQueryInfoMap.isEmpty()) {
             return;
         }
-        if (needWait()) {
-            return;
-        }
-
-        for (PendingQueryInfo queryInfo : pendingQueryInfoMap.values()) {
-            queryInfo.signalAfterLock();
+        if (canRunMore()) {
+            for (PendingQueryInfo queryInfo : pendingQueryInfoMap.values()) {
+                queryInfo.signalAfterLock();
+            }
         }
     }
 
@@ -126,57 +178,42 @@ public class QueryQueueManager {
         }
     }
 
-    public void maybeWait(ConnectContext connectCtx) throws UserException, InterruptedException {
-        if (!GlobalVariable.isQueryQueueEnable()) {
-            return;
+    public boolean needCheckQueue(Coordinator coord) {
+        if (coord.isLoadType()) {
+            return false;
         }
 
-        if (!needWait()) {
-            return;
+        // The queries only using schema meta will never been queued, because a MySQL client will
+        // query schema meta after the connection is established.
+        List<ScanNode> scanNodes = coord.getScanNodes();
+        boolean notNeed = scanNodes.isEmpty() || scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
+        if (notNeed) {
+            return false;
         }
 
-        long startMs = System.currentTimeMillis();
-        long timeoutMs = startMs + GlobalVariable.getQueryQueuePendingTimeoutSecond() * 1000L;
-        PendingQueryInfo queryInfo = new PendingQueryInfo(connectCtx, lock);
-
-        try {
-            lock.lock();
-
-            if (GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() &&
-                    pendingQueryInfoMap.size() >= GlobalVariable.getQueryQueueMaxQueuedQueries()) {
-                throw new UserException("Need pend but exceed query queue capacity");
+        DataSink sink = coord.getFragments().get(0).getSink();
+        if (sink instanceof OlapTableSink || sink instanceof MysqlTableSink) {
+            return GlobalVariable.isQueryQueueInsertEnable();
+        } else if (sink instanceof ResultSink) {
+            ResultSink resultSink = (ResultSink) sink;
+            if (resultSink.isQuerySink()) {
+                return GlobalVariable.isQueryQueueSelectEnable();
+            } else if (resultSink.isStatisticSink()) {
+                return GlobalVariable.isQueryQueueStatisticEnable();
             }
-
-            queryInfo.connectCtx.setPending(true);
-            pendingQueryInfoMap.put(queryInfo.connectCtx, queryInfo);
-
-            while (needWait()) {
-                long currentMs = System.currentTimeMillis();
-                if (currentMs >= timeoutMs) {
-                    throw new UserException("Pending timeout");
-                }
-
-                boolean timeout = !queryInfo.await(timeoutMs - currentMs, TimeUnit.MILLISECONDS);
-                if (timeout) {
-                    throw new UserException("Pending timeout");
-                }
-
-                if (queryInfo.isCancelled) {
-                    throw new UserException("Cancelled");
-                }
-            }
-        } finally {
-            queryInfo.connectCtx.auditEventBuilder.setPendingTimeMs(System.currentTimeMillis() - startMs);
-            queryInfo.connectCtx.setPending(false);
-            pendingQueryInfoMap.remove(queryInfo.connectCtx);
-
-            lock.unlock();
         }
+
+        return false;
     }
 
-    public boolean needWait() {
+    public boolean canRunMore() {
         return GlobalStateMgr.getCurrentSystemInfo().getBackends().stream()
-                .anyMatch(ComputeNode::isResourceOverloaded);
+                .noneMatch(ComputeNode::isResourceOverloaded);
+    }
+
+    private boolean canQueueMore() {
+        return !GlobalVariable.isQueryQueueMaxQueuedQueriesEffective() ||
+                pendingQueryInfoMap.size() < GlobalVariable.getQueryQueueMaxQueuedQueries();
     }
 
     public int numPendingQueries() {

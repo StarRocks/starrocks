@@ -71,7 +71,6 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
-import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -719,12 +718,6 @@ public class StmtExecutor {
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),
                 new QeProcessorImpl.QueryInfo(context, originStmt.originStmt, coord));
 
-        //  The queries only using schema meta will never been queued, because a MySQL client will
-        //  query schema meta after the connection is established.
-        boolean needQueue = !(scanNodes.isEmpty() || scanNodes.stream().allMatch(SchemaScanNode.class::isInstance));
-        if (needQueue) {
-            QueryQueueManager.getInstance().maybeWait(ConnectContext.get());
-        }
         coord.exec();
 
         // send result

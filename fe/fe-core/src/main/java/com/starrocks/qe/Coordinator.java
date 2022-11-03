@@ -629,7 +629,16 @@ public class Coordinator {
         return fragments;
     }
 
+    public boolean isLoadType() {
+        return queryOptions.getQuery_type() == TQueryType.LOAD;
+    }
+
+    public List<ScanNode> getScanNodes() {
+        return scanNodes;
+    }
+
     public void exec() throws Exception {
+        QueryQueueManager.getInstance().maybeWait(connectContext, this);
         prepareExec();
         deliverExecFragments();
     }
@@ -834,8 +843,7 @@ public class Coordinator {
                     // This is a load process, and it is the first fragment.
                     // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
                     // so that we can check these backends' state when joining this Coordinator
-                    boolean needCheckBackendState =
-                            queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
+                    boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
 
                     for (TExecPlanFragmentParams tParam : tParams) {
                         // TODO: pool of pre-formatted BackendExecStates?
@@ -1120,8 +1128,7 @@ public class Coordinator {
                         // this is a load process, and it is the first fragment.
                         // we should add all BackendExecState of this fragment to needCheckBackendExecStates,
                         // so that we can check these backends' state when joining this Coordinator
-                        boolean needCheckBackendState =
-                                queryOptions.getQuery_type() == TQueryType.LOAD && profileFragmentId == 0;
+                        boolean needCheckBackendState = isLoadType() && profileFragmentId == 0;
 
                         // Create ExecState for each fragment instance.
                         List<BackendExecState> execStates = Lists.newArrayList();

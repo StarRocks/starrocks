@@ -486,10 +486,6 @@ public class ComputeNode implements IComputable, Writable {
     }
 
     public boolean isResourceOverloaded() {
-        if (!GlobalVariable.isQueryQueueEnable()) {
-            return false;
-        }
-
         if (!isAvailable()) {
             return false;
         }
