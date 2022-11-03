@@ -135,7 +135,7 @@ public:
     TestSourceOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        size_t chunk_num, size_t chunk_size, CounterPtr counter, int32_t pending_finish_cnt)
             : SourceOperator(factory, id, "test_source", plan_node_id, driver_sequence),
-              _counter(std::move(std::move(counter))),
+              _counter(std::move(counter)),
               _pending_finish_cnt(pending_finish_cnt) {
         for (size_t i = 0; i < chunk_num; ++i) {
             _chunks.push_back(PipelineTestBase::_create_and_fill_chunk(chunk_size));
@@ -229,7 +229,7 @@ public:
             : SourceOperatorFactory(id, "test_source", plan_node_id),
               _chunk_num(chunk_num),
               _chunk_size(chunk_size),
-              _counter(std::move(std::move(counter))),
+              _counter(std::move(counter)),
               _pending_finish_cnt(pending_finish_cnt) {}
 
     ~TestSourceOperatorFactory() override = default;
@@ -251,7 +251,7 @@ public:
     TestNormalOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        CounterPtr counter)
             : TestOperator(factory, id, "test_normal", plan_node_id, driver_sequence),
-              _counter(std::move(std::move(counter))) {}
+              _counter(std::move(counter)) {}
     ~TestNormalOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -288,7 +288,7 @@ StatusOr<vectorized::ChunkPtr> TestNormalOperator::pull_chunk(RuntimeState* stat
 class TestNormalOperatorFactory final : public OperatorFactory {
 public:
     TestNormalOperatorFactory(int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : OperatorFactory(id, "test_normal", plan_node_id), _counter(std::move(std::move(counter))) {}
+            : OperatorFactory(id, "test_normal", plan_node_id), _counter(std::move(counter)) {}
 
     ~TestNormalOperatorFactory() override = default;
 
@@ -305,7 +305,7 @@ public:
     TestSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                      CounterPtr counter)
             : TestOperator(factory, id, "test_sink", plan_node_id, driver_sequence),
-              _counter(std::move(std::move(counter))) {}
+              _counter(std::move(counter)) {}
     ~TestSinkOperator() override = default;
 
     bool need_input() const override { return true; }
@@ -337,7 +337,7 @@ StatusOr<vectorized::ChunkPtr> TestSinkOperator::pull_chunk(RuntimeState* state)
 class TestSinkOperatorFactory final : public OperatorFactory {
 public:
     TestSinkOperatorFactory(int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : OperatorFactory(id, "test_sink", plan_node_id), _counter(std::move(std::move(counter))) {}
+            : OperatorFactory(id, "test_sink", plan_node_id), _counter(std::move(counter)) {}
 
     ~TestSinkOperatorFactory() override = default;
 

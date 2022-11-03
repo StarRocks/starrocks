@@ -345,7 +345,7 @@ public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
             : Operator(factory, id, "test_sink", plan_node_id, driver_sequence),
-              _counter(std::move(std::move(counter))) {}
+              _counter(std::move(counter)) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {
@@ -388,7 +388,7 @@ StatusOr<vectorized::ChunkPtr> TestFileScanSinkOperator::pull_chunk(RuntimeState
 class TestFileScanSinkOperatorFactory final : public OperatorFactory {
 public:
     TestFileScanSinkOperatorFactory(int32_t id, int32_t plan_node_id, CounterPtr counter)
-            : OperatorFactory(id, "test_sink", plan_node_id), _counter(std::move(std::move(counter))) {}
+            : OperatorFactory(id, "test_sink", plan_node_id), _counter(std::move(counter)) {}
 
     ~TestFileScanSinkOperatorFactory() override = default;
 
