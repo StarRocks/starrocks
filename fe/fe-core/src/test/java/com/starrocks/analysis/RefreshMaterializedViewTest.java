@@ -138,16 +138,16 @@ public class RefreshMaterializedViewTest {
         cluster.runSql("test", "insert into tbl_with_mv values(\"2022-02-20\", 1, 10)");
         refreshMaterializedView("test", "mv_to_refresh");
         MaterializedView mv1 = getMv("test", "mv_to_refresh");
-        Set<String> partitionsToRefresh1 = mv1.getPartitionNamesToRefresh();
+        Set<String> partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv();
         Assert.assertTrue(partitionsToRefresh1.isEmpty());
         refreshMaterializedView("test", "mv2_to_refresh");
         MaterializedView mv2 = getMv("test", "mv2_to_refresh");
-        Set<String> partitionsToRefresh2 = mv2.getPartitionNamesToRefresh();
+        Set<String> partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
         Assert.assertTrue(partitionsToRefresh2.isEmpty());
         cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2022-02-20\", 2, 10)");
-        partitionsToRefresh1 = mv1.getPartitionNamesToRefresh();
+        partitionsToRefresh1 = mv1.getPartitionNamesToRefreshForMv();
         Assert.assertEquals(Sets.newHashSet("mv_to_refresh"), partitionsToRefresh1);
-        partitionsToRefresh2 = mv2.getPartitionNamesToRefresh();
+        partitionsToRefresh2 = mv2.getPartitionNamesToRefreshForMv();
         Assert.assertEquals(Sets.newHashSet("p2"), partitionsToRefresh2);
     }
 }

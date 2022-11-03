@@ -406,7 +406,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.refreshScheme = refreshScheme;
     }
 
-    public Set<String> getNeedRefreshPartitionNames(Table base) {
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         if (!base.isOlapTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
@@ -642,7 +642,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return sb.toString();
     }
 
-    public Set<String> getPartitionNamesToRefresh() {
+    public Set<String> getPartitionNamesToRefreshForMv() {
         PartitionInfo partitionInfo = getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
@@ -653,7 +653,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 if (!table.isLocalTable()) {
                     return Sets.newHashSet();
                 }
-                Set<String> partitionNames = getNeedRefreshPartitionNames(table);
+                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
                 if (!partitionNames.isEmpty()) {
                     return getPartitionNames();
                 }
@@ -663,7 +663,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             // 1. dropped partitions
             // 2. newly added partitions
             // 3. partitions loaded with new data
-            return getPartitionNamesToRefreshForPartitionBy();
+            return getUpdatedPartitionNamesForPartitionBy();
         } else {
             throw UnsupportedException.unsupportedException("unsupported partition info type:"
                     + partitionInfo.getClass().getName());
@@ -671,7 +671,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return Sets.newHashSet();
     }
 
-    private Set<String> getPartitionNamesToRefreshForPartitionBy() {
+    private Set<String> getUpdatedPartitionNamesForPartitionBy() {
         Expr partitionExpr = getPartitionRefTableExprs().get(0);
         Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
         // if non-partition-by table has changed, should refresh all mv partitions
@@ -684,7 +684,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
                 continue;
             }
-            Set<String> partitionNames = getNeedRefreshPartitionNames(table);
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
             if (!partitionNames.isEmpty()) {
                 return getPartitionNames();
             }
@@ -713,13 +713,12 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
                 .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
 
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable);
         if (partitionExpr instanceof SlotRef) {
-            Set<String> baseChangedPartitionNames = getNeedRefreshPartitionNames(partitionTable);
             for (String basePartitionName : baseChangedPartitionNames) {
                 needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));
             }
         } else if (partitionExpr instanceof FunctionCallExpr) {
-            Set<String> baseChangedPartitionNames = getNeedRefreshPartitionNames(partitionTable);
             for (String baseChangedPartitionName : baseChangedPartitionNames) {
                 needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(baseChangedPartitionName));
             }
