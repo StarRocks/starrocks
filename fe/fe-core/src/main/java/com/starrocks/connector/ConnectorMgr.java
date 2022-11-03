@@ -24,7 +24,7 @@ public class ConnectorMgr {
 
     private final MetadataMgr metadataMgr;
 
-    public final List<String> SUPPORT_CONNECTOR_TYPE = Lists.newArrayList();
+    public static final List<String> SUPPORT_CONNECTOR_TYPE = Lists.newArrayList();
 
     public ConnectorMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;

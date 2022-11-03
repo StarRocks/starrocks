@@ -130,7 +130,11 @@ public class CatalogMgr {
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
-
+        // skip unsupport catalog type
+        if (!connectorMgr.SUPPORT_CONNECTOR_TYPE.contains(type)) {
+            LOG.warn("Replay catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+            return;
+        }
         readLock();
         try {
             Preconditions.checkState(!catalogs.containsKey(catalogName), "Catalog '%s' already exists", catalogName);
@@ -138,9 +142,7 @@ public class CatalogMgr {
             readUnlock();
         }
 
-        if (connectorMgr.SUPPORT_CONNECTOR_TYPE.contains(type)) {
-            connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
-        }
+        connectorMgr.createConnector(new ConnectorContext(catalogName, type, config));
         writeLock();
         try {
             catalogs.put(catalogName, catalog);
@@ -153,14 +155,15 @@ public class CatalogMgr {
         String catalogName = log.getCatalogName();
         readLock();
         try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+            if (!catalogs.contains(catalogName)) {
+                LOG.warn("Catalog [{}] doesn't exist", catalogName);
+                return;
+            }
         } finally {
             readUnlock();
         }
-        if (connectorMgr.SUPPORT_CONNECTOR_TYPE.contains(catalogs.get(catalogName).getType())) {
-            connectorMgr.removeConnector(catalogName);
-        }
 
+        connectorMgr.removeConnector(catalogName);
         writeLock();
         try {
             catalogs.remove(catalogName);
