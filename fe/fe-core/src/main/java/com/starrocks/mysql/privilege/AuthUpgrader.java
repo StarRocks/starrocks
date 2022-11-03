@@ -56,10 +56,6 @@ public class AuthUpgrader {
         this.globalStateMgr = globalStateMgr;
     }
 
-    public boolean needUpgrade() {
-        return !this.authenticationManager.isLoaded() || !this.privilegeManager.isLoaded();
-    }
-
     public void upgradeAsLeader() throws RuntimeException {
         try {
             LOG.info("start to upgrade as leader.");

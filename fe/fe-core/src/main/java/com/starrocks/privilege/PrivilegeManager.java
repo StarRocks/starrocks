@@ -57,6 +57,10 @@ public class PrivilegeManager {
     private final Map<String, Long> roleNameToId;
     @SerializedName(value = "p")
     private final Map<String, String> pluralToType;
+    @SerializedName(value = "i")
+    private short pluginId;
+    @SerializedName(value = "v")
+    private short pluginVersion;
 
     protected AuthorizationProvider provider;
 
@@ -93,6 +97,8 @@ public class PrivilegeManager {
         } else {
             this.provider = provider;
         }
+        pluginId = this.provider.getPluginId();
+        pluginVersion = this.provider.getPluginVersion();
         typeStringToId = new HashMap<>();
         typeToActionMap = new HashMap<>();
         pluralToType = new HashMap<>();
@@ -1229,6 +1235,8 @@ public class PrivilegeManager {
                     UserIdentity userIdentity = (UserIdentity) reader.readJson(UserIdentity.class);
                     UserPrivilegeCollection collection =
                             (UserPrivilegeCollection) reader.readJson(UserPrivilegeCollection.class);
+                    // upgrade meta to current version
+                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
                     ret.userToPrivilegeCollection.put(userIdentity, collection);
                 }
                 // 1 json for num roles
@@ -1239,6 +1247,8 @@ public class PrivilegeManager {
                     Long roleId = (Long) reader.readJson(Long.class);
                     RolePrivilegeCollection collection =
                             (RolePrivilegeCollection) reader.readJson(RolePrivilegeCollection.class);
+                    // upgrade meta to current version
+                    ret.provider.upgradePrivilegeCollection(collection, ret.pluginId, ret.pluginVersion);
                     ret.roleIdToPrivilegeCollection.put(roleId, collection);
                 }
             } catch (SRMetaBlockEOFException eofException) {
@@ -1253,7 +1263,7 @@ public class PrivilegeManager {
             // mark data is loaded
             ret.isLoaded = true;
             return ret;
-        } catch (SRMetaBlockException e) {
+        } catch (SRMetaBlockException | PrivilegeException e) {
             throw new DdlException("failed to load PrivilegeManager!", e);
         }
     }

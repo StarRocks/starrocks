@@ -34,6 +34,7 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -94,6 +95,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PrintableMap;
@@ -147,6 +149,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.mysql.privilege.UserPropertyInfo;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
@@ -154,11 +157,14 @@ import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
@@ -915,6 +921,10 @@ public class GlobalStateMgr {
         return usingNewPrivilege.get();
     }
 
+    private boolean needUpgradedToNewPrivilege() {
+        return !privilegeManager.isLoaded() || !authenticationManager.isLoaded();
+    }
+
     protected void initJournal() throws JournalException, InterruptedException {
         BlockingQueue<JournalTask> journalQueue = new ArrayBlockingQueue<JournalTask>(Config.metadata_journal_queue_size);
         journal = JournalFactory.create(nodeMgr.getNodeName());
@@ -1019,8 +1029,8 @@ public class GlobalStateMgr {
             nodeMgr.setLeaderInfo();
 
             if (USING_NEW_PRIVILEGE) {
-                AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-                if (upgrader.needUpgrade()) {
+                if (needUpgradedToNewPrivilege()) {
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
                     // upgrade metadata in old privilege framework to the new one
                     upgrader.upgradeAsLeader();
                     this.domainResolver.setAuthenticationManager(authenticationManager);
@@ -1144,7 +1154,8 @@ public class GlobalStateMgr {
 
     private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
-        if (isUsingNewPrivilege()) {
+        if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
+            // already upgraded, set auth = null
             auth = null;
         }
 
@@ -1256,13 +1267,10 @@ public class GlobalStateMgr {
 
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
-        if (isUsingNewPrivilege()) {
-            AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
-            if (upgrader.needUpgrade() && !isLeader() && !isCheckpointThread()) {
-                LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
-                usingNewPrivilege.set(false);
-                domainResolver = new DomainResolver(auth);
-            }
+        if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
+            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
+            usingNewPrivilege.set(false);
+            domainResolver = new DomainResolver(auth);
         }
 
         long loadImageEndTime = System.currentTimeMillis();
@@ -3219,6 +3227,70 @@ public class GlobalStateMgr {
         } catch (Exception e) {
             LOG.warn("replay uninstall plugin failed.", e);
         }
+    }
+
+    /**
+     * pretend we're using old auth if we have replayed journal from old auth
+     */
+    public void replayOldAuthJournal(short code, Writable data) throws DdlException {
+        if (USING_NEW_PRIVILEGE) {
+            LOG.warn("replay old auth journal right after restart, set usingNewPrivilege = false for now");
+            usingNewPrivilege.set(false);
+            domainResolver = new DomainResolver(auth);
+        }
+        switch (code) {
+            case OperationType.OP_CREATE_USER: {
+                auth.replayCreateUser((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_NEW_DROP_USER: {
+                auth.replayDropUser((UserIdentity) data);
+                break;
+            }
+            case OperationType.OP_GRANT_PRIV: {
+                auth.replayGrant((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_REVOKE_PRIV: {
+                auth.replayRevoke((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_SET_PASSWORD: {
+                auth.replaySetPassword((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_CREATE_ROLE: {
+                auth.replayCreateRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_DROP_ROLE: {
+                auth.replayDropRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_GRANT_ROLE: {
+                auth.replayGrantRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_REVOKE_ROLE: {
+                auth.replayRevokeRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_UPDATE_USER_PROPERTY: {
+                auth.replayUpdateUserProperty((UserPropertyInfo) data);
+                break;
+            }
+            case OperationType.OP_GRANT_IMPERSONATE: {
+                auth.replayGrantImpersonate((ImpersonatePrivInfo) data);
+                break;
+            }
+            case OperationType.OP_REVOKE_IMPERSONATE: {
+                auth.replayRevokeImpersonate((ImpersonatePrivInfo) data);
+                break;
+            }
+            default:
+                throw new DdlException("unknown code " + code);
+        }
+
     }
 
     public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {

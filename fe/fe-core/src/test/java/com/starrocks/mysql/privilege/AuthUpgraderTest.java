@@ -28,7 +28,7 @@ public class AuthUpgraderTest {
     private ConnectContext ctx;
     private long roleUserId = 0;
 
-    private UtFrameUtils.PseudoImage executeAndUpgrade(String...sqls) throws Exception {
+    private UtFrameUtils.PseudoImage executeAndUpgrade(boolean onlyUpgradeJournal, String...sqls) throws Exception {
         GlobalStateMgr.getCurrentState().initAuth(false);
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -55,7 +55,9 @@ public class AuthUpgraderTest {
                 ctx.getGlobalStateMgr().getAuthenticationManager(),
                 ctx.getGlobalStateMgr().getPrivilegeManager(),
                 ctx.getGlobalStateMgr());
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        if (onlyUpgradeJournal) {
+            UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
+        }
         authUpgrader.upgradeAsLeader();
         return image;
     }
@@ -139,6 +141,7 @@ public class AuthUpgraderTest {
     @Test
     public void testSelect() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
                 "create user globalSelect",
                 "GRANT select_priv on *.* TO globalSelect",
                 "create user dbSelect",
@@ -180,8 +183,46 @@ public class AuthUpgraderTest {
     }
 
     @Test
+    public void testNoImage() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                false,
+                "create user selectUser",
+                "GRANT select_priv on db0.tbl0 TO selectUser",
+                "create role impersonateRole",
+                "GRANT impersonate on selectUser TO ROLE impersonateRole");
+
+        // check upgrade success
+        UserIdentity selectUser = UserIdentity.createAnalyzedUserIdentWithIp("selectUser", "%");
+        checkPrivilegeAsUser(selectUser, "select * from db0.tbl0");
+        UserIdentity user = createUserByRole("impersonateRole");
+        ctx.setCurrentUserIdentity(user);
+        ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(ctx, selectUser);
+
+        // restart
+        ctx.getGlobalStateMgr().initAuth(true);
+        // read all journals
+        for (short op : Arrays.asList(
+                OperationType.OP_CREATE_USER,
+                OperationType.OP_GRANT_PRIV,
+                OperationType.OP_CREATE_ROLE,
+                OperationType.OP_GRANT_IMPERSONATE)) {
+            ctx.getGlobalStateMgr().replayOldAuthJournal(op, UtFrameUtils.PseudoJournalReplayer.replayNextJournal(op));
+        }
+        AuthUpgradeInfo info = (AuthUpgradeInfo) UtFrameUtils.PseudoJournalReplayer.replayNextJournal(
+                OperationType.OP_AUTH_UPGRDE_V2);
+        ctx.getGlobalStateMgr().replayAuthUpgrade(info);
+
+        // check upgrade success
+        checkPrivilegeAsUser(selectUser, "select * from db0.tbl0");
+        user = createUserByRole("impersonateRole");
+        ctx.setCurrentUserIdentity(user);
+        ctx.getGlobalStateMgr().getPrivilegeManager().canExecuteAs(ctx, selectUser);
+    }
+
+    @Test
     public void testImpersonate() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
                 "create user harry",
                 "create user gregory",
                 "GRANT impersonate on gregory TO harry",
@@ -207,6 +248,7 @@ public class AuthUpgraderTest {
     @Test
     public void testDomainUser() throws Exception {
         UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
                 "create user domain_user@['localhost']",
                 "GRANT select_priv on db1.tbl1 TO domain_user@['localhost']");
 
