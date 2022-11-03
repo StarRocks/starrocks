@@ -85,16 +85,15 @@ public class FilterUnusedColumnTest extends PlanTestBase {
         connectContext.getSessionVariable().enableTrimOnlyFilteredColumnsInScanStage();
         String sql = "select 1 from tpcds_100g_date_dim as ref_0 where ref_0.d_day_name=\"dd\" limit 137";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        Assert.assertTrue(plan, plan.contains("unused_output_column_name:[d_day_name]"));
     }
 
     @Test
     public void testFilterProjection() throws Exception {
-        String sql = "select\n" +
-                "            ref_0.d_dow as c1, year(d_date) as year from tpcds_100g_date_dim as ref_0 \n" +
+        String sql = "select ref_0.d_dow as c1, year(d_date) as year from tpcds_100g_date_dim as ref_0 \n" +
                 "            where ref_0.d_date = \'1997-12-31\' limit 137;\n";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        Assert.assertTrue(plan, plan.contains("unused_output_column_name:[d_date]"));
     }
 
     @Test

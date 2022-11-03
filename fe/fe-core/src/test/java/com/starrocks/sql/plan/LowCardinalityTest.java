@@ -131,7 +131,7 @@ public class LowCardinalityTest extends PlanTestBase {
                         "KI5') AND LO_ORDERDATE >= '1997-12-01' AND LO_ORDERDATE <= '1997-12-31' GROUP BY C_CITY, S_CITY, year " +
                         "ORDER BY year ASC, revenue DESC;";
         String plan = getThriftPlan(sql);
-        Assert.assertTrue(plan.contains("unused_output_column_name:[]"));
+        Assert.assertTrue(plan, plan.contains("unused_output_column_name:[LO_ORDERDATE]"));
         connectContext.getSessionVariable().disableTrimOnlyFilteredColumnsInScanStage();
     }
 
