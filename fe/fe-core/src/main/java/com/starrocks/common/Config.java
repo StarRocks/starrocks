@@ -1593,7 +1593,7 @@ public class Config extends ConfigBase {
      * connection and socket timeout for broker client
      */
     @ConfField
-    public static int broker_client_timeout_ms = 10000;
+    public static int broker_client_timeout_ms = 120000;
 
     /**
      * Unused config field, leave it here for backward compatibility
