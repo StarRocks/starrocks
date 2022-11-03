@@ -1062,7 +1062,10 @@ public class LocalMetastore implements ConnectorMetadata {
             buildPartitions(db, copiedTable, partitionList);
 
             // check again
-            db.writeLock();
+            if (!db.writeLockAndCheckExist()) {
+                throw new DdlException("db " + db.getFullName()
+                        + "(" + db.getId() + ") has been dropped");
+            }
             Set<String> existPartitionNameSet = Sets.newHashSet();
             try {
                 CatalogUtils.checkTableExist(db, tableName);
@@ -1270,6 +1273,7 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     public void dropPartition(Database db, Table table, DropPartitionClause clause) throws DdlException {
+        CatalogUtils.checkTableExist(db, table.getName());
         OlapTable olapTable = (OlapTable) table;
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
 
