@@ -36,7 +36,7 @@ public class KeyInferenceTest extends PlanTestBase {
     private List<String> planAndInferenceKey(String sql) throws Exception {
         ExecPlan plan = getExecPlan(sql);
         OptExpression physicalPlan = plan.getPhysicalPlan();
-        KeyInference.KeyPropertySet keys = KeyInference.infer(physicalPlan, plan);
+        KeyInference.KeyPropertySet keys = KeyInference.infer(physicalPlan, null);
         Map<Integer, String> columnNames = plan.getOutputColumns().stream().collect(
                 Collectors.toMap(ColumnRefOperator::getId, ColumnRefOperator::getName));
 
