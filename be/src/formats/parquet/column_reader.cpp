@@ -254,7 +254,7 @@ public:
     explicit StructColumnReader(const ColumnReaderOptions& opts) {}
     ~StructColumnReader() override = default;
 
-    Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>> child_readers) {
+    Status init(const ParquetField* field, std::vector<std::unique_ptr<ColumnReader>>&& child_readers) {
         _field = field;
         _child_readers = std::move(child_readers);
         return Status::OK();
