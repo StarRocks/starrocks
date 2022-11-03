@@ -46,20 +46,6 @@ brew install openjdk@11
 
 MacOS is already installed by default.
 
-**Setup thirdparty directory**
-
-Create `installed/bin` directory in `/thirdparty`.
-
-```bash
-mkdir -p thirdparty/installed/bin
-```
-
-Then create soft link for Thrift and Protobuf respectively.
-
-```bash
-ln -s /opt/homebrew/Cellar/thrift@0.13.0/0.13.0/bin/thrift thirdparty/installed/bin/thrift
-ln -s /opt/homebrew/Cellar/protobuf/3.19.4/bin/protoc thirdparty/installed/bin/protoc
-```
 
 Everyone's Thrift and Protobuf installation directories may be different, you can use the brew list command to inspect:
 
@@ -68,11 +54,34 @@ brew list thrift@0.13.0
 brew list protobuf
 ```
 
+## Configure the StarRocks
+
+**Download the StarRocks**
+
+```
+git clone https://github.com/StarRocks/starrocks.git
+```
+
+**Setup thirdparty directory**
+
+Create `installed/bin` directory in `thirdparty`.
+
+```bash
+cd starrocks && mkdir -p starrocks/thirdparty/installed/bin
+```
+
+Then create soft link for Thrift and Protobuf respectively.
+
+```bash
+ln -s /opt/homebrew/bin/thrift thirdparty/installed/bin/thrift
+ln -s /opt/homebrew/bin/protoc thirdparty/installed/bin/protoc
+```
+
 **Setting environment variables**
 
 ```bash
-export JAVA_HOME="/opt/homebrew/Cellar/openjdk@11/11.0.15"
-export PYTHON="/usr/bin/python3"
+export JAVA_HOME="/opt/homebrew/Cellar/openjdk@11/11.0.15" (Caution: The jdk stable version number may be changed)
+export PYTHON=/usr/bin/python3
 export STARROCKS_THIRDPARTY=/Users/smith/Code/starrocks/thirdparty
 ```
 
@@ -96,7 +105,14 @@ cd fe
 mvn install -DskipTests
 ```
 
-## Run StarRocksFE
+## Open StarRocks in IDEA
+
+1. Open the `StarRocks` directory in IDEA.
+
+2. Add Coding style setting
+    To standardize the coding style, you should import the `fe/starrocks_intellij_style.xml` code style file in IDEA.
+
+## Run StarRocks FE in MacOS
 
 Use IDEA to open the `fe` directory.
 
@@ -134,14 +150,9 @@ export LOG_DIR=/Users/smith/Code/starrocks/fe/log
 
 5. Then you have run StarRocks FE successfully.
 
-## Coding style setting
-
-To standardize the coding style, you should import the `fe/starrocks_intellij_style.xml` code style file in IDEA.
-
 ![image-20220701193938856](../../assets/IDEA-2.png)
 
-## Attach debugger
-
+## DEBUG StarRocks FE in MacOS
 
 If you started the FE with the debug option, you can then attach the IDEA debugger to the FE process.
 
