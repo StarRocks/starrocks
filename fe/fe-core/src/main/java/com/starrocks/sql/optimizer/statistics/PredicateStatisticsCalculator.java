@@ -256,16 +256,22 @@ public class PredicateStatisticsCalculator {
                         andStatistics.getOutputRowCount());
             } else if (predicate.isOr()) {
                 Preconditions.checkState(predicate.getChildren().size() == 2);
-                Statistics leftStatistics = predicate.getChild(0).accept(this, null);
-                Statistics rightStatistics = predicate.getChild(1).accept(this, null);
-                Statistics andStatistics = predicate.getChild(1)
-                        .accept(new PredicateStatisticsCalculator.PredicateStatisticsCalculatingVisitor(leftStatistics),
-                                null);
-                double rowCount = leftStatistics.getOutputRowCount() + rightStatistics.getOutputRowCount() -
-                        andStatistics.getOutputRowCount();
-                rowCount = Math.min(rowCount, statistics.getOutputRowCount());
-                return StatisticsEstimateUtils.adjustStatisticsByRowCount(
-                        computeOrPredicateStatistics(leftStatistics, rightStatistics, statistics, rowCount), rowCount);
+
+                List<ScalarOperator> disjunctive = Utils.extractDisjunctive(predicate);
+                Statistics cumulativeStatistics = predicate.getChild(0).accept(this, null);
+                double rowCount = cumulativeStatistics.getOutputRowCount();
+
+                for (int i = 1; i < disjunctive.size(); ++i) {
+                    Statistics orItemStatistics = disjunctive.get(i).accept(this, null);
+                    Statistics andStatistics = disjunctive.get(i).accept(
+                            new PredicateStatisticsCalculator.PredicateStatisticsCalculatingVisitor(cumulativeStatistics), null);
+                    rowCount = cumulativeStatistics.getOutputRowCount() + orItemStatistics.getOutputRowCount() -
+                            andStatistics.getOutputRowCount();
+                    rowCount = Math.min(rowCount, statistics.getOutputRowCount());
+                    cumulativeStatistics = computeOrPredicateStatistics(cumulativeStatistics, orItemStatistics, rowCount);
+                }
+
+                return StatisticsEstimateUtils.adjustStatisticsByRowCount(cumulativeStatistics, rowCount);
             } else {
                 Preconditions.checkState(predicate.getChildren().size() == 1);
                 Statistics inputStatistics = predicate.getChild(0).accept(this, null);
@@ -275,13 +281,14 @@ public class PredicateStatisticsCalculator {
             }
         }
 
-        public Statistics computeOrPredicateStatistics(Statistics leftStatistics, Statistics rightStatistics,
-                                                       Statistics inputStatistics, double rowCount) {
-            Statistics.Builder builder = Statistics.buildFrom(inputStatistics);
+        public Statistics computeOrPredicateStatistics(Statistics cumulativeStatistics, Statistics orItemStatistics,
+                                                       double rowCount) {
+            Statistics.Builder builder = Statistics.buildFrom(cumulativeStatistics);
             builder.setOutputRowCount(rowCount);
-            leftStatistics.getColumnStatistics().forEach((columnRefOperator, columnStatistic) -> {
+
+            cumulativeStatistics.getColumnStatistics().forEach((columnRefOperator, columnStatistic) -> {
                 ColumnStatistic.Builder columnBuilder = ColumnStatistic.buildFrom(columnStatistic);
-                ColumnStatistic rightColumnStatistic = rightStatistics.getColumnStatistic(columnRefOperator);
+                ColumnStatistic rightColumnStatistic = orItemStatistics.getColumnStatistic(columnRefOperator);
                 columnBuilder.setMinValue(Math.min(columnStatistic.getMinValue(), rightColumnStatistic.getMinValue()));
                 columnBuilder.setMaxValue(Math.max(columnStatistic.getMaxValue(), rightColumnStatistic.getMaxValue()));
                 builder.addColumnStatistic(columnRefOperator, columnBuilder.build());
