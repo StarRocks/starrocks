@@ -124,7 +124,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
 
     // shared by sink operator and source operator
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
     auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;

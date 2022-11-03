@@ -173,7 +173,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
     auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         // shared by sink operator and source operator
         auto aggregator_factory = std::make_shared<AggFactory>(_tnode);

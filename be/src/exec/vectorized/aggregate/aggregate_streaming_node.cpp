@@ -211,7 +211,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateStreamingNode:
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
     if (!should_cache && _tnode.agg_node.__isset.interpolate_passthrough && _tnode.agg_node.interpolate_passthrough &&
         could_local_shuffle) {
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink,
