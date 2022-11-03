@@ -68,10 +68,10 @@ public class MetadataMgrTest {
         List<String> internalTables = metadataMgr.listTableNames("default_catalog", "db1");
         Assert.assertTrue(internalTables.contains("tbl1"));
         try {
-            metadataMgr.listTableNames("default_catalog", "db2");
+            metadataMgr.listTableNames("default_catalog", "db_foo");
             Assert.fail();
         } catch (DdlException e) {
-            Assert.assertTrue(e.getMessage().contains("Database db2 doesn't exist"));
+            Assert.assertTrue(e.getMessage().contains("Database db_foo doesn't exist"));
         }
 
 
