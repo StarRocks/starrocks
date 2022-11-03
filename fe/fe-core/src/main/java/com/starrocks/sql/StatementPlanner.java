@@ -77,41 +77,31 @@ public class StatementPlanner {
         if (stmt instanceof QueryStatement) {
             OptimizerTraceUtil.logQueryStatement(session, "after parse:\n%s", (QueryStatement) stmt);
         }
-        Analyzer.analyze(stmt, session);
-        PrivilegeChecker.check(stmt, session);
-        if (stmt instanceof QueryStatement) {
-            OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", (QueryStatement) stmt);
-        }
 
-        if (stmt instanceof QueryStatement) {
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-            QueryStatement queryStmt = (QueryStatement) stmt;
-            try {
-                lock(dbs);
+        Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
+        try {
+            lock(dbs);
+            Analyzer.analyze(stmt, session);
+            PrivilegeChecker.check(stmt, session);
+            if (stmt instanceof QueryStatement) {
+                QueryStatement queryStmt = (QueryStatement) stmt;
+                OptimizerTraceUtil.logQueryStatement(session, "after analyze:\n%s", queryStmt);
+
                 session.setCurrentSqlDbIds(dbs.values().stream().map(Database::getId).collect(Collectors.toSet()));
                 TResultSinkType resultSinkType =
                         queryStmt.hasOutFileClause() ? TResultSinkType.FILE : TResultSinkType.MYSQL_PROTOCAL;
                 ExecPlan plan = createQueryPlan(queryStmt.getQueryRelation(), session, resultSinkType);
                 setOutfileSink(queryStmt, plan);
-
                 return plan;
-            } finally {
-                unLock(dbs);
+            } else if (stmt instanceof InsertStmt) {
+                return new InsertPlanner().plan((InsertStmt) stmt, session);
+            } else if (stmt instanceof UpdateStmt) {
+                return new UpdatePlanner().plan((UpdateStmt) stmt, session);
+            } else if (stmt instanceof DeleteStmt) {
+                return new DeletePlanner().plan((DeleteStmt) stmt, session);
             }
-        } else if (stmt instanceof DmlStmt) {
-            Map<String, Database> dbs = AnalyzerUtils.collectAllDatabase(session, stmt);
-            try {
-                lock(dbs);
-                if (stmt instanceof InsertStmt) {
-                    return new InsertPlanner().plan((InsertStmt) stmt, session);
-                } else if (stmt instanceof UpdateStmt) {
-                    return new UpdatePlanner().plan((UpdateStmt) stmt, session);
-                } else if (stmt instanceof DeleteStmt) {
-                    return new DeletePlanner().plan((DeleteStmt) stmt, session);
-                }
-            } finally {
-                unLock(dbs);
-            }
+        } finally {
+            unLock(dbs);
         }
         return null;
     }
