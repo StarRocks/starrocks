@@ -62,7 +62,7 @@ Status TableFunctionNode::init(const TPlanNode& tnode, RuntimeState* state) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
     _input_chunk_seek_rows = 0;
-    _table_function_result_eos = true;
+    _table_function_result_eos = false;
     _outer_column_remain_repeat_times = 0;
 
     return Status::OK();
@@ -238,7 +238,7 @@ Status TableFunctionNode::build_chunk(ChunkPtr* chunk, const std::vector<ColumnP
 }
 
 Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
-    if (!_table_function_result_eos) {
+    if (_input_chunk_ptr != nullptr && !_table_function_result_eos) {
         SCOPED_TIMER(_table_function_exec_timer);
         _table_function_result = _table_function->process(_table_function_state, &_table_function_result_eos);
         return Status::OK();
@@ -253,6 +253,7 @@ Status TableFunctionNode::get_next_input_chunk(RuntimeState* state, bool* eos) {
     }
 
     _input_chunk_seek_rows = 0;
+    _table_function_result_eos = false;
     Columns table_function_params;
     for (SlotId slotId : _param_slots) {
         table_function_params.emplace_back(_input_chunk_ptr->get_column_by_slot_id(slotId));
