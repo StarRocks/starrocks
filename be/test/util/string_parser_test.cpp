@@ -39,8 +39,8 @@ const int space_len = 7;
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>
 void test_int_value(const char* s, T exp_val, StringParser::ParseResult exp_result) {
-    for (auto & i : space) {
-        for (auto & j : space) {
+    for (auto& i : space) {
+        for (auto& j : space) {
             // All combinations of leading and/or trailing whitespace.
             std::string str = i + s + j;
             StringParser::ParseResult result;
@@ -54,8 +54,8 @@ void test_int_value(const char* s, T exp_val, StringParser::ParseResult exp_resu
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>
 void test_unsigned_int_value(const char* s, T exp_val, StringParser::ParseResult exp_result) {
-    for (auto & i : space) {
-        for (auto & j : space) {
+    for (auto& i : space) {
+        for (auto& j : space) {
             // All combinations of leading and/or trailing whitespace.
             std::string str = i + s + j;
             StringParser::ParseResult result;
@@ -69,8 +69,8 @@ void test_unsigned_int_value(const char* s, T exp_val, StringParser::ParseResult
 // Tests conversion of s, given a base, to an integer with and without leading/trailing whitespace
 template <typename T>
 void test_int_value(const char* s, int base, T exp_val, StringParser::ParseResult exp_result) {
-    for (auto & i : space) {
-        for (auto & j : space) {
+    for (auto& i : space) {
+        for (auto& j : space) {
             // All combinations of leading and/or trailing whitespace.
             std::string str = i + s + j;
             StringParser::ParseResult result;
@@ -82,8 +82,8 @@ void test_int_value(const char* s, int base, T exp_val, StringParser::ParseResul
 }
 
 void test_bool_value(const char* s, bool exp_val, StringParser::ParseResult exp_result) {
-    for (auto & i : space) {
-        for (auto & j : space) {
+    for (auto& i : space) {
+        for (auto& j : space) {
             // All combinations of leading and/or trailing whitespace.
             std::string str = i + s + j;
             StringParser::ParseResult result;
@@ -123,9 +123,9 @@ void test_float_value_is_nan(const std::string& s, StringParser::ParseResult exp
 // and without leading/trailing whitespace
 void test_all_float_variants(const std::string& s, StringParser::ParseResult exp_result) {
     std::string sign[] = {"", "+", "-"};
-    for (auto & i : space) {
-        for (auto & j : space) {
-            for (auto & k : sign) {
+    for (auto& i : space) {
+        for (auto& j : space) {
+            for (auto& k : sign) {
                 // All combinations of leading and/or trailing whitespace and +/- sign.
                 std::string str = i + k + s + j;
                 test_float_value<float>(str, exp_result);

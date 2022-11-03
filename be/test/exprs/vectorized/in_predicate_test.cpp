@@ -256,4 +256,4 @@ TEST_F(VectorizedInPredicateTest, inConstPred) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

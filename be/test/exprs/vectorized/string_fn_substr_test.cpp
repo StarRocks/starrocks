@@ -812,4 +812,4 @@ TEST_F(StringFunctionSubstrTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

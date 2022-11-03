@@ -125,4 +125,4 @@ TEST_F(StringFunctionSm3Test, abcNullLiteralTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

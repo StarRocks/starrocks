@@ -66,4 +66,4 @@ TEST_F(PercentileFunctionsTest, percentileNullTest) {
     ASSERT_TRUE(result->is_null(0));
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

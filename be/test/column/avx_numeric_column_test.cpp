@@ -242,6 +242,6 @@ TEST(AvxTest, simd) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 #endif

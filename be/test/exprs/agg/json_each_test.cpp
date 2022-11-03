@@ -13,7 +13,8 @@ namespace starrocks::vectorized {
 
 class JsonEachTest : public testing::Test {
 public:
-    void test_impl(const std::vector<std::string>& inputs, const std::vector<std::tuple<std::string, std::string>>& expected) {
+    void test_impl(const std::vector<std::string>& inputs,
+                   const std::vector<std::tuple<std::string, std::string>>& expected) {
         const TableFunction* func =
                 get_table_function("json_each", {TYPE_JSON}, {TYPE_VARCHAR, TYPE_JSON}, TFunctionBinaryType::BUILTIN);
 

@@ -1944,4 +1944,4 @@ TEST_F(VecBitmapFunctionsTest, array_to_bitmap_test) {
     ASSERT_EQ(res->debug_item(0), "");
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

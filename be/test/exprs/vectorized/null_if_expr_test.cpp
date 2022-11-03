@@ -115,4 +115,4 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftNullRightNull) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -590,7 +590,8 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_fail) {
 
 template <typename ArrowType, bool is_nullable, typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements, ArrowCppType value,
-                                                             const std::shared_ptr<arrow::DataType>& type, size_t& counter) {
+                                                             const std::shared_ptr<arrow::DataType>& type,
+                                                             size_t& counter) {
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
     size_t null_bitmap_in_bytes = (num_elements + 7) / 8;
@@ -872,8 +873,8 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
 
 template <bool is_nullable>
 std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
-                                                         const std::shared_ptr<arrow::Decimal128Type>& type, int128_t decimal,
-                                                         size_t& counter) {
+                                                         const std::shared_ptr<arrow::Decimal128Type>& type,
+                                                         int128_t decimal, size_t& counter) {
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
     auto byte_width = type->byte_width();

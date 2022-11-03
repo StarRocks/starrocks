@@ -99,4 +99,4 @@ TEST_F(VectorizedIfExprTest, ifNull) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

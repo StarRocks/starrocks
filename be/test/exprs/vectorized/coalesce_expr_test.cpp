@@ -115,4 +115,4 @@ TEST_F(VectorizedCoalesceExprTest, coalesceSameNull) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

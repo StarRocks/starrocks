@@ -465,8 +465,8 @@ public:
                                                    const std::vector<int64_t>& expect_rowset_versions, bool gc,
                                                    bool expect_error);
 
-    void tablets_prepare(const TabletSharedPtr& tablet0, const TabletSharedPtr& tablet1, std::vector<int32_t>& column_indexes,
-                         const std::shared_ptr<TabletSchema>& partial_schema);
+    void tablets_prepare(const TabletSharedPtr& tablet0, const TabletSharedPtr& tablet1,
+                         std::vector<int32_t>& column_indexes, const std::shared_ptr<TabletSchema>& partial_schema);
     void snapshot_prepare(const TabletSharedPtr& tablet, const std::vector<int64_t>& delta_versions,
                           std::string* snapshot_id_path, std::string* snapshot_dir,
                           std::vector<RowsetSharedPtr>* snapshot_rowsets,

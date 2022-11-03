@@ -611,4 +611,4 @@ TEST_F(VectorizedArithmeticExprTest, constModN128Expr) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -1982,7 +1982,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlNullable) {
                           "http://werwrw:sdf@sdfsceesvdsdvs/ccvwfewf?cvx=value#sdfs",
                           "http://vdvsv:df23@hostname/path?cvxvv=value#dsfs"};
 
-    for (auto & i : strs) {
+    for (auto& i : strs) {
         str->append(i);
     }
 
@@ -2025,7 +2025,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlOnlyNull) {
                           "http://werwrw:sdf@hostname/path?cvx=value#sdfs",
                           "http://vdvsv:df23@hostname/path?cvxvv=value#dsfs"};
 
-    for (auto & i : strs) {
+    for (auto& i : strs) {
         str->append(i);
     }
 
@@ -2063,7 +2063,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
 
         std::string res[] = {"username:password@hostname", "starrockssss:apache", "wobushinidehao:kjkljq"};
 
-        for (auto & i : strs) {
+        for (auto& i : strs) {
             str->append(i);
         }
 
@@ -2102,7 +2102,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
 
         std::string res[] = {"/path", "/csdwwww", "/wfefefe"};
 
-        for (auto & i : strs) {
+        for (auto& i : strs) {
             str->append(i);
         }
 
@@ -2149,7 +2149,7 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrl) {
                          "username:password",
                          "http"};
 
-    for (auto & i : parts) {
+    for (auto& i : parts) {
         str->append(strs[0]);
         part->append(i);
     }
@@ -2203,7 +2203,7 @@ PARALLEL_TEST(VecStringFunctionsTest, hex_stringTest) {
     std::string values[] = {"21", "16", "256", "514"};
     std::string strs[] = {"3231", "3136", "323536", "353134"};
 
-    for (auto & value : values) {
+    for (auto& value : values) {
         ints->append(value);
     }
 
@@ -2226,7 +2226,7 @@ PARALLEL_TEST(VecStringFunctionsTest, unhexTest) {
     std::string strs[] = {"21", "16", "256", "514"};
     std::string values[] = {"3231", "3136", "323536", "353134"};
 
-    for (auto & value : values) {
+    for (auto& value : values) {
         ints->append(value);
     }
 
@@ -2629,4 +2629,4 @@ PARALLEL_TEST(VecStringFunctionsTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

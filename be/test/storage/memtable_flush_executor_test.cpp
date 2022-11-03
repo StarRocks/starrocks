@@ -110,7 +110,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     TDescriptorTableBuilder dtb;
     TTupleDescriptorBuilder tuple_builder;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
-    for (auto & c : cs) {
+    for (auto& c : cs) {
         std::vector<std::string> fs = strings::Split(c, " ", strings::SkipWhitespace());
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";

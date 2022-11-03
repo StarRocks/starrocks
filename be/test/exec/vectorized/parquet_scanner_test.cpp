@@ -267,9 +267,8 @@ class ParquetScannerTest : public ::testing::Test {
         column_names.template insert(column_names.end(), columns_from_path.begin(), columns_from_path.end());
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
-        for (const auto & i : columns_from_path) {
-            src_slot_infos.template emplace_back(i, TypeDescriptor::from_primtive_type(TYPE_VARCHAR),
-                                                 is_nullable);
+        for (const auto& i : columns_from_path) {
+            src_slot_infos.template emplace_back(i, TypeDescriptor::from_primtive_type(TYPE_VARCHAR), is_nullable);
         }
 
         auto dst_slot_infos = select_columns(column_names, is_nullable);

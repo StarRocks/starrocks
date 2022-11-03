@@ -646,4 +646,4 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
                         .ok());
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -212,7 +212,7 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
     ChunkProbeSuppliers probe_suppliers;
     ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2};
-    for (auto & chunk : chunks) {
+    for (auto& chunk : chunks) {
         auto supplier = [&chunks, &chunk](Chunk** cnk) -> Status {
             if (chunk != nullptr) {
                 ChunkPtr& src_chunk = chunk;
@@ -262,7 +262,7 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
     ChunkProbeSuppliers probe_suppliers;
     ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2, _chunk_3};
-    for (auto & chunk : chunks) {
+    for (auto& chunk : chunks) {
         auto supplier = [&chunks, &chunk](Chunk** cnk) -> Status {
             if (chunk != nullptr) {
                 ChunkPtr& src_chunk = chunk;

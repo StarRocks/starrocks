@@ -247,4 +247,4 @@ TEST(DateValueTest, weekday) {
     ASSERT_EQ(0, dv.weekday()); // Sunday
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

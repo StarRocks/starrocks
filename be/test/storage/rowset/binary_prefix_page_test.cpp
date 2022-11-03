@@ -131,7 +131,7 @@ public:
         test_data.emplace_back("ab");
         test_data.emplace_back("c");
         std::vector<Slice> slices;
-        for (auto & i : test_data) {
+        for (auto& i : test_data) {
             Slice s(i);
             slices.emplace_back(s);
         }
@@ -164,7 +164,7 @@ public:
             test_data.push_back(std::to_string(i));
         }
         std::vector<Slice> slices;
-        for (auto & i : test_data) {
+        for (auto& i : test_data) {
             Slice s(i);
             slices.emplace_back(s);
         }

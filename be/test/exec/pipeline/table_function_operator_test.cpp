@@ -67,7 +67,9 @@ using CounterPtr = std::shared_ptr<Counter>;
 class TestNormalOperatorFactory final : public OperatorFactory {
 public:
     TestNormalOperatorFactory(int32_t id, int32_t plan_node_id, CounterPtr counter, TPlanNode* tnode)
-            : OperatorFactory(id, "test_normal", plan_node_id), _counter(std::move(std::move(counter))), _tnode(tnode) {}
+            : OperatorFactory(id, "test_normal", plan_node_id),
+              _counter(std::move(std::move(counter))),
+              _tnode(tnode) {}
 
     ~TestNormalOperatorFactory() override = default;
 

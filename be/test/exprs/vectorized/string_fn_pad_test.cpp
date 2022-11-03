@@ -527,7 +527,7 @@ struct PadNullableStrConstLenFillTestCase {
     std::vector<bool> lpad_expected_nulls;
 
     PadNullableStrConstLenFillTestCase(const vector<std::string>& strs, const vector<bool>& str_nulls, int len,
-                                       string  fill, bool rpad_expected_null,
+                                       string fill, bool rpad_expected_null,
                                        const vector<std::string>& rpad_expected_results,
                                        const vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
                                        const vector<std::string>& lpad_expected_results,
@@ -640,4 +640,4 @@ INSTANTIATE_TEST_SUITE_P(StringFunctionPadTest, PadNullableStrConstLenFillTestFi
                                                    // lpad expected results.
                                                    false, {"1231abc", "1231edf", "1abcdef"}, {false, false, false})));
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

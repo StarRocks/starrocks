@@ -84,4 +84,4 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

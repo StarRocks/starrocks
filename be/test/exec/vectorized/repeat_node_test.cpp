@@ -298,4 +298,4 @@ TEST_F(RepeatNodeTest, repeat_node_test) {
     ASSERT_TRUE(rows == 9);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

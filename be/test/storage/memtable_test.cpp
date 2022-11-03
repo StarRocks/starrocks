@@ -109,7 +109,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     TDescriptorTableBuilder dtb;
     TTupleDescriptorBuilder tuple_builder;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
-    for (auto & c : cs) {
+    for (auto& c : cs) {
         std::vector<std::string> fs = strings::Split(c, " ", strings::SkipWhitespace());
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
@@ -206,7 +206,8 @@ public:
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
         _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
         _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
-        _mem_table = std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
+        _mem_table =
+                std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     }
 
     void TearDown() override {

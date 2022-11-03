@@ -156,4 +156,4 @@ TEST_F(StringFunctionTrimTest, trimSpacesTest) {
         }
     }
 }
-} // namespace starrocks
+} // namespace starrocks::vectorized

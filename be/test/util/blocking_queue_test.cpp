@@ -60,8 +60,7 @@ TEST(BlockingQueueTest, TestGetFromShutdownQueue) {
 
 class MultiThreadTest {
 public:
-    MultiThreadTest()
-            :  _queue(_iterations * _nthreads / 10), _num_inserters(_nthreads) {}
+    MultiThreadTest() : _queue(_iterations * _nthreads / 10), _num_inserters(_nthreads) {}
 
     void inserter_thread(int arg) {
         for (int i = 0; i < _iterations; ++i) {
@@ -103,7 +102,7 @@ public:
         // the queue to go around.  This way, we test removal after shutdown.
         _threads.push_back(std::make_shared<std::thread>([this] { RemoverThread(); }));
 
-        for (auto & _thread : _threads) {
+        for (auto& _thread : _threads) {
             _thread->join();
         }
 

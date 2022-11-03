@@ -317,4 +317,4 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

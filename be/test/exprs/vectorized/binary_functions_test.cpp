@@ -66,4 +66,4 @@ TEST_F(VectorizedBinaryNullableTest, allArgsNull) {
     auto result = MathFunctions::pow(function_context, columns);
     ASSERT_TRUE(result->is_null(0));
 }
-} // namespace starrocks
+} // namespace starrocks::vectorized

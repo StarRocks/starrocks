@@ -66,7 +66,7 @@ TEST(CompactionManagerTest, test_candidates) {
         }
     }
 
-    for (auto & tablet : tablets) {
+    for (auto& tablet : tablets) {
         std::unique_ptr<CompactionContext> compaction_context;
         tablet->set_compaction_context(compaction_context);
     }
@@ -150,7 +150,7 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
-    for (auto & tablet : tablets) {
+    for (auto& tablet : tablets) {
         std::unique_ptr<CompactionContext> compaction_context;
         tablet->set_compaction_context(compaction_context);
     }

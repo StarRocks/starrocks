@@ -406,4 +406,4 @@ TEST(BitmapValueTest, bitmap_xor) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

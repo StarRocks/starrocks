@@ -729,4 +729,4 @@ TEST_F(RuntimeFilterTest, TestMultiColumnsOnRuntimeFilter_ShuffleJoin) {
                                            {});
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

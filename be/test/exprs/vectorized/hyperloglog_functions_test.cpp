@@ -158,4 +158,4 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

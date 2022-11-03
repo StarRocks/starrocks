@@ -385,4 +385,4 @@ TEST_F(VectorizedCompoundPredicateTest, testOnlyNullAndZeroRow) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

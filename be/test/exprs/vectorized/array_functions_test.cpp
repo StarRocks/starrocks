@@ -4128,7 +4128,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
         std::unordered_set<int32_t> set_expect = {4, 1};
         std::unordered_set<int32_t> set_actual;
         auto result_array = dest_column->get(2).get_array();
-        for (auto & i : result_array) {
+        for (auto& i : result_array) {
             set_actual.insert(i.get_int32());
         }
         ASSERT_TRUE(set_expect == set_actual);
@@ -4139,7 +4139,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
         std::unordered_set<int32_t> set_actual;
         size_t null_values = 0;
         auto result_array = dest_column->get(3).get_array();
-        for (auto & i : result_array) {
+        for (auto& i : result_array) {
             if (i.is_null()) {
                 ++null_values;
             } else {
@@ -4210,7 +4210,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
         std::unordered_set<std::string> set_expect = {"4", "1"};
         std::unordered_set<std::string> set_actual;
         auto result_array = dest_column->get(2).get_array();
-        for (auto & i : result_array) {
+        for (auto& i : result_array) {
             set_actual.insert(i.get_slice().to_string());
         }
         ASSERT_TRUE(set_expect == set_actual);
@@ -4221,7 +4221,7 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
         std::unordered_set<std::string> set_actual;
         size_t null_values = 0;
         auto result_array = dest_column->get(3).get_array();
-        for (auto & i : result_array) {
+        for (auto& i : result_array) {
             if (i.is_null()) {
                 ++null_values;
             } else {

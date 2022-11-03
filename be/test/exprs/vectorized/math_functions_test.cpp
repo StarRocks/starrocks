@@ -1368,4 +1368,4 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

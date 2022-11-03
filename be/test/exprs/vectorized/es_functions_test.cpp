@@ -39,4 +39,4 @@ TEST_F(EsFunctionsTest, matchTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

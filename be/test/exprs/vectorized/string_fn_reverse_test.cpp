@@ -77,4 +77,4 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

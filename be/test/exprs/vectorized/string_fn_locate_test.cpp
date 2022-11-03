@@ -544,4 +544,4 @@ TEST_F(StringFunctionLocateTest, locatePosChineseTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

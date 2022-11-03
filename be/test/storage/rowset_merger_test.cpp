@@ -63,7 +63,8 @@ public:
     Status flush_columns() override { return Status::OK(); }
     Status final_flush() override { return Status::OK(); }
 
-    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes, bool is_key) override {
+    Status add_columns(const vectorized::Chunk& chunk, const std::vector<uint32_t>& column_indexes,
+                       bool is_key) override {
         if (is_key) {
             all_pks->append(*chunk.get_column_by_index(0), 0, chunk.num_rows());
         } else {

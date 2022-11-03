@@ -121,4 +121,4 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

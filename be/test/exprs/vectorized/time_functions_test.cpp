@@ -3096,4 +3096,4 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

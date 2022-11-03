@@ -187,7 +187,8 @@ StatusOr<vectorized::ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::Runti
 
 ReduceSourceOperatorFactory::ReduceSourceOperatorFactory(int32_t id,
                                                          starrocks::vectorized::ReducerFactoryPtr reducer_factory)
-        : pipeline::SourceOperatorFactory(id, "reduce_source", id), _reducer_factory(std::move(std::move(reducer_factory))) {}
+        : pipeline::SourceOperatorFactory(id, "reduce_source", id),
+          _reducer_factory(std::move(std::move(reducer_factory))) {}
 
 pipeline::OperatorPtr ReduceSourceOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
     auto reducer = _reducer_factory->create(degree_of_parallelism, driver_sequence);

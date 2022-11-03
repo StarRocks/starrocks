@@ -112,4 +112,4 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

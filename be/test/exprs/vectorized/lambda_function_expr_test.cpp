@@ -511,4 +511,4 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

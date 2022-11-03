@@ -884,4 +884,4 @@ INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
 
 // clang-format on
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

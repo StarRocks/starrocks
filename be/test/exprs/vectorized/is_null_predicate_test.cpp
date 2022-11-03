@@ -179,4 +179,4 @@ TEST_F(VectorizedIsNullExprTest, isNotNullTest) {
         ASSERT_TRUE(v);
     }
 }
-} // namespace starrocks
+} // namespace starrocks::vectorized

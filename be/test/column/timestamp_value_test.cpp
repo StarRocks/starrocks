@@ -102,4 +102,4 @@ TEST(TimestampValueTest, cast) {
     ASSERT_EQ("2004-02-29", ((DateValue)v).to_string());
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

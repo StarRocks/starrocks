@@ -267,8 +267,9 @@ void PipeLineFileScanNodeTest::execute_pipeline() {
     }
 }
 
-void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
-                                                    const std::vector<TScanRangeParams>& scan_ranges) {
+void PipeLineFileScanNodeTest::generate_morse_queue(
+        const std::vector<starrocks::vectorized::ConnectorScanNode*>& scan_nodes,
+        const std::vector<TScanRangeParams>& scan_ranges) {
     std::vector<TScanRangeParams> no_scan_ranges;
     MorselQueueFactoryMap& morsel_queue_factories = _fragment_ctx->morsel_queue_factories();
 
@@ -343,7 +344,8 @@ class TestFileScanSinkOperator : public Operator {
 public:
     TestFileScanSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                              CounterPtr counter)
-            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence), _counter(std::move(std::move(counter))) {}
+            : Operator(factory, id, "test_sink", plan_node_id, driver_sequence),
+              _counter(std::move(std::move(counter))) {}
     ~TestFileScanSinkOperator() override = default;
 
     Status prepare(RuntimeState* state) override {

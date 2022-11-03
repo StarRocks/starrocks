@@ -448,4 +448,4 @@ TEST_F(geographyFunctionsTest, st_containsConstTest) {
     GeoFunctions::st_contains_close(ctx.get(), FunctionContext::FRAGMENT_LOCAL);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -131,11 +131,11 @@ TEST(HashMapTest, Insert) {
         auto& r = down_cast<Int32Column*>(down_cast<NullableColumn*>(key_columns[0].get())->data_column().get())
                           ->get_data();
         std::set<int32_t> keys_sets;
-        for (int & i : r) {
+        for (int& i : r) {
             keys_sets.insert(i);
         }
         std::set<int32_t> res_sets;
-        for (int & i : l) {
+        for (int& i : l) {
             res_sets.insert(i);
         }
         ASSERT_EQ(res_sets.size(), keys_sets.size());

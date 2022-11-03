@@ -250,8 +250,8 @@ TEST_F(BooleanQueryBuilderTest, bool_query) {
 
     TypeDescriptor range_type_desc = TypeDescriptor::create_varchar_type(range_value_length);
     std::string range_field_name = "k";
-    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name,
-                                                                 range_type_desc, TExprOpcode::GE, range_literal);
+    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name, range_type_desc,
+                                                   TExprOpcode::GE, range_literal);
     char term_str[] = "wyf";
     int term_value_length = (int)strlen(term_str);
     Slice term_value(term_str, term_value_length);
@@ -260,8 +260,8 @@ TEST_F(BooleanQueryBuilderTest, bool_query) {
 
     TypeDescriptor term_type_desc = TypeDescriptor::create_varchar_type(term_value_length);
     std::string term_field_name = "content";
-    auto* term_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name,
-                                                                term_type_desc, TExprOpcode::EQ, term_literal);
+    auto* term_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name, term_type_desc,
+                                                  TExprOpcode::EQ, term_literal);
 
     // content like 'a%e%g_' or k >= a or content = "wyf"
     std::vector<ExtPredicate*> or_predicates = {like_predicate, function_predicate, range_predicate, term_predicate};
@@ -329,8 +329,8 @@ TEST_F(BooleanQueryBuilderTest, compound_bool_query) {
 
     TypeDescriptor range_type_desc = TypeDescriptor::create_varchar_type(range_value_length);
     std::string range_field_name = "k";
-    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name,
-                                                                 range_type_desc, TExprOpcode::GE, range_literal);
+    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name, range_type_desc,
+                                                   TExprOpcode::GE, range_literal);
 
     std::vector<ExtPredicate*> bool_predicates_2 = {range_predicate};
     auto* bool_predicate_2 = new EsPredicate(bool_predicates_2);
@@ -344,8 +344,8 @@ TEST_F(BooleanQueryBuilderTest, compound_bool_query) {
 
     TypeDescriptor term_type_desc = TypeDescriptor::create_varchar_type(term_value_length);
     std::string term_field_name = "content";
-    auto* term_ne_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name,
-                                                                   term_type_desc, TExprOpcode::NE, term_literal);
+    auto* term_ne_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name, term_type_desc,
+                                                     TExprOpcode::NE, term_literal);
     std::vector<ExtPredicate*> bool_predicates_3 = {term_ne_predicate};
     auto* bool_predicate_3 = new EsPredicate(bool_predicates_3);
 
@@ -485,8 +485,8 @@ TEST_F(BooleanQueryBuilderTest, validate_partial) {
 
     TypeDescriptor range_type_desc = TypeDescriptor::create_varchar_type(range_value_length);
     std::string range_field_name = "k";
-    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name,
-                                                                 range_type_desc, TExprOpcode::GE, range_literal);
+    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name, range_type_desc,
+                                                   TExprOpcode::GE, range_literal);
 
     std::vector<ExtPredicate*> bool_predicates_1 = {like_predicate, range_predicate};
     auto* bool_predicate_1 = new EsPredicate(bool_predicates_1);
@@ -523,8 +523,8 @@ TEST_F(BooleanQueryBuilderTest, validate_partial) {
 
     TypeDescriptor term_type_desc = TypeDescriptor::create_varchar_type(term_value_length);
     std::string term_field_name = "content";
-    auto* term_ne_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name,
-                                                                   term_type_desc, TExprOpcode::NE, term_literal);
+    auto* term_ne_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name, term_type_desc,
+                                                     TExprOpcode::NE, term_literal);
 
     char es_query_str[] = R"({"bool": {"must_not": {"exists": {"field": "f1"}}}})";
     int es_query_length = (int)strlen(es_query_str);
@@ -600,8 +600,8 @@ TEST_F(BooleanQueryBuilderTest, validate_compound_and) {
             pool.add(new VExtLiteral(TYPE_VARCHAR, ColumnHelper::create_const_column<TYPE_VARCHAR>(term_value, 1)));
     TypeDescriptor term_type_desc = TypeDescriptor::create_varchar_type(term_value_length);
     std::string term_field_name = "content";
-    auto* term_ne_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name,
-                                                                   term_type_desc, TExprOpcode::NE, term_literal);
+    auto* term_ne_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, term_field_name, term_type_desc,
+                                                     TExprOpcode::NE, term_literal);
 
     std::vector<ExtPredicate*> innner_or_content = {term_ne_predicate, in_predicate};
 
@@ -615,8 +615,8 @@ TEST_F(BooleanQueryBuilderTest, validate_compound_and) {
 
     TypeDescriptor range_type_desc = TypeDescriptor::create_varchar_type(range_value_length);
     std::string range_field_name = "k";
-    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name,
-                                                                 range_type_desc, TExprOpcode::GE, range_literal);
+    auto* range_predicate = new ExtBinaryPredicate(TExprNodeType::BINARY_PRED, range_field_name, range_type_desc,
+                                                   TExprOpcode::GE, range_literal);
     std::vector<ExtPredicate*> range_predicates = {range_predicate};
     auto* left_inner_or_predicate = new EsPredicate(range_predicates);
 

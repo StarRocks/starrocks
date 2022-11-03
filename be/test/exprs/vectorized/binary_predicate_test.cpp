@@ -533,4 +533,4 @@ TEST_F(VectorizedBinaryPredicateStringTest, nullEqExpr) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

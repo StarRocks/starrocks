@@ -21,8 +21,8 @@ namespace starrocks::vectorized {
 
 class ChunkHelperTest : public testing::Test {
 public:
-    void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type, int32_t length,
-                           bool is_nullable);
+    void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
+                           int32_t length, bool is_nullable);
     vectorized::SchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
@@ -95,8 +95,8 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     return tuple_desc;
 }
 
-void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
-                                        int32_t length, bool is_nullable) {
+void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key,
+                                        const std::string& type, int32_t length, bool is_nullable) {
     ColumnPB* column = tablet_schema_pb.add_column();
     column->set_unique_id(id);
     column->set_name("c" + std::to_string(id));
@@ -298,4 +298,4 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_EQ(input_rows, output_rows);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

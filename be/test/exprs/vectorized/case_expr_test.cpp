@@ -553,4 +553,4 @@ TEST_F(VectorizedCaseExprTest, NoCaseWhenNullReturnIntElse) {
     }
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

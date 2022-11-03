@@ -70,4 +70,4 @@ TEST(CRC, Extend) {
     ASSERT_EQ(Value("hello world", 11), Value(slices));
 }
 
-} // namespace starrocks
+} // namespace starrocks::crc32c

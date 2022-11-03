@@ -77,4 +77,4 @@ TEST_F(HashFunctionsTest, emptyTest) {
     ASSERT_EQ(123456, h3);
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

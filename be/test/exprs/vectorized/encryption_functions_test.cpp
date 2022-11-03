@@ -217,7 +217,7 @@ TEST_F(EncryptionFunctionsTest, aes_encryptConstTextTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "944EE45DA6CA9428A74E92A7A80BFA87",
                              "3D1967BC5A9BF290F77FE42733A29F6F"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
     }
 
@@ -417,7 +417,7 @@ TEST_F(EncryptionFunctionsTest, aes_decryptConstTextTest) {
     std::string results[] = {"CEF5BE724B7B98B63216C95A7BD681C9", "944EE45DA6CA9428A74E92A7A80BFA87",
                              "3D1967BC5A9BF290F77FE42733A29F6F"};
 
-    for (auto & result : results) {
+    for (auto& result : results) {
         plain->append(result);
     }
 
@@ -473,7 +473,7 @@ TEST_F(EncryptionFunctionsTest, from_base64GeneralTest) {
     std::string plains[] = {"MQ==", "ZG9yaXN3ZXE=", "MzQ5dWlvbmZrbHduZWZr"};
     std::string results[] = {"1", "dorisweq", "349uionfklwnefk"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
     }
 
@@ -497,7 +497,7 @@ TEST_F(EncryptionFunctionsTest, from_base64NullTest) {
     std::string plains[] = {"MQ==", "ZG9yaXN3ZXE=", "MzQ5dWlvbmZrbHduZWZr"};
     std::string results[] = {"1", "dorisweq", "349uionfklwnefk"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
         plain_null->append(0);
     }
@@ -545,7 +545,7 @@ TEST_F(EncryptionFunctionsTest, to_base64Test) {
     std::string plains[] = {"1", "dorisweq", "349uionfklwnefk"};
     std::string results[] = {"MQ==", "ZG9yaXN3ZXE=", "MzQ5dWlvbmZrbHduZWZr"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
     }
 
@@ -569,7 +569,7 @@ TEST_F(EncryptionFunctionsTest, to_base64NullTest) {
     std::string plains[] = {"1", "dorisweq", "349uionfklwnefk"};
     std::string results[] = {"MQ==", "ZG9yaXN3ZXE=", "MzQ5dWlvbmZrbHduZWZr"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
         plain_null->append(0);
     }
@@ -617,7 +617,7 @@ TEST_F(EncryptionFunctionsTest, md5GeneralTest) {
     std::string plains[] = {"dorisqq", "errankong"};
     std::string results[] = {"465f8101946b24bc012ce07b4d17a5da", "4402f1c78924499be8a48506c00dc070"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
     }
 
@@ -641,7 +641,7 @@ TEST_F(EncryptionFunctionsTest, md5NullTest) {
     std::string plains[] = {"dorisqq", "errankong"};
     std::string results[] = {"465f8101946b24bc012ce07b4d17a5da", "4402f1c78924499be8a48506c00dc070"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         plain->append(j);
         plain_null->append(0);
     }
@@ -676,7 +676,7 @@ TEST_F(EncryptionFunctionsTest, md5ConstTest) {
     auto result2 = ColumnHelper::as_column<ConstColumn>(result);
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result2->data_column());
 
-    for (auto & result : results) {
+    for (auto& result : results) {
         ASSERT_EQ(result, ColumnHelper::get_const_value<TYPE_VARCHAR>(result2));
     }
 }
@@ -688,7 +688,7 @@ TEST_F(EncryptionFunctionsTest, md5sumTest) {
     std::string plains[] = {"dorisqq", "1", "324", "2111"};
     std::string results[] = {"ebe1e817a42e312d89ed197c8c67b5f7"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
         columns.emplace_back(plain);
@@ -710,13 +710,13 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
     std::string plains[] = {"dorisqq", "1", "324", "2111"};
     std::string results[] = {"ebe1e817a42e312d89ed197c8c67b5f7"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
         columns.emplace_back(plain);
     }
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
         auto plain_null = NullColumn::create();
@@ -740,7 +740,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
     std::string plains[] = {"dorisqq", "1", "324", "2111"};
     std::string results[] = {"313541553194712735798834777371609380343"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
         columns.emplace_back(plain);
@@ -762,13 +762,13 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     std::string plains[] = {"dorisqq", "1", "324", "2111"};
     std::string results[] = {"313541553194712735798834777371609380343"};
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
         columns.emplace_back(plain);
     }
 
-    for (auto & j : plains) {
+    for (auto& j : plains) {
         auto plain = BinaryColumn::create();
         plain->append(j);
         auto plain_null = NullColumn::create();
@@ -855,4 +855,4 @@ INSTANTIATE_TEST_SUITE_P(
                                 "eaf18d26b2976216790d95b2942d15b7db5f926c7d62d35f24c98b8eedbe96f2e6241e5e4fdc6b7d9e7893"
                                 "d94d86cd8a6f3bb6b1804c22097b337ecc24f6015e")));
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

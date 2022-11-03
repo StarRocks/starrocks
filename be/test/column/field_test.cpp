@@ -155,4 +155,4 @@ TEST(FieldTest, test_with_nullable) {
     ASSERT_EQ(10, field2->short_key_length());
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized

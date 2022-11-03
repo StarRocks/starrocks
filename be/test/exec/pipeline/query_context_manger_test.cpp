@@ -205,4 +205,4 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
     query_ctx_mgr->remove(query_id);
     ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
 }
-} // namespace starrocks
+} // namespace starrocks::pipeline

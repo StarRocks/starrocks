@@ -1911,4 +1911,4 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
-} // namespace starrocks
+} // namespace starrocks::vectorized
