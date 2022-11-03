@@ -261,18 +261,22 @@ public class IcebergUtil {
 
     private static IcebergTable convertToSRTable(org.apache.iceberg.Table icebergTable, Map<String, String> properties)
             throws DdlException {
-        Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
-                .collect(Collectors.toMap(Types.NestedField::name, field -> field));
-        List<Column> fullSchema = Lists.newArrayList();
-        for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
-            Types.NestedField icebergColumn = entry.getValue();
-            Type srType = convertColumnType(icebergColumn.type());
-            Column column = new Column(icebergColumn.name(), srType, true);
-            fullSchema.add(column);
-        }
+        try {
+            Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
+                    .collect(Collectors.toMap(Types.NestedField::name, field -> field));
+            List<Column> fullSchema = Lists.newArrayList();
+            for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
+                Types.NestedField icebergColumn = entry.getValue();
+                Type srType = convertColumnType(icebergColumn.type());
+                Column column = new Column(icebergColumn.name(), srType, true);
+                fullSchema.add(column);
+            }
 
-        return new IcebergTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), icebergTable,
-                true, icebergTable.name(), fullSchema, properties);
+            return new IcebergTable(CONNECTOR_ID_GENERATOR.getNextId().asInt(), icebergTable,
+                    true, icebergTable.name(), fullSchema, properties);
+        } catch (NullPointerException e) {
+            throw new DdlException("iceberg table is not found.", e);
+        }
     }
 
     public static Type convertColumnType(org.apache.iceberg.types.Type icebergType) {

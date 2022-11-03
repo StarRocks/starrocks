@@ -114,6 +114,11 @@ public class TableFactory {
         metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HUDI, HUDI);
+        if (table == null) {
+            throw new DdlException("Can not find hudi table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HudiTable oHudiTable = (HudiTable) table;
         validateHudiColumnType(columns, oHudiTable);
 
