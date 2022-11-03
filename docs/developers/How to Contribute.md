@@ -21,17 +21,15 @@ You can also report issues and problems, or suggest new features, on [GitHub](ht
 
 Our community strictly adheres to the [code of conduct](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md).
 
-
 # Community roles
 
-![img](https://starrocks.feishu.cn/space/api/box/stream/download/asynccode/?code=NjQwMjM4MmMyODZlNWEwOWI3ZTAyNWQ1YmFkNzhjMTRfU054aUlrZlFzd2JqbzNkZ3B3UE1MdjFZN1F2eFBwVFBfVG9rZW46Ym94Y25yTFp4VW5KU2N6NU04d0VLY1piRlVmXzE2NjY5NDY1ODc6MTY2Njk1MDE4N19WNA)
+![img](../assets/how%20to%20contribute.png)
 
 Everyone is encouraged to participate in the StarRocks project. Anyone can make an impact by simply being involved in the discussions about new features, project roadmap, architecture, and even reporting issues you are facing. 
 
 The roles listed below are a few possible ways to get involved in the community, it also defines what is expected from each role.
 
-## User group 
-
+## User group
 
 ### Participants
 
@@ -49,16 +47,15 @@ Expectations and responsibilities:
 
 - Suggest improvements.
 
-
 ### Champions
 
-StarRocks Community Champions are a group of passionate community evangelists and pioneers who are well-versed in StarRocks technology. They enjoy sharing the latest developments and products in the community, and their enthusiasm drives the progress and development of the community. 
+StarRocks Community Champions are a group of passionate community evangelists and pioneers who are well-versed in StarRocks technology. They enjoy sharing the latest developments and products in the community, and their enthusiasm drives the progress and development of the community.
 
 #### **Benefits**
 
 **Product**
 
-- Early access to new products/features. 
+- Early access to new products/features.
 
 - Participate in exclusive meetings with the project core team.
 
@@ -87,9 +84,7 @@ StarRocks Community Champions are a group of passionate community evangelists an
 1. StarRocks Champions must abide by the StarRocks Community [Code of Conduct.](https://github.com/StarRocks/starrocks/blob/main/CODE_OF_CONDUCT.md)
 2. StarRocks Champions are eligible for one year, and must reapply each year based on their contributions in the past year.
 
-
-## Developer Group 
-
+## Developer Group
 
 ### Contributor
 
@@ -99,7 +94,7 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 
 - 1 merged PR in any StarRocks' public repos.
 
-#### As a Contributor, we expect you to：
+#### As a Contributor, we expect you to
 
 - Actively participate in StarRocks' project development.
 
@@ -107,12 +102,11 @@ Everyone who contributes can become a StarRocks contributor. The members will pr
 
 - Learn and help others learn StarRocks-related technologies.
 
-#### Privileges:
+#### Privileges
 
 - Be listed as a StarRocks contributor.
 
 - Be awarded a StarRocks Contributor e-certificate.
-
 
 ## Active Contributor
 
@@ -126,7 +120,7 @@ Active contributors are contributors who have made outstanding contributions and
 
 - Actively participate in community events such as online/offline meetups and community discussions.
 
-### Responsibilities and privileges:
+### Responsibilities and privileges
 
 - Join the community meeting and discussion.
 
@@ -135,7 +129,6 @@ Active contributors are contributors who have made outstanding contributions and
 - Be listed as a StarRocks Active Contributor.
 
 - Be awarded a StarRocks Active Contributor e-certificate.
-
 
 ## Committer
 
@@ -153,7 +146,7 @@ They have the authority to merge PRs into master branches and are responsible fo
 
 - Receive at least two PMC nominations and pass voting.
 
-### Responsibilities and privileges:
+### Responsibilities and privileges
 
 - Mentor and guide other memberships in the community.
 
@@ -164,7 +157,6 @@ They have the authority to merge PRs into master branches and are responsible fo
 - Be listed as a StarRocks Committer.
 
 - Be awarded a StarRocks Committer e-certificate.
-
 
 ## PMC
 
@@ -180,7 +172,7 @@ PMCs are promoted from Committers. They have the authority to merge merge PRs in
 
 - Receive at least two PMC nominations and pass voting.
 
-### Responsibilities and privileges:
+### Responsibilities and privileges
 
 - Mentor and guide other memberships in the community.
 
@@ -196,21 +188,21 @@ PMCs are promoted from Committers. They have the authority to merge merge PRs in
 
 - Be awarded a StarRocks PMC e-certificate.
 
-
 # Contribution process
 
 If you don't know how to get started, this is the process we suggest for contributions. This process is designed to help reduce your learning curve and get your pull requests merged more efficiently!
 
 1. Sign the [Contributor License Agreement (CLA)](https://cla-assistant.io/StarRocks/starrocks).
+
 2. Start a discussion by creating a Github [issue](https://github.com/StarRocks/starrocks/issues), or asking on [Slack channel](https://join.slack.com/t/starrocks/shared_invite/zt-1d0cs3cs2-7eL5Q0cGoBofhyIOx7pLfQ)(unless the change is trivial).
 
-- Before getting your hands on codes, you should comment in the issue body, and inform the maintainer to assign you the issue that you wish to solve. It is recommended to share your plan on how to solve this problem in the issue body as well.
+   Before getting your hands on codes, you should comment in the issue body, and inform the maintainer to assign you the issue that you wish to solve. It is recommended to share your plan on how to solve this problem in the issue body as well.
 
-- - This step helps you identify possible collaborators and reviewers.
-  - Will the change conflict with another change in progress? If so, work with others to minimize impact.
-  - Is this change major? If so, work with others to break the change into smaller steps.
+   - This step helps you identify possible collaborators and reviewers.
+   - Will the change conflict with another change in progress? If so, work with others to minimize impact.
+   - Is this change major? If so, work with others to break the change into smaller steps.
 
-3. Implement the change:
+3. Implement the change.
 
    * If the change is major, split it into smaller PRs.
 
@@ -218,15 +210,15 @@ If you don't know how to get started, this is the process we suggest for contrib
 
 4. Create a Github [pull request](https://github.com/StarRocks/starrocks/pulls):
 
-- In StarRocks community, we follow the fork-and-merge GitHub workflow when contributing code.
+   In StarRocks community, we follow the fork-and-merge GitHub workflow when contributing code.
 
-- - Create a fork of StarRocks in your GitHub account.
-  - Clone this forked repository to your computer.
-  - Check out a new branch based on the branch you expect to contribute to.
-  - Commit your code changes to the new branch.
-  - Push the branch with code changes to GitHub.
-  - Create a PR to submit your code changes. It is recommended to submit ONE commit in ONE PR. You can follow the [PR templated](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a PR. 
-  - Make sure the pull request passes the tests in CI.
+   - Create a fork of StarRocks in your GitHub account.
+   - Clone this forked repository to your computer.
+   - Check out a new branch based on the branch you expect to contribute to.
+   - Commit your code changes to the new branch.
+   - Push the branch with code changes to GitHub.
+   - Create a PR to submit your code changes. It is recommended to submit ONE commit in ONE PR. You can follow the [PR templated](https://github.com/StarRocks/starrocks/blob/main/.github/PULL_REQUEST_TEMPLATE.md) when submitting a PR. 
+   - Make sure the pull request passes the tests in CI.
 
 5. Review is required by at least 2 reviewers:
 
