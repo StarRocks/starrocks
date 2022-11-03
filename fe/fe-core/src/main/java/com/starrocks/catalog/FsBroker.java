@@ -28,6 +28,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.system.BrokerHbResponse;
+import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 
 import java.io.DataInput;
@@ -62,7 +63,7 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
      * handle Broker's heartbeat response.
      * return true if alive state is changed.
      */
-    public boolean handleHbResponse(BrokerHbResponse hbResponse) {
+    public boolean handleHbResponse(BrokerHbResponse hbResponse, boolean isReplay) {
         boolean isChanged = false;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!isAlive) {
@@ -88,10 +89,20 @@ public class FsBroker implements Writable, Comparable<FsBroker> {
             // this heartbeat info also need to be synced to follower.
             // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
             // if this heartbeat is not synchronized to the follower, 
-            // that will cause the Follower and master’s memory to be inconsistent
+            // that will cause the Follower and leader’s memory to be inconsistent
             isChanged = true;
         }
-
+        if (!isReplay) {
+            hbResponse.aliveStatus = isAlive ?
+                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+        } else {
+            if (hbResponse.aliveStatus != null) {
+                // The metadata before the upgrade does not contain hbResponse.aliveStatus,
+                // in which case the alive status needs to be handled according to the original logic
+                isAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
+                heartbeatRetryTimes = 0;
+            }
+        }
         return isChanged;
     }
 

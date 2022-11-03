@@ -603,6 +603,52 @@ TEST_F(TabletUpdatesTest, writeread_with_delete) {
     ASSERT_EQ(N, read_tablet(_tablet, 4));
 }
 
+TEST_F(TabletUpdatesTest, writeread_with_overlapping_deletes_only_batches) {
+    _tablet = create_tablet(rand(), rand());
+
+    std::vector<int64_t> keys;
+
+    const int N = 8000;
+
+    for (int i = 0; i < N; i++) {
+        keys.push_back(i);
+    }
+    // Insert [0, 1, 2 ... N)
+    ASSERT_TRUE(_tablet->rowset_commit(2, create_rowset(_tablet, keys)).ok());
+
+    for (int i = 0; i < N; i++) {
+        keys[i] = N + i;
+    }
+    // Insert [N, N + 1, N + 2 ... 2N)
+    ASSERT_TRUE(_tablet->rowset_commit(3, create_rowset(_tablet, keys)).ok());
+
+    for (int i = 0; i < N; i++) {
+        keys[i] = 2 * N + i;
+    }
+    // Insert [2N, 2N + 1, 2N + 2 ... 3N)
+    ASSERT_TRUE(_tablet->rowset_commit(4, create_rowset(_tablet, keys)).ok());
+
+    vectorized::Int64Column deletes;
+    for (int i = N / 2; i < N + N / 2; i++) {
+        deletes.append(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(5, create_rowset(_tablet, {}, &deletes)).ok());
+
+    deletes.resize(0);
+    for (int i = N; i < 2 * N; i++) {
+        deletes.append(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(6, create_rowset(_tablet, {}, &deletes)).ok());
+
+    deletes.resize(0);
+    for (int i = N + N / 2; i < 2 * N + N / 2; i++) {
+        deletes.append(i);
+    }
+    ASSERT_TRUE(_tablet->rowset_commit(7, create_rowset(_tablet, {}, &deletes)).ok());
+
+    ASSERT_EQ(N, read_tablet(_tablet, 7));
+}
+
 TEST_F(TabletUpdatesTest, noncontinous_commit) {
     _tablet = create_tablet(rand(), rand());
     const int N = 100;
