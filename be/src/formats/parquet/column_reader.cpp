@@ -333,9 +333,9 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::unordered_map<std::string, size_t> mapping;
         for (size_t i = 0; i < field->children.size(); i++) {
             if (opts.case_sensitive) {
-                mapping.insert({field->children.at(i).name, i});
+                mapping.emplace(field->children.at(i).name, i);
             } else {
-                mapping.insert({boost::algorithm::to_lower_copy(field->children.at(i).name), i});
+                mapping.emplace(boost::algorithm::to_lower_copy(field->children.at(i).name), i);
             }
         }
 
@@ -343,7 +343,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         for (size_t i = 0; i < col_type.children.size(); i++) {
             if (!col_type.selected_fields.at(i)) continue;
 
-            const std::string subfield_name = col_type.field_names.at(i);
+            const std::string& subfield_name = col_type.field_names.at(i);
 
             std::string required_subfield_name =
                     opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);

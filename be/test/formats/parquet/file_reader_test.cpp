@@ -1308,7 +1308,6 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
 
     // --------------init context---------------
     auto ctx = _create_scan_context();
-    ctx->case_sensitive = false;
 
     TypeDescriptor c1 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
 
@@ -1356,6 +1355,45 @@ TEST_F(FileReaderTest, TestReadStructCaseSensitive) {
     //    for (int i = 0; i < 1; ++i) {
     //        std::cout << "row" << i << ": " << chunk->debug_row(i) << std::endl;
     //    }
+}
+
+TEST_F(FileReaderTest, TestReadStructCaseSensitiveError) {
+    auto file = _create_file(_file4_path);
+    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                    std::filesystem::file_size(_file4_path));
+
+    // --------------init context---------------
+    auto ctx = _create_scan_context();
+    ctx->case_sensitive = true;
+
+    TypeDescriptor c1 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT);
+
+    TypeDescriptor c2 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_STRUCT);
+
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    c2.field_names.emplace_back("F1");
+    c2.selected_fields.emplace_back(true);
+
+    c2.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
+    c2.field_names.emplace_back("F2");
+    c2.selected_fields.emplace_back(true);
+
+    TypeDescriptor f3 = TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_ARRAY);
+    f3.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+
+    c2.children.emplace_back(f3);
+    c2.field_names.emplace_back("F3");
+    c2.selected_fields.emplace_back(true);
+
+    SlotDesc slot_descs[] = {{"c1", c1}, {"c2", c2}, {""}};
+    ctx->tuple_desc = create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    ctx->scan_ranges.emplace_back(_create_scan_range(_file4_path));
+    // --------------finish init context---------------
+
+    Status status = file_reader->init(ctx);
+    EXPECT_TRUE(!status.ok());
+    std::cout << status.get_error_msg() << std::endl;
 }
 
 TEST_F(FileReaderTest, TestReadStructNull) {

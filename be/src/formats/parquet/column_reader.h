@@ -22,7 +22,7 @@ struct ColumnReaderContext {
 
 struct ColumnReaderOptions {
     std::string timezone;
-    bool case_sensitive;
+    bool case_sensitive = false;
     int chunk_size = 0;
     vectorized::HdfsScanStats* stats = nullptr;
     RandomAccessFile* file = nullptr;
