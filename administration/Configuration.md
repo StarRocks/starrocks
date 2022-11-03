@@ -152,6 +152,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |agent_task_resend_wait_time_ms|5000|当代理任务的创建时间被设置，并且距离现在超过该值，才能重新发送代理任务，单位为 ms。|
 |backup_job_default_timeout_ms|86400*1000|Backup 作业的超时时间，单位为 ms。|
 |report_queue_size|100|Disk/Task/Tablet 的 Report 的等待队列长度。|
+|enable_experimental_mv|FALSE|是否开启异步物化视图功能。如果为 `TRUE`，则开启异步物化视图功能。|
 
 ### FE 静态参数
 
