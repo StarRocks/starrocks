@@ -10,7 +10,7 @@ StarRocks 支持以外部表 (external table) 的形式，接入其他数据源�
 
 <br/>
 
-在使用 MySQL 的数据之前，需在 StarRocks 创建外部表，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下图。
+在使用 MySQL 的数据之前，需在 StarRocks 创建外部表，与之相映射。StarRocks 中创建 MySQL 外部表时需要指定 MySQL 的相关连接信息，如下所示。
 
 ~~~sql
 CREATE EXTERNAL TABLE mysql_external_table
