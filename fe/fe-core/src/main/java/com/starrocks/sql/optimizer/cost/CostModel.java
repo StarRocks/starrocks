@@ -69,17 +69,17 @@ public class CostModel {
         return expressionContext.getOp().accept(costEstimator, expressionContext);
     }
 
-    public static double calculateCostWithInputProperty(GroupExpression expression,
-                                                              List<PhysicalPropertySet> inputProperties) {
+    public static double calculateCostWithChildrenOutProperty(GroupExpression expression,
+                                                              List<PhysicalPropertySet> childrenOutputProperties) {
         ExpressionContext expressionContext = new ExpressionContext(expression);
-        CostEstimator costEstimator = new CostEstimator(inputProperties);
+        CostEstimator costEstimator = new CostEstimator(childrenOutputProperties);
         CostEstimate costEstimate = expressionContext.getOp().accept(costEstimator, expressionContext);
         double realCost = getRealCost(costEstimate);
 
         LOG.debug("operator: {}, group id: {}, child group id: {}, " +
                         "inputProperties: {}, outputRowCount: {}, outPutSize: {}, costEstimate: {}, realCost: {}",
                 expressionContext.getOp(), expression.getGroup().getId(),
-                expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()), inputProperties,
+                expression.getInputs().stream().map(Group::getId).collect(Collectors.toList()), childrenOutputProperties,
                 expressionContext.getStatistics().getOutputRowCount(),
                 expressionContext.getStatistics().getComputeSize(),
                 costEstimate, realCost);
