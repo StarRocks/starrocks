@@ -7,6 +7,7 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.After;
 import org.junit.Assert;
@@ -57,6 +58,10 @@ public class KeyInferenceTest extends PlanTestBase {
         } else {
             Assert.assertTrue("expected is " + key + "\n, but got " + keys, keys.contains(key));
         }
+    }
+
+    private void assertInferenceNotSupported(String sql) throws Exception {
+        Assert.assertThrows(NotImplementedException.class, () -> planAndInferenceKey(sql));
     }
 
     private void assertInferenceContains(String sql, List<String> expected) throws Exception {
@@ -130,13 +135,20 @@ public class KeyInferenceTest extends PlanTestBase {
                         "Key{unique=true, columns=pk,v1}",
                         "Key{unique=true, columns=pk1,v3}",
                         "Key{unique=true, columns=pk,v1,pk1,v3}"));
+
+        assertInferenceNotSupported("select * from t0 cross join t1");
+        assertInferenceNotSupported("select * from t0 left join t1 on t0.v1 < t1.v4");
     }
 
     @Test
     public void testAgg() throws Exception {
         assertInferenceContains("select v1, count(*) from t0 group by v1",
-                Collections.singletonList(
-                        "Key{unique=true, columns=v1"));
+                Collections.singletonList("Key{unique=true, columns=v1}"));
+        assertInferenceContains("select v1,v2,v3, count(*) from t0 group by v1,v2,v3",
+                Collections.singletonList("Key{unique=true, columns=v1,v2,v3}"));
+        assertInferenceContains("select count(*) from t0 group by v1",
+                Collections.singletonList("Key{unique=true, columns=null}"));
 
+        assertInferenceNotSupported("select min(v1), max(v1) from t0");
     }
 }
