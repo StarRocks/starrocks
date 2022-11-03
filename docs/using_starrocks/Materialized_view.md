@@ -404,9 +404,9 @@ When a query is executed with a materialized view, the original query statement 
 
 ### Caution
 
-- Prior to StarRocks 2.4, materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
+- Sync materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
 
-- Prior to StarRocks 2.4, clauses such as JOIN, WHERE, and GROUP BY are not supported in the materialized view creation statements.
+- Clauses such as JOIN, and WHERE are not supported in the sync materialized view creation statements.
 
 - The current version of StarRocks does not support creating multiple materialized views at the same time. A new materialized view can only be created when the one before is completed.
 
