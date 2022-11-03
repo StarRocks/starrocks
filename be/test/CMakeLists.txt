@@ -153,6 +153,7 @@ set(EXEC_FILES
         ./storage/rowset/segment_v2/segment_test.cpp
         ./storage/rowset/segment_v2/zone_map_index_test.cpp
         ./storage/rowset/unique_rowset_id_generator_test.cpp
+        ./storage/rowset/segment_v2/default_value_column_iterator_test.cpp
         ./storage/rowset/index_page_test.cpp
         ./storage/selection_vector_test.cpp
         ./storage/snapshot_meta_test.cpp
