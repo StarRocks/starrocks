@@ -21,7 +21,6 @@ import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOp
 import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.NotImplementedException;
 
@@ -35,30 +34,30 @@ import java.util.stream.Collectors;
 /**
  * Infer key for each operator from the query plan
  */
-public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertySet, ExecPlan> {
+public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertySet, Void> {
 
     private static final KeyInference INSTANCE = new KeyInference();
 
     private KeyInference() {
     }
 
-    public static KeyPropertySet infer(OptExpression optExpr, ExecPlan ctx) {
+    public static KeyPropertySet infer(OptExpression optExpr, Void ctx) {
         KeyPropertySet keySet = optExpr.getOp().accept(INSTANCE, optExpr, ctx);
         return keySet;
     }
 
     @Override
-    public KeyPropertySet visit(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visit(OptExpression optExpression, Void ctx) {
         throw new NotImplementedException("Operator not supported:" + optExpression);
     }
 
     @Override
-    public KeyPropertySet visitPhysicalFilter(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visitPhysicalFilter(OptExpression optExpression, Void ctx) {
         return visit(optExpression.inputAt(0), ctx);
     }
 
     @Override
-    public KeyPropertySet visitPhysicalProject(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visitPhysicalProject(OptExpression optExpression, Void ctx) {
         KeyPropertySet input = infer(optExpression.inputAt(0), ctx);
         PhysicalProjectOperator project = (PhysicalProjectOperator) optExpression.getOp();
         ColumnRefSet projectColumns = new ColumnRefSet(project.getOutputColumns());
@@ -108,7 +107,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
     }
 
     @Override
-    public KeyPropertySet visitPhysicalOlapScan(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visitPhysicalOlapScan(OptExpression optExpression, Void ctx) {
         PhysicalOlapScanOperator scan = (PhysicalOlapScanOperator) optExpression.getOp();
         Table table = scan.getTable();
         Preconditions.checkState(table.isOlapTable());
@@ -118,7 +117,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
     }
 
     @Override
-    public KeyPropertySet visitPhysicalStreamScan(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visitPhysicalStreamScan(OptExpression optExpression, Void ctx) {
         PhysicalStreamScanOperator scan = (PhysicalStreamScanOperator) optExpression.getOp();
         Table table = scan.getTable();
         Preconditions.checkState(table.isOlapTable());
@@ -131,7 +130,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
     }
 
     @Override
-    public KeyPropertySet visitPhysicalStreamJoin(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visitPhysicalStreamJoin(OptExpression optExpression, Void ctx) {
         KeyPropertySet lhsKeySet = infer(optExpression.inputAt(0), ctx);
         KeyPropertySet rhsKeySet = infer(optExpression.inputAt(1), ctx);
         PhysicalStreamJoinOperator join = (PhysicalStreamJoinOperator) optExpression.getOp();
@@ -187,7 +186,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
     }
 
     @Override
-    public KeyPropertySet visitPhysicalStreamAgg(OptExpression optExpression, ExecPlan ctx) {
+    public KeyPropertySet visitPhysicalStreamAgg(OptExpression optExpression, Void ctx) {
         Operator input = optExpression.inputAt(0).getOp();
         PhysicalStreamAggOperator agg = (PhysicalStreamAggOperator) optExpression.getOp();
 

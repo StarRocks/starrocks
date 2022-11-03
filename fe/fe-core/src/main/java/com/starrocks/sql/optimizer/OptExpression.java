@@ -8,6 +8,9 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.LogicalProperty;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.rule.mv.KeyInference;
+import com.starrocks.sql.optimizer.rule.mv.MVOperatorProperty;
+import com.starrocks.sql.optimizer.rule.mv.ModifyInference;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 
 import java.util.List;
@@ -39,6 +42,8 @@ public class OptExpression {
     private List<PhysicalPropertySet> requiredProperties;
     // Output property, only set up after best plan is generated.
     private PhysicalPropertySet outputProperty;
+    // MV Operator property, inferred from best plan
+    private MVOperatorProperty mvOperatorProperty;
 
     public OptExpression() {
         this.inputs = Lists.newArrayList();
@@ -131,6 +136,12 @@ public class OptExpression {
         ExpressionContext context = new ExpressionContext(this);
         context.deriveLogicalProperty();
         setLogicalProperty(context.getRootProperty());
+    }
+
+    public void deriveMVProperty() {
+        KeyInference.KeyPropertySet keyPropertySet = KeyInference.infer(this, null);
+        ModifyInference.ModifyOp modifyOp = ModifyInference.infer(this);
+        this.mvOperatorProperty = new MVOperatorProperty(keyPropertySet, modifyOp);
     }
 
     public Statistics getStatistics() {
