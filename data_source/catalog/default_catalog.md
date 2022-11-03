@@ -30,7 +30,7 @@ StarRocks 2.3 及以上版本提供了 internal catalog（内部数据目录）�
     或
 
     ```SQL
-    USE default_catalog.db_name；
+    USE default_catalog.db_name;
     ```
 
 4. 使用 [SELECT](/sql-reference/sql-statements/data-manipulation/SELECT.md) 语句查询内部数据。
