@@ -94,6 +94,15 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     // table id -> <base table info, snapshot table>
     private Map<Long, Pair<MaterializedView.BaseTableInfo, Table>> snapshotBaseTables;
 
+    @VisibleForTesting
+    public MvTaskRunContext getMvContext() {
+        return mvContext;
+    }
+    @VisibleForTesting
+    public void setMvContext(MvTaskRunContext mvContext) {
+        this.mvContext = mvContext;
+    }
+
     // Core logics:
     // 1. prepare to check some conditions
     // 2. sync partitions with base tables(add or drop partitions, which will be optimized  by dynamic partition creation later)
@@ -207,7 +216,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
 
         mvContext.setNextPartitionStart(nextPartitionStart);
-        LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).lowerEndpoint().getKeys().get(0);
+        LiteralExpr upperExpr = mappedPartitionsToRefresh.get(endPartitionName).upperEndpoint().getKeys().get(0);
         mvContext.setNextPartitionEnd(parseLiteralExprToDateString(upperExpr, 1));
     }
 

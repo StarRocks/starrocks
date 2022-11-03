@@ -3,6 +3,7 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
@@ -37,6 +38,7 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class PartitionBasedMaterializedViewRefreshProcessorTest {
@@ -734,5 +736,50 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                 replica.updateVersionInfo(version, -1, version);
             }
         }
+    }
+
+    @Test
+    public void testFilterPartitionByRefreshNumber() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test")
+                .withTable("CREATE TABLE test.base\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
+                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
+                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
+                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view test.mv_with_test_refresh\n" +
+                        "partition by k1\n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh manual\n" +
+                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+
+        PartitionBasedMaterializedViewRefreshProcessor processor = new PartitionBasedMaterializedViewRefreshProcessor();
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_test_refresh"));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        materializedView.getTableProperty().setPartitionRefreshNumber(3);
+
+        MvTaskRunContext mvContext = new MvTaskRunContext(new TaskRunContext());
+
+        processor.setMvContext(mvContext);
+        processor.filterPartitionByRefreshNumber(materializedView.getPartitionNames(), materializedView);
+
+        mvContext = processor.getMvContext();
+        Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
+        Assert.assertEquals("2022-05-02", mvContext.getNextPartitionEnd());
+
     }
 }
