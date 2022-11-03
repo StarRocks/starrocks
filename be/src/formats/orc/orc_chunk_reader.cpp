@@ -1321,6 +1321,11 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
     PrimitiveType t2 = to.type;
     if (t1 == TYPE_ARRAY && t2 == TYPE_ARRAY) {
         _try_implicit_cast(&from->children[0], to.children[0]);
+    } else if (t1 == TYPE_MAP && t2 == TYPE_MAP) {
+        DCHECK(from->children.size() == 2);
+        DCHECK(to.children.size() == 2);
+        _try_implicit_cast(&from->children[0], to.children[0]);
+        _try_implicit_cast(&from->children[1], to.children[1]);
     } else if (is_integer_type(t1) && is_integer_type(t2)) {
         from->type = t2;
     } else if (is_decimal_type(t1) && is_decimal_type(t2)) {
@@ -1330,9 +1335,9 @@ static void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to) {
         // violated during creating a DecimalV3Column via ColumnHelper::create(...).
         if (t2 == PrimitiveType::TYPE_DECIMALV2) {
             from->type = t2;
-        } else if (from->precision > decimal_precision_limit<int64_t>) {
+        } else if ((from->precision > decimal_precision_limit<int64_t>)) {
             from->type = PrimitiveType::TYPE_DECIMAL128;
-        } else if (from->precision > decimal_precision_limit<int32_t>) {
+        } else if ((from->precision > decimal_precision_limit<int32_t>) || (to.type == PrimitiveType::TYPE_DECIMAL64)) {
             from->type = PrimitiveType::TYPE_DECIMAL64;
         } else {
             from->type = PrimitiveType::TYPE_DECIMAL32;
