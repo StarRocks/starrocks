@@ -13,8 +13,7 @@
 #include "types/date_value.h"
 #include "types/timestamp_value.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 TEST(DateValueTest, normalDate) {
     ASSERT_EQ(1, std::is_pod_v<starrocks::vectorized::DateValue>);
@@ -248,5 +247,4 @@ TEST(DateValueTest, weekday) {
     ASSERT_EQ(0, dv.weekday()); // Sunday
 }
 
-} // namespace vectorized
 } // namespace starrocks

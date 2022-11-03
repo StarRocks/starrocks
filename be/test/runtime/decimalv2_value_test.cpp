@@ -553,7 +553,7 @@ TEST_F(DecimalV2ValueTest, round_to_int) {
 // NOLINTNEXTLINE
 TEST_F(DecimalV2ValueTest, double_to_decimal) {
     double i = 1.2;
-    DecimalV2Value* value = new DecimalV2Value(100, 9876);
+    auto* value = new DecimalV2Value(100, 9876);
     value->assign_from_double(i);
     ASSERT_STREQ("1.2", value->to_string().c_str());
     delete value;
@@ -562,7 +562,7 @@ TEST_F(DecimalV2ValueTest, double_to_decimal) {
 // NOLINTNEXTLINE
 TEST_F(DecimalV2ValueTest, float_to_decimal) {
     float i = 1.2;
-    DecimalV2Value* value = new DecimalV2Value(100, 9876);
+    auto* value = new DecimalV2Value(100, 9876);
     value->assign_from_float(i);
     ASSERT_STREQ("1.2", value->to_string().c_str());
     delete value;

@@ -5,6 +5,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <utility>
 
 #include "column/chunk.h"
 #include "common/status.h"
@@ -170,7 +171,7 @@ class ParquetScannerTest : public ::testing::Test {
     }
 
     void validate(std::unique_ptr<ParquetScanner>& scanner, const size_t expect_num_rows,
-                  std::function<void(const ChunkPtr&)> check_func) {
+                  const std::function<void(const ChunkPtr&)>& check_func) {
         ASSERT_OK(scanner->open());
         size_t num_rows = 0;
         while (true) {
@@ -266,8 +267,8 @@ class ParquetScannerTest : public ::testing::Test {
         column_names.template insert(column_names.end(), columns_from_path.begin(), columns_from_path.end());
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
-        for (auto i = 0; i < columns_from_path.size(); ++i) {
-            src_slot_infos.template emplace_back(columns_from_path[i], TypeDescriptor::from_primtive_type(TYPE_VARCHAR),
+        for (const auto & i : columns_from_path) {
+            src_slot_infos.template emplace_back(i, TypeDescriptor::from_primtive_type(TYPE_VARCHAR),
                                                  is_nullable);
         }
 
@@ -293,8 +294,8 @@ class ParquetScannerTest : public ::testing::Test {
     ChunkPtr test_json_column(const std::vector<std::string>& columns_from_file,
                               const std::unordered_map<size_t, ::starrocks::TExpr>& dst_slot_exprs,
                               std::string specific_file) {
-        std::vector<std::string> file_names{specific_file};
-        std::vector<std::string> column_names = columns_from_file;
+        std::vector<std::string> file_names{std::move(specific_file)};
+        const std::vector<std::string>& column_names = columns_from_file;
 
         auto src_slot_infos = select_columns(columns_from_file, is_nullable);
         auto dst_slot_infos = select_columns(column_names, is_nullable);
@@ -320,7 +321,7 @@ class ParquetScannerTest : public ::testing::Test {
         return result;
     }
 
-    void SetUp() {
+    void SetUp() override {
         std::string starrocks_home = getenv("STARROCKS_HOME");
         test_exec_dir = starrocks_home + "/be/test/exec";
         _nullable_file_names =
@@ -488,7 +489,7 @@ TEST_F(ParquetScannerTest, test_to_json) {
             {"col_json_bool", {"true", "false", "true"}},
             {"col_json_string", {"\"s1\"", "\"s2\"", "\"s3\""}},
             {"col_json_list", {"[1, 2]", "[3, 4]", "[5, 6]"}},
-            {"col_json_map", {"{\"s1\": 1, \"s2\": 3}", "{\"s2\": 2}", "{\"s3\": 3}"}},
+            {"col_json_map", {R"({"s1": 1, "s2": 3})", "{\"s2\": 2}", "{\"s3\": 3}"}},
             {"col_json_map_timestamp", {"{\"1659962123000\": 1}", "{\"1659962124000\": 2}", "{\"1659962125000\": 3}"}},
             {"col_json_struct",
              {R"({ "s0": 1, "s1": "string1" }                                                    )",

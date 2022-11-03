@@ -66,16 +66,17 @@ TEST(CompactionManagerTest, test_candidates) {
         }
     }
 
-    for (int i = 0; i < tablets.size(); i++) {
+    for (auto & tablet : tablets) {
         std::unique_ptr<CompactionContext> compaction_context;
-        tablets[i]->set_compaction_context(compaction_context);
+        tablet->set_compaction_context(compaction_context);
     }
 }
 
 class MockCompactionTask : public CompactionTask {
+public:
     MockCompactionTask() : CompactionTask(HORIZONTAL_COMPACTION) {}
 
-    ~MockCompactionTask() = default;
+    ~MockCompactionTask() override = default;
 
     Status run_impl() override { return Status::OK(); }
 };
@@ -149,9 +150,9 @@ TEST(CompactionManagerTest, test_compaction_tasks) {
         bool ret = StorageEngine::instance()->compaction_manager()->register_task(tasks[i].get());
         ASSERT_TRUE(ret);
     }
-    for (int i = 0; i < tablets.size(); i++) {
+    for (auto & tablet : tablets) {
         std::unique_ptr<CompactionContext> compaction_context;
-        tablets[i]->set_compaction_context(compaction_context);
+        tablet->set_compaction_context(compaction_context);
     }
 }
 

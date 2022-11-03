@@ -99,7 +99,7 @@ public:
 
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes,
-                                          std::shared_ptr<TabletSchema> partial_schema) {
+                                          const std::shared_ptr<TabletSchema>& partial_schema) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -123,9 +123,9 @@ public:
             auto chunk = ChunkHelper::new_chunk(schema, keys.size());
             EXPECT_TRUE(2 == chunk->num_columns());
             auto& cols = chunk->columns();
-            for (size_t i = 0; i < keys.size(); i++) {
-                cols[0]->append_datum(vectorized::Datum(keys[i]));
-                cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+            for (long key : keys) {
+                cols[0]->append_datum(vectorized::Datum(key));
+                cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 3)));
             }
             CHECK_OK(writer->flush_chunk(*chunk));
         }
@@ -347,7 +347,7 @@ public:
         RETURN_IF_ERROR(SnapshotManager::instance()->assign_new_rowset_id(&(*snapshot_meta), meta_dir));
 
         std::set<std::string> files;
-        auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+        auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
         CHECK(st.ok()) << st;
         files.erase("meta");
 
@@ -371,7 +371,7 @@ public:
         }
 
         st = dest_tablet->updates()->load_snapshot(*snapshot_meta);
-        dest_tablet->updates()->remove_expired_versions(time(NULL));
+        dest_tablet->updates()->remove_expired_versions(time(nullptr));
         return st;
     }
 
@@ -402,7 +402,7 @@ public:
         CHECK(std::filesystem::create_directories(new_tablet_path));
 
         std::set<std::string> files;
-        CHECK(fs::list_dirs_files(meta_dir, NULL, &files).ok());
+        CHECK(fs::list_dirs_files(meta_dir, nullptr, &files).ok());
         for (const auto& f : files) {
             std::string src = meta_dir + "/" + f;
             std::string dst = new_tablet_path + "/" + f;
@@ -465,13 +465,13 @@ public:
                                                    const std::vector<int64_t>& expect_rowset_versions, bool gc,
                                                    bool expect_error);
 
-    void tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1, std::vector<int32_t>& column_indexes,
+    void tablets_prepare(const TabletSharedPtr& tablet0, const TabletSharedPtr& tablet1, std::vector<int32_t>& column_indexes,
                          const std::shared_ptr<TabletSchema>& partial_schema);
     void snapshot_prepare(const TabletSharedPtr& tablet, const std::vector<int64_t>& delta_versions,
                           std::string* snapshot_id_path, std::string* snapshot_dir,
                           std::vector<RowsetSharedPtr>* snapshot_rowsets,
                           std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
-                          TabletMetaSharedPtr snapshot_tablet_meta);
+                          const TabletMetaSharedPtr& snapshot_tablet_meta);
     void load_snapshot(const std::string& meta_dir, const TabletSharedPtr& tablet, SegmentFooterPB* footer);
 
 protected:
@@ -525,10 +525,10 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, const 
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
-    for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum(keys[i]));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+    for (long key : keys) {
+        cols[0]->append_datum(vectorized::Datum(key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
     }
     size_t count = 0;
     while (true) {
@@ -596,10 +596,10 @@ static ssize_t read_tablet_and_compare_schema_changed(const TabletSharedPtr& tab
     }
     auto full_chunk = ChunkHelper::new_chunk(iter->schema(), keys.size());
     auto& cols = full_chunk->columns();
-    for (size_t i = 0; i < keys.size(); i++) {
-        cols[0]->append_datum(vectorized::Datum((int64_t)keys[i]));
-        cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-        auto v = std::to_string((int64_t)(keys[i] % 1000 + 2));
+    for (long key : keys) {
+        cols[0]->append_datum(vectorized::Datum((int64_t)key));
+        cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+        auto v = std::to_string((int64_t)(key % 1000 + 2));
         cols[2]->append_datum(vectorized::Datum(Slice{v}));
     }
     auto chunk = ChunkHelper::new_chunk(iter->schema(), 100);
@@ -637,7 +637,7 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
-    auto rs2 = create_rowset(_tablet, keys, NULL, true);
+    auto rs2 = create_rowset(_tablet, keys, nullptr, true);
     ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
     ASSERT_EQ(4, _tablet->updates()->max_version());
 
@@ -670,7 +670,7 @@ TEST_F(TabletUpdatesTest, writeread_with_sort_key) {
     auto rs1 = create_rowset(_tablet, keys);
     ASSERT_TRUE(_tablet->rowset_commit(3, rs1).ok());
     ASSERT_EQ(3, _tablet->updates()->max_version());
-    auto rs2 = create_rowset(_tablet, keys, NULL, true);
+    auto rs2 = create_rowset(_tablet, keys, nullptr, true);
     ASSERT_TRUE(_tablet->rowset_commit(4, rs2).ok());
     ASSERT_EQ(4, _tablet->updates()->max_version());
 
@@ -945,7 +945,7 @@ void TabletUpdatesTest::test_remove_expired_versions(bool enable_persistent_inde
     auto iter_v4 = create_tablet_iterator(reader4, schema);
 
     // Remove all but the last version.
-    _tablet->updates()->remove_expired_versions(time(NULL));
+    _tablet->updates()->remove_expired_versions(time(nullptr));
     ASSERT_EQ(1, _tablet->updates()->version_history_count());
     ASSERT_EQ(4, _tablet->updates()->max_version());
 
@@ -1056,7 +1056,7 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent
     auto version_gc_thread = [&]() {
         wait_start();
         while (!stopped) {
-            _tablet->updates()->remove_expired_versions(time(NULL));
+            _tablet->updates()->remove_expired_versions(time(nullptr));
             std::this_thread::sleep_for(std::chrono::milliseconds(5));
         }
     };
@@ -1086,7 +1086,7 @@ void TabletUpdatesTest::test_concurrent_write_read_and_gc(bool enable_persistent
     }
     std::cout << "version count=" << version.load() << std::endl;
     EXPECT_EQ(N, read_tablet(_tablet, version.load()));
-    _tablet->updates()->remove_expired_versions(time(NULL));
+    _tablet->updates()->remove_expired_versions(time(nullptr));
     EXPECT_EQ(1, _tablet->updates()->version_history_count());
     EXPECT_EQ(version.load(), _tablet->updates()->max_version());
 
@@ -1569,7 +1569,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental(bool enable_persistent_in
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1643,7 +1643,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_ignore_already_committed_
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1717,7 +1717,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_mismatched_tablet_id(bool
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1778,7 +1778,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_data_file_not_exist(bool 
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1841,7 +1841,7 @@ void TabletUpdatesTest::test_load_snapshot_incremental_incorrect_version(bool en
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -1871,7 +1871,7 @@ TEST_F(TabletUpdatesTest, load_snapshot_incremental_incorrect_version_with_persi
     test_load_snapshot_incremental_incorrect_version(true);
 }
 
-void TabletUpdatesTest::tablets_prepare(TabletSharedPtr tablet0, TabletSharedPtr tablet1,
+void TabletUpdatesTest::tablets_prepare(const TabletSharedPtr& tablet0, const TabletSharedPtr& tablet1,
                                         std::vector<int32_t>& column_indexes,
                                         const std::shared_ptr<TabletSchema>& partial_schema) {
     std::vector<int64_t> keys0 = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9};
@@ -1906,7 +1906,7 @@ void TabletUpdatesTest::snapshot_prepare(const TabletSharedPtr& tablet, const st
                                          std::string* snapshot_id_path, std::string* snapshot_dir,
                                          std::vector<RowsetSharedPtr>* snapshot_rowsets,
                                          std::vector<RowsetMetaSharedPtr>* snapshot_rowset_metas,
-                                         TabletMetaSharedPtr snapshot_tablet_meta) {
+                                         const TabletMetaSharedPtr& snapshot_tablet_meta) {
     std::shared_lock rdlock(tablet->get_header_lock());
     for (int64_t v : delta_versions) {
         auto rowset = tablet->get_inc_rowset_by_version(Version{v, v});
@@ -1941,7 +1941,7 @@ void TabletUpdatesTest::load_snapshot(const std::string& meta_dir, const TabletS
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    ASSERT_TRUE(fs::list_dirs_files(meta_dir, NULL, &files).ok());
+    ASSERT_TRUE(fs::list_dirs_files(meta_dir, nullptr, &files).ok());
     files.erase("meta");
 
     for (const auto& f : files) {
@@ -2248,7 +2248,7 @@ void TabletUpdatesTest::test_load_snapshot_full_file_not_exist(bool enable_persi
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -2318,7 +2318,7 @@ void TabletUpdatesTest::test_load_snapshot_full_mismatched_tablet_id(bool enable
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 
@@ -2716,7 +2716,7 @@ void TabletUpdatesTest::test_load_snapshot_primary(int64_t max_version, const st
     ASSERT_TRUE(snapshot_meta.ok()) << snapshot_meta.status();
 
     std::set<std::string> files;
-    auto st = fs::list_dirs_files(meta_dir, NULL, &files);
+    auto st = fs::list_dirs_files(meta_dir, nullptr, &files);
     ASSERT_TRUE(st.ok()) << st;
     files.erase("meta");
 

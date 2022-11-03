@@ -5,6 +5,8 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
+#include <random>
 
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
@@ -98,7 +100,7 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         fd->set_aggregate_method(i < nkey ? OLAP_FIELD_AGGREGATION_NONE : OLAP_FIELD_AGGREGATION_REPLACE);
         fields.emplace_back(fd);
     }
-    ret.reset(new Schema(std::move(fields)));
+    ret = std::make_unique<Schema>(std::move(fields));
     return ret;
 }
 
@@ -107,8 +109,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState*
     TDescriptorTableBuilder dtb;
     TTupleDescriptorBuilder tuple_builder;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
-    for (int i = 0; i < cs.size(); i++) {
-        auto& c = cs[i];
+    for (auto & c : cs) {
         std::vector<std::string> fs = strings::Split(c, " ", strings::SkipWhitespace());
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
@@ -187,7 +188,7 @@ public:
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
-        _mem_tracker.reset(new MemTracker(-1, "root"));
+        _mem_tracker = std::make_unique<MemTracker>(-1, "root");
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
         _slots = create_tuple_desc_slots(&_runtime_state, slot_desc, _obj_pool);
         RowsetWriterContext writer_context;
@@ -203,9 +204,9 @@ public:
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
-        _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
+        _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
         _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
-        _mem_table.reset(new MemTable(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get()));
+        _mem_table = std::make_unique<MemTable>(1, &_vectorized_schema, _slots, _mem_table_sink.get(), _mem_tracker.get());
     }
 
     void TearDown() override {
@@ -235,7 +236,7 @@ TEST_F(MemTableTest, testDupKeysInsertFlushRead) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
@@ -282,7 +283,7 @@ TEST_F(MemTableTest, testUniqKeysInsertFlushRead) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
@@ -336,7 +337,7 @@ TEST_F(MemTableTest, testPrimaryKeysWithDeletes) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
     ASSERT_OK(_mem_table->flush());
@@ -368,7 +369,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitSinglePK) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(_mem_table->finalize().ok());
 }
@@ -404,7 +405,7 @@ TEST_F(MemTableTest, testPrimaryKeysSizeLimitCompositePK) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     _mem_table->insert(*chunk, indexes.data(), 0, indexes.size());
     ASSERT_FALSE(_mem_table->finalize().ok());
 }

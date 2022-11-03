@@ -83,7 +83,7 @@ public:
         ColumnBlockView block_view(&column_block);
 
         ret = page_decoder->next_batch(&size, &block_view);
-        Slice* values = reinterpret_cast<Slice*>(column_block.data());
+        auto* values = reinterpret_cast<Slice*>(column_block.data());
         ASSERT_TRUE(ret.ok());
         ASSERT_EQ(slices.size(), size);
         for (int i = 1000; i < 1038; ++i) {
@@ -105,22 +105,22 @@ public:
             ASSERT_EQ(std::to_string(i), values[i - 1015].to_string());
         }
 
-        Slice v1 = Slice("1039");
+        auto v1 = Slice("1039");
         bool exact_match;
         ret = page_decoder->seek_at_or_after_value(&v1, &exact_match);
         ASSERT_TRUE(ret.is_not_found());
 
-        Slice v2 = Slice("1000");
+        auto v2 = Slice("1000");
         ret = page_decoder->seek_at_or_after_value(&v2, &exact_match);
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(exact_match);
 
-        Slice v3 = Slice("1037");
+        auto v3 = Slice("1037");
         ret = page_decoder->seek_at_or_after_value(&v3, &exact_match);
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(exact_match);
 
-        Slice v4 = Slice("100");
+        auto v4 = Slice("100");
         ret = page_decoder->seek_at_or_after_value(&v4, &exact_match);
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(!exact_match);
@@ -131,8 +131,8 @@ public:
         test_data.emplace_back("ab");
         test_data.emplace_back("c");
         std::vector<Slice> slices;
-        for (int i = 0; i < test_data.size(); ++i) {
-            Slice s(test_data[i]);
+        for (auto & i : test_data) {
+            Slice s(i);
             slices.emplace_back(s);
         }
         // encode
@@ -164,8 +164,8 @@ public:
             test_data.push_back(std::to_string(i));
         }
         std::vector<Slice> slices;
-        for (int i = 0; i < test_data.size(); ++i) {
-            Slice s(test_data[i]);
+        for (auto & i : test_data) {
+            Slice s(i);
             slices.emplace_back(s);
         }
         // encode
@@ -237,25 +237,25 @@ public:
         }
 
         std::string v1_string = std::to_string(1039);
-        Slice v1 = Slice(v1_string);
+        auto v1 = Slice(v1_string);
         bool exact_match;
         ret = page_decoder->seek_at_or_after_value(&v1, &exact_match);
         ASSERT_TRUE(ret.is_not_found());
 
         std::string v2_string = std::to_string(1000);
-        Slice v2 = Slice(v2_string);
+        auto v2 = Slice(v2_string);
         ret = page_decoder->seek_at_or_after_value(&v2, &exact_match);
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(exact_match);
 
         std::string v3_string = std::to_string(1037);
-        Slice v3 = Slice(v3_string);
+        auto v3 = Slice(v3_string);
         ret = page_decoder->seek_at_or_after_value(&v3, &exact_match);
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(exact_match);
 
         std::string v4_string = std::to_string(100);
-        Slice v4 = Slice(v4_string);
+        auto v4 = Slice(v4_string);
         ret = page_decoder->seek_at_or_after_value(&v4, &exact_match);
         ASSERT_TRUE(ret.ok());
         ASSERT_TRUE(!exact_match);

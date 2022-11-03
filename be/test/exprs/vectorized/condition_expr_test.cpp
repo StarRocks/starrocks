@@ -17,12 +17,11 @@
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedConditionExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -132,7 +131,7 @@ public:
 
     typename RunTimeColumnType<Type>::Container get_data() { return col->get_data(); }
 
-    Expr* clone(ObjectPool* pool) const { return nullptr; }
+    Expr* clone(ObjectPool* pool) const override { return nullptr; }
 
 private:
     void _init(int size) {
@@ -162,7 +161,7 @@ class MakeNullableExpr final : public Expr {
 public:
     MakeNullableExpr(const TExprNode& t, size_t size, Expr* inner) : Expr(t), _inner(inner) { init(); }
     ColumnPtr evaluate(ExprContext*, Chunk*) override { return _col; }
-    Expr* clone(ObjectPool* pool) const { return nullptr; }
+    Expr* clone(ObjectPool* pool) const override { return nullptr; }
 
     ColumnPtr get_col_ptr() { return _col; }
 
@@ -318,5 +317,4 @@ TEST_F(VectorizedConditionExprTest, ifExpr) {
     }
 }
 
-} // namespace vectorized
 } // namespace starrocks

@@ -16,7 +16,7 @@ namespace starrocks::vectorized {
 
 class SortedChunksMergerTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         config::vector_chunk_size = 1024;
 
         const auto& int_type_desc = TypeDescriptor(TYPE_INT);
@@ -116,7 +116,7 @@ public:
         ASSERT_OK(Expr::open(_sort_exprs, _runtime_state.get()));
     }
 
-    void TearDown() {
+    void TearDown() override {
         for (ExprContext* ctx : _sort_exprs) {
             delete ctx;
         }
@@ -212,16 +212,16 @@ TEST_F(SortedChunksMergerTest, two_suppliers) {
     ChunkProbeSuppliers probe_suppliers;
     ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2};
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        auto supplier = [&chunks, i](Chunk** cnk) -> Status {
-            if (chunks[i] != nullptr) {
-                ChunkPtr& src_chunk = chunks[i];
+    for (auto & chunk : chunks) {
+        auto supplier = [&chunks, &chunk](Chunk** cnk) -> Status {
+            if (chunk != nullptr) {
+                ChunkPtr& src_chunk = chunk;
                 size_t row_num = src_chunk->num_rows();
                 *cnk = src_chunk->clone_empty_with_slot(row_num).release();
                 for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
                     (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
                 }
-                chunks[i] = nullptr;
+                chunk = nullptr;
             } else {
                 *cnk = nullptr;
             }
@@ -262,16 +262,16 @@ TEST_F(SortedChunksMergerTest, three_suppliers) {
     ChunkProbeSuppliers probe_suppliers;
     ChunkHasSuppliers has_suppliers;
     std::vector<ChunkPtr> chunks = {_chunk_1, _chunk_2, _chunk_3};
-    for (size_t i = 0; i < chunks.size(); ++i) {
-        auto supplier = [&chunks, i](Chunk** cnk) -> Status {
-            if (chunks[i] != nullptr) {
-                ChunkPtr& src_chunk = chunks[i];
+    for (auto & chunk : chunks) {
+        auto supplier = [&chunks, &chunk](Chunk** cnk) -> Status {
+            if (chunk != nullptr) {
+                ChunkPtr& src_chunk = chunk;
                 size_t row_num = src_chunk->num_rows();
                 *cnk = src_chunk->clone_empty_with_slot(row_num).release();
                 for (size_t c = 0; c < src_chunk->num_columns(); ++c) {
                     (*cnk)->get_column_by_index(c)->append(*(src_chunk->get_column_by_index(c)), 0, row_num);
                 }
-                chunks[i] = nullptr;
+                chunk = nullptr;
             } else {
                 *cnk = nullptr;
             }

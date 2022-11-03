@@ -105,7 +105,7 @@ public:
         ColumnBlockView block_view(&column_block);
 
         status = page_decoder.next_batch(&size, &block_view);
-        Slice* values = reinterpret_cast<Slice*>(column_block.data());
+        auto* values = reinterpret_cast<Slice*>(column_block.data());
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(slices.size(), size);
         ASSERT_EQ("Individual", values[0].to_string());
@@ -218,7 +218,7 @@ public:
             ColumnVectorBatch::create(1, false, type_info, nullptr, &cvb);
             ColumnBlock column_block(cvb.get(), &pool);
             ColumnBlockView block_view(&column_block);
-            Slice* values = reinterpret_cast<Slice*>(column_block.data());
+            auto* values = reinterpret_cast<Slice*>(column_block.data());
 
             size_t num = 1;
             size_t pos = random() % (page_start_ids[slice_index + 1] - page_start_ids[slice_index]);
@@ -292,7 +292,7 @@ TEST_F(BinaryDictPageTest, TestEncodingRatio) {
     }
     for (int i = 0; i < 10000; ++i) {
         for (const auto& src_string : src_strings) {
-            slices.push_back(src_string);
+            slices.emplace_back(src_string);
         }
     }
 

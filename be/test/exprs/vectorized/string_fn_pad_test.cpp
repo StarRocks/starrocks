@@ -3,13 +3,13 @@
 #include <gtest/gtest.h>
 
 #include <random>
+#include <utility>
 
 #include "butil/time.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 typedef std::tuple<std::string, int32_t, std::string, bool, std::string, std::string> TestCaseType;
 typedef std::vector<TestCaseType> TestCaseArray;
@@ -154,7 +154,7 @@ TEST_F(StringFunctionPadTest, padNotConstASCIITest) {
     test_pad(num_rows, cases, {nullptr, nulls_11_1, nulls_17_13}, nullptr);
     test_pad(num_rows, cases, {nulls_7_3, nulls_11_1, nulls_17_13}, nullptr);
 }
-std::string repeat(size_t n, std::string s) {
+std::string repeat(size_t n, const std::string& s) {
     std::string dst;
     dst.reserve(s.size() * n);
     for (auto i = 0; i < n; ++i) {
@@ -527,7 +527,7 @@ struct PadNullableStrConstLenFillTestCase {
     std::vector<bool> lpad_expected_nulls;
 
     PadNullableStrConstLenFillTestCase(const vector<std::string>& strs, const vector<bool>& str_nulls, int len,
-                                       const string& fill, bool rpad_expected_null,
+                                       string  fill, bool rpad_expected_null,
                                        const vector<std::string>& rpad_expected_results,
                                        const vector<bool>& rpad_expected_nulls, bool lpad_expected_null,
                                        const vector<std::string>& lpad_expected_results,
@@ -535,7 +535,7 @@ struct PadNullableStrConstLenFillTestCase {
             : strs(strs),
               str_nulls(str_nulls),
               len(len),
-              fill(fill),
+              fill(std::move(fill)),
               rpad_expected_null(rpad_expected_null),
               rpad_expected_results(rpad_expected_results),
               rpad_expected_nulls(rpad_expected_nulls),
@@ -640,5 +640,4 @@ INSTANTIATE_TEST_SUITE_P(StringFunctionPadTest, PadNullableStrConstLenFillTestFi
                                                    // lpad expected results.
                                                    false, {"1231abc", "1231edf", "1abcdef"}, {false, false, false})));
 
-} // namespace vectorized
 } // namespace starrocks

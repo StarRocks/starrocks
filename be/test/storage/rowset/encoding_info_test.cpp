@@ -33,8 +33,8 @@ namespace starrocks {
 
 class EncodingInfoTest : public testing::Test {
 public:
-    EncodingInfoTest() {}
-    virtual ~EncodingInfoTest() {}
+    EncodingInfoTest() = default;
+    ~EncodingInfoTest() override = default;
 };
 
 TEST_F(EncodingInfoTest, normal) {

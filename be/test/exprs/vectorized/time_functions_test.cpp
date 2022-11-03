@@ -22,12 +22,11 @@
 #include "testutil/function_utils.h"
 #include "udf/udf.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class TimeFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -3097,5 +3096,4 @@ TEST_F(TimeFunctionsTest, DateSliceCeilTest) {
     }
 }
 
-} // namespace vectorized
 } // namespace starrocks

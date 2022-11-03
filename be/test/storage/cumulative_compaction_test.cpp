@@ -32,7 +32,7 @@ public:
             _engine = nullptr;
         }
     }
-    void write_new_version(TabletMetaSharedPtr tablet_meta) {
+    void write_new_version(const TabletMetaSharedPtr& tablet_meta) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, _version);
         _version++;
@@ -49,7 +49,7 @@ public:
         tablet_meta->add_rs_meta(src_rowset->rowset_meta());
     }
 
-    void write_specify_version(TabletSharedPtr tablet, int64_t version) {
+    void write_specify_version(const TabletSharedPtr& tablet, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;
@@ -65,7 +65,7 @@ public:
         ASSERT_TRUE(tablet->add_rowset(src_rowset).ok());
     }
 
-    void write_delete_version(TabletMetaSharedPtr tablet_meta, int64_t version) {
+    void write_delete_version(const TabletMetaSharedPtr& tablet_meta, int64_t version) {
         RowsetWriterContext rowset_writer_context;
         create_rowset_writer_context(&rowset_writer_context, version);
         std::unique_ptr<RowsetWriter> rowset_writer;

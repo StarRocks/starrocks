@@ -25,8 +25,8 @@ namespace starrocks {
 
 class CodingTest : public testing::Test {
 public:
-    CodingTest() {}
-    virtual ~CodingTest() {}
+    CodingTest() = default;
+    ~CodingTest() override = default;
 };
 
 TEST_F(CodingTest, fixed_le) {
@@ -142,7 +142,7 @@ TEST_F(CodingTest, put_varint) {
     put_varint64_varint32(&val, 3, 4);
 
     ASSERT_EQ(4, val.size());
-    const uint8_t* ptr = (const uint8_t*)val.data();
+    const auto* ptr = (const uint8_t*)val.data();
     const uint8_t* limit = ptr + 4;
     uint32_t val32;
     uint64_t val64;

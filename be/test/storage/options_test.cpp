@@ -39,8 +39,8 @@ void tear_down() {
 
 class OptionsTest : public testing::Test {
 public:
-    OptionsTest() {}
-    virtual ~OptionsTest() {}
+    OptionsTest() = default;
+    ~OptionsTest() override = default;
 };
 
 TEST_F(OptionsTest, parse_root_path) {

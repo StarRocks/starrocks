@@ -12,8 +12,8 @@ namespace starrocks {
 
 class BufferedStreamTest : public testing::Test {
 public:
-    BufferedStreamTest() {}
-    virtual ~BufferedStreamTest() {}
+    BufferedStreamTest() = default;
+    ~BufferedStreamTest() override = default;
 };
 
 TEST_F(BufferedStreamTest, Normal) {

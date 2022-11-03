@@ -2,7 +2,8 @@
 
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <math.h>
+
+#include <cmath>
 
 #include "butil/time.h"
 #include "column/column_helper.h"
@@ -19,8 +20,7 @@
 #include "runtime/runtime_state.h"
 #include "testutil/assert.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class FakeConstExpr : public starrocks::Expr {
 public:
@@ -51,7 +51,7 @@ ColumnPtr build_int_column(const std::vector<int>& values, const std::vector<uin
 
 class VectorizedLambdaFunctionExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         // init the int_type.
         TTypeNode node;
         node.__set_type(TTypeNodeType::SCALAR);
@@ -511,5 +511,4 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
     }
 }
 
-} // namespace vectorized
 } // namespace starrocks

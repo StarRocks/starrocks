@@ -33,14 +33,14 @@ namespace starrocks {
 
 class SystemMetricsTest : public testing::Test {
 public:
-    SystemMetricsTest() {}
-    virtual ~SystemMetricsTest() {}
+    SystemMetricsTest() = default;
+    ~SystemMetricsTest() override = default;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
 public:
-    virtual ~TestMetricsVisitor() {}
-    void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) {
+    ~TestMetricsVisitor() override = default;
+    void visit(const std::string& prefix, const std::string& name, MetricCollector* collector) override {
         for (auto& it : collector->metrics()) {
             Metric* metric = it.second;
             auto& labels = it.first;

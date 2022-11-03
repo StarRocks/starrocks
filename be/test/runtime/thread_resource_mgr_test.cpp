@@ -28,10 +28,10 @@ namespace starrocks {
 
 class NotifiedCounter {
 public:
-    NotifiedCounter() : _counter(0) {}
+    NotifiedCounter()  {}
 
     void Notify(ThreadResourceMgr::ResourcePool* consumer) {
-        DCHECK(consumer != NULL);
+        DCHECK(consumer != nullptr);
         DCHECK_LT(consumer->num_threads(), consumer->quota());
         ++_counter;
     }
@@ -39,7 +39,7 @@ public:
     int counter() const { return _counter; }
 
 private:
-    int _counter;
+    int _counter{0};
 };
 
 TEST(ThreadResourceMgr, BasicTest) {

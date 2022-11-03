@@ -20,10 +20,10 @@
 #include <gtest/gtest.h>
 
 #include <atomic>
+#include <ctime>
 #include <thread>
 
 #include "common/logging.h"
-#include "time.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -31,8 +31,7 @@ namespace starrocks {
 // Fixture for testing class Decompressor
 class CoreLocalTest : public ::testing::Test {
 protected:
-    CoreLocalTest() {}
-    ~CoreLocalTest() {}
+    CoreLocalTest() = default;
 };
 
 void updater(CoreLocalValue<int64_t>* value, int64_t* used_ns) {

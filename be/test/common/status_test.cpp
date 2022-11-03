@@ -39,7 +39,7 @@ TEST_F(StatusTest, OK) {
     ASSERT_EQ("OK", st.to_string());
     // copy
     {
-        Status other = st;
+        const Status& other = st;
         ASSERT_TRUE(other.ok());
     }
     // move assign
@@ -62,7 +62,7 @@ TEST_F(StatusTest, Error) {
     ASSERT_EQ("Internal error: 123", st.to_string());
     // copy
     {
-        Status other = st;
+        const Status& other = st;
         ASSERT_FALSE(other.ok());
         ASSERT_EQ("123", st.get_error_msg());
         ASSERT_EQ("123", st.message());

@@ -5,13 +5,13 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <cmath>
+
 #include "exprs/vectorized/mock_vectorized_expr.h"
-#include "math.h"
 
 #define PI acos(-1)
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class VecMathFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {}
@@ -489,8 +489,8 @@ TEST_F(VecMathFunctionsTest, BinTest) {
 
         std::string res[] = {"1", "10", "100000000"};
 
-        for (int i = 0; i < sizeof(ints) / sizeof(ints[0]); ++i) {
-            tc1->append(ints[i]);
+        for (long i : ints) {
+            tc1->append(i);
         }
 
         columns.emplace_back(tc1);
@@ -516,8 +516,8 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc1->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc1->append(dec_value);
         }
     }
 
@@ -528,8 +528,8 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc2->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc2->append(dec_value);
         }
     }
 
@@ -562,8 +562,8 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc1->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc1->append(dec_value);
         }
     }
 
@@ -574,8 +574,8 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc2->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc2->append(dec_value);
         }
     }
 
@@ -608,8 +608,8 @@ TEST_F(VecMathFunctionsTest, PositiveDecimalTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc1->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc1->append(dec_value);
         }
     }
 
@@ -641,8 +641,8 @@ TEST_F(VecMathFunctionsTest, NegativeDecimalTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc1->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc1->append(dec_value);
         }
     }
 
@@ -674,8 +674,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc1->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc1->append(dec_value);
         }
     }
 
@@ -686,8 +686,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc2->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc2->append(dec_value);
         }
     }
 
@@ -723,8 +723,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc1->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc1->append(dec_value);
         }
     }
 
@@ -735,8 +735,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
         for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
             dec_values[i] = DecimalV2Value(str[i]);
         }
-        for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-            tc2->append(dec_values[i]);
+        for (auto dec_value : dec_values) {
+            tc2->append(dec_value);
         }
     }
 
@@ -1015,8 +1015,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         int8_t inputs[] = {10, 10, 10, 8, -35, 35, -128};
         int16_t results[] = {10, 10, 10, 8, 35, 35, 128};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (signed char input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1038,8 +1038,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         int16_t inputs[] = {1000, 1000, 1000, -500, -35, 35, -32768};
         int32_t results[] = {1000, 1000, 1000, 500, 35, 35, 32768};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (short input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1061,8 +1061,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         int32_t inputs[] = {23424242, -1111188324, 909877, -4353525, -39879711, 35, -2147483648};
         int64_t results[] = {23424242, 1111188324, 909877, 4353525, 39879711, 35, 2147483648};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (int input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1086,8 +1086,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         int128_t results[] = {2342423422442, 11111883200004, 90987700000,         435352241435,
                               398797110000,  3523411,        9223372036854775808U};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (long input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1111,8 +1111,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         int128_t results[] = {2342423422442, 1111188320000004,   90987700000241,
                               435352241435,  390241238797110000, 3523411};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (__int128 input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1134,8 +1134,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         double inputs[] = {23424222.124, -34123412.24311, -23412487.1111, -97241.8761, -2349723, -3523411};
         double results[] = {23424222.124, 34123412.24311, 23412487.1111, 97241.8761, 2349723, 3523411};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (double input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1157,8 +1157,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
         float inputs[] = {23424222.124, -34123412.24311, -23412487.1111, -97241.8761, -2349723, -3523411};
         float results[] = {23424222.124, 34123412.24311, 23412487.1111, 97241.8761, 2349723, 3523411};
 
-        for (int i = 0; i < sizeof(inputs) / sizeof(inputs[0]); ++i) {
-            tc1->append(inputs[i]);
+        for (float input : inputs) {
+            tc1->append(input);
         }
 
         columns.emplace_back(tc1);
@@ -1183,8 +1183,8 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             for (int i = 0; i < sizeof(str) / sizeof(str[0]); ++i) {
                 dec_values[i] = DecimalV2Value(str[i]);
             }
-            for (int i = 0; i < sizeof(dec_values) / sizeof(dec_values[0]); ++i) {
-                tc1->append(dec_values[i]);
+            for (auto dec_value : dec_values) {
+                tc1->append(dec_value);
             }
         }
 
@@ -1368,5 +1368,4 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     }
 }
 
-} // namespace vectorized
 } // namespace starrocks

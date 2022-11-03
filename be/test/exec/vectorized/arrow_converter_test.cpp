@@ -8,6 +8,8 @@
 #include <testutil/parallel_test.h>
 #include <util/guard.h>
 
+#include <utility>
+
 #include "arrow/array/builder_base.h"
 #include "arrow/type_fwd.h"
 #include "arrow/type_traits.h"
@@ -24,7 +26,7 @@ namespace starrocks::vectorized {
 
 class ArrowConverterTest : public ::testing::Test {
 public:
-    void SetUp() { vectorized::date::init_date_cache(); }
+    void SetUp() override { vectorized::date::init_date_cache(); }
 };
 
 template <typename ArrowType, bool is_nullable = false, typename CType = typename arrow::TypeTraits<ArrowType>::CType,
@@ -588,7 +590,7 @@ PARALLEL_TEST(ArrowConverterTest, PARALLEL_TESTixed_size_binary_fail) {
 
 template <typename ArrowType, bool is_nullable, typename ArrowCppType = typename arrow::TypeTraits<ArrowType>::CType>
 std::shared_ptr<arrow::Array> create_constant_datetime_array(size_t num_elements, ArrowCppType value,
-                                                             std::shared_ptr<arrow::DataType> type, size_t& counter) {
+                                                             const std::shared_ptr<arrow::DataType>& type, size_t& counter) {
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
     size_t null_bitmap_in_bytes = (num_elements + 7) / 8;
@@ -870,7 +872,7 @@ PARALLEL_TEST(ArrowConverterTest, test_timestamp_to_datetime) {
 
 template <bool is_nullable>
 std::shared_ptr<arrow::Array> create_const_decimal_array(size_t num_elements,
-                                                         std::shared_ptr<arrow::Decimal128Type> type, int128_t decimal,
+                                                         const std::shared_ptr<arrow::Decimal128Type>& type, int128_t decimal,
                                                          size_t& counter) {
     std::vector<std::shared_ptr<arrow::Buffer>> buffers;
     buffers.resize(2);
@@ -899,7 +901,7 @@ void add_arrow_to_decimal_column(std::shared_ptr<arrow::Decimal128Type> type, Co
                                  int128_t value, CppType expect_value, size_t& counter, bool fail) {
     using ColumnType = RunTimeColumnType<PT>;
     ASSERT_EQ(column->size(), counter);
-    auto array = create_const_decimal_array<false>(num_elements, type, value, counter);
+    auto array = create_const_decimal_array<false>(num_elements, std::move(type), value, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, false, false);
     ASSERT_TRUE(conv_func != nullptr);
     Column::Filter filter;
@@ -926,7 +928,7 @@ void add_arrow_to_nullable_decimal_column(std::shared_ptr<arrow::Decimal128Type>
                                           bool fail) {
     using ColumnType = RunTimeColumnType<PT>;
     ASSERT_EQ(column->size(), counter);
-    auto array = create_const_decimal_array<true>(num_elements, type, value, counter);
+    auto array = create_const_decimal_array<true>(num_elements, std::move(type), value, counter);
     auto conv_func = get_arrow_converter(ArrowTypeId::DECIMAL, PT, true, false);
     ASSERT_TRUE(conv_func != nullptr);
     auto* nullable_column = down_cast<NullableColumn*>(column);

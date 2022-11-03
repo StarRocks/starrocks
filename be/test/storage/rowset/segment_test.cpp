@@ -70,7 +70,7 @@ protected:
 
     void TearDown() override { StoragePageCache::release_global_cache(); }
 
-    void build_segment(SegmentWriterOptions opts, const TabletSchema& build_schema, const TabletSchema& query_schema,
+    void build_segment(const SegmentWriterOptions& opts, const TabletSchema& build_schema, const TabletSchema& query_schema,
                        size_t nrows, const ValueGenerator& generator, shared_ptr<Segment>* res) {
         static int seg_id = 0;
         // must use unique filename for each segment, otherwise page cache kicks in and produces

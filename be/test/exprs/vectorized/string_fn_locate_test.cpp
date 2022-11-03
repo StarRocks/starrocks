@@ -4,12 +4,11 @@
 #include "exprs/vectorized/string_functions.h"
 #include "gen_cpp/Exprs_types.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class StringFunctionLocateTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -545,5 +544,4 @@ TEST_F(StringFunctionLocateTest, locatePosChineseTest) {
     }
 }
 
-} // namespace vectorized
 } // namespace starrocks

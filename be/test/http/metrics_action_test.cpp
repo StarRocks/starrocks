@@ -39,8 +39,8 @@ void HttpChannel::send_reply(HttpRequest* request, HttpStatus status, const std:
 
 class MetricsActionTest : public testing::Test {
 public:
-    MetricsActionTest() {}
-    virtual ~MetricsActionTest() {}
+    MetricsActionTest() = default;
+    ~MetricsActionTest() override = default;
     void SetUp() override { _evhttp_req = evhttp_request_new(nullptr, nullptr); }
     void TearDown() override {
         if (_evhttp_req != nullptr) {

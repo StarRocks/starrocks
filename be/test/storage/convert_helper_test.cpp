@@ -27,8 +27,7 @@ PARALLEL_TEST(ConvertHelperTest, testVoidPtr) {
             "0.000000000", "999999999999999999.999999999", "-999999999999999999.999999999",
             "1.001000000", "123456789.987654321",
     };
-    for (auto i = 0; i < test_cases.size(); ++i) {
-        auto& tc = test_cases[i];
+    for (auto & tc : test_cases) {
         int128_t decimalv3_value;
         auto fail = DecimalV3Cast::from_string<int128_t>(&decimalv3_value, 27, 9, tc.data(), tc.size());
         ASSERT_FALSE(fail);
@@ -70,8 +69,7 @@ PARALLEL_TEST(ConvertHelperTest, testDatum) {
             "0.000000000", "999999999999999999.999999999", "-999999999999999999.999999999",
             "1.001000000", "123456789.987654321",
     };
-    for (auto i = 0; i < test_cases.size(); ++i) {
-        auto& tc = test_cases[i];
+    for (auto & tc : test_cases) {
         int128_t decimalv3_value;
         auto fail = DecimalV3Cast::from_string<int128_t>(&decimalv3_value, 27, 9, tc.data(), tc.size());
         ASSERT_FALSE(fail);

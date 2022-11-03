@@ -8,8 +8,8 @@ namespace starrocks::parquet {
 
 class ParquetMetaDataTest : public testing::Test {
 public:
-    ParquetMetaDataTest() {}
-    virtual ~ParquetMetaDataTest() {}
+    ParquetMetaDataTest() = default;
+    ~ParquetMetaDataTest() override = default;
 
 private:
     tparquet::SchemaElement _create_root_schema_element();

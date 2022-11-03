@@ -47,7 +47,7 @@ void exec(HashMap& hash_map, std::vector<key_type> keys) {
 
     for (int32_t i = 0; i < 10; i++) {
         key_type key = keys[i];
-        AggDataPtr agg_data = (AggDataPtr)(&sums[i]);
+        auto agg_data = (AggDataPtr)(&sums[i]);
         hash_map.emplace(key, agg_data);
     }
 
@@ -131,12 +131,12 @@ TEST(HashMapTest, Insert) {
         auto& r = down_cast<Int32Column*>(down_cast<NullableColumn*>(key_columns[0].get())->data_column().get())
                           ->get_data();
         std::set<int32_t> keys_sets;
-        for (int i = 0; i < r.size(); i++) {
-            keys_sets.insert(r[i]);
+        for (int & i : r) {
+            keys_sets.insert(i);
         }
         std::set<int32_t> res_sets;
-        for (int i = 0; i < l.size(); i++) {
-            res_sets.insert(l[i]);
+        for (int & i : l) {
+            res_sets.insert(i);
         }
         ASSERT_EQ(res_sets.size(), keys_sets.size());
     }

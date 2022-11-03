@@ -18,12 +18,11 @@
 #include "testutil/assert.h"
 #include "util/json.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class JsonFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -33,7 +32,7 @@ public:
         expr_node.type = gen_type_desc(TPrimitiveType::BOOLEAN);
     }
 
-    Status test_extract_from_object(std::string input, std::string jsonpath, std::string* output) {
+    Status test_extract_from_object(std::string input, const std::string& jsonpath, std::string* output) {
         // reverse for padding.
         input.reserve(input.size() + simdjson::SIMDJSON_PADDING);
 
@@ -66,7 +65,7 @@ TEST_F(JsonFunctionsTest, get_json_intTest) {
     auto ints = BinaryColumn::create();
     auto ints2 = BinaryColumn::create();
 
-    std::string values[] = {"{\"k1\":1, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1, 2, 3]}"};
+    std::string values[] = {R"({"k1":1, "k2":"2"})", R"({"k1":"v1", "my.key":[1, 2, 3]})"};
     std::string strs[] = {"$.k1", "$.\"my.key\"[1]"};
     int length_ints[] = {1, 2};
 
@@ -101,7 +100,7 @@ TEST_F(JsonFunctionsTest, get_json_doubleTest) {
     auto doubles = BinaryColumn::create();
     auto doubles2 = BinaryColumn::create();
 
-    std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
+    std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
     std::string strs[] = {"$.k1", "$.\"my.key\"[1]"};
     double length_doubles[] = {1.3, 2.2};
 
@@ -136,15 +135,15 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
     auto strings = BinaryColumn::create();
     auto strings2 = BinaryColumn::create();
 
-    std::string values[] = {"{\"k1\":\"v1\", \"k2\":\"v2\"}",
-                            "{\"k1\":\"v1\", \"my.key\":[\"e1\", \"e2\", \"e3\"]}",
-                            "{\"k1.key\":{\"k2\":[\"v1\", \"v2\"]}}",
-                            "[{\"k1\":\"v1\"}, {\"k2\":\"v2\"}, {\"k1\":\"v3\"}, {\"k1\":\"v4\"}]",
+    std::string values[] = {R"({"k1":"v1", "k2":"v2"})",
+                            R"({"k1":"v1", "my.key":["e1", "e2", "e3"]})",
+                            R"({"k1.key":{"k2":["v1", "v2"]}})",
+                            R"([{"k1":"v1"}, {"k2":"v2"}, {"k1":"v3"}, {"k1":"v4"}])",
                             R"({"key":  "qu\"ote"})",
                             R"({"key":  "esca\\ped"})"};
 
     std::string strs[] = {"$.k1", "$.\"my.key\"[1]", "$.\"k1.key\".k2[0]", "$[*].k1", "$.key", "$.key"};
-    std::string length_strings[] = {"v1", "e2", "v1", "[\"v1\", \"v3\", \"v4\"]", "qu\"ote", "esca\\ped"};
+    std::string length_strings[] = {"v1", "e2", "v1", R"(["v1", "v3", "v4"])", "qu\"ote", "esca\\ped"};
 
     for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
         strings->append(values[j]);
@@ -277,7 +276,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         auto doubles = BinaryColumn::create();
         auto doubles2 = BinaryColumn::create();
 
-        std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
+        std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
 
         for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -312,7 +311,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         auto str_values = BinaryColumn::create();
         auto str_values2 = BinaryColumn::create();
 
-        std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
+        std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
 
         for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -347,7 +346,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         auto ints = BinaryColumn::create();
         auto ints2 = BinaryColumn::create();
 
-        std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
+        std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"", ""};
 
         for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -382,7 +381,7 @@ TEST_F(JsonFunctionsTest, get_json_emptyTest) {
         auto ints = BinaryColumn::create();
         auto ints2 = BinaryColumn::create();
 
-        std::string values[] = {"{\"k1\":1.3, \"k2\":\"2\"}", "{\"k1\":\"v1\", \"my.key\":[1.1, 2.2, 3.3]}"};
+        std::string values[] = {R"({"k1":1.3, "k2":"2"})", R"({"k1":"v1", "my.key":[1.1, 2.2, 3.3]})"};
         std::string strs[] = {"$.k3", "$.k4"};
 
         for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
@@ -661,7 +660,7 @@ TEST_P(JsonArrayTestFixture, json_array) {
     Columns columns;
     std::vector<std::string> param_json = std::get<0>(GetParam());
     std::string param_result = std::get<1>(GetParam());
-    for (auto json_str : param_json) {
+    for (const auto& json_str : param_json) {
         auto column = JsonColumn::create();
         auto json = JsonValue::parse(json_str);
         ASSERT_TRUE(json.ok());
@@ -706,7 +705,7 @@ TEST_P(JsonObjectTestFixture, json_object) {
     Columns columns;
     std::vector<std::string> param_json = std::get<0>(GetParam());
     std::string param_result = std::get<1>(GetParam());
-    for (auto json_str : param_json) {
+    for (const auto& json_str : param_json) {
         auto column = JsonColumn::create();
         auto json = JsonValue::parse(json_str);
         ASSERT_TRUE(json.ok());
@@ -885,5 +884,4 @@ INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
 
 // clang-format on
 
-} // namespace vectorized
 } // namespace starrocks

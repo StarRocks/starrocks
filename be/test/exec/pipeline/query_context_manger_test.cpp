@@ -6,8 +6,7 @@
 #include "exec/pipeline/query_context.h"
 #include "gtest/gtest.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
     auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
     {
@@ -206,5 +205,4 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
     query_ctx_mgr->remove(query_id);
     ASSERT_TRUE(query_ctx_mgr->get(query_id) == nullptr);
 }
-} // namespace pipeline
 } // namespace starrocks

@@ -5,6 +5,7 @@
 #include <chrono>
 #include <memory>
 #include <thread>
+#include <utility>
 
 #include "column/fixed_length_column.h"
 #include "column/vectorized_fwd.h"
@@ -184,8 +185,8 @@ query_cache::CacheParam create_test_cache_param(bool force_populate, bool force_
 
 using ValidateFunc = std::function<void(double)>;
 Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t dop,
-                            query_cache::CacheManagerPtr cache_mgr, RuntimeState* state, MapFunc map_func1,
-                            MapFunc map_func2, double init_value, ReduceFunc reduce_func) {
+                            const query_cache::CacheManagerPtr& cache_mgr, RuntimeState* state, const MapFunc& map_func1,
+                            const MapFunc& map_func2, double init_value, const ReduceFunc& reduce_func) {
     int id = 0;
     auto mul2 = std::make_shared<MapOperatorFactory>(++id, map_func1);
     auto plus1 = std::make_shared<MapOperatorFactory>(++id, map_func2);
@@ -203,9 +204,9 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     auto plan_node_id = ++id;
     auto cache_op_factory =
             std::make_shared<query_cache::CacheOperatorFactory>(cache_id, plan_node_id, cache_mgr.get(), cache_param);
-    for (size_t i = 0, size = opFactories.size(); i < size; ++i) {
-        opFactories[i] =
-                std::make_shared<query_cache::MultilaneOperatorFactory>(++id, opFactories[i], cache_param.num_lanes);
+    for (auto & opFactorie : opFactories) {
+        opFactorie =
+                std::make_shared<query_cache::MultilaneOperatorFactory>(++id, opFactorie, cache_param.num_lanes);
     }
     opFactories.push_back(cache_op_factory);
     auto reducer = std::make_shared<ReducerFactory>(init_value, reduce_func, 1);
@@ -242,8 +243,8 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
         }
         tasks[k].cache_operator->set_multilane_operators(std::move(multilane_operators));
 
-        for (size_t i = 0, size = upstream.size(); i < size; ++i) {
-            upstream[i]->prepare(state);
+        for (auto & i : upstream) {
+            i->prepare(state);
         }
 
         tasks[k].downstream->prepare(state);
@@ -251,7 +252,7 @@ Tasks create_test_pipelines(const query_cache::CacheParam& cache_param, size_t d
     return tasks;
 }
 
-bool exec_test_pipeline(Task& task, RuntimeState* state, vectorized::ChunkPtr input_chunk, int max_step,
+bool exec_test_pipeline(Task& task, RuntimeState* state, const vectorized::ChunkPtr& input_chunk, int max_step,
                         bool set_first_op_finished) {
     auto& first_op = task.upstream[0];
     auto& upstream = task.upstream;
@@ -478,10 +479,10 @@ void test_framework_with_with_options(query_cache::CacheManagerPtr cache_mgr, bo
                                       bool force_passthrough, int num_lanes, int dop, RuntimeState& state_object,
                                       MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
                                       const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
-                                      ValidateFunc validate_func) {
+                                      const ValidateFunc& validate_func) {
     auto* state = &state_object;
     auto cache_param = create_test_cache_param(force_populate, force_passthrough, num_lanes);
-    auto tasks = create_test_pipelines(cache_param, dop, cache_mgr, state, map1, map2, init_value, reduce);
+    auto tasks = create_test_pipelines(cache_param, dop, std::move(cache_mgr), state, std::move(map1), std::move(map2), init_value, std::move(reduce));
     auto& task = tasks[0];
     auto i = 0;
     for (const auto& a : pre_passthrough_actions) {
@@ -509,16 +510,16 @@ void test_framework(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int d
                     MapFunc map1, MapFunc map2, double init_value, ReduceFunc reduce,
                     const Actions& pre_passthrough_actions, const Actions& post_passthrough_actions,
                     ValidateFunc validate_func) {
-    test_framework_with_with_options(cache_mgr, false, false, num_lanes, dop, state_object, map1, map2, init_value,
-                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
+    test_framework_with_with_options(std::move(cache_mgr), false, false, num_lanes, dop, state_object, std::move(map1), std::move(map2), init_value,
+                                     std::move(reduce), pre_passthrough_actions, post_passthrough_actions, std::move(validate_func));
 }
 
 void test_framework_force_populate(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
                                    RuntimeState& state_object, MapFunc map1, MapFunc map2, double init_value,
                                    ReduceFunc reduce, const Actions& pre_passthrough_actions,
                                    const Actions& post_passthrough_actions, ValidateFunc validate_func) {
-    test_framework_with_with_options(cache_mgr, true, false, num_lanes, dop, state_object, map1, map2, init_value,
-                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
+    test_framework_with_with_options(std::move(cache_mgr), true, false, num_lanes, dop, state_object, std::move(map1), std::move(map2), init_value,
+                                     std::move(reduce), pre_passthrough_actions, post_passthrough_actions, std::move(validate_func));
 }
 
 void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr cache_mgr, int num_lanes, int dop,
@@ -527,8 +528,8 @@ void test_framework_force_populate_and_passthrough(query_cache::CacheManagerPtr 
                                                    const Actions& pre_passthrough_actions,
                                                    const Actions& post_passthrough_actions,
                                                    ValidateFunc validate_func) {
-    test_framework_with_with_options(cache_mgr, true, true, num_lanes, dop, state_object, map1, map2, init_value,
-                                     reduce, pre_passthrough_actions, post_passthrough_actions, validate_func);
+    test_framework_with_with_options(std::move(cache_mgr), true, true, num_lanes, dop, state_object, std::move(map1), std::move(map2), init_value,
+                                     std::move(reduce), pre_passthrough_actions, post_passthrough_actions, std::move(validate_func));
 }
 
 TEST_F(CacheTest, testMultilane) {

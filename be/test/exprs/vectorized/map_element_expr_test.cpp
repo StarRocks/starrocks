@@ -28,7 +28,7 @@ ColumnPtr const_int_column(int32_t value, size_t size = 1) {
     return ConstColumn::create(std::move(data), size);
 }
 
-ColumnPtr const_varchar_column(std::string value, size_t size = 1) {
+ColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
     auto data = BinaryColumn::create();
     data->append_string(value);
     return ConstColumn::create(std::move(data), size);

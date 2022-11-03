@@ -104,7 +104,7 @@ if [ ${HELP} -eq 1 ]; then
 fi
 
 CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
-CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE^^}"
+CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi

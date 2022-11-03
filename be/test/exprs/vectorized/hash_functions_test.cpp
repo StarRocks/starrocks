@@ -7,8 +7,7 @@
 
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class HashFunctionsTest : public ::testing::Test {
 public:
     void SetUp() override {}
@@ -78,5 +77,4 @@ TEST_F(HashFunctionsTest, emptyTest) {
     ASSERT_EQ(123456, h3);
 }
 
-} // namespace vectorized
 } // namespace starrocks

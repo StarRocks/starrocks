@@ -39,10 +39,10 @@ const int space_len = 7;
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>
 void test_int_value(const char* s, T exp_val, StringParser::ParseResult exp_result) {
-    for (int i = 0; i < space_len; ++i) {
-        for (int j = 0; j < space_len; ++j) {
+    for (auto & i : space) {
+        for (auto & j : space) {
             // All combinations of leading and/or trailing whitespace.
-            std::string str = space[i] + s + space[j];
+            std::string str = i + s + j;
             StringParser::ParseResult result;
             T val = StringParser::string_to_int<T>(str.data(), str.length(), &result);
             EXPECT_EQ(exp_val, val) << str;
@@ -54,10 +54,10 @@ void test_int_value(const char* s, T exp_val, StringParser::ParseResult exp_resu
 // Tests conversion of s to integer with and without leading/trailing whitespace
 template <typename T>
 void test_unsigned_int_value(const char* s, T exp_val, StringParser::ParseResult exp_result) {
-    for (int i = 0; i < space_len; ++i) {
-        for (int j = 0; j < space_len; ++j) {
+    for (auto & i : space) {
+        for (auto & j : space) {
             // All combinations of leading and/or trailing whitespace.
-            std::string str = space[i] + s + space[j];
+            std::string str = i + s + j;
             StringParser::ParseResult result;
             T val = StringParser::string_to_unsigned_int<T>(str.data(), str.length(), &result);
             EXPECT_EQ(exp_val, val) << str;
@@ -69,10 +69,10 @@ void test_unsigned_int_value(const char* s, T exp_val, StringParser::ParseResult
 // Tests conversion of s, given a base, to an integer with and without leading/trailing whitespace
 template <typename T>
 void test_int_value(const char* s, int base, T exp_val, StringParser::ParseResult exp_result) {
-    for (int i = 0; i < space_len; ++i) {
-        for (int j = 0; j < space_len; ++j) {
+    for (auto & i : space) {
+        for (auto & j : space) {
             // All combinations of leading and/or trailing whitespace.
-            std::string str = space[i] + s + space[j];
+            std::string str = i + s + j;
             StringParser::ParseResult result;
             T val = StringParser::string_to_int<T>(str.data(), str.length(), base, &result);
             EXPECT_EQ(exp_val, val) << str;
@@ -82,10 +82,10 @@ void test_int_value(const char* s, int base, T exp_val, StringParser::ParseResul
 }
 
 void test_bool_value(const char* s, bool exp_val, StringParser::ParseResult exp_result) {
-    for (int i = 0; i < space_len; ++i) {
-        for (int j = 0; j < space_len; ++j) {
+    for (auto & i : space) {
+        for (auto & j : space) {
             // All combinations of leading and/or trailing whitespace.
-            std::string str = space[i] + s + space[j];
+            std::string str = i + s + j;
             StringParser::ParseResult result;
             bool val = StringParser::string_to_bool(str.data(), str.length(), &result);
             EXPECT_EQ(exp_val, val) << s;
@@ -103,7 +103,7 @@ void test_float_value(const std::string& s, StringParser::ParseResult exp_result
 
     if ((exp_result == StringParser::PARSE_SUCCESS || exp_result == StringParser::PARSE_OVERFLOW) &&
         result == exp_result) {
-        T exp_val = strtod(s.c_str(), NULL);
+        T exp_val = strtod(s.c_str(), nullptr);
         EXPECT_EQ(exp_val, val);
     }
 }
@@ -123,11 +123,11 @@ void test_float_value_is_nan(const std::string& s, StringParser::ParseResult exp
 // and without leading/trailing whitespace
 void test_all_float_variants(const std::string& s, StringParser::ParseResult exp_result) {
     std::string sign[] = {"", "+", "-"};
-    for (int i = 0; i < space_len; ++i) {
-        for (int j = 0; j < space_len; ++j) {
-            for (int k = 0; k < 3; ++k) {
+    for (auto & i : space) {
+        for (auto & j : space) {
+            for (auto & k : sign) {
                 // All combinations of leading and/or trailing whitespace and +/- sign.
-                std::string str = space[i] + sign[k] + s + space[j];
+                std::string str = i + k + s + j;
                 test_float_value<float>(str, exp_result);
                 test_float_value<double>(str, exp_result);
             }
@@ -143,7 +143,7 @@ void TestFloatBruteForce() {
     // Keep multiplying by 2.
     T cur_val = 1.0;
     while (cur_val < max_val) {
-        std::string s = boost::lexical_cast<std::string>(cur_val);
+        auto s = boost::lexical_cast<std::string>(cur_val);
         test_float_value<T>(s, StringParser::PARSE_SUCCESS);
         cur_val *= 2;
     }
@@ -151,7 +151,7 @@ void TestFloatBruteForce() {
     // Keep multiplying by 2.
     cur_val = -1.0;
     while (cur_val > min_val) {
-        std::string s = boost::lexical_cast<std::string>(cur_val);
+        auto s = boost::lexical_cast<std::string>(cur_val);
         test_float_value<T>(s, StringParser::PARSE_SUCCESS);
         cur_val *= 2;
     }
@@ -160,7 +160,7 @@ void TestFloatBruteForce() {
     cur_val = 1.0;
     T min_positive_val = std::numeric_limits<T>::min();
     while (cur_val > min_positive_val) {
-        std::string s = boost::lexical_cast<std::string>(cur_val);
+        auto s = boost::lexical_cast<std::string>(cur_val);
         test_float_value<T>(s, StringParser::PARSE_SUCCESS);
         cur_val /= 2;
     }
@@ -168,12 +168,12 @@ void TestFloatBruteForce() {
 
 class StringParserTest : public testing::Test {
 public:
-    StringParserTest() {}
-    ~StringParserTest() {}
+    StringParserTest() = default;
+    ~StringParserTest() override = default;
 
 protected:
-    virtual void SetUp() { init(); }
-    virtual void TearDown() {}
+    void SetUp() override { init(); }
+    void TearDown() override {}
 
     void init();
 
@@ -444,12 +444,12 @@ TEST(StringToFloat, Basic) {
     test_all_float_variants("1.7E-294", StringParser::PARSE_SUCCESS);
 
     // Min/max values.
-    std::string float_lowest = boost::lexical_cast<std::string>(std::numeric_limits<float>::lowest());
-    std::string float_max = boost::lexical_cast<std::string>(std::numeric_limits<float>::max());
+    auto float_lowest = boost::lexical_cast<std::string>(std::numeric_limits<float>::lowest());
+    auto float_max = boost::lexical_cast<std::string>(std::numeric_limits<float>::max());
     test_float_value<float>(float_lowest, StringParser::PARSE_SUCCESS);
     test_float_value<float>(float_max, StringParser::PARSE_SUCCESS);
-    std::string double_lowest = boost::lexical_cast<std::string>(std::numeric_limits<double>::lowest());
-    std::string double_max = boost::lexical_cast<std::string>(std::numeric_limits<double>::max());
+    auto double_lowest = boost::lexical_cast<std::string>(std::numeric_limits<double>::lowest());
+    auto double_max = boost::lexical_cast<std::string>(std::numeric_limits<double>::max());
     test_float_value<double>(double_lowest, StringParser::PARSE_SUCCESS);
     test_float_value<double>(double_max, StringParser::PARSE_SUCCESS);
     test_float_value<double>("2.97", StringParser::PARSE_SUCCESS);
@@ -557,7 +557,7 @@ double random_range(double const range_min, double const range_max) {
 TEST(StringToFloat, Random) {
     double lower_bound = 0;
     double upper_bound = 10000;
-    srand(time(0));
+    srand(time(nullptr));
     for (int i = 0; i < 5000; i++) {
         double random_double = random_range(lower_bound, upper_bound);
 

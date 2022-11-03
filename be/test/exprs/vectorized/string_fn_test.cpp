@@ -13,8 +13,7 @@
 #include "testutil/assert.h"
 #include "testutil/parallel_test.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 PARALLEL_TEST(VecStringFunctionsTest, sliceTest) {
     Slice a("abc");
@@ -136,7 +135,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstASCIITest) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->size(), 2);
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
@@ -184,7 +183,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstZhTest) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -267,7 +266,7 @@ PARALLEL_TEST(VecStringFunctionsTest, substrConstUtf8Test) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -1889,7 +1888,7 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatDouble) {
     Columns columns;
     auto money = DoubleColumn::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) money->append(moneys[i]);
+    for (double i : moneys) money->append(i);
 
     columns.emplace_back(money);
     ColumnPtr result = StringFunctions::money_format_double(ctx.get(), columns);
@@ -1907,7 +1906,7 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatBigInt) {
     Columns columns;
     auto money = Int64Column::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) money->append(moneys[i]);
+    for (long i : moneys) money->append(i);
 
     columns.emplace_back(money);
     ColumnPtr result = StringFunctions::money_format_bigint(ctx.get(), columns);
@@ -1934,8 +1933,8 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatLargeInt) {
     Columns columns;
     auto money = Int128Column::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) {
-        money->append(moneys[i]);
+    for (__int128 i : moneys) {
+        money->append(i);
     }
 
     columns.emplace_back(money);
@@ -1958,8 +1957,8 @@ PARALLEL_TEST(VecStringFunctionsTest, moneyFormatDecimalV2Value) {
     Columns columns;
     auto money = DecimalColumn::create();
 
-    for (int i = 0; i < sizeof(moneys) / sizeof(moneys[0]); ++i) {
-        money->append(moneys[i]);
+    for (auto i : moneys) {
+        money->append(i);
     }
 
     columns.emplace_back(money);
@@ -1983,8 +1982,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlNullable) {
                           "http://werwrw:sdf@sdfsceesvdsdvs/ccvwfewf?cvx=value#sdfs",
                           "http://vdvsv:df23@hostname/path?cvxvv=value#dsfs"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        str->append(strs[i]);
+    for (auto & i : strs) {
+        str->append(i);
     }
 
     data->append("PATH");
@@ -2026,8 +2025,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlOnlyNull) {
                           "http://werwrw:sdf@hostname/path?cvx=value#sdfs",
                           "http://vdvsv:df23@hostname/path?cvxvv=value#dsfs"};
 
-    for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-        str->append(strs[i]);
+    for (auto & i : strs) {
+        str->append(i);
     }
 
     columns.emplace_back(str);
@@ -2064,8 +2063,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
 
         std::string res[] = {"username:password@hostname", "starrockssss:apache", "wobushinidehao:kjkljq"};
 
-        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-            str->append(strs[i]);
+        for (auto & i : strs) {
+            str->append(i);
         }
 
         columns.emplace_back(str);
@@ -2103,8 +2102,8 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrlForConst) {
 
         std::string res[] = {"/path", "/csdwwww", "/wfefefe"};
 
-        for (int i = 0; i < sizeof(strs) / sizeof(strs[0]); ++i) {
-            str->append(strs[i]);
+        for (auto & i : strs) {
+            str->append(i);
         }
 
         columns.emplace_back(str);
@@ -2150,9 +2149,9 @@ PARALLEL_TEST(VecStringFunctionsTest, parseUrl) {
                          "username:password",
                          "http"};
 
-    for (int i = 0; i < sizeof(parts) / sizeof(parts[0]); ++i) {
+    for (auto & i : parts) {
         str->append(strs[0]);
-        part->append(parts[i]);
+        part->append(i);
     }
 
     columns.emplace_back(str);
@@ -2182,8 +2181,8 @@ PARALLEL_TEST(VecStringFunctionsTest, hex_intTest) {
     int64_t values[] = {21, 16, 256, 514};
     std::string strs[] = {"15", "10", "100", "202"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
+    for (long value : values) {
+        ints->append(value);
     }
 
     columns.emplace_back(ints);
@@ -2204,8 +2203,8 @@ PARALLEL_TEST(VecStringFunctionsTest, hex_stringTest) {
     std::string values[] = {"21", "16", "256", "514"};
     std::string strs[] = {"3231", "3136", "323536", "353134"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
+    for (auto & value : values) {
+        ints->append(value);
     }
 
     columns.emplace_back(ints);
@@ -2227,8 +2226,8 @@ PARALLEL_TEST(VecStringFunctionsTest, unhexTest) {
     std::string strs[] = {"21", "16", "256", "514"};
     std::string values[] = {"3231", "3136", "323536", "353134"};
 
-    for (int j = 0; j < sizeof(values) / sizeof(values[0]); ++j) {
-        ints->append(values[j]);
+    for (auto & value : values) {
+        ints->append(value);
     }
 
     columns.emplace_back(ints);
@@ -2258,8 +2257,8 @@ static void test_left_and_right_not_const(
     columns.push_back(len_col);
     ColumnPtr left_result = StringFunctions::left(context.get(), columns);
     ColumnPtr right_result = StringFunctions::right(context.get(), columns);
-    BinaryColumn* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
-    BinaryColumn* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
+    auto* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
+    auto* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
     ASSERT_TRUE(binary_left_result != nullptr);
     ASSERT_TRUE(binary_right_result != nullptr);
     const auto size = cases.size();
@@ -2368,7 +2367,7 @@ PARALLEL_TEST(VecStringFunctionsTest, leftAndRightNotConstUtf8Test) {
 }
 
 static void test_left_and_right_const(
-        ColumnPtr str_col,
+        const ColumnPtr& str_col,
         std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> const& cases) {
     for (auto& c : cases) {
         auto [len, left_expect, right_expect] = c;
@@ -2469,7 +2468,7 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
     }
     Columns columns{str_col, off_col, len_col};
     auto result = StringFunctions::substring(context.get(), columns);
-    BinaryColumn* binary_result = down_cast<BinaryColumn*>(result.get());
+    auto* binary_result = down_cast<BinaryColumn*>(result.get());
     const auto size = cases.size();
     ASSERT_TRUE(binary_result != nullptr);
     ASSERT_EQ(binary_result->size(), size);
@@ -2630,5 +2629,4 @@ PARALLEL_TEST(VecStringFunctionsTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
-} // namespace vectorized
 } // namespace starrocks
