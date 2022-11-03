@@ -215,6 +215,7 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
 import com.starrocks.rpc.FrontendServiceProxy;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.statistic.AnalyzeManager;
@@ -3391,7 +3392,10 @@ public class Catalog {
             buildPartitions(db, copiedTable, partitionList);
 
             // check again
-            db.writeLock();
+            if (!db.writeLockAndCheckExist()) {
+                throw new DdlException("db " + db.getFullName()
+                        + "(" + db.getId() + ") has been dropped");
+            }
             Set<String> existPartitionNameSet = Sets.newHashSet();
             try {
                 CatalogChecker.checkTableExist(db, tableName);
@@ -3589,6 +3593,7 @@ public class Catalog {
     }
 
     public void dropPartition(Database db, OlapTable olapTable, DropPartitionClause clause) throws DdlException {
+        CatalogChecker.checkTableExist(db, olapTable.getName());
         Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
 
         String partitionName = clause.getPartitionName();
