@@ -4,7 +4,16 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
+import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.PartitionInfo;
+import com.starrocks.catalog.SinglePartitionInfo;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.Explain;
@@ -15,6 +24,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -47,11 +57,13 @@ import com.starrocks.sql.optimizer.rule.tree.UseSortAggregateRule;
 import com.starrocks.sql.optimizer.task.OptimizeGroupTask;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Optimizer's entrance class
@@ -92,7 +104,7 @@ public class Optimizer {
     }
 
     // Optimize by rule will return logical plan.
-    // Used by Materialized view query rewrite optimization.
+    // Used by materialized view query rewrite optimization.
     private OptExpression optimizeByRule(ConnectContext connectContext,
                                          OptExpression logicOperatorTree,
                                          PhysicalPropertySet requiredProperty,
@@ -183,8 +195,74 @@ public class Optimizer {
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
 
         // process materialized views
+        // TODO: add session variable
         if (Config.enable_experimental_mv) {
             // TODO: register materialized views
+            // register materialized views
+            registerMaterializedViews(logicOperatorTree, connectContext);
+        }
+    }
+
+    private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
+        List<Table> tables = RewriteUtils.getAllTables(logicOperatorTree);
+
+        // include nested materialized views
+        Set<MaterializedView> relatedMvs = Sets.newHashSet();
+        getRelatedMvs(tables, relatedMvs);
+
+        for (MaterializedView mv : relatedMvs) {
+            if (!mv.isActive()) {
+                continue;
+            }
+            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefresh();
+            PartitionInfo partitionInfo = mv.getPartitionInfo();
+            if (partitionInfo instanceof SinglePartitionInfo) {
+                if (!partitionNamesToRefresh.isEmpty()) {
+                    continue;
+                }
+            } else if (partitionNamesToRefresh.containsAll(mv.getPartitionNames())) {
+                // if the mv is partitioned, and all partitions need refresh,
+                // then it can not be candidate
+                continue;
+            }
+
+            // 1. build mv query logical plan
+            String mvSql = mv.getViewDefineSql();
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            Pair<OptExpression, LogicalPlan> plans = getOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
+            if (plans == null) {
+                continue;
+            }
+            OptExpression optimizedPlan = plans.first;
+            if (!isValidSPJGPlan(optimizedPlan)) {
+                continue;
+            }
+            if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
+                updatePartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, optimizedPlan);
+            }
+
+            List<ColumnRefOperator> outputExpressions = plans.second.getOutputColumn();
+            MaterializationContext materializationContext = new MaterializationContext(mv, optimizedPlan,
+                    columnRefFactory, outputExpressions, partitionNamesToRefresh);
+
+            // generate scan mv plan
+            Database db = context.getCatalog().getDb(mv.getDbId());
+            TableName tableName = new TableName(db.getFullName(), mv.getName());
+            String selectMvSql = "select * from " + tableName.toSql();
+            Pair<OptExpression, LogicalPlan> mvPlans =
+                    getOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
+            OptExpression mvOptimizedPlan = mvPlans.first;
+            if (!RewriteUtils.isLogicalSPJ(mvOptimizedPlan)) {
+                continue;
+            }
+            if (!(mvOptimizedPlan.getOp() instanceof LogicalOlapScanOperator)) {
+                continue;
+            }
+            materializationContext.setScanMvOperator(mvOptimizedPlan.getOp());
+            List<ColumnRefOperator> mvOutputExpressions = mvPlans.second.getOutputColumn();
+            materializationContext.setScanMvOutputExpressions(mvOutputExpressions);
+
+            context.addCandidateMvs(materializationContext);
         }
     }
 
