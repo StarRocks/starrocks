@@ -454,6 +454,7 @@
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
+  + [Contribute to StarRocks](./developers/development-environment/How to Contribute.md)
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
     + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
