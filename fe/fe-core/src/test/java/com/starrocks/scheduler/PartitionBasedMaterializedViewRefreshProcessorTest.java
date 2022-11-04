@@ -127,7 +127,28 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
                         "properties('replication_num' = '1')\n" +
-                        "as select k2, sum(v1) as total_sum from tbl3 group by k2;");
+                        "as select k2, sum(v1) as total_sum from tbl3 group by k2;")
+                .withTable("CREATE TABLE test.base\n" +
+                        "(\n" +
+                        "    k1 date,\n" +
+                        "    k2 int,\n" +
+                        "    v1 int sum\n" +
+                        ")\n" +
+                        "PARTITION BY RANGE(k1)\n" +
+                        "(\n" +
+                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
+                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
+                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
+                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
+                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
+                        ")\n" +
+                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                        "PROPERTIES('replication_num' = '1');")
+                .withNewMaterializedView("create materialized view test.mv_with_test_refresh\n" +
+                        "partition by k1\n" +
+                        "distributed by hash(k2) buckets 10\n" +
+                        "refresh manual\n" +
+                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
     }
 
     @Test
@@ -738,29 +759,6 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
 
     @Test
     public void testFilterPartitionByRefreshNumber() throws Exception {
-        starRocksAssert.withDatabase("test").useDatabase("test")
-                .withTable("CREATE TABLE test.base\n" +
-                        "(\n" +
-                        "    k1 date,\n" +
-                        "    k2 int,\n" +
-                        "    v1 int sum\n" +
-                        ")\n" +
-                        "PARTITION BY RANGE(k1)\n" +
-                        "(\n" +
-                        "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
-                        "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
-                        "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
-                        "    PARTITION p3 values [('2022-03-01'),('2022-04-01')),\n" +
-                        "    PARTITION p4 values [('2022-04-01'),('2022-05-01'))\n" +
-                        ")\n" +
-                        "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                        "PROPERTIES('replication_num' = '1');")
-                .withNewMaterializedView("create materialized view test.mv_with_test_refresh\n" +
-                        "partition by k1\n" +
-                        "distributed by hash(k2) buckets 10\n" +
-                        "refresh manual\n" +
-                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
-
         PartitionBasedMaterializedViewRefreshProcessor processor = new PartitionBasedMaterializedViewRefreshProcessor();
         Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
         MaterializedView materializedView = ((MaterializedView) testDb.getTable("mv_with_test_refresh"));
