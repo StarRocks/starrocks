@@ -21,7 +21,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public static final String UNEXPECTED_TYPE = "unexpected type ";
 
     static {
-        for (PrivilegeTypes type : PrivilegeTypes.values()) {
+        for (PrivilegeType type : PrivilegeType.values()) {
             TYPE_STRING_TO_ID.put(type.toString(), (short) type.getId());
             TYPE_TO_ACTION_MAP.put((short) type.getId(), type.getActionMap());
             PLURAL_TO_TYPE.put(type.getPlural(), type.toString());
@@ -85,7 +85,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
     @Override
     public PEntryObject generateObject(String typeStr, List<String> objectTokens, GlobalStateMgr mgr) throws PrivilegeException {
-        PrivilegeTypes type = PrivilegeTypes.valueOf(typeStr);
+        PrivilegeType type = PrivilegeType.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, objectTokens);
@@ -111,7 +111,7 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     public PEntryObject generateObject(
             String typeStr, List<String> allTypes, String restrictType, String restrictName, GlobalStateMgr mgr)
             throws PrivilegeException {
-        PrivilegeTypes type = PrivilegeTypes.valueOf(typeStr);
+        PrivilegeType type = PrivilegeType.valueOf(typeStr);
         switch (type) {
             case TABLE:
                 return TablePEntryObject.generate(mgr, allTypes, restrictType, restrictName);

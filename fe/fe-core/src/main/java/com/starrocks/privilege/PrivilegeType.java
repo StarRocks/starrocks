@@ -5,18 +5,18 @@ package com.starrocks.privilege;
 import java.util.HashMap;
 import java.util.Map;
 
-public enum PrivilegeTypes {
-    TABLE(1, TableActions.actionMap(), "TABLES"),
-    DATABASE(2, DbActions.actionMap(), "DATABASES"),
-    SYSTEM(3, SystemActions.actionMap(), null),
-    USER(4, UserActions.actionMap(), "USERS");
+public enum PrivilegeType {
+    TABLE(1, TableAction.actionMap(), "TABLES"),
+    DATABASE(2, DbAction.actionMap(), "DATABASES"),
+    SYSTEM(3, SystemAction.actionMap(), null),
+    USER(4, UserAction.actionMap(), "USERS");
 
     private final int id;
     private final Map<String, Action> actionMap;
 
     // used in ALL statement, e.g. grant select on all tables in all databases
     private final String plural;
-    PrivilegeTypes(int id, Map<String, Action> actionMap, String plural) {
+    PrivilegeType(int id, Map<String, Action> actionMap, String plural) {
         this.id = id;
         this.actionMap = actionMap;
         this.plural = plural;
@@ -37,7 +37,7 @@ public enum PrivilegeTypes {
     /**
      * Below defines all validate actions of a certain type
      */
-    public enum TableActions {
+    public enum TableAction {
         DELETE(1),
         DROP(2),
         INSERT(3),
@@ -46,70 +46,70 @@ public enum PrivilegeTypes {
 
         private final int id;
 
-        TableActions(int id) {
+        TableAction(int id) {
             this.id = id;
         }
 
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
-            for (TableActions action : TableActions.values()) {
+            for (TableAction action : TableAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;
         }
     }
 
-    public enum DbActions {
+    public enum DbAction {
         CREATE_TABLE(1),
         DROP(2),
         SHOW(3);
 
         private final int id;
 
-        DbActions(int id) {
+        DbAction(int id) {
             this.id = id;
         }
 
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
-            for (DbActions action : DbActions.values()) {
+            for (DbAction action : DbAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;
         }
     }
 
-    public enum SystemActions {
+    public enum SystemAction {
         GRANT(1),
         NODE(2);  // AND MORE...
 
         private final int id;
 
-        SystemActions(int id) {
+        SystemAction(int id) {
             this.id = id;
         }
 
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
-            for (SystemActions action : SystemActions.values()) {
+            for (SystemAction action : SystemAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;
         }
     }
 
-    public enum UserActions {
+    public enum UserAction {
         IMPERSONATE(1);
 
         private final int id;
 
-        UserActions(int id) {
+        UserAction(int id) {
             this.id = id;
         }
 
         public static Map<String, Action> actionMap() {
             Map<String, Action> ret = new HashMap<>();
-            for (UserActions action : UserActions.values()) {
+            for (UserAction action : UserAction.values()) {
                 ret.put(action.toString(), new Action((short) action.id, action.toString()));
             }
             return ret;

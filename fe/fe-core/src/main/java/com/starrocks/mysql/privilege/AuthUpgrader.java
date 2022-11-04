@@ -13,7 +13,7 @@ import com.starrocks.privilege.PEntryObject;
 import com.starrocks.privilege.PrivilegeCollection;
 import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.privilege.PrivilegeManager;
-import com.starrocks.privilege.PrivilegeTypes;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.privilege.RolePrivilegeCollection;
 import com.starrocks.privilege.UserPrivilegeCollection;
 import com.starrocks.server.GlobalStateMgr;
@@ -81,21 +81,21 @@ public class AuthUpgrader {
 
     private void init() throws AuthUpgradeUnrecoveredException {
         try {
-            tableTypeStr = PrivilegeTypes.TABLE.name();
-            dbTypeStr = PrivilegeTypes.DATABASE.name();
-            userTypeStr = PrivilegeTypes.USER.name();
+            tableTypeStr = PrivilegeType.TABLE.name();
+            dbTypeStr = PrivilegeType.DATABASE.name();
+            userTypeStr = PrivilegeType.USER.name();
             tableTypeId = privilegeManager.analyzeType(tableTypeStr);
             userTypeId = privilegeManager.analyzeType(userTypeStr);
             allTablesInAllDbObject = Arrays.asList(privilegeManager.analyzeObject(
                     tableTypeStr,
-                    Arrays.asList(PrivilegeTypes.TABLE.getPlural(), PrivilegeTypes.DATABASE.getPlural()),
+                    Arrays.asList(PrivilegeType.TABLE.getPlural(), PrivilegeType.DATABASE.getPlural()),
                     null, null));
             selectActionSet = privilegeManager.analyzeActionSet(
                     tableTypeId,
-                    Arrays.asList(PrivilegeTypes.TableActions.SELECT.toString()));
+                    Arrays.asList(PrivilegeType.TableAction.SELECT.toString()));
             impersonateActionSet = privilegeManager.analyzeActionSet(
                     userTypeId,
-                    Arrays.asList(PrivilegeTypes.UserActions.IMPERSONATE.toString()));
+                    Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
         } catch (PrivilegeException e) {
             throw new AuthUpgradeUnrecoveredException("should not happen", e);
         }

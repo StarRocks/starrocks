@@ -105,7 +105,7 @@ public class PrivilegeManager {
             if (rolePrivilegeCollection != null) {
                 // GRANT ALL ON ALL
                 for (String typeStr : provider.getAllTypes()) {
-                    PrivilegeTypes t = PrivilegeTypes.valueOf(typeStr);
+                    PrivilegeType t = PrivilegeType.valueOf(typeStr);
                     initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
                 }
                 rolePrivilegeCollection.disableMutable();  // not mutable
@@ -113,13 +113,13 @@ public class PrivilegeManager {
 
             // 2. builtin db_admin role
             rolePrivilegeCollection = initBuiltinRoleUnlocked(DB_ADMIN_ROLE_ID, "db_admin");
-            PrivilegeTypes systemTypes = PrivilegeTypes.SYSTEM;
+            PrivilegeType systemTypes = PrivilegeType.SYSTEM;
             if (rolePrivilegeCollection != null) {
                 // ALL system but GRANT AND NODE
                 List<String> actionWithoutNodeGrant = systemTypes.getActionMap().keySet().stream().filter(
                         x -> !x.equals("GRANT") && !x.equals("NODE")).collect(Collectors.toList());
                 initPrivilegeCollections(rolePrivilegeCollection, systemTypes.name(), actionWithoutNodeGrant, null, false);
-                for (PrivilegeTypes t : Arrays.asList(PrivilegeTypes.DATABASE, PrivilegeTypes.TABLE)) {
+                for (PrivilegeType t : Arrays.asList(PrivilegeType.DATABASE, PrivilegeType.TABLE)) {
                     initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
                 }
                 rolePrivilegeCollection.disableMutable(); // not mutable
@@ -132,7 +132,7 @@ public class PrivilegeManager {
                 initPrivilegeCollections(
                         rolePrivilegeCollection,
                         systemTypes.name(),
-                        Arrays.asList(PrivilegeTypes.SystemActions.NODE.name()),
+                        Arrays.asList(PrivilegeType.SystemAction.NODE.name()),
                         null,
                         false);
                 rolePrivilegeCollection.disableMutable(); // not mutable
@@ -145,10 +145,10 @@ public class PrivilegeManager {
                 initPrivilegeCollections(
                         rolePrivilegeCollection,
                         systemTypes.name(),
-                        Arrays.asList(PrivilegeTypes.SystemActions.GRANT.name()),
+                        Arrays.asList(PrivilegeType.SystemAction.GRANT.name()),
                         null,
                         false);
-                PrivilegeTypes t = PrivilegeTypes.USER;
+                PrivilegeType t = PrivilegeType.USER;
                 initPrivilegeCollecionAllObjects(rolePrivilegeCollection, t, new ArrayList<>(t.getActionMap().keySet()));
                 rolePrivilegeCollection.disableMutable(); // not mutable
             }
@@ -160,8 +160,8 @@ public class PrivilegeManager {
                 // GRANT SELECT ON ALL TABLES IN infomation_schema
                 List<PEntryObject> object = Arrays.asList(new TablePEntryObject(
                         SystemId.INFORMATION_SCHEMA_DB_ID, TablePEntryObject.ALL_TABLES_ID));
-                short tableTypeId = provider.getTypeIdByName(PrivilegeTypes.TABLE.name());
-                ActionSet selectAction = analyzeActionSet(tableTypeId, Arrays.asList(PrivilegeTypes.TableActions.SELECT.name()));
+                short tableTypeId = provider.getTypeIdByName(PrivilegeType.TABLE.name());
+                ActionSet selectAction = analyzeActionSet(tableTypeId, Arrays.asList(PrivilegeType.TableAction.SELECT.name()));
                 rolePrivilegeCollection.grant(tableTypeId, selectAction, object, false);
             }
 
@@ -190,7 +190,7 @@ public class PrivilegeManager {
 
     // called by initBuiltinRolesAndUsers()
     private void initPrivilegeCollecionAllObjects(
-            PrivilegeCollection collection, PrivilegeTypes type, List<String> actionList) throws PrivilegeException {
+            PrivilegeCollection collection, PrivilegeType type, List<String> actionList) throws PrivilegeException {
         short typeId = analyzeType(type.name());
         ActionSet actionSet = analyzeActionSet(typeId, actionList);
         List<PEntryObject> objects = new ArrayList<>();
@@ -198,7 +198,7 @@ public class PrivilegeManager {
             case TABLE:
                 objects.add(provider.generateObject(
                         type.name(),
-                        Arrays.asList(type.getPlural(), PrivilegeTypes.DATABASE.getPlural()),
+                        Arrays.asList(type.getPlural(), PrivilegeType.DATABASE.getPlural()),
                         null,
                         null,
                         globalStateMgr));
@@ -542,7 +542,7 @@ public class PrivilegeManager {
     }
 
     public static boolean checkSystemAction(
-            ConnectContext context, PrivilegeTypes.SystemActions action) {
+            ConnectContext context, PrivilegeType.SystemAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
@@ -555,7 +555,7 @@ public class PrivilegeManager {
 
 
     public static boolean checkTableAction(
-            ConnectContext context, String db, String table, PrivilegeTypes.TableActions action) {
+            ConnectContext context, String db, String table, PrivilegeType.TableAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
@@ -566,7 +566,7 @@ public class PrivilegeManager {
         }
     }
 
-    public static boolean checkDbAction(ConnectContext context, String db, PrivilegeTypes.DbActions action) {
+    public static boolean checkDbAction(ConnectContext context, String db, PrivilegeType.DbAction action) {
         PrivilegeManager manager = context.getGlobalStateMgr().getPrivilegeManager();
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
@@ -586,19 +586,19 @@ public class PrivilegeManager {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             // 1. check for any action in db
             PEntryObject dbObject = manager.provider.generateObject(
-                    PrivilegeTypes.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
-            short dbTypeId = manager.analyzeType(PrivilegeTypes.DATABASE.name());
+                    PrivilegeType.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
+            short dbTypeId = manager.analyzeType(PrivilegeType.DATABASE.name());
             if (manager.provider.checkAnyAction(dbTypeId, dbObject, collection)) {
                 return true;
             }
             // 2. check for any action in any table in this db
             PEntryObject allTableInDbObject = manager.provider.generateObject(
-                    PrivilegeTypes.TABLE.name(),
-                    Arrays.asList(PrivilegeTypes.TABLE.getPlural()),
-                    PrivilegeTypes.DATABASE.name(),
+                    PrivilegeType.TABLE.name(),
+                    Arrays.asList(PrivilegeType.TABLE.getPlural()),
+                    PrivilegeType.DATABASE.name(),
                     db,
                     manager.globalStateMgr);
-            short tableTypeId = manager.analyzeType(PrivilegeTypes.TABLE.name());
+            short tableTypeId = manager.analyzeType(PrivilegeType.TABLE.name());
             return manager.provider.checkAnyAction(tableTypeId, allTableInDbObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
@@ -614,8 +614,8 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = manager.mergePrivilegeCollection(context);
             PEntryObject tableObject = manager.provider.generateObject(
-                    PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
-            short tableTypeId = manager.analyzeType(PrivilegeTypes.TABLE.name());
+                    PrivilegeType.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
+            short tableTypeId = manager.analyzeType(PrivilegeType.TABLE.name());
             return manager.provider.checkAnyAction(tableTypeId, tableObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
@@ -623,39 +623,39 @@ public class PrivilegeManager {
         }
     }
 
-    protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeTypes.SystemActions action)
+    protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeType.SystemAction action)
             throws PrivilegeException {
-        short systemTypeId = analyzeType(PrivilegeTypes.SYSTEM.name());
+        short systemTypeId = analyzeType(PrivilegeType.SYSTEM.name());
         Action want = provider.getAction(systemTypeId, action.name());
         return provider.check(systemTypeId, want, null, collection);
     }
 
     protected boolean checkTableAction(
-            PrivilegeCollection collection, String db, String table, PrivilegeTypes.TableActions action)
+            PrivilegeCollection collection, String db, String table, PrivilegeType.TableAction action)
             throws PrivilegeException {
-        short tableTypeId = analyzeType(PrivilegeTypes.TABLE.name());
+        short tableTypeId = analyzeType(PrivilegeType.TABLE.name());
         Action want = provider.getAction(tableTypeId, action.name());
         PEntryObject object = provider.generateObject(
-                PrivilegeTypes.TABLE.name(), Arrays.asList(db, table), globalStateMgr);
+                PrivilegeType.TABLE.name(), Arrays.asList(db, table), globalStateMgr);
         return provider.check(tableTypeId, want, object, collection);
     }
 
-    protected boolean checkDbAction(PrivilegeCollection collection, String db, PrivilegeTypes.DbActions action)
+    protected boolean checkDbAction(PrivilegeCollection collection, String db, PrivilegeType.DbAction action)
             throws PrivilegeException {
-        short dbTypeId = analyzeType(PrivilegeTypes.DATABASE.name());
+        short dbTypeId = analyzeType(PrivilegeType.DATABASE.name());
         Action want = provider.getAction(dbTypeId, action.name());
         PEntryObject object = provider.generateObject(
-                PrivilegeTypes.DATABASE.name(), Arrays.asList(db), globalStateMgr);
+                PrivilegeType.DATABASE.name(), Arrays.asList(db), globalStateMgr);
         return provider.check(dbTypeId, want, object, collection);
     }
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
         try {
             PrivilegeCollection collection = mergePrivilegeCollection(context);
-            String typeStr = PrivilegeTypes.USER.toString();
+            String typeStr = PrivilegeType.USER.toString();
             short typeId = analyzeType(typeStr);
             PEntryObject object = provider.generateUserObject(typeStr, impersonateUser, globalStateMgr);
-            Action want = provider.getAction(typeId, PrivilegeTypes.UserActions.IMPERSONATE.toString());
+            Action want = provider.getAction(typeId, PrivilegeType.UserAction.IMPERSONATE.toString());
             return provider.check(typeId, want, object, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception in canExecuteAs() user[{}]", impersonateUser, e);
@@ -667,7 +667,7 @@ public class PrivilegeManager {
         try {
             PrivilegeCollection collection = mergePrivilegeCollection(context);
             // check for GRANT or WITH GRANT OPTION in the specific type
-            return checkSystemAction(collection, PrivilegeTypes.SystemActions.GRANT)
+            return checkSystemAction(collection, PrivilegeType.SystemAction.GRANT)
                     || provider.allowGrant(type, wants, objects, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when allowGrant", e);
