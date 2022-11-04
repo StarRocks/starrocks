@@ -52,8 +52,8 @@ PROPERTIES ("key"="value", ...);
 | **属性**               | **必选** | **说明**                                                     |
 | ---------------------- | -------- | ------------------------------------------------------------ |
 | type                   | 是       | 数据源类型，取值为 `iceberg`。                                |
-| starrocks.catalog.type | 是       | Iceberg 中 catalog 的类型。使用 Hive metastore 则需要在 Iceberg 中配置 HiveCatalog， 设置该参数为 `HIVE`。 |
-| hive.metastore.uris    | 是       | Hive metastore 的 URI。格式为`thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
+| iceberg.catalog.type | 是       | Iceberg 中 catalog 的类型。使用 Hive metastore 则需要在 Iceberg 中配置 HiveCatalog， 设置该参数为 `HIVE`。 |
+| iceberg.catalog.hive.metastore.uris    | 是       | Hive metastore 的 URI。格式为`thrift://<Hive metastore的IP地址>:<端口号>`，端口号默认为 9083。 |
 
 #### 自定义元数据服务
 
@@ -66,7 +66,7 @@ PROPERTIES ("key"="value", ...);
 | **属性**               | **必选** | **说明**                                                     |
 | ---------------------- | -------- | ------------------------------------------------------------ |
 | type                   | 是       | 数据源类型，取值为 `iceberg`。                                |
-| starrocks.catalog.type | 是       | Iceberg 中 catalog 的类型。使用自定义元数据服务则需要在 Iceberg 中配置 custom catalog，设置该参数为 `CUSTOM`。 |
+| iceberg.catalog.type   | 是       | Iceberg 中 catalog 的类型。使用自定义元数据服务则需要在 Iceberg 中配置 custom catalog，设置该参数为 `CUSTOM`。 |
 | iceberg.catalog-impl   | 是       | Custom catalog 的全限定类名。FE 会根据该类名查找开发的 custom catalog。如果您在 custom catalog 中自定义了配置项，且希望在查询外部数据时这些配置项能生效，您可以在创建 Iceberg catalog 时将这些配置项以键值对的形式添加到 SQL 语句的 `PROPERTIES` 中。 |
 
 ## 元数据同步
