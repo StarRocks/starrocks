@@ -274,10 +274,14 @@ public class AuthUpgraderTest {
                 true,
                 "create user globalUsageResourceUser",
                 "GRANT usage_priv on resource * TO globalUsageResourceUser",
+                "create user globalUsageResourceUser1",
+                "GRANT usage_priv on * TO globalUsageResourceUser1",
                 "create user oneUsageResourceUser",
                 "GRANT usage_priv on resource hive0 TO oneUsageResourceUser",
                 "create role globalUsageResourceRole",
                 "GRANT usage_priv on resource * TO role globalUsageResourceRole",
+                "create role globalUsageResourceRole1",
+                "GRANT usage_priv on * TO role globalUsageResourceRole1",
                 "create role oneUsageResourceRole",
                 "GRANT usage_priv on resource hive0 TO role oneUsageResourceRole");
         // check twice, the second time is as follower
@@ -285,16 +289,17 @@ public class AuthUpgraderTest {
             if (i == 1) {
                 replayUpgrade(image);
             }
-            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(
-                    "globalUsageResourceUser", "%"));
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("globalUsageResourceUser", "%"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
-            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(
-                    "oneUsageResourceUser", "%"));
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("globalUsageResourceUser1", "%"));
+            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("oneUsageResourceUser", "%"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
 
             ctx.setCurrentUserIdentity(createUserByRole("globalUsageResourceRole"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
-
+            ctx.setCurrentUserIdentity(createUserByRole("globalUsageResourceRole1"));
+            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
             ctx.setCurrentUserIdentity(createUserByRole("oneUsageResourceRole"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
         }
