@@ -64,6 +64,9 @@ public class PrivilegeManagerTest {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
         globalStateMgr.getPrivilegeManager().initBuiltinRolesAndUsers();
         starRocksAssert.getCtx().setRemoteIP("localhost");
+        String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
+                "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
+        starRocksAssert.withResource(createResourceStmt);
 
         CreateUserStmt createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(
                 "create user test_user", ctx);
@@ -490,6 +493,13 @@ public class PrivilegeManagerTest {
         // 8. add invalidate entry: bad impersonate user
         objects = Arrays.asList(new UserPEntryObject(UserIdentity.createAnalyzedUserIdentWithIp("bad", "%")));
         manager.grantToUser(grantUserStmt.getTypeId(), grantUserStmt.getActionList(), objects, false, testUser);
+        // 9. add valid resource
+        sql = "grant usage on resource 'hive0' to test_user";
+        GrantPrivilegeStmt grantResourceStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        manager.grant(grantResourceStmt);
+        // 10. add invalidate entry: bad resource name
+        objects = Arrays.asList(new ResourcePEntryObject("bad_resource"));
+        manager.grantToUser(grantResourceStmt.getTypeId(), grantResourceStmt.getActionList(), objects, false, testUser);
 
         // check before clean up:
         System.out.println(GsonUtils.GSON.toJson(manager.userToPrivilegeCollection));
@@ -499,6 +509,8 @@ public class PrivilegeManagerTest {
                 typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size();
         int numUserPEntires = manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantUserStmt.getTypeId()).size();
+        int numResourcePEntires = manager.userToPrivilegeCollection.get(testUser).
+                typeToPrivilegeEntryList.get(grantResourceStmt.getTypeId()).size();
 
         manager.removeInvalidObject();
 
@@ -510,6 +522,8 @@ public class PrivilegeManagerTest {
                 typeToPrivilegeEntryList.get(grantDbStmt.getTypeId()).size());
         Assert.assertEquals(numUserPEntires - 1, manager.userToPrivilegeCollection.get(testUser).
                 typeToPrivilegeEntryList.get(grantUserStmt.getTypeId()).size());
+        Assert.assertEquals(numResourcePEntires - 1, manager.userToPrivilegeCollection.get(testUser).
+                typeToPrivilegeEntryList.get(grantResourceStmt.getTypeId()).size());
     }
 
     @Test

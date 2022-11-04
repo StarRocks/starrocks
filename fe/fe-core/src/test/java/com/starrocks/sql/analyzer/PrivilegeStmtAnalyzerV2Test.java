@@ -417,6 +417,24 @@ public class PrivilegeStmtAnalyzerV2Test {
     public void testResourceException() throws Exception {
         try {
             UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on all resources in all databases to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for resource! only support ON ALL RESOURCES"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on resource db.resource to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
                     "grant alter on resource 'not_exists' to test_user", ctx);
             Assert.fail();
         } catch (Exception e) {
