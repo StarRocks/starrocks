@@ -1162,9 +1162,9 @@ TEST_F(CacheTest, testPartialHit) {
 TEST_F(CacheTest, testTicketChecker) {
     auto test_func1 = [](int64_t id, int n) {
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
-        ASSERT_FALSE(ticket_checker->are_all_ready(id));
         for (auto i = 0; i < n; ++i) {
             ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
         }
         for (auto i = 0; i < n; ++i) {
             ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
@@ -1177,9 +1177,9 @@ TEST_F(CacheTest, testTicketChecker) {
 
     auto test_func2 = [](int64_t id, int n) {
         auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
-        ASSERT_FALSE(ticket_checker->are_all_ready(id));
         for (auto i = 0; i < n; ++i) {
             ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
             ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
         }
     };

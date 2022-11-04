@@ -3,7 +3,6 @@
 #include "exec/pipeline/scan/olap_scan_operator.h"
 
 #include "column/chunk.h"
-#include "exec/pipeline/scan/eos_chunk_source.h"
 #include "exec/pipeline/scan/olap_chunk_source.h"
 #include "exec/pipeline/scan/olap_scan_context.h"
 #include "exec/vectorized/olap_scan_node.h"
@@ -80,13 +79,8 @@ void OlapScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr OlapScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
     auto* olap_scan_node = down_cast<vectorized::OlapScanNode*>(_scan_node);
-    if (morsel->is_eos()) {
-        return std::make_shared<EOSChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                                std::move(morsel), olap_scan_node, _ctx.get());
-    } else {
-        return std::make_shared<OlapChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
-                                                 std::move(morsel), olap_scan_node, _ctx.get());
-    }
+    return std::make_shared<OlapChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
+                                             std::move(morsel), olap_scan_node, _ctx.get());
 }
 
 void OlapScanOperator::attach_chunk_source(int32_t source_index) {

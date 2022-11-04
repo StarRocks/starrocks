@@ -132,13 +132,6 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
     // we should pick up the next segment and init it.
     while (!_has_init_any_segment || _cur_segment() == nullptr || _cur_segment()->num_rows() == 0 ||
            !_segment_range_iter.has_more()) {
-        if (_has_init_any_segment && _cur_segment() != nullptr && _cur_segment()->num_rows() != 0 &&
-            !_segment_range_iter.has_more()) {
-            if (_has_emitted_eos_morsel()) {
-                auto* cur_morsel = _cur_scan_morsel();
-                return _emit_eos_morsel(cur_morsel->get_plan_node_id(), *cur_morsel->get_scan_range());
-            }
-        }
         if (!_next_segment()) {
             return nullptr;
         }
@@ -166,7 +159,7 @@ StatusOr<MorselPtr> PhysicalSplitMorselQueue::try_get() {
 
     MorselPtr morsel = std::make_unique<PhysicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(rowid_range));
-    _inc_num_splits();
+    _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -213,6 +206,11 @@ Rowset* PhysicalSplitMorselQueue::_cur_rowset() {
 Segment* PhysicalSplitMorselQueue::_cur_segment() {
     const auto& segments = _cur_rowset()->segments();
     return _segment_idx >= segments.size() ? nullptr : segments[_segment_idx].get();
+}
+
+bool PhysicalSplitMorselQueue::_is_last_split_of_current_morsel() {
+    return _has_init_any_segment && _cur_segment() != nullptr && _cur_segment()->num_rows() != 0 &&
+           !_segment_range_iter.has_more();
 }
 
 bool PhysicalSplitMorselQueue::_next_segment() {
@@ -325,12 +323,6 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     // or all the key ranges of the current tablet has been finished,
     // we should pick up the next tablet and init it.
     while (!_has_init_any_tablet || _segment_group == nullptr || _cur_tablet_finished()) {
-        if (_has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished()) {
-            if (!_has_emitted_eos_morsel()) {
-                auto* cur_morsel = _cur_scan_morsel();
-                return _emit_eos_morsel(cur_morsel->get_plan_node_id(), *cur_morsel->get_scan_range());
-            }
-        }
         if (!_next_tablet()) {
             return nullptr;
         }
@@ -428,7 +420,7 @@ StatusOr<MorselPtr> LogicalSplitMorselQueue::try_get() {
     auto* scan_morsel = down_cast<ScanMorsel*>(_morsels[_tablet_idx].get());
     auto morsel = std::make_unique<LogicalSplitScanMorsel>(
             scan_morsel->get_plan_node_id(), *(scan_morsel->get_scan_range()), std::move(short_key_ranges));
-    _inc_num_splits();
+    _inc_num_splits(_is_last_split_of_current_morsel());
     return morsel;
 }
 
@@ -636,6 +628,10 @@ ShortKeyIndexGroupIterator LogicalSplitMorselQueue::_upper_bound_ordinal(const v
 
     auto end_iter = _segment_group->upper_bound(index_key);
     return end_iter;
+}
+
+bool LogicalSplitMorselQueue::_is_last_split_of_current_morsel() {
+    return _has_init_any_tablet && _segment_group != nullptr && _cur_tablet_finished();
 }
 
 MorselQueuePtr create_empty_morsel_queue() {

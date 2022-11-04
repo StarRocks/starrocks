@@ -42,7 +42,6 @@ class Range;
 namespace pipeline {
 
 class Morsel;
-class EOSMorsel;
 using MorselPtr = std::unique_ptr<Morsel>;
 using Morsels = std::vector<MorselPtr>;
 class MorselQueue;
@@ -72,9 +71,6 @@ public:
     // should be read out and merged with the cache result, here from_version is cached version.
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
-
-    virtual bool is_eos() const { return false; }
-
 private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
@@ -106,14 +102,6 @@ private:
     std::unique_ptr<TScanRange> _scan_range;
     int64_t _tablet_id = 0;
     int64_t _version = 0;
-};
-// the last morsel to be split out for a ScanMorsel, it used to create EOSChunkSource. EOSMorsel
-// is used to indicate that morsel splitting is done and the exact number of EOS chunks would
-// be known to ScanOperator, so the ScanOperator can count down the EOS chunks.
-class EOSMorsel final : public ScanMorsel {
-public:
-    using ScanMorsel::ScanMorsel;
-    bool is_eos() const override { return true; }
 };
 
 class PhysicalSplitScanMorsel final : public ScanMorsel {
@@ -249,40 +237,13 @@ public:
     void set_ticket_checker(const query_cache::TicketCheckerPtr& ticket_checker) { _ticket_checker = ticket_checker; }
 
 protected:
-    template <typename T>
-    auto _use_ticket_checker(std::function<T(query_cache::TicketCheckerPtr& ticket_checker, int64_t)> func,
-                             T default_value) {
+    void _inc_num_splits(bool is_last) {
         if (_ticket_checker == nullptr) {
-            return default_value;
-        } else {
-            DCHECK(0 <= _tablet_idx && _tablet_idx < _tablets.size());
-            auto tablet_id = _tablets[_tablet_idx]->tablet_id();
-            return func(_ticket_checker, tablet_id);
+            return;
         }
-    }
-
-    int _inc_num_splits() {
-        return _use_ticket_checker<int>(
-                [](query_cache::TicketCheckerPtr& ticket_checker, int64_t tablet_id) {
-                    ticket_checker->enter(tablet_id, false);
-                    return 0;
-                },
-                0);
-    }
-
-    MorselPtr _emit_eos_morsel(int32_t plan_node_id, const TScanRange& scan_range) {
-        return _use_ticket_checker<MorselPtr>(
-                [&](query_cache::TicketCheckerPtr& ticket_checker, int64_t tablet_id) {
-                    ticket_checker->enter(tablet_id, true);
-                    return std::make_unique<EOSMorsel>(plan_node_id, scan_range);
-                },
-                nullptr);
-    }
-
-    bool _has_emitted_eos_morsel() {
-        return _use_ticket_checker<bool>([](query_cache::TicketCheckerPtr& ticket_checker,
-                                            int64_t tablet_id) { return ticket_checker->are_all_ready(tablet_id); },
-                                         true);
+        DCHECK(0 <= _tablet_idx && _tablet_idx < _tablets.size());
+        auto tablet_id = _tablets[_tablet_idx]->tablet_id();
+        _ticket_checker->enter(tablet_id, is_last);
     }
 
     ScanMorsel* _cur_scan_morsel() { return down_cast<ScanMorsel*>(_morsels[_tablet_idx].get()); }
@@ -321,6 +282,7 @@ public:
 private:
     rowid_t _lower_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower) const;
     rowid_t _upper_bound_ordinal(Segment* segment, const vectorized::SeekTuple& key, bool lower, rowid_t end) const;
+    bool _is_last_split_of_current_morsel();
 
     Rowset* _cur_rowset();
     // Return nullptr, when _segment_idx exceeds the segments of the current rowset.
@@ -395,6 +357,7 @@ private:
 
     ShortKeyIndexGroupIterator _lower_bound_ordinal(const vectorized::SeekTuple& key, bool lower) const;
     ShortKeyIndexGroupIterator _upper_bound_ordinal(const vectorized::SeekTuple& key, bool lower) const;
+    bool _is_last_split_of_current_morsel();
 
 private:
     std::mutex _mutex;
