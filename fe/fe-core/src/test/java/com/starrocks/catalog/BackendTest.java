@@ -21,13 +21,18 @@
 
 package com.starrocks.catalog;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendHbResponse;
+import com.starrocks.system.HeartbeatResponse;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
+import mockit.Expectations;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -231,5 +236,86 @@ public class BackendTest {
         BackendHbResponse hbResponse = new BackendHbResponse();
         boolean isChanged = be.handleHbResponse(hbResponse, false);
         Assert.assertTrue(isChanged);
+    }
+
+    @Test
+    public void testHbStatusAliveChanged() {
+
+        class TestCase {
+            final boolean isReplay;
+
+            final HeartbeatResponse.HbStatus responseStatus;
+            final HeartbeatResponse.AliveStatus aliveStatus;
+            final boolean nodeAlive;
+
+            final boolean expectedNeedSync;
+            final boolean expectedNeedNotifyCoordinatorMonitor;
+            final boolean expectedAlive;
+
+            public TestCase(boolean isReplay,
+                            HeartbeatResponse.HbStatus responseStatus, HeartbeatResponse.AliveStatus aliveStatus,
+                            boolean nodeAlive,
+                            boolean expectedNeedSync, boolean expectedNeedNotifyCoordinatorMonitor,
+                            boolean expectedAlive) {
+                this.isReplay = isReplay;
+                this.responseStatus = responseStatus;
+                this.aliveStatus = aliveStatus;
+                this.nodeAlive = nodeAlive;
+                this.expectedNeedSync = expectedNeedSync;
+                this.expectedNeedNotifyCoordinatorMonitor = expectedNeedNotifyCoordinatorMonitor;
+                this.expectedAlive = expectedAlive;
+            }
+        }
+
+        BackendHbResponse hbResponse = new BackendHbResponse();
+        Backend node = new Backend();
+        node.setBrpcPort(hbResponse.getBrpcPort()); // Don't return needSync by different BrpcPort.
+        CoordinatorMonitor coordinatorMonitor = CoordinatorMonitor.getInstance();
+
+        List<TestCase> testCases = ImmutableList.of(
+                new TestCase(false, HeartbeatResponse.HbStatus.BAD, null, true, true, true, false),
+                new TestCase(false, HeartbeatResponse.HbStatus.BAD, null, false, true, false, false),
+                new TestCase(false, HeartbeatResponse.HbStatus.OK, null, true, false, false, true),
+                new TestCase(false, HeartbeatResponse.HbStatus.OK, null, false, true, false, true),
+
+                new TestCase(true, HeartbeatResponse.HbStatus.BAD, null, true, false, true, false),
+                new TestCase(true, HeartbeatResponse.HbStatus.BAD, null, false, false, false, false),
+                new TestCase(true, HeartbeatResponse.HbStatus.OK, null, true, false, false, true),
+                new TestCase(true, HeartbeatResponse.HbStatus.OK, null, false, false, false, true),
+
+                new TestCase(true, HeartbeatResponse.HbStatus.BAD, HeartbeatResponse.AliveStatus.NOT_ALIVE, true, false, true, false),
+                new TestCase(true, HeartbeatResponse.HbStatus.BAD, HeartbeatResponse.AliveStatus.NOT_ALIVE, false, false, false, false),
+                new TestCase(true, HeartbeatResponse.HbStatus.BAD, HeartbeatResponse.AliveStatus.ALIVE, true, false, false, true),
+                new TestCase(true, HeartbeatResponse.HbStatus.BAD, HeartbeatResponse.AliveStatus.ALIVE, false, false, false, true),
+                new TestCase(true, HeartbeatResponse.HbStatus.OK, HeartbeatResponse.AliveStatus.ALIVE, true, false, false, true),
+                new TestCase(true, HeartbeatResponse.HbStatus.OK, HeartbeatResponse.AliveStatus.ALIVE, false, false, false, true)
+
+        );
+
+        int prevHeartbeatRetryTimes = Config.heartbeat_retry_times;
+        try {
+            Config.heartbeat_retry_times = 0;
+
+            long nextNodeId = 0L;
+            for (TestCase tc : testCases) {
+                hbResponse.setStatus(tc.responseStatus);
+                hbResponse.aliveStatus = tc.aliveStatus;
+                node.setId(nextNodeId++);
+                node.setAlive(tc.nodeAlive);
+                new Expectations(coordinatorMonitor) {
+                    {
+                        coordinatorMonitor.addDeadBackend(node.getId());
+                        times = tc.expectedNeedNotifyCoordinatorMonitor ? 1 : 0;
+                    }
+                };
+                boolean needSync = node.handleHbResponse(hbResponse, tc.isReplay);
+                if (!tc.isReplay) { // Only check needSync for the FE leader.
+                    Assert.assertEquals("nodeId: " + node.getId(), tc.expectedNeedSync, needSync);
+                }
+                Assert.assertEquals("nodeId: " + node.getId(), tc.expectedAlive, node.isAlive());
+            }
+        } finally {
+            Config.heartbeat_retry_times = prevHeartbeatRetryTimes;
+        }
     }
 }
