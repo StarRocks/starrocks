@@ -1120,6 +1120,8 @@ public class SchemaChangeHandler extends AlterHandler {
                     return null;
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
                     return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                    return null;
                 }
             }
 
@@ -1238,6 +1240,11 @@ public class SchemaChangeHandler extends AlterHandler {
             TWriteQuorumType writeQuorum = WriteQuorum
                     .findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
             if (writeQuorum == olapTable.writeQuorum()) {
+                return;
+            }
+        } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
+            metaValue = Boolean.parseBoolean(properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE));
+            if (metaValue == olapTable.enableReplicatedStorage()) {
                 return;
             }
         } else {
