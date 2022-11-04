@@ -3226,7 +3226,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (asyncRefreshContext.getTimeUnit() == null) {
                 // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
                 Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(stmt.getQueryStatement());
-                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isOlapTable())) {
+                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isLocalTable())) {
                     throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
                             "external table");
                 }
