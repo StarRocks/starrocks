@@ -414,7 +414,7 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
         VLOG_ROW << "DataStreamRecvr no new data, stop unpluging";
         return Status::OK();
     }
-    auto defer_op = [&]() {
+    DeferOp defer_op([&]() {
         auto* closure = item.closure;
         if (closure != nullptr) {
 #ifndef BE_TEST
@@ -425,24 +425,17 @@ Status DataStreamRecvr::PipelineSenderQueue::get_chunk(vectorized::Chunk** chunk
             closure->Run();
             chunk_queue_state.blocked_closure_num--;
         }
-    };
+    });
 
     if (item.chunk_ptr == nullptr) {
         ChunkUniquePtr chunk_ptr = std::make_unique<vectorized::Chunk>();
         faststring uncompressed_buffer;
-        auto status = _deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer);
-        if (!status.ok()) {
-            // closure must be run immediately if errors occur.
-            defer_op();
-            LOG(ERROR) << "Deserialize error but should defer to running closure.";
-            return status;
-        }
+        RETURN_IF_ERROR(_deserialize_chunk(item.pchunk, chunk_ptr.get(), &uncompressed_buffer));
         *chunk = chunk_ptr.release();
     } else {
         *chunk = item.chunk_ptr.release();
     }
     VLOG_ROW << "DataStreamRecvr fetched #rows=" << (*chunk)->num_rows();
-    defer_op();
 
     _total_chunks--;
     _recvr->_num_buffered_bytes -= item.chunk_bytes;

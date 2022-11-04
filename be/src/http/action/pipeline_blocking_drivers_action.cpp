@@ -29,11 +29,13 @@ struct DriverInfo {
     bool is_fragment_cancelled;
     std::string fragment_status;
 
-    DriverInfo(int32_t driver_id, pipeline::DriverState state, std::string&& driver_desc, bool cancelled, std::string status)
+    DriverInfo(int32_t driver_id, pipeline::DriverState state, std::string&& driver_desc, bool cancelled,
+               std::string status)
             : driver_id(driver_id),
               state(state),
               driver_desc(std::move(driver_desc)),
-              is_fragment_cancelled(cancelled), fragment_status(std::move(status)) {}
+              is_fragment_cancelled(cancelled),
+              fragment_status(std::move(status)) {}
 };
 
 void PipelineBlockingDriversAction::handle(HttpRequest* req) {
