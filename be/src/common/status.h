@@ -294,15 +294,12 @@ inline const Status& to_status(const StatusOr<T>& st) {
 #define AS_STRING_INTERNAL(x) #x
 #endif
 
-#define RETURN_IF_ERROR_INTERNAL(stmt)                                                                          \
-    do {                                                                                                        \
-        auto&& status__ = (stmt);                                                                               \
-        if (UNLIKELY(!status__.ok())) {                                                                         \
-            auto status___ = to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
-            std::string msg = status___.detailed_message().to_string();                                         \
-            LOG(ERROR) << msg;                                                                                  \
-            return status___;                                                                                   \
-        }                                                                                                       \
+#define RETURN_IF_ERROR_INTERNAL(stmt)                                                                \
+    do {                                                                                              \
+        auto&& status__ = (stmt);                                                                     \
+        if (UNLIKELY(!status__.ok())) {                                                               \
+            return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+        }                                                                                             \
     } while (false)
 
 #if defined(ENABLE_STATUS_FAILED)
