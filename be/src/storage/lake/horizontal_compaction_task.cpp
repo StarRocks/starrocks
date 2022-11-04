@@ -18,7 +18,7 @@ namespace starrocks::lake {
 
 HorizontalCompactionTask::~HorizontalCompactionTask() = default;
 
-Status HorizontalCompactionTask::execute() {
+Status HorizontalCompactionTask::execute(Stats* stats) {
     ASSIGN_OR_RETURN(auto tablet_schema, _tablet->get_schema());
     const KeysType keys_type = tablet_schema->keys_type();
     if (keys_type == PRIMARY_KEYS) {
@@ -89,7 +89,14 @@ Status HorizontalCompactionTask::execute() {
     op_compaction->mutable_output_rowset()->set_num_rows(writer->num_rows());
     op_compaction->mutable_output_rowset()->set_data_size(writer->data_size());
     op_compaction->mutable_output_rowset()->set_overlapped(false);
-    return _tablet->put_txn_log(std::move(txn_log));
+    Status st = _tablet->put_txn_log(std::move(txn_log));
+    if (st.ok() && stats != nullptr) {
+        stats->input_bytes.fetch_add(num_size, std::memory_order_relaxed);
+        stats->input_rows.fetch_add(num_rows, std::memory_order_relaxed);
+        stats->output_bytes.fetch_add(writer->data_size(), std::memory_order_relaxed);
+        stats->output_rows.fetch_add(writer->num_rows(), std::memory_order_relaxed);
+    }
+    return st;
 }
 
 } // namespace starrocks::lake
