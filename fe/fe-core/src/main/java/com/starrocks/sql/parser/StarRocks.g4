@@ -1702,6 +1702,7 @@ literalExpression
     | string                                                                              #stringLiteral
     | interval                                                                            #intervalLiteral
     | unitBoundary                                                                        #unitBoundaryLiteral
+    | binary                                                                              #binaryLiteral
     ;
 
 functionCall
@@ -1942,6 +1943,11 @@ string
     | DOUBLE_QUOTED_TEXT
     ;
 
+binary
+    : BINARY_SINGLE_QUOTED_TEXT
+    | BINARY_DOUBLE_QUOTED_TEXT
+    ;
+
 comparisonOperator
     : EQ | NEQ | LT | LTE | GT | GTE | EQ_FOR_NULL
     ;
@@ -2013,6 +2019,7 @@ baseType
     | HLL
     | PERCENTILE
     | JSON
+    | VARBINARY typeParameter?
     ;
 
 decimalType

@@ -117,6 +117,10 @@ FunctionContext::TypeDesc AnyValUtil::column_type_to_type_desc(const TypeDescrip
         break;
     case TYPE_FUNCTION:
         out.type = TYPE_FUNCTION;
+    case TYPE_VARBINARY:
+        out.type = TYPE_VARBINARY;
+        out.len = type.len;
+        break;
     default:
         DCHECK(false) << "Unknown type: " << type;
     }

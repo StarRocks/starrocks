@@ -92,6 +92,8 @@ template <>
 inline constexpr bool isArithmeticPT<TYPE_PERCENTILE> = false;
 template <>
 inline constexpr bool isArithmeticPT<TYPE_JSON> = false;
+template <>
+inline constexpr bool isArithmeticPT<TYPE_VARBINARY> = false;
 
 template <PrimitiveType primitive_type>
 constexpr bool isSlicePT = false;
@@ -101,6 +103,9 @@ inline constexpr bool isSlicePT<TYPE_CHAR> = true;
 
 template <>
 inline constexpr bool isSlicePT<TYPE_VARCHAR> = true;
+
+template <>
+inline constexpr bool isSlicePT<TYPE_VARBINARY> = true;
 
 template <PrimitiveType primitive_type>
 struct RunTimeTypeTraits {};
@@ -235,6 +240,12 @@ template <>
 struct RunTimeTypeTraits<TYPE_JSON> {
     using CppType = JsonValue*;
     using ColumnType = JsonColumn;
+};
+
+template <>
+struct RunTimeTypeTraits<TYPE_VARBINARY> {
+    using CppType = Slice;
+    using ColumnType = BinaryColumn;
 };
 
 template <PrimitiveType Type>

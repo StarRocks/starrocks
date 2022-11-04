@@ -157,6 +157,7 @@ vectorized_functions = [
 
     [10312, "hex", "VARCHAR", ['BIGINT'], "StringFunctions::hex_int"],
     [10313, "hex", "VARCHAR", ['VARCHAR'], "StringFunctions::hex_string"],
+    [10313, "hex", "VARCHAR", ['VARBINARY'], "StringFunctions::hex_string"],
     [10314, "unhex", "VARCHAR", ['VARCHAR'], "StringFunctions::unhex"],
     [10315, "sm3", "VARCHAR", ['VARCHAR'], "StringFunctions::sm3"],
 

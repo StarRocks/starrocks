@@ -165,17 +165,18 @@ template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_OBJECT> {
     using CppType = Slice;
 };
-
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_PERCENTILE> {
     using CppType = Slice;
 };
-
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_JSON> {
     using CppType = Slice;
 };
-
+template <>
+struct CppTypeTraits<OLAP_FIELD_TYPE_VARBINARY> {
+    using CppType = Slice;
+};
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_ARRAY> {
     using CppType = Collection;

@@ -199,6 +199,7 @@ public:
         _data[OLAP_FIELD_TYPE_DECIMAL64] = TYPE_DECIMAL64;
         _data[OLAP_FIELD_TYPE_DECIMAL128] = TYPE_DECIMAL128;
         _data[OLAP_FIELD_TYPE_JSON] = TYPE_JSON;
+        _data[OLAP_FIELD_TYPE_VARBINARY] = TYPE_VARBINARY;
     }
     PrimitiveType get_primitive_type(FieldType field_type) { return _data[field_type]; }
 

@@ -1065,7 +1065,7 @@ public class FunctionSet {
         for (Type t : Type.getSupportedTypes()) {
             // null/char/time is handled through type promotion
             // TODO: array/json/pseudo is not supported yet
-            if (t.isNull() || t.isChar() || t.isTime() || t.isArrayType() || t.isJsonType() || t.isPseudoType() || t.isFunctionType()) {
+            if (!t.canAggregateArguments()) {
                 continue;
             }
             addBuiltin(AggregateFunction.createAnalyticBuiltin(

@@ -311,6 +311,23 @@ public class AnalyzeSingleTest {
     }
 
     @Test
+    public void testBinaryLiteral() {
+        QueryStatement statement = (QueryStatement) analyzeSuccess("select x'0ABC' ");
+        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        statement = (QueryStatement) analyzeSuccess("select \"0ABC\" ");
+        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+        // mysql client will output binary format in the outputs.
+        statement = (QueryStatement) analyzeSuccess("select '0ABC' ");
+        Assert.assertEquals("\'0ABC\'", AST2SQL.toString(statement.getQueryRelation().getOutputExpression().get(0)));
+
+        analyzeFail("select x'0AB' ", "Binary literal must contain an even number of digits");
+        analyzeFail("select x\"0AB\" ", "Binary literal must contain an even number of digits");
+        analyzeFail("select x'0,AB' ", "Binary literal can only contain hexadecimal digits");
+        analyzeFail("select x\"0,AB\" ", "Binary literal can only contain hexadecimal digits");
+        analyzeFail("select x\"0AX\" ", "Binary literal can only contain hexadecimal digits");
+    }
+
+    @Test
     public void testCast() {
         analyzeSuccess("select cast(v1 as varchar) from t0 group by cast(v1 as varchar)");
         analyzeSuccess("select cast(v1 as varchar) + 1 from t0 group by cast(v1 as varchar)");

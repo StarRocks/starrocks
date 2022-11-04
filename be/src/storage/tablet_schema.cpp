@@ -67,6 +67,7 @@ FieldType TabletColumn::get_field_type_by_string(const std::string& type_str) {
     if (upper_type_str == "DECIMAL64") return OLAP_FIELD_TYPE_DECIMAL64;
     if (upper_type_str == "DECIMAL128") return OLAP_FIELD_TYPE_DECIMAL128;
     if (upper_type_str == "JSON") return OLAP_FIELD_TYPE_JSON;
+    if (upper_type_str == "VARBINARY") return OLAP_FIELD_TYPE_VARBINARY;
     LOG(WARNING) << "invalid type string. [type='" << type_str << "']";
     return OLAP_FIELD_TYPE_UNKNOWN;
 }
@@ -158,6 +159,8 @@ std::string TabletColumn::get_string_by_field_type(FieldType type) {
         return "NONE";
     case OLAP_FIELD_TYPE_MAX_VALUE:
         return "MAX_VALUE";
+    case OLAP_FIELD_TYPE_VARBINARY:
+        return "VARBINARY";
     }
     return "";
 }
@@ -235,6 +238,7 @@ uint32_t TabletColumn::get_field_length_by_type(FieldType type, uint32_t string_
     case OLAP_FIELD_TYPE_HLL:
     case OLAP_FIELD_TYPE_PERCENTILE:
     case OLAP_FIELD_TYPE_JSON:
+    case OLAP_FIELD_TYPE_VARBINARY:
         return string_length + sizeof(OLAP_STRING_MAX_LENGTH);
     case OLAP_FIELD_TYPE_ARRAY:
         return string_length;

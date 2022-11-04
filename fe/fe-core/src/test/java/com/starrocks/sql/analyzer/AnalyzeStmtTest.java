@@ -35,6 +35,7 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.util.regex.Pattern;
 
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeFail;
 import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
@@ -293,16 +294,21 @@ public class AnalyzeStmtTest {
         Column kk1 = table.getColumn("kk1");
         Column kk2 = table.getColumn("kk2");
 
-        Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
-                        " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10158 and column_name = \"kk1\" " +
-                        "GROUP BY db_id, table_id, column_name " +
-                        "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
-                        "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
-                        "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
-                        "FROM column_statistics WHERE table_id = 10158 and column_name = \"kk2\" " +
-                        "GROUP BY db_id, table_id, column_name",
-                StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
+        String pattern = "SELECT cast\\(1 as INT\\), now\\(\\), db_id, table_id, column_name, sum\\(row_count\\), " +
+                "cast\\(sum\\(data_size\\) as bigint\\), hll_union_agg\\(ndv\\), sum\\(null_count\\), " +
+                " cast\\(max\\(cast\\(max as int\\(11\\)\\)\\) as string\\), cast\\(min\\(cast\\(min " +
+                "as int\\(11\\)\\)\\) as string\\) " +
+                "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk1\" " +
+                "GROUP BY db_id, table_id, column_name " +
+                "UNION ALL SELECT cast\\(1 as INT\\), now\\(\\), db_id, table_id, column_name, " +
+                "sum\\(row_count\\), " +
+                "cast\\(sum\\(data_size\\) as bigint\\), hll_union_agg\\(ndv\\), sum\\(null_count\\),  " +
+                "cast\\(max\\(cast\\(max as string\\)\\) as string\\), cast\\(min\\(cast\\(min as" +
+                " string\\)\\) as string\\) " +
+                "FROM column_statistics WHERE table_id = (\\d+) and column_name = \"kk2\" " +
+                "GROUP BY db_id, table_id, column_name";
+        String content = StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(),
+                Lists.newArrayList(kk1, kk2));
+        Assert.assertTrue(Pattern.matches(pattern, content));
     }
 }
