@@ -2819,6 +2819,9 @@ public class GlobalStateMgr {
         this.alter.replayChangeMaterializedViewRefreshScheme(log);
     }
 
+    public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
+        this.alter.replayAlterMaterializedViewProperties(opCode, log);
+    }
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler

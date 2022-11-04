@@ -281,6 +281,12 @@ public class EditLog {
                     globalStateMgr.replayChangeMaterializedViewRefreshScheme(log);
                     break;
                 }
+                case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES: {
+                    ModifyTablePropertyOperationLog log =
+                            (ModifyTablePropertyOperationLog) journal.getData();
+                    globalStateMgr.replayAlterMaterializedViewProperties(opCode, log);
+                    break;
+                }
                 case OperationType.OP_RENAME_MATERIALIZED_VIEW: {
                     RenameMaterializedViewLog log = (RenameMaterializedViewLog) journal.getData();
                     globalStateMgr.replayRenameMaterializedView(log);
@@ -1528,6 +1534,10 @@ public class EditLog {
 
     public void logMvChangeRefreshScheme(ChangeMaterializedViewRefreshSchemeLog log) {
         logEdit(OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME, log);
+    }
+
+    public void logAlterMaterializedViewProperties(ModifyTablePropertyOperationLog log) {
+        logEdit(OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES, log);
     }
 
     public void logAddUnusedShard(Set<Long> shardIds) {

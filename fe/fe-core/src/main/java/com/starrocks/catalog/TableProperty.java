@@ -123,9 +123,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                buildMvProperties();
+                break;
             default:
                 break;
         }
+        return this;
+    }
+
+    public TableProperty buildMvProperties() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(NO_TTL)));
         return this;
     }
 

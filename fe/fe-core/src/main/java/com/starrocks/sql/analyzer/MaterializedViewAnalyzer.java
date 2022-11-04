@@ -569,6 +569,19 @@ public class MaterializedViewAnalyzer {
                         }
                     }
                 }
+            } else if (statement.getModifyTablePropertiesClause() != null) {
+                TableName mvName = statement.getMvName();
+                Database db = context.getGlobalStateMgr().getDb(mvName.getDb());
+                if (db == null) {
+                    throw new SemanticException("Can not find database:" + mvName.getDb());
+                }
+                OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
+                if (table == null) {
+                    throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
+                }
+                if (!(table instanceof MaterializedView)) {
+                    throw new SemanticException(mvName.getTbl() + " is not async materialized view");
+                }
             } else {
                 throw new SemanticException("Unsupported modification for materialized view");
             }

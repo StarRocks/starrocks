@@ -15,11 +15,15 @@ public class AlterMaterializedViewStmt extends DdlStmt {
     private final String newMvName;
     private final RefreshSchemeDesc refreshSchemeDesc;
 
+    private final ModifyTablePropertiesClause modifyTablePropertiesClause;
+
     public AlterMaterializedViewStmt(TableName mvName, String newMvName,
-                                     RefreshSchemeDesc refreshSchemeDesc) {
+                                     RefreshSchemeDesc refreshSchemeDesc,
+                                     ModifyTablePropertiesClause modifyTablePropertiesClause) {
         this.mvName = mvName;
         this.newMvName = newMvName;
         this.refreshSchemeDesc = refreshSchemeDesc;
+        this.modifyTablePropertiesClause = modifyTablePropertiesClause;
     }
 
     public TableName getMvName() {
@@ -32,6 +36,10 @@ public class AlterMaterializedViewStmt extends DdlStmt {
 
     public RefreshSchemeDesc getRefreshSchemeDesc() {
         return refreshSchemeDesc;
+    }
+
+    public ModifyTablePropertiesClause getModifyTablePropertiesClause() {
+        return modifyTablePropertiesClause;
     }
 
     @Override
