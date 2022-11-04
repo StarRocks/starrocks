@@ -237,7 +237,7 @@ public class IcebergScanNode extends ScanNode {
                     target.setLength(source.fileSizeInBytes());
 
                     if (source.content() == FileContent.EQUALITY_DELETES) {
-                        source.equalityFieldIds().stream().forEach(fieldId -> {
+                        source.equalityFieldIds().forEach(fieldId -> {
                             equalityDeleteColumns.add(srIcebergTable.getIcebergTable().schema().findColumnName(fieldId));
                         });
                     }
