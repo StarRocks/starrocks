@@ -21,7 +21,6 @@
 
 package com.starrocks.http.rest;
 
-import org.apache.thrift.transport.TTransportException;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
@@ -61,6 +60,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+import org.apache.thrift.transport.TTransportException;
 import org.codehaus.jackson.map.ObjectMapper;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -285,7 +285,14 @@ public class TableQueryPlanAction extends RestBaseAction {
         tQueryPlanInfo.tablet_info = tabletInfo;
 
         // serialize TQueryPlanInfo and encode plan with Base64 to string in order to translate by json format
-        TSerializer serializer = new TSerializer();
+        // TSerializer serializer = new TSerializer();
+        TSerializer serializer;
+        try {
+            serializer = new TSerializer();
+        } catch (TTransportException e) {
+            return;
+        }
+
         String opaquedQueryPlan;
         try {
             byte[] queryPlanStream = serializer.serialize(tQueryPlanInfo);

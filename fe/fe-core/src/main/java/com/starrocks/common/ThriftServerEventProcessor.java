@@ -64,8 +64,8 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
         switch (thriftServer.getType()) {
             case THREADED:
                 // class org.apache.thrift.transport.TFramedTransport
-                Preconditions.checkState(transport instanceof TFramedTransport);
-                TFramedTransport framedTransport = (TFramedTransport) transport;
+                // Preconditions.checkState(transport instanceof TFramedTransport);
+                // TFramedTransport framedTransport = (TFramedTransport) transport;
                 // NOTE: we need patch code in TNonblockingServer, we don't use for now.
                 //  see https://issues.apache.org/jira/browse/THRIFT-1053
                 break;

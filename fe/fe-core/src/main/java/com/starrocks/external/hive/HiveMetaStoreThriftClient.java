@@ -439,7 +439,13 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                             throw new MetaException(e.toString());
                         }
                     } else {
-                        transport = new TSocket(store.getHost(), store.getPort(), clientSocketTimeout);
+                        // transport = new TSocket(store.getHost(), store.getPort(), clientSocketTimeout);
+                        try {
+                                transport = new TSocket(null, store.getHost(), store.getPort(), clientSocketTimeout);
+                        } catch (TTransportException e) {
+                            tte = e;
+                            throw new MetaException(e.toString());
+                        }
                     }
 
                     if (useSasl) {
@@ -479,7 +485,7 @@ public class HiveMetaStoreThriftClient implements IMetaStoreClient, AutoCloseabl
                         }
                     } else {
                         if (useFramedTransport) {
-                            transport = new TFramedTransport(transport);
+                            // transport = new TFramedTransport(transport);
                         }
                     }
 

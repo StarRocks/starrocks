@@ -37,4 +37,12 @@ public class ThriftServerContext implements ServerContext {
     public TNetworkAddress getClient() {
         return client;
     }
+
+    public boolean isWrapperFor(Class<?> iface) throws RuntimeException {
+        return false;
+    }
+
+    public <T>  T unwrap(java.lang.Class<T> iface) throws RuntimeException {
+        return null;
+    }
 }
