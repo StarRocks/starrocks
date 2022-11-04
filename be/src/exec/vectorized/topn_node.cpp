@@ -150,9 +150,9 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         //                                                        &_is_asc_order, &_is_null_first, _offset, _limit,
         //                                                        SIZE_OF_CHUNK_FOR_TOPN);
         // } else {
-            _chunks_sorter = std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()),
-                                                                &_is_asc_order, &_is_null_first, _offset, _limit,
-                                                                SIZE_OF_CHUNK_FOR_TOPN);
+        _chunks_sorter =
+                std::make_unique<ChunksSorterTopn>(state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order,
+                                                   &_is_null_first, _offset, _limit, SIZE_OF_CHUNK_FOR_TOPN);
         // }
 
     } else {
