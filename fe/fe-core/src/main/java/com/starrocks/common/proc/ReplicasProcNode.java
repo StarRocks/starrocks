@@ -64,11 +64,10 @@ public class ReplicasProcNode implements ProcNodeInterface {
             String compactionUrl;
             Backend backend = backendMap.get(replica.getBackendId());
             if (backend != null) {
-                metaUrl = String.format("http://%s:%d/api/meta/header/%d/%d",
+                metaUrl = String.format("http://%s:%d/api/meta/header/%d",
                         backend.getHost(),
                         backend.getHttpPort(),
-                        tabletId,
-                        replica.getSchemaHash());
+                        tabletId);
                 compactionUrl = String.format(
                         "http://%s:%d/api/compaction/show?tablet_id=%d&schema_hash=%d",
                         backend.getHost(),
