@@ -62,7 +62,7 @@ public class FileScanNodeTest {
         loadId = new TUniqueId(3, 4);
         brokerDesc = new BrokerDesc("broker0", null);
 
-        loadParallelInstanceNum = Config.load_parallel_instance_num;
+        loadParallelInstanceNum = 1;
 
         // backends
         Map<Long, Backend> idToBackendTmp = Maps.newHashMap();

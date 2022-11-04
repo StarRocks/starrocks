@@ -22,6 +22,7 @@
 package com.starrocks.common;
 
 import com.starrocks.StarRocksFE;
+import com.starrocks.system.BackendCoreStat;
 
 public class Config extends ConfigBase {
 
@@ -832,7 +833,7 @@ public class Config extends ConfigBase {
      * Parallel load fragment instance num in single host
      */
     @ConfField(mutable = true)
-    public static int load_parallel_instance_num = 1;
+    public static int load_parallel_instance_num = BackendCoreStat.getAvgNumOfHardwareCoresOfBe();
 
     /**
      * Export checker's running interval.
