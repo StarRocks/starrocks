@@ -483,11 +483,11 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     public void testCountPruneJoinByProject() throws Exception {
         String sql = "select count(*) from customer join orders on C_CUSTKEY = O_CUSTKEY";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "5:AGGREGATE (update serialize)\n" +
+        assertContains(plan, "6:AGGREGATE (update serialize)\n" +
                 "  |  output: count(*)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
-                "  4:Project\n" +
+                "  5:Project\n" +
                 "  |  <slot 1> : 1: C_CUSTKEY");
         checkTwoPhaseAgg(plan);
     }
