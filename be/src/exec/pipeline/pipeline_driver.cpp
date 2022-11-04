@@ -502,8 +502,8 @@ Status PipelineDriver::_mark_operator_finishing(OperatorPtr& op, RuntimeState* s
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] finishing operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] finishing operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_finishing_timer);
         op_state = OperatorStage::FINISHING;
@@ -519,8 +519,8 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] finished operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] finished operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_finished_timer);
         op_state = OperatorStage::FINISHED;
@@ -530,14 +530,19 @@ Status PipelineDriver::_mark_operator_finished(OperatorPtr& op, RuntimeState* st
 }
 
 Status PipelineDriver::_mark_operator_cancelled(OperatorPtr& op, RuntimeState* state) {
-    RETURN_IF_ERROR(_mark_operator_finished(op, state));
+    Status res = _mark_operator_finished(op, state);
+    if (!res.ok()) {
+        LOG(WARNING) << fmt::format("fragment_id {} driver {} cancels operator {} with finished error {}",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name(),
+                                    res.get_error_msg());
+    }
     auto& op_state = _operator_stages[op->get_id()];
     if (op_state >= OperatorStage::CANCELLED) {
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] cancelled operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     op_state = OperatorStage::CANCELLED;
     return op->set_cancelled(state);
 }
@@ -554,8 +559,8 @@ Status PipelineDriver::_mark_operator_closed(OperatorPtr& op, RuntimeState* stat
         return Status::OK();
     }
 
-    VLOG_ROW << strings::Substitute("[Driver] close operator [driver=$0] [operator=$1]", to_readable_string(),
-                                    op->get_name());
+    VLOG_ROW << strings::Substitute("[Driver] close operator [fragment_id=$0] [driver=$1] [operator=$2]",
+                                    print_id(state->fragment_instance_id()), to_readable_string(), op->get_name());
     {
         SCOPED_TIMER(op->_close_timer);
         op_state = OperatorStage::CLOSED;
