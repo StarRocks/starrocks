@@ -6,6 +6,8 @@ import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.OperationType;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -119,6 +121,10 @@ public class AuthUpgraderTest {
         StarRocksAssert starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db0");
         starRocksAssert.withDatabase("db1");
+        String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
+                "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
+        starRocksAssert.withResource(createResourceStmt);
+
         for (int i = 0; i != 2; ++ i) {
             for (int j = 0; j != 2; ++ j) {
                 String createTblStmtStr = "create table db" + i + ".tbl" + j
@@ -262,4 +268,35 @@ public class AuthUpgraderTest {
         }
     }
 
+    @Test
+    public void testResource() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user globalUsageResourceUser",
+                "GRANT usage_priv on resource * TO globalUsageResourceUser",
+                "create user oneUsageResourceUser",
+                "GRANT usage_priv on resource hive0 TO oneUsageResourceUser",
+                "create role globalUsageResourceRole",
+                "GRANT usage_priv on resource * TO role globalUsageResourceRole",
+                "create role oneUsageResourceRole",
+                "GRANT usage_priv on resource hive0 TO role oneUsageResourceRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(
+                    "globalUsageResourceUser", "%"));
+            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(
+                    "oneUsageResourceUser", "%"));
+            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+
+            ctx.setCurrentUserIdentity(createUserByRole("globalUsageResourceRole"));
+            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+
+            ctx.setCurrentUserIdentity(createUserByRole("oneUsageResourceRole"));
+            Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+        }
+    }
 }

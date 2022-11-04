@@ -38,12 +38,13 @@ public class AuthUpgrader {
     // constants used when upgrading
     private short tableTypeId;
     private short userTypeId;
+    private short resourceTypeId;
     private String tableTypeStr;
     private String dbTypeStr;
     private String userTypeStr;
+    private String resourceTypeStr;
     private List<PEntryObject> allTablesInAllDbObject;
     private ActionSet selectActionSet;
-    private ActionSet impersonateActionSet;
 
     public AuthUpgrader(
             Auth auth,
@@ -84,8 +85,10 @@ public class AuthUpgrader {
             tableTypeStr = PrivilegeType.TABLE.name();
             dbTypeStr = PrivilegeType.DATABASE.name();
             userTypeStr = PrivilegeType.USER.name();
+            resourceTypeStr = PrivilegeType.RESOURCE.name();
             tableTypeId = privilegeManager.analyzeType(tableTypeStr);
             userTypeId = privilegeManager.analyzeType(userTypeStr);
+            resourceTypeId = privilegeManager.analyzeType(resourceTypeStr);
             allTablesInAllDbObject = Arrays.asList(privilegeManager.analyzeObject(
                     tableTypeStr,
                     Arrays.asList(PrivilegeType.TABLE.getPlural(), PrivilegeType.DATABASE.getPlural()),
@@ -93,9 +96,6 @@ public class AuthUpgrader {
             selectActionSet = privilegeManager.analyzeActionSet(
                     tableTypeId,
                     Arrays.asList(PrivilegeType.TableAction.SELECT.toString()));
-            impersonateActionSet = privilegeManager.analyzeActionSet(
-                    userTypeId,
-                    Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
         } catch (PrivilegeException e) {
             throw new AuthUpgradeUnrecoveredException("should not happen", e);
         }
@@ -277,8 +277,15 @@ public class AuthUpgrader {
         }
     }
 
-    protected void upgradeUserResourcePrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection) {
-        // TODO: resource object has not implemented yet
+    protected void upgradeUserResourcePrivileges(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
+            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+        while (iterator.hasNext()) {
+            ResourcePrivEntry entry = (ResourcePrivEntry) iterator.next();
+            PrivBitSet bitSet = entry.getPrivSet();
+            for (Privilege privilege : bitSet.toPrivilegeList()) {
+                upgradeResourcePrivileges(entry.getOrigResource(), privilege, collection);
+            }
+        }
     }
 
     protected void upgradeUserImpersonate(Iterator<PrivEntry> iterator, UserPrivilegeCollection collection)
@@ -365,8 +372,19 @@ public class AuthUpgrader {
     }
 
     protected void upgradeRoleResourcePrivileges(
-            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection) {
-        // TODO: resource object has not implemented yet
+            Map<ResourcePattern, PrivBitSet> resourcePatternToPrivs, RolePrivilegeCollection collection)
+            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+        Iterator<Map.Entry<ResourcePattern, PrivBitSet>> iterator = resourcePatternToPrivs.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<ResourcePattern, PrivBitSet> entry = iterator.next();
+            ResourcePattern pattern = entry.getKey();
+            PrivBitSet bitSet = entry.getValue();
+
+            for (Privilege privilege : bitSet.toPrivilegeList()) {
+                upgradeResourcePrivileges(pattern.getResourceName(), privilege, collection);
+            }
+        }
     }
 
     protected void upgradeRoleImpersonatePrivileges(Set<UserIdentity> impersonateUsers, RolePrivilegeCollection collection)
@@ -402,6 +420,13 @@ public class AuthUpgrader {
                 break;
             }
 
+            case USAGE_PRIV: {
+                if (db.equals(TablePattern.ALL.getQuolifiedDb())) {
+                    upgradeResourcePrivileges("*", privilege, collection);
+                    break;
+                }
+            }
+
             default:
                 throw new AuthUpgradeUnrecoveredException("table privilege " + privilege + " hasn't implemented");
         }
@@ -411,7 +436,34 @@ public class AuthUpgrader {
             throws PrivilegeException {
         List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeUserObject(
                 userTypeStr, user));
+        ActionSet impersonateActionSet = privilegeManager.analyzeActionSet(
+                userTypeId,
+                Arrays.asList(PrivilegeType.UserAction.IMPERSONATE.toString()));
         collection.grant(userTypeId, impersonateActionSet, objects, false);
+    }
+
+    protected void upgradeResourcePrivileges(String name, Privilege privilege, PrivilegeCollection collection)
+            throws PrivilegeException, AuthUpgradeUnrecoveredException {
+        switch (privilege) {
+            case USAGE_PRIV: {
+                List<PEntryObject> objects;
+                if (name.equals(ResourcePattern.ALL.getResourceName())) {
+                    objects = Arrays.asList(privilegeManager.analyzeObject(
+                            resourceTypeStr, Arrays.asList(name), null, null));
+                } else {
+                    objects = Arrays.asList(privilegeManager.analyzeObject(
+                            resourceTypeStr, Arrays.asList(name)));
+                }
+                ActionSet actionSet = privilegeManager.analyzeActionSet(
+                        resourceTypeId, Arrays.asList(PrivilegeType.ResourceAction.USAGE.toString()));
+                collection.grant(resourceTypeId, actionSet, objects, false);
+                break;
+            }
+
+            default:
+                throw new AuthUpgradeUnrecoveredException("resource privilege " + privilege + " hasn't implemented");
+        }
+
     }
 
     public static class AuthUpgradeUnrecoveredException extends Exception {
