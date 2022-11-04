@@ -261,8 +261,14 @@ public class CostModel {
             Preconditions.checkState(!(join.getJoinType().isCrossJoin() || eqOnPredicates.isEmpty()),
                     "should be handled by nestloopjoin");
 
+            ConnectContext connectContext = ConnectContext.get();
+            double cboJoinCostRowWeight = 1.25d;
+            if (connectContext != null) {
+                cboJoinCostRowWeight = connectContext.getSessionVariable().getCboJoinCostRowWeight();
+            }
             return CostEstimate.of(leftStatistics.getOutputSize(context.getChildOutputColumns(0))
-                            + rightStatistics.getOutputSize(context.getChildOutputColumns(1)),
+                            + rightStatistics.getOutputSizeIncreaseRowWeight(context.getChildOutputColumns(1),
+                            cboJoinCostRowWeight),
                     rightStatistics.getOutputSize(context.getChildOutputColumns(1)), 0);
         }
 
@@ -310,7 +316,8 @@ public class CostModel {
                 cpuCost += StatsConstants.CROSS_JOIN_RIGHT_COST_PENALTY;
                 memCost += rightSize;
             }
-            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() || join.getJoinType().isAntiJoin()) {
+            if (join.getJoinType().isOuterJoin() || join.getJoinType().isSemiJoin() ||
+                    join.getJoinType().isAntiJoin()) {
                 cpuCost += leftSize;
             }
 
