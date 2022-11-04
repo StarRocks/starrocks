@@ -670,7 +670,7 @@ public class Backend implements Writable {
             } else {
                 if (isAlive.compareAndSet(true, false)) {
                     becomeDead = true;
-                    LOG.info("{} is dead due to exceed heartbeatRetryTimes", this.toString());
+                    LOG.info("{} is dead due to exceed heartbeatRetryTimes", this);
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
                 lastMissingHeartbeatTime = System.currentTimeMillis();
@@ -693,7 +693,7 @@ public class Backend implements Writable {
                 boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
                 if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
                     becomeDead = !newIsAlive;
-                    LOG.info("{} alive status is changed to {}", this.toString(), newIsAlive);
+                    LOG.info("{} alive status is changed to {}", this, newIsAlive);
                 }
                 heartbeatRetryTimes = 0;
             }
