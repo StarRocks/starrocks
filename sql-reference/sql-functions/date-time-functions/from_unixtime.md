@@ -23,7 +23,7 @@
 %s：秒。例：59，01
 ```
 
-该函数受时区影响，具体参见 [设置时区](../../../using_starrocks/timezone.md)。
+该函数受时区影响，具体参见 [设置时区](../../../administration/timezone.md)。
 
 ## 语法
 

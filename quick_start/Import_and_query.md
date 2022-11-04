@@ -270,7 +270,7 @@ SHOW ALTER TABLE ROLLUP\G
 
 当作业状态为 FINISHED，则表示作业完成。
 
-StarRocks 支持多种外部表：[MySQL 外部表](/using_starrocks/External_table.md#MySQL外部表)，[Elasticsearch 外部表](/using_starrocks/External_table.md#ElasticSearch外部表)，[Hive 外表](/using_starrocks/External_table.md#Hive外表)，[StarRocks 外部表](/using_starrocks/External_table.md#StarRocks外部表)，[Apache Iceberg 外表](/using_starrocks/External_table.md#apache-iceberg%E5%A4%96%E8%A1%A8)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
+StarRocks 支持多种外部表：[MySQL 外部表](/data_source/External_table.md#MySQL外部表)，[Elasticsearch 外部表](/data_source/External_table.md#ElasticSearch外部表)，[Hive 外表](/data_source/External_table.md#Hive外表)，[StarRocks 外部表](/data_source/External_table.md#StarRocks外部表)，[Apache Iceberg 外表](/data_source/External_table.md#apache-iceberg%E5%A4%96%E8%A1%A8)。成功创建外部表后，可通过查询外部表的方式接入其他数据源。
 
 Rollup建立完成之后可以使用desc table1 all查看表的rollup信息：
 

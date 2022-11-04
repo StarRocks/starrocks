@@ -166,7 +166,7 @@
     + 辅助命令
       + [DESCRIBE](/sql-reference/sql-statements/Utility/DESCRIBE.md)
   + 函数参考
-    + [窗口函数](/using_starrocks/Window_function.md)
+    + [窗口函数](/sql-reference/sql-functions/Window_function.md)
     + 日期函数
       + [convert_tz](/sql-reference/sql-functions/date-time-functions/convert_tz.md)
       + [curdate](/sql-reference/sql-functions/date-time-functions/curdate.md)
@@ -300,8 +300,8 @@
   + [配置参数](/administration/Configuration.md)
   + [扩容缩容](/administration/Scale_up_down.md)
   + [备份与恢复](/administration/Backup_and_restore.md)
-  + [时区](/using_starrocks/timezone.md)
-  + [文件管理器](/using_starrocks/filemanager.md)
+  + [时区](/administration/timezone.md)
+  + [文件管理器](/administration/filemanager.md)
   + 数据恢复
     + [数据删除恢复](/administration/Data_recovery.md)
     + [元数据恢复](/administration/Metadata_recovery.md)
