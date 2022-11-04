@@ -392,39 +392,39 @@ public class VariableMgr {
             switch (field.getType().getSimpleName()) {
                 case "boolean":
                     desc.setType(Type.BOOLEAN);
-                    desc.setBoolValue(field.getBoolean(obj));
+                    desc.setValue(field.getBoolean(obj));
                     break;
                 case "byte":
                     desc.setType(Type.TINYINT);
-                    desc.setIntValue(field.getByte(obj));
+                    desc.setValue(field.getByte(obj));
                     break;
                 case "short":
                     desc.setType(Type.SMALLINT);
-                    desc.setIntValue(field.getShort(obj));
+                    desc.setValue(field.getShort(obj));
                     break;
                 case "int":
                     desc.setType(Type.INT);
-                    desc.setIntValue(field.getInt(obj));
+                    desc.setValue(field.getInt(obj));
                     break;
                 case "long":
                     desc.setType(Type.BIGINT);
-                    desc.setIntValue(field.getLong(obj));
+                    desc.setValue(field.getLong(obj));
                     break;
                 case "float":
                     desc.setType(Type.FLOAT);
-                    desc.setFloatValue(field.getFloat(obj));
+                    desc.setValue(field.getFloat(obj));
                     break;
                 case "double":
                     desc.setType(Type.DOUBLE);
-                    desc.setFloatValue(field.getDouble(obj));
+                    desc.setValue(field.getDouble(obj));
                     break;
                 case "String":
                     desc.setType(Type.VARCHAR);
-                    desc.setStringValue((String) field.get(obj));
+                    desc.setValue((String) field.get(obj));
                     break;
                 default:
                     desc.setType(Type.VARCHAR);
-                    desc.setStringValue("");
+                    desc.setValue("");
                     break;
             }
         } catch (IllegalAccessException e) {
