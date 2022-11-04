@@ -134,7 +134,7 @@ PROPERTIES (
     "user" = "root",
     "password" = "root",
     "index" = "tindex",
-    "type" = "doc"
+    "type" = "doc",
     "es.net.ssl" = "true"
 );
 ~~~
