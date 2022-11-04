@@ -52,8 +52,8 @@ If you use Hive metastore for your Iceberg cluster, configure the following prop
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
-| starrocks.catalog-type | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `HIVE`. |
-| hive.metastore.uris    | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
+| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `HIVE`. |
+| iceberg.catalog.hive.metastore.uris    | Yes          | The URI of the Hive metastore. The parameter value is in the following format: `thrift://<IP address of Hive metastore>:<port number>`. The port number defaults to 9083. |
 
 #### Custom catalog
 
@@ -66,7 +66,7 @@ After you complete the preceding operations, you can create an Iceberg catalog a
 | **Property**           | **Required** | **Description**                                              |
 | ---------------------- | ------------ | ------------------------------------------------------------ |
 | type                   | Yes          | The type of the data source. Set the value to `iceberg`.     |
-| starrocks.catalog-type | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
+| iceberg.catalog.type   | Yes          | The type of the catalog configured your Iceberg cluster. Set the value to `CUSTOM`. |
 | iceberg.catalog-impl   | Yes          | The fully qualified class name of the custom catalog. FEs search for the catalog based on this name. If the custom catalog contains custom configuration items, you must add them to the `PROPERTIES` parameter as key-value pairs when you create an Iceberg catalog. |
 
 ## Caching strategy of Iceberg metadata
