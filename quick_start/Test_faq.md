@@ -52,6 +52,6 @@
 
 * 通过explain sql命令可以查看查询计划。
 * 通过 set is\_report\_success = true 可以打开profile的上报。
-* 社区版用户在 http:FE\_IP:FE\_HTTP\_PORT/query 可以看到当前的查询和Profile信息
+* 社区版用户在 http//:FE\_IP:FE\_HTTP\_PORT/query 可以看到当前的查询和Profile信息
 * 企业版用户在StarRocksManager的查询页面可以看到图形化的Profille展示，点击查询链接可以在“执行时间“页面看到树状展示，可以在“执行详情“页面看到完整的Profile详细信息。如果达不到预期可以发送执行详情页面的文本到社区或者技术支持的群里寻求帮助
 * Plan和Profile参考[查询分析](../administration/Query_planning.md) 和[性能优化](../administration/Profiling.md)章节
