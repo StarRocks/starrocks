@@ -40,8 +40,6 @@ Status LakeMetaReader::init(const LakeMetaReaderParams& read_params) {
 }
 
 Status LakeMetaReader::_init_params(const LakeMetaReaderParams& read_params) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaReader::_init_params";
     _tablet = read_params.tablet;
     _tablet_schema = read_params.tablet_schema;
     _version = read_params.version;
@@ -52,17 +50,12 @@ Status LakeMetaReader::_init_params(const LakeMetaReaderParams& read_params) {
 }
 
 Status LakeMetaReader::_build_collect_context(const LakeMetaReaderParams& read_params) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaReader::_build_collect_context";
-    LOG(INFO) << "read_params.id_to_names size is " << read_params.id_to_names->size();
     _collect_context.seg_collecter_params.max_cid = 0;
     for (auto it : *(read_params.id_to_names)) {
         std::string col_name = "";
         std::string collect_field = "";
         RETURN_IF_ERROR(SegmentMetaCollecter::parse_field_and_colname(it.second, &collect_field, &col_name));
-        // for debug
-        LOG(INFO) << "after SegmentMetaCollecter::parse_field_and_colname";
-
+        
         int32_t index = _tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
@@ -112,9 +105,6 @@ Status LakeMetaReader::_init_seg_meta_collecters(const LakeMetaReaderParams& par
 
 Status LakeMetaReader::_get_segments(lake::Tablet tablet, const Version& version,
                                  std::vector<SegmentSharedPtr>* segments) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaReader::_get_segments";
-
     size_t footer_size_hint = 16 * 1024;
     uint32_t seg_id = 0;                                
     ASSIGN_OR_RETURN(auto rowsets, tablet.get_rowsets(version.second));

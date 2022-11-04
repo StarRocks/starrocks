@@ -255,8 +255,6 @@ Status RuntimeFilterProbeDescriptor::prepare(RuntimeState* state, const RowDescr
 }
 
 Status RuntimeFilterProbeDescriptor::open(RuntimeState* state) {
-    // for debug
-    LOG(INFO) << "enter RuntimeFilterProbeDescriptor::open";
     if (_probe_expr_ctx != nullptr) {
         RETURN_IF_ERROR(_probe_expr_ctx->open(state));
     }
@@ -326,9 +324,6 @@ Status RuntimeFilterProbeCollector::prepare(RuntimeState* state, const RowDescri
     return Status::OK();
 }
 Status RuntimeFilterProbeCollector::open(RuntimeState* state) {
-    // for debug
-    LOG(INFO) << "enter RuntimeFilterProbeCollector::open";
-    LOG(INFO) << "_descriptors.size is " << _descriptors.size();
     for (auto& it : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = it.second;
         RETURN_IF_ERROR(rf_desc->open(state));
@@ -547,8 +542,6 @@ void RuntimeFilterProbeCollector::add_descriptor(RuntimeFilterProbeDescriptor* d
 }
 
 void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
-    // for debug
-    LOG(INFO) << "enter RuntimeFilterProbeCollector::wait";
     if (_descriptors.empty()) return;
 
     std::list<RuntimeFilterProbeDescriptor*> wait_list;

@@ -162,8 +162,6 @@ void NodeChannel::try_open() {
 }
 
 void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResult>* open_closure) {
-    // for debug
-    LOG(INFO) << "enter NodeChannel::_open";
     PTabletWriterOpenRequest request;
     request.set_merge_condition(_parent->_merge_condition);
     request.set_allocated_id(&_parent->_load_id);

@@ -12,8 +12,6 @@ LakeMetaScanner::LakeMetaScanner(LakeMetaScanNode* parent)
   
 
 Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParams& params) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaScanner::init";
     _runtime_state = runtime_state;
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_meta_reader_params());
@@ -28,8 +26,6 @@ Status LakeMetaScanner::init(RuntimeState* runtime_state, const MetaScannerParam
 }
 
 Status LakeMetaScanner::_init_meta_reader_params() {
-    // for debug
-    LOG(INFO) << "enter LakeMetaScanner::_init_meta_reader_params";
     _reader_params.tablet = _tablet;
     _reader_params.tablet_schema = _tablet_schema;
     _reader_params.version = Version(0, _version);
@@ -78,8 +74,6 @@ bool LakeMetaScanner::has_more() {
 }
 
 Status LakeMetaScanner::_get_tablet(const TInternalScanRange* scan_range) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaScanner::_get_tablet";
     _version = strtoul(scan_range->version.c_str(), nullptr, 10);
     ASSIGN_OR_RETURN(_tablet, ExecEnv::GetInstance()->lake_tablet_manager()->get_tablet(scan_range->tablet_id));
     ASSIGN_OR_RETURN(_tablet_schema, _tablet->get_schema());

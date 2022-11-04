@@ -15,13 +15,9 @@ LakeMetaScanNode::LakeMetaScanNode(ObjectPool* pool, const TPlanNode& tnode, con
         : MetaScanNode(pool, tnode, descs){}
 
 Status LakeMetaScanNode::open(RuntimeState* state) {
-    // for debug
-    LOG(INFO) << "enter LakeMetaScanNode";
     if (!_is_init) {
         return Status::InternalError("Open before Init.");
     }
-    // for debug
-    LOG(INFO) << "_scan_ranges.size is " << _scan_ranges.size();
     for (auto& scan_range : _scan_ranges) {
         MetaScannerParams scanner_params;
         scanner_params.scan_range = scan_range.get();
