@@ -28,9 +28,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.protocol.TProtocol;
 import org.apache.thrift.server.ServerContext;
 import org.apache.thrift.server.TServerEventHandler;
-// import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 import org.apache.thrift.transport.TTransport;
+import org.apache.thrift.transport.layered.TFramedTransport;
 
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -64,8 +64,8 @@ public class ThriftServerEventProcessor implements TServerEventHandler {
         switch (thriftServer.getType()) {
             case THREADED:
                 // class org.apache.thrift.transport.TFramedTransport
-                // Preconditions.checkState(transport instanceof TFramedTransport);
-                // TFramedTransport framedTransport = (TFramedTransport) transport;
+                Preconditions.checkState(transport instanceof TFramedTransport);
+                TFramedTransport framedTransport = (TFramedTransport) transport;
                 // NOTE: we need patch code in TNonblockingServer, we don't use for now.
                 //  see https://issues.apache.org/jira/browse/THRIFT-1053
                 break;
