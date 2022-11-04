@@ -83,6 +83,7 @@ protected:
 
     // It's only for trace, so no need to 100% unique.
     uint32_t _pseudo_unique_id = 0;
+
 private:
     // _scan_timer = _io_task_wait_timer + _io_task_exec_timer
     RuntimeProfile::Counter* _scan_timer = nullptr;
