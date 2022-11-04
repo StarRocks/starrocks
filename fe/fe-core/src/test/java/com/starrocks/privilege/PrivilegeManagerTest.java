@@ -1255,4 +1255,18 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(manager.canExecuteAs(ctx, UserIdentity.ROOT));
         Assert.assertTrue(PrivilegeManager.checkTableAction(ctx, DB_NAME, TABLE_NAME_1, PrivilegeType.TableAction.SELECT));
     }
+
+    @Test
+    public void testGrantAllResource() throws Exception {
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create user resource_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant drop on resource 'hive0' to resource_user", ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant usage on all resources to resource_user", ctx), ctx);
+        UserIdentity user = UserIdentity.createAnalyzedUserIdentWithIp("resource_user", "%");
+        ctx.setCurrentUserIdentity(user);
+        Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.DROP));
+        Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+    }
 }
