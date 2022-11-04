@@ -278,8 +278,8 @@ public:
         DCHECK_EQ(fields_column.size(), _child_readers.size());
 
         for (size_t i = 0; i < fields_column.size(); i++) {
-            vectorized::Column* child_column = fields_column.at(i).get();
-            RETURN_IF_ERROR(_child_readers.at(i)->prepare_batch(num_records, content_type, child_column));
+            vectorized::Column* child_column = fields_column[i].get();
+            RETURN_IF_ERROR(_child_readers[i]->prepare_batch(num_records, content_type, child_column));
         }
 
         if (_field->is_nullable) {
@@ -287,7 +287,7 @@ public:
             DCHECK(nullable_column != nullptr);
             // Assume all rows are not null in struct level.
             // Use subfield's NullableColumn instead.
-            vectorized::NullColumn null_column(fields_column.at(0)->size(), 0);
+            vectorized::NullColumn null_column(fields_column[0]->size(), 0);
             nullable_column->mutable_null_column()->swap_column(null_column);
             nullable_column->set_has_null(false);
         }
@@ -297,7 +297,7 @@ public:
     Status finish_batch() override { return Status::OK(); }
 
     void get_levels(level_t** def_levels, level_t** rep_levels, size_t* num_levels) override {
-        _child_readers.at(0)->get_levels(def_levels, rep_levels, num_levels);
+        _child_readers[0]->get_levels(def_levels, rep_levels, num_levels);
     }
 
 private:
@@ -333,17 +333,17 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
         std::unordered_map<std::string, size_t> field_name_2_pos;
         for (size_t i = 0; i < field->children.size(); i++) {
             if (opts.case_sensitive) {
-                field_name_2_pos.emplace(field->children.at(i).name, i);
+                field_name_2_pos.emplace(field->children[i].name, i);
             } else {
-                field_name_2_pos.emplace(boost::algorithm::to_lower_copy(field->children.at(i).name), i);
+                field_name_2_pos.emplace(boost::algorithm::to_lower_copy(field->children[i].name), i);
             }
         }
 
         std::vector<std::unique_ptr<ColumnReader>> children_readers;
         for (size_t i = 0; i < col_type.children.size(); i++) {
-            if (!col_type.selected_fields.at(i)) continue;
+            if (!col_type.selected_fields[i]) continue;
 
-            const std::string& subfield_name = col_type.field_names.at(i);
+            const std::string& subfield_name = col_type.field_names[i];
 
             std::string required_subfield_name =
                     opts.case_sensitive ? subfield_name : boost::algorithm::to_lower_copy(subfield_name);
@@ -356,7 +356,7 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             size_t parquet_pos = it->second;
 
             std::unique_ptr<ColumnReader> child_reader;
-            RETURN_IF_ERROR(ColumnReader::create(opts, &field->children.at(parquet_pos), col_type.children.at(i),
+            RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i],
                                                  &child_reader));
             children_readers.emplace_back(std::move(child_reader));
         }
