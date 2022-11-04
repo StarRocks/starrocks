@@ -22,6 +22,9 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class ColumnTypeConverter {
+
+    public static final int HIVE_STRING_LENGTH = ScalarType.MAX_VARCHAR_LENGTH;
+
     public static final String DECIMAL_PATTERN = "^decimal\\((\\d+),(\\d+)\\)";
     public static final String ARRAY_PATTERN = "^array<([0-9a-z<>(),:]+)>";
     public static final String MAP_PATTERN = "^map<([0-9a-z<>(),:]+)>";
@@ -64,7 +67,7 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultString();
+                return ScalarType.createVarcharType(HIVE_STRING_LENGTH);
             case "VARCHAR":
                 return ScalarType.createVarcharType(getVarcharLength(hiveType));
             case "CHAR":
