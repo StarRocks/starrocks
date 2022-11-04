@@ -356,8 +356,8 @@ Status ColumnReader::create(const ColumnReaderOptions& opts, const ParquetField*
             size_t parquet_pos = it->second;
 
             std::unique_ptr<ColumnReader> child_reader;
-            RETURN_IF_ERROR(ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i],
-                                                 &child_reader));
+            RETURN_IF_ERROR(
+                    ColumnReader::create(opts, &field->children[parquet_pos], col_type.children[i], &child_reader));
             children_readers.emplace_back(std::move(child_reader));
         }
 
