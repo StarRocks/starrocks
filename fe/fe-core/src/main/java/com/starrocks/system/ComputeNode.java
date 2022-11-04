@@ -8,6 +8,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.CoordinatorMonitor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -412,6 +413,7 @@ public class ComputeNode implements IComputable, Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
+                    CoordinatorMonitor.getInstance().addDeadBackend(id);
                     LOG.info("{} is dead,", this.toString());
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
