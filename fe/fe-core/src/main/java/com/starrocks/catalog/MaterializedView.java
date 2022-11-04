@@ -6,15 +6,19 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.common.Pair;
 import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.util.DateUtils;
@@ -31,6 +35,9 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
+import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.thrift.TTableDescriptor;
@@ -399,7 +406,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         this.refreshScheme = refreshScheme;
     }
 
-    public Set<String> getNeedRefreshPartitionNames(Table base) {
+    public Set<String> getUpdatedPartitionNamesOfTable(Table base) {
         if (!base.isOlapTable()) {
             // TODO(ywb): support external table refresh according to partition later
             return Sets.newHashSet();
@@ -635,4 +642,121 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         return sb.toString();
     }
 
+    public Set<String> getPartitionNamesToRefreshForMv() {
+        PartitionInfo partitionInfo = getPartitionInfo();
+        if (partitionInfo instanceof SinglePartitionInfo) {
+            // for non-partitioned materialized view
+            for (BaseTableInfo tableInfo : baseTableInfos) {
+                Table table = tableInfo.getTable();
+                // if there is one external table, just return empty sets
+                // because that we can not judge whether mv based on external table is update-to-date
+                if (!table.isLocalTable()) {
+                    return Sets.newHashSet();
+                }
+                Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+                if (!partitionNames.isEmpty()) {
+                    return getPartitionNames();
+                }
+            }
+        } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
+            // partitions to refresh
+            // 1. dropped partitions
+            // 2. newly added partitions
+            // 3. partitions loaded with new data
+            return getUpdatedPartitionNamesForPartitionBy();
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition info type:"
+                    + partitionInfo.getClass().getName());
+        }
+        return Sets.newHashSet();
+    }
+
+    private Set<String> getUpdatedPartitionNamesForPartitionBy() {
+        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        Pair<Table, Column> partitionInfo = getPartitionTableAndColumn();
+        // if non-partition-by table has changed, should refresh all mv partitions
+        Table partitionTable = partitionInfo.first;
+        for (BaseTableInfo tableInfo : baseTableInfos) {
+            Table table = tableInfo.getTable();
+            if (!table.isLocalTable()) {
+                return Sets.newHashSet();
+            }
+            if (table.getTableIdentifier().equals(partitionTable.getTableIdentifier())) {
+                continue;
+            }
+            Set<String> partitionNames = getUpdatedPartitionNamesOfTable(table);
+            if (!partitionNames.isEmpty()) {
+                return getPartitionNames();
+            }
+        }
+        // from here, partitionTable must be OlapTable or MaterializedView
+        OlapTable basePartitionTable = (OlapTable) partitionTable;
+
+        // check partition-by table
+        Set<String> needRefreshMvPartitionNames = Sets.newHashSet();
+
+        Map<String, Range<PartitionKey>> basePartitionMap = basePartitionTable.getRangePartitionMap();
+        Map<String, Range<PartitionKey>> mvPartitionMap = getRangePartitionMap();
+        PartitionDiff partitionDiff = getPartitionDiff(partitionExpr, partitionInfo.second,
+                basePartitionMap, mvPartitionMap);
+        needRefreshMvPartitionNames.addAll(partitionDiff.getDeletes().keySet());
+        for (String deleted : partitionDiff.getDeletes().keySet()) {
+            mvPartitionMap.remove(deleted);
+        }
+        needRefreshMvPartitionNames.addAll(partitionDiff.getAdds().keySet());
+        for (Map.Entry<String, Range<PartitionKey>> addEntry : partitionDiff.getAdds().entrySet()) {
+            mvPartitionMap.put(addEntry.getKey(), addEntry.getValue());
+        }
+
+        Map<String, Set<String>> baseToMvNameRef = SyncPartitionUtils
+                .generatePartitionRefMap(basePartitionMap, mvPartitionMap);
+        Map<String, Set<String>> mvToBaseNameRef = SyncPartitionUtils
+                .generatePartitionRefMap(mvPartitionMap, basePartitionMap);
+
+        Set<String> baseChangedPartitionNames = getUpdatedPartitionNamesOfTable(partitionTable);
+        if (partitionExpr instanceof SlotRef) {
+            for (String basePartitionName : baseChangedPartitionNames) {
+                needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(basePartitionName));
+            }
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            for (String baseChangedPartitionName : baseChangedPartitionNames) {
+                needRefreshMvPartitionNames.addAll(baseToMvNameRef.get(baseChangedPartitionName));
+            }
+            // because the relation of partitions between materialized view and base partition table is n : m,
+            // should calculate the candidate partitions recursively.
+            SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                    baseToMvNameRef, mvToBaseNameRef);
+        }
+        return needRefreshMvPartitionNames;
+    }
+
+    private PartitionDiff getPartitionDiff(Expr partitionExpr, Column partitionColumn,
+                                           Map<String, Range<PartitionKey>> basePartitionMap,
+                                           Map<String, Range<PartitionKey>> mvPartitionMap) {
+        if (partitionExpr instanceof SlotRef) {
+            return SyncPartitionUtils.calcSyncSamePartition(basePartitionMap, mvPartitionMap);
+        } else if (partitionExpr instanceof FunctionCallExpr) {
+            FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr;
+            String granularity = ((StringLiteral) functionCallExpr.getChild(0)).getValue();
+            return SyncPartitionUtils.calcSyncRollupPartition(basePartitionMap, mvPartitionMap,
+                    granularity, partitionColumn.getPrimitiveType());
+        } else {
+            throw UnsupportedException.unsupportedException("unsupported partition expr:" + partitionExpr);
+        }
+    }
+
+    private Pair<Table, Column> getPartitionTableAndColumn() {
+        Expr partitionExpr = getPartitionRefTableExprs().get(0);
+        List<SlotRef> slotRefs = Lists.newArrayList();
+        partitionExpr.collect(SlotRef.class, slotRefs);
+        Preconditions.checkState(slotRefs.size() == 1);
+        SlotRef partitionSlotRef = slotRefs.get(0);
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            Table table = baseTableInfo.getTable();
+            if (partitionSlotRef.getTblNameWithoutAnalyzed().getTbl().equals(table.getName())) {
+                return Pair.create(table, table.getColumn(partitionSlotRef.getColumnName()));
+            }
+        }
+        return null;
+    }
 }
