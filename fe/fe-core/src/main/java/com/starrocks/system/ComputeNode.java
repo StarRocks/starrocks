@@ -361,6 +361,7 @@ public class ComputeNode implements IComputable, Writable {
      * return true if any port changed, or alive state is changed.
      */
     public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
+        boolean becomeDead = false;
         boolean isChanged = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (!this.version.equals(hbResponse.getVersion())) {
@@ -418,8 +419,8 @@ public class ComputeNode implements IComputable, Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
-                    CoordinatorMonitor.getInstance().addDeadBackend(id);
-                    LOG.info("{} is dead,", this.toString());
+                    becomeDead = true;
+                    LOG.info("{} is dead due to exceed heartbeatRetryTimes", this);
                 }
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
                 lastMissingHeartbeatTime = System.currentTimeMillis();
@@ -438,10 +439,19 @@ public class ComputeNode implements IComputable, Writable {
             if (hbResponse.aliveStatus != null) {
                 // The metadata before the upgrade does not contain hbResponse.aliveStatus,
                 // in which case the alive status needs to be handled according to the original logic
-                isAlive.getAndSet(hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE);
+                boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
+                if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
+                    becomeDead = !newIsAlive;
+                    LOG.info("{} alive status is changed to {}", this, newIsAlive);
+                }
                 heartbeatRetryTimes = 0;
             }
         }
+
+        if (becomeDead) {
+            CoordinatorMonitor.getInstance().addDeadBackend(id);
+        }
+
         return isChanged;
     }
 }
