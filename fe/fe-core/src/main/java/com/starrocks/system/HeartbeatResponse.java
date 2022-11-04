@@ -77,6 +77,10 @@ public class HeartbeatResponse implements Writable {
         return status;
     }
 
+    public void setStatus(HbStatus status) {
+        this.status = status;
+    }
+
     public String getMsg() {
         return msg;
     }
