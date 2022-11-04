@@ -71,6 +71,7 @@ public:
     // should be read out and merged with the cache result, here from_version is cached version.
     void set_from_version(int64_t from_version) { _from_version = from_version; }
     int64_t from_version() { return _from_version; }
+
 private:
     int32_t _plan_node_id;
     int64_t _from_version = 0;
