@@ -175,7 +175,7 @@ public class PartitionUtil {
     // [NULL,1992-01-01,1992-01-02,1992-01-03]
     //               ||
     //               \/
-    // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, 9999-12-31)
+    // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, MAX_VALUE)
     public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws AnalysisException {
         Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
@@ -220,8 +220,7 @@ public class PartitionUtil {
         }
         if (lastPartitionName != null) {
             partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey,
-                    PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue(
-                                    LiteralExpr.createMaxValue(partitionColumn.getType()).getStringValue())),
+                    PartitionKey.createPartitionKey(ImmutableList.of(PartitionValue.MAX_VALUE),
                             ImmutableList.of(partitionColumn))));
         }
         return partitionRangeMap;
