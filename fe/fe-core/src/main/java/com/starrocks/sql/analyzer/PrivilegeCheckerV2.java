@@ -6,7 +6,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.privilege.PrivilegeManager;
-import com.starrocks.privilege.PrivilegeTypes;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AlterResourceStmt;
@@ -39,7 +39,7 @@ public class PrivilegeCheckerV2 {
 
     public static void checkTableAction(ConnectContext context,
                                         TableName tableName,
-                                        PrivilegeTypes.TableActions action) {
+                                        PrivilegeType.TableAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             throw new SemanticException("external catalog is not supported for now!");
         }
@@ -50,7 +50,7 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeTypes.DbActions action) {
+    static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             throw new SemanticException("external catalog is not supported for now!");
         }
@@ -71,25 +71,25 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
-            checkDbAction(session, statement.getDbTbl(), PrivilegeTypes.DbActions.CREATE_TABLE);
+            checkDbAction(session, statement.getDbTbl(), PrivilegeType.DbAction.CREATE_TABLE);
             return null;
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt statement, ConnectContext session) {
-            checkTableAction(session, statement.getTableName(), PrivilegeTypes.TableActions.DELETE);
+            checkTableAction(session, statement.getTableName(), PrivilegeType.TableAction.DELETE);
             return null;
         }
 
         @Override
         public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
-            checkTableAction(session, statement.getTbl(), PrivilegeTypes.TableActions.DROP);
+            checkTableAction(session, statement.getTbl(), PrivilegeType.TableAction.DROP);
             return null;
         }
 
         @Override
         public Void visitInsertStatement(InsertStmt statement, ConnectContext session) {
-            checkTableAction(session, statement.getTableName(), PrivilegeTypes.TableActions.INSERT);
+            checkTableAction(session, statement.getTableName(), PrivilegeType.TableAction.INSERT);
             return null;
         }
 
@@ -155,7 +155,7 @@ public class PrivilegeCheckerV2 {
 
             @Override
             public Void visitTable(TableRelation node, Void context) {
-                checkTableAction(session, node.getName(), PrivilegeTypes.TableActions.SELECT);
+                checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
                 return null;
             }
         }
@@ -172,7 +172,7 @@ public class PrivilegeCheckerV2 {
         // ---------------------------------------- External Resource Statement---------------------------------------------
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeTypes.SystemActions.CREATE_RESOURCE)) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE_RESOURCE");
             }
             return null;
@@ -181,7 +181,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitDropResourceStatement(DropResourceStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkResourceAction(
-                    context, statement.getResourceName(), PrivilegeTypes.ResourceActions.DROP)) {
+                    context, statement.getResourceName(), PrivilegeType.ResourceAction.DROP)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "DROP");
             }
             return null;
@@ -190,7 +190,7 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitAlterResourceStatement(AlterResourceStmt statement, ConnectContext context) {
             if (!PrivilegeManager.checkResourceAction(
-                    context, statement.getResourceName(), PrivilegeTypes.ResourceActions.ALTER)) {
+                    context, statement.getResourceName(), PrivilegeType.ResourceAction.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
             }
             return null;
