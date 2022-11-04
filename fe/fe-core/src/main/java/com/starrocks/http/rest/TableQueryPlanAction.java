@@ -21,6 +21,7 @@
 
 package com.starrocks.http.rest;
 
+import org.apache.thrift.transport.TTransportException;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
