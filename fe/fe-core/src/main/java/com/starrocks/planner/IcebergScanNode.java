@@ -149,13 +149,14 @@ public class IcebergScanNode extends ScanNode {
                 .map(column -> column.getName()).collect(Collectors.toSet());
         Set<String> appendEqualityColumns = equalityDeleteColumns.stream()
                 .filter(name -> !scanNodeColumns.contains(name)).collect(Collectors.toSet());
-        Map<String, Object> nameToColumns = referenceTable.getFullSchema().stream().collect(Collectors.toMap(Column::getName, item -> item));
+        Map<String, Column> nameToColumns = referenceTable.getFullSchema().stream()
+                .collect(Collectors.toMap(Column::getName, item -> item));
         for (String eqName : appendEqualityColumns) {
             if (nameToColumns.containsKey(eqName)) {
-                Column column = (Column) nameToColumns.get(eqName);
+                Column column = nameToColumns.get(eqName);
                 Field field;
                 TableName tableName = desc.getRef().getName();
-                if (referenceTable.getBaseSchema().contains(column)) {
+                if (referenceTable.getFullSchema().contains(column)) {
                     field = new Field(column.getName(), column.getType(), tableName,
                             new SlotRef(tableName, column.getName(), column.getName()), true);
                 } else {
