@@ -27,6 +27,7 @@ import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TReportExecStatusResult;
 import com.starrocks.thrift.TUniqueId;
 
+import java.util.List;
 import java.util.Map;
 
 public interface QeProcessor {
@@ -42,4 +43,6 @@ public interface QeProcessor {
     Map<String, QueryStatisticsItem> getQueryStatistics();
 
     Coordinator getCoordinator(TUniqueId queryId);
+
+    List<Coordinator> getCoordinators();
 }
