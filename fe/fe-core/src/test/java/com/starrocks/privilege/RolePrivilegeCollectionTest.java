@@ -11,7 +11,7 @@ public class RolePrivilegeCollectionTest {
         RolePrivilegeCollection collection = new RolePrivilegeCollection("nolabel");
         Assert.assertFalse(collection.isRemovable());
         try {
-            collection.addSubRole(-1);
+            collection.addParentRole(-1);
             Assert.fail();
         } catch (PrivilegeException e) {
             Assert.assertTrue(e.getMessage().contains("is not mutable"));
@@ -25,7 +25,7 @@ public class RolePrivilegeCollectionTest {
         collection.addSubRole(-1);
         collection.disableMutable();
         try {
-            collection.addSubRole(-1);
+            collection.addParentRole(-1);
             Assert.fail();
         } catch (PrivilegeException e) {
             Assert.assertTrue(e.getMessage().contains("is not mutable"));
@@ -37,7 +37,7 @@ public class RolePrivilegeCollectionTest {
                 RolePrivilegeCollection.RoleFlags.REMOVABLE);
         Assert.assertTrue(collection.isRemovable());
         try {
-            collection.addSubRole(-1);
+            collection.addParentRole(-1);
             Assert.fail();
         } catch (PrivilegeException e) {
             Assert.assertTrue(e.getMessage().contains("is not mutable"));

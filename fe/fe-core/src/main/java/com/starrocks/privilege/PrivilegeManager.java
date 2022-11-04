@@ -2,10 +2,14 @@
 
 package com.starrocks.privilege;
 
+import com.google.common.cache.CacheBuilder;
+import com.google.common.cache.CacheLoader;
+import com.google.common.cache.LoadingCache;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.SystemId;
 import com.starrocks.persist.RolePrivilegeCollectionInfo;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -34,6 +38,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
@@ -60,6 +66,20 @@ public class PrivilegeManager {
     private GlobalStateMgr globalStateMgr;
 
     protected Map<UserIdentity, UserPrivilegeCollection> userToPrivilegeCollection;
+
+    private static final int MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION = 1000;
+    private static final int CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN = 60;
+    protected LoadingCache<Pair<UserIdentity, Set<Long>>, PrivilegeCollection> ctxToMergedPrivilegeCollections =
+            CacheBuilder.newBuilder()
+                    .maximumSize(MAX_NUM_CACHED_MERGED_PRIVILEGE_COLLECTION)
+                    .expireAfterAccess(CACHED_MERGED_PRIVILEGE_COLLECTION_EXPIRE_MIN, TimeUnit.MINUTES)
+                    .build(new CacheLoader<Pair<UserIdentity, Set<Long>>, PrivilegeCollection>() {
+                        @Override
+                        public PrivilegeCollection load(Pair<UserIdentity, Set<Long>> userIdentitySetPair)
+                                throws Exception {
+                            return loadPrivilegeCollection(userIdentitySetPair.first, userIdentitySetPair.second);
+                        }
+                    });
 
     private final ReentrantReadWriteLock userLock;
 
@@ -304,6 +324,7 @@ public class PrivilegeManager {
             collection.grant(type, actionSet, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
+            invalidateUserInCache(userIdentity);
         } finally {
             userWriteUnlock();
         }
@@ -318,6 +339,7 @@ public class PrivilegeManager {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
+            invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.grant(type, actionSet, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
@@ -361,6 +383,7 @@ public class PrivilegeManager {
             collection.revoke(type, actionSet, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     userIdentity, collection, provider.getPluginId(), provider.getPluginVersion());
+            invalidateUserInCache(userIdentity);
         } finally {
             userWriteUnlock();
         }
@@ -375,6 +398,7 @@ public class PrivilegeManager {
         roleWriteLock();
         try {
             long roleId = getRoleIdByNameNoLock(roleName);
+            invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
             collection.revoke(type, actionSet, objects, isGrant);
             globalStateMgr.getEditLog().logUpdateRolePrivilege(
@@ -427,6 +451,7 @@ public class PrivilegeManager {
 
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     user, collection, provider.getPluginId(), provider.getPluginVersion());
+            invalidateUserInCache(user);
             LOG.info("grant role {} to user {}", roleName, user);
         } finally {
             userWriteLock();
@@ -471,6 +496,7 @@ public class PrivilegeManager {
                     parentCollection.removeSubRole(roleId);
                 }
             }
+            invalidateRolesInCacheRoleUnlocked(roleId);
             collection.addParentRole(parentRoleId);
 
             // write journal to update privilege collections of both role & parent role
@@ -509,6 +535,7 @@ public class PrivilegeManager {
             }
             globalStateMgr.getEditLog().logUpdateUserPrivilege(
                     user, collection, provider.getPluginId(), provider.getPluginVersion());
+            invalidateUserInCache(user);
             LOG.info("revoke role {} from user {}", roleName, user);
         } finally {
             userWriteLock();
@@ -523,6 +550,7 @@ public class PrivilegeManager {
             long roleId = getRoleIdByNameNoLock(roleName);
             RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, true);
 
+            invalidateRolesInCacheRoleUnlocked(roleId);
             parentCollection.removeSubRole(roleId);
             collection.removeParentRole(parentRoleId);
 
@@ -552,7 +580,6 @@ public class PrivilegeManager {
             return false;
         }
     }
-
 
     public static boolean checkTableAction(
             ConnectContext context, String db, String table, PrivilegeType.TableAction action) {
@@ -684,6 +711,7 @@ public class PrivilegeManager {
         try {
             provider.upgradePrivilegeCollection(privilegeCollection, pluginId, pluginVersion);
             userToPrivilegeCollection.put(user, privilegeCollection);
+            invalidateUserInCache(user);
             LOG.info("replayed update user {}", user);
         } finally {
             userWriteUnlock();
@@ -716,6 +744,7 @@ public class PrivilegeManager {
         userWriteLock();
         try {
             userToPrivilegeCollection.remove(user);
+            invalidateUserInCache(user);
         } finally {
             userWriteUnlock();
         }
@@ -729,17 +758,38 @@ public class PrivilegeManager {
         return provider.getPluginVersion();
     }
 
+    /**
+     * read from cache
+     */
     protected PrivilegeCollection mergePrivilegeCollection(ConnectContext context) throws PrivilegeException {
+        try {
+            return ctxToMergedPrivilegeCollections.get(
+                    new Pair<>(context.getCurrentUserIdentity(), context.getCurrentRoleIds()));
+        } catch (ExecutionException e) {
+            String errMsg = String.format(
+                    "failed merge privilege collection on %s with roles %s %s",
+                    context.getCurrentUserIdentity(),
+                    context.getCurrentRoleIds(),
+                    context);
+            PrivilegeException exception = new PrivilegeException(errMsg);
+            exception.initCause(e);
+            throw exception;
+        }
+    }
+
+    /**
+     * used for cache to do the actual merge job
+     */
+    protected PrivilegeCollection loadPrivilegeCollection(UserIdentity userIdentity, Set<Long> roleIds)
+            throws PrivilegeException {
+        PrivilegeCollection collection = new PrivilegeCollection();
         userReadLock();
         try {
-            UserIdentity userIdentity = context.getCurrentUserIdentity();
             UserPrivilegeCollection userCollection = getUserPrivilegeCollectionUnlocked(userIdentity);
-            PrivilegeCollection collection = new PrivilegeCollection();
             collection.merge(userCollection);
             roleReadLock();
             try {
                 // 1. get all parent roles by default, but can be specified with `SET ROLE` statement
-                Set<Long> roleIds = context.getCurrentRoleIds();
                 if (roleIds == null) {
                     roleIds = userCollection.getAllRoles();
                 }
@@ -756,9 +806,49 @@ public class PrivilegeManager {
             } finally {
                 roleReadUnlock();
             }
-            return collection;
         } finally {
             userReadUnlock();
+        }
+        return collection;
+    }
+
+    /**
+     * if the privileges of a role are changed, call this function to invalidate cache
+     * requires role lock
+     */
+    protected void invalidateRolesInCacheRoleUnlocked(long roleId) throws PrivilegeException {
+        Set<Long> badRoles = getAllDescendantsUnlocked(roleId);
+        List<Pair<UserIdentity, Set<Long>>> badKeys = new ArrayList<>();
+        for (Pair<UserIdentity, Set<Long>> pair : ctxToMergedPrivilegeCollections.asMap().keySet()) {
+            Set<Long> roleIds = pair.second;
+            if (roleIds == null) {
+                roleIds = getRoleIdsByUser(pair.first);
+            }
+            for (long badRoleId : badRoles) {
+                if (roleIds.contains(badRoleId)) {
+                    badKeys.add(pair);
+                    break;
+                }
+            }
+        }
+        for (Pair<UserIdentity, Set<Long>> pair : badKeys) {
+            ctxToMergedPrivilegeCollections.invalidate(pair);
+        }
+    }
+
+    /**
+     * if the privileges of a user are changed, call this function to invalidate cache
+     * require not extra lock.
+     */
+    protected void invalidateUserInCache(UserIdentity userIdentity) {
+        List<Pair<UserIdentity, Set<Long>>> badKeys = new ArrayList<>();
+        for (Pair<UserIdentity, Set<Long>> pair : ctxToMergedPrivilegeCollections.asMap().keySet()) {
+            if (pair.first.equals(userIdentity)) {
+                badKeys.add(pair);
+            }
+        }
+        for (Pair<UserIdentity, Set<Long>> pair : badKeys) {
+            ctxToMergedPrivilegeCollections.invalidate(pair);
         }
     }
 
@@ -839,6 +929,7 @@ public class PrivilegeManager {
         try {
             for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivilegeCollectionMap().entrySet()) {
                 long roleId = entry.getKey();
+                invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollection privilegeCollection = entry.getValue();
                 provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
                 roleIdToPrivilegeCollection.put(roleId, privilegeCollection);
@@ -857,6 +948,7 @@ public class PrivilegeManager {
         try {
             String roleName = stmt.getQualifiedRole();
             long roleId = getRoleIdByNameNoLock(roleName);
+            invalidateRolesInCacheRoleUnlocked(roleId);
             RolePrivilegeCollection collection = roleIdToPrivilegeCollection.get(roleId);
             if (!collection.isRemovable()) {
                 throw new DdlException("role " + roleName + " cannot be dropped!");
@@ -878,6 +970,7 @@ public class PrivilegeManager {
         try {
             for (Map.Entry<Long, RolePrivilegeCollection> entry : info.getRolePrivilegeCollectionMap().entrySet()) {
                 long roleId = entry.getKey();
+                invalidateRolesInCacheRoleUnlocked(roleId);
                 RolePrivilegeCollection privilegeCollection = entry.getValue();
                 // Actually privilege collection is useless here, but we still record it for further usage
                 provider.upgradePrivilegeCollection(privilegeCollection, info.getPluginId(), info.getPluginVersion());
@@ -1048,6 +1141,34 @@ public class PrivilegeManager {
                 maxDepth = Math.max(maxDepth, getMaxRoleInheritanceDepthInner(currentDepth + 1, subRoleId));
             }
             return maxDepth;
+        }
+    }
+
+    /**
+     * get all descendants roles(sub roles and their subs etc.)
+     * e.g grant role_a to role role_b; grant role_b to role role_c;
+     * then the inheritance graph would be role_a -> role_b -> role_c
+     * then all descendants roles of role_a would be [role_b, role_c]
+     */
+    protected Set<Long> getAllDescendantsUnlocked(long roleId) throws PrivilegeException {
+        Set<Long> set = new HashSet<>();
+        set.add(roleId);
+        getAllDescendantsUnlockedInner(roleId, set);
+        return set;
+    }
+
+    protected void getAllDescendantsUnlockedInner(long roleId, Set<Long> resultSet) throws PrivilegeException {
+        RolePrivilegeCollection collection = getRolePrivilegeCollectionUnlocked(roleId, false);
+        // this role has been dropped, but we still count it as descendants
+        if (collection == null) {
+            return;
+        }
+        for (Long subId : collection.getSubRoleIds()) {
+            if (!resultSet.contains(subId)) {
+                resultSet.add(subId);
+                // recursively collect all predecessors
+                getAllDescendantsUnlockedInner(subId, resultSet);
+            }
         }
     }
 
