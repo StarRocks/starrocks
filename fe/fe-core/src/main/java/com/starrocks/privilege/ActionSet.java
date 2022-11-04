@@ -4,13 +4,13 @@ package com.starrocks.privilege;
 
 import com.google.gson.annotations.SerializedName;
 
-import java.util.List;
+import java.util.Collection;
 
 public class ActionSet {
     @SerializedName(value = "b")
     protected long bitSet = 0;
 
-    public ActionSet(List<Action> actions) {
+    public ActionSet(Collection<Action> actions) {
         for (Action action : actions) {
             bitSet |= (1L << action.getId());
         }
