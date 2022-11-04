@@ -160,7 +160,7 @@ static inline bool is_multilane(pipeline::OperatorPtr& op) {
 StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int worker_id) {
     COUNTER_UPDATE(_schedule_counter, 1);
     SCOPED_TIMER(_active_timer);
-    QUERY_TRACE_SCOPED("process", "");
+    QUERY_TRACE_SCOPED("process", _driver_name);
     set_driver_state(DriverState::RUNNING);
     size_t total_chunks_moved = 0;
     size_t total_rows_moved = 0;
@@ -374,7 +374,7 @@ void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
 void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     VLOG_ROW << "[Driver] finalize, driver=" << this;
     DCHECK(state == DriverState::FINISH || state == DriverState::CANCELED || state == DriverState::INTERNAL_ERROR);
-    QUERY_TRACE_BEGIN("finalize", "");
+    QUERY_TRACE_BEGIN("finalize", _driver_name);
     _close_operators(runtime_state);
 
     set_driver_state(state);
@@ -420,7 +420,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
                     wg->decr_num_queries();
                 }
             }
-            QUERY_TRACE_END("finalize", "");
+            QUERY_TRACE_END("finalize", _driver_name);
             // @TODO(silverbullet233): if necessary, remove the dump from the execution thread
             // considering that this feature is generally used for debugging,
             // I think it should not have a big impact now
@@ -428,7 +428,7 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             return;
         }
     }
-    QUERY_TRACE_END("finalize", "");
+    QUERY_TRACE_END("finalize", _driver_name);
 }
 
 void PipelineDriver::_update_overhead_timer() {

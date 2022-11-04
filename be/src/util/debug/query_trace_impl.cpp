@@ -27,6 +27,7 @@ QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::stri
     event.instance_id = instance_id;
     event.driver = driver;
     event.args = std::move(args);
+    event.thread_id = std::this_thread::get_id();
     return event;
 }
 
@@ -43,18 +44,20 @@ QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const 
 }
 
 static const char* kSimpleEventFormat =
-        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"ph":"%c","args":%s})";
+        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
 static const char* kCompleteEventFormat =
-        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"dur":%ld,"ph":"%c","args":%s})";
+        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"dur":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
 
 std::string QueryTraceEvent::to_string() {
     std::string args_str = args_to_string();
+    size_t tidx = std::hash<std::thread::id>{}(thread_id);
+
     if (phase == 'X') {
         return fmt::sprintf(kCompleteEventFormat, category.c_str(), name.c_str(), instance_id, (int64_t)driver, id,
-                            timestamp, duration, phase, args_str.c_str());
+                            timestamp, duration, phase, args_str.c_str(), tidx);
     } else {
         return fmt::sprintf(kSimpleEventFormat, category.c_str(), name.c_str(), instance_id, (int64_t)driver, id,
-                            timestamp, phase, args_str.c_str());
+                            timestamp, phase, args_str.c_str(), tidx);
     }
 }
 

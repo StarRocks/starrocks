@@ -323,10 +323,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
-            [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
-            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
-
             auto& chunk_source = _chunk_sources[chunk_source_index];
+            [[maybe_unused]] char category[64];
+            snprintf(category, sizeof(category), "chunk_source_0x%x", chunk_source->get_pseudo_unique_id());
+            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 
             DeferOp timer_defer([chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),

@@ -33,6 +33,7 @@ struct QueryTraceEvent {
     int64_t instance_id;
     // driver pointer
     std::uintptr_t driver;
+    std::thread::id thread_id;
     std::vector<std::pair<std::string, std::string>> args;
 
     std::string to_string();

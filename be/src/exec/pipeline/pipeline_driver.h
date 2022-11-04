@@ -158,6 +158,7 @@ public:
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
         }
+        snprintf(_driver_name, sizeof(_driver_name), "Driver(node=%d/id=%d)", _source_node_id, _driver_id);
     }
 
     PipelineDriver(const PipelineDriver& driver)
@@ -403,6 +404,7 @@ private:
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
+    char _driver_name[64];
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;

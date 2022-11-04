@@ -2,11 +2,12 @@
 
 #include "exec/pipeline/scan/chunk_source.h"
 
+#include <random>
+
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
-
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
@@ -15,7 +16,11 @@ ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profi
           _runtime_profile(runtime_profile),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
-          _chunk_token(nullptr) {}
+          _chunk_token(nullptr) {
+    std::random_device rd;
+    std::mt19937 gen32(rd());
+    _pseudo_unique_id = gen32() & 0x0ffffff;
+}
 
 Status ChunkSource::prepare(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");
