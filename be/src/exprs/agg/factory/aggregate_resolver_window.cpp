@@ -12,7 +12,7 @@ namespace starrocks::vectorized {
 struct WindowDispatcher {
     template <PrimitiveType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_aggregate<pt> || pt_is_hll<pt> || pt_is_object<pt>) {
+        if constexpr (pt_is_aggregate<pt> || pt_is_string<pt> || pt_is_hll<pt> || pt_is_object<pt>) {
             resolver->add_aggregate_mapping_notnull<pt, pt>("first_value", true,
                                                             AggregateFactory::MakeFirstValueWindowFunction<pt>());
             resolver->add_aggregate_mapping_notnull<pt, pt>("last_value", true,
