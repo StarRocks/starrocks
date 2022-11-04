@@ -30,7 +30,7 @@ class TicketChecker {
     static constexpr int64_t ALL_READY_BIT = 1L << 63;
     static constexpr int64_t ENTER_COUNT_BITS = (1L << 30) - 1;
     static constexpr int LEAVE_COUNT_SHIFT = 30;
-    static constexpr int64_t LEAVE_COUNT_BITS = (1L << 30) << LEAVE_COUNT_SHIFT;
+    static constexpr int64_t LEAVE_COUNT_BITS = ((1L << 30) - 1) << LEAVE_COUNT_SHIFT;
 
     struct Ticket {
         Ticket(TicketIdType id, int64_t data) : id(id), data(data) {}
