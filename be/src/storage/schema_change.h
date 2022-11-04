@@ -54,7 +54,6 @@ public:
     void set_row_len(size_t row_len) { _row_len = row_len; }
 
 private:
-    const TabletSchema& _tablet_schema;
     size_t _memory_allocated = 0;
     size_t _row_len;
     size_t _memory_limitation;
@@ -115,7 +114,7 @@ public:
                  TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
     Status process_v2(TabletReader* reader, RowsetWriter* new_rowset_writer, TabletSharedPtr new_tablet,
-                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset);
+                      TabletSharedPtr base_tablet, RowsetSharedPtr rowset) override;
 
 private:
     static bool _internal_sorting(std::vector<ChunkPtr>& chunk_arr, RowsetWriter* new_rowset_writer,
@@ -149,7 +148,7 @@ private:
         std::unique_ptr<ChunkChanger> chunk_changer = nullptr;
     };
 
-    static Status _get_versions_to_be_changed(TabletSharedPtr base_tablet,
+    static Status _get_versions_to_be_changed(const TabletSharedPtr& base_tablet,
                                               std::vector<Version>* versions_to_be_changed);
 
     Status _do_process_alter_tablet_v2(const TAlterTabletReqV2& request);
@@ -157,7 +156,7 @@ private:
     Status _do_process_alter_tablet_v2_normal(const TAlterTabletReqV2& request, SchemaChangeParams& sc_params,
                                               const TabletSharedPtr& base_tablet, const TabletSharedPtr& new_tablet);
 
-    Status _validate_alter_result(TabletSharedPtr new_tablet, const TAlterTabletReqV2& request);
+    Status _validate_alter_result(const TabletSharedPtr& new_tablet, const TAlterTabletReqV2& request);
 
     static Status _convert_historical_rowsets(SchemaChangeParams& sc_params);
 

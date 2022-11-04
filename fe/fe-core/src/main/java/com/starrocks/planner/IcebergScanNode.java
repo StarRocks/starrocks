@@ -12,16 +12,17 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.UserException;
-import com.starrocks.external.PredicateUtils;
-import com.starrocks.external.iceberg.ExpressionConverter;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.connector.PredicateUtils;
+import com.starrocks.connector.iceberg.ExpressionConverter;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
 import com.starrocks.thrift.THdfsScanRange;
+import com.starrocks.thrift.TIcebergDeleteFile;
+import com.starrocks.thrift.TIcebergFileContent;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
@@ -30,6 +31,7 @@ import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.apache.iceberg.CombinedScanTask;
 import org.apache.iceberg.DataFile;
+import org.apache.iceberg.FileContent;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.exceptions.ValidationException;
@@ -41,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class IcebergScanNode extends ScanNode {
     private static final Logger LOG = LogManager.getLogger(IcebergScanNode.class);
@@ -174,6 +177,16 @@ public class IcebergScanNode extends ScanNode {
                 hdfsScanRange.setPartition_id(-1);
                 hdfsScanRange.setFile_length(file.fileSizeInBytes());
                 hdfsScanRange.setFile_format(IcebergUtil.getHdfsFileFormat(file.format()).toThrift());
+
+                hdfsScanRange.setDelete_files(task.deletes().stream().map(source -> {
+                    TIcebergDeleteFile target = new TIcebergDeleteFile();
+                    target.setFull_path(source.path().toString());
+                    target.setFile_content(
+                            source.content() == FileContent.EQUALITY_DELETES ? TIcebergFileContent.EQUALITY_DELETES : TIcebergFileContent.POSITION_DELETES);
+                    target.setLength(source.fileSizeInBytes());
+
+                    return target;
+                }).collect(Collectors.toList()));
                 TScanRange scanRange = new TScanRange();
                 scanRange.setHdfs_scan_range(hdfsScanRange);
                 scanRangeLocations.setScan_range(scanRange);

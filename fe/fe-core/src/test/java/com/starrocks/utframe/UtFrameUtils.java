@@ -25,8 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.Database;
@@ -42,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -60,6 +59,8 @@ import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.SqlDigestBuilder;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -75,7 +76,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
-import com.starrocks.sql.plan.ReplayHiveRepository;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.system.Backend;
 import com.starrocks.system.BackendCoreStat;
@@ -376,10 +376,15 @@ public class UtFrameUtils {
         for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
             starRocksAssert.withResource(createResourceStmt);
         }
+
         // mock replay external table info
         if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
-            ReplayHiveRepository replayHiveRepository = new ReplayHiveRepository(replayDumpInfo.getHmsTableMap());
-            connectContext.getGlobalStateMgr().setHiveRepository(replayHiveRepository);
+            ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
+                    connectContext.getGlobalStateMgr().getLocalMetastore(),
+                    connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    replayDumpInfo.getHmsTableMap(),
+                    replayDumpInfo.getTableStatisticsMap());
+            connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table

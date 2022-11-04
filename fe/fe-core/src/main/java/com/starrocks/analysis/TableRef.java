@@ -207,7 +207,7 @@ public class TableRef implements ParseNode, Writable {
     }
 
     @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException, UserException {
+    public void analyze(Analyzer analyzer) throws UserException {
         ErrorReport.reportAnalysisException(ErrorCode.ERR_UNRESOLVED_TABLE_REF, tableRefToSql());
     }
 

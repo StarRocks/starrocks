@@ -30,7 +30,6 @@ import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.CancelStmt;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.catalog.AggregateType;
@@ -43,6 +42,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
+import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -64,6 +64,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.ListComparator;
 import com.starrocks.common.util.PropertyAnalyzer;
+import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
@@ -72,6 +73,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateIndexClause;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropIndexClause;
@@ -86,6 +88,7 @@ import com.starrocks.task.UpdateTabletMetaInfoTask;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTaskType;
+import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -175,7 +178,7 @@ public class SchemaChangeHandler extends AlterHandler {
 
         /*
          * PRIMARY:
-         *      Can not drop any key column.
+         *      Can not drop any key/sort column.
          * UNIQUE:
          *      Can not drop any key column.
          * AGGREGATION:
@@ -187,6 +190,14 @@ public class SchemaChangeHandler extends AlterHandler {
             boolean isKey = baseSchema.stream().anyMatch(c -> c.isKey() && c.getName().equalsIgnoreCase(dropColName));
             if (isKey) {
                 throw new DdlException("Can not drop key column in primary data model table");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(dropColName)) {
+                        throw new DdlException("Can not drop sort column in primary data model table");
+                    }
+                }
             }
         } else if (KeysType.UNIQUE_KEYS == olapTable.getKeysType()) {
             long baseIndexId = olapTable.getBaseIndexId();
@@ -250,6 +261,14 @@ public class SchemaChangeHandler extends AlterHandler {
         if (KeysType.PRIMARY_KEYS == olapTable.getKeysType()) {
             if (olapTable.getBaseColumn(modColumn.getName()).isKey()) {
                 throw new DdlException("Can not modify key column: " + modColumn.getName() + " for primary key table");
+            }
+            MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (indexMeta.getSortKeyIdxes() != null) {
+                for (Integer sortKeyIdx : indexMeta.getSortKeyIdxes()) {
+                    if (indexMeta.getSchema().get(sortKeyIdx).getName().equalsIgnoreCase(modColumn.getName())) {
+                        throw new DdlException("Can not modify sort column in primary data model table");
+                    }
+                }
             }
             if (modColumn.getAggregationType() != null) {
                 throw new DdlException("Can not assign aggregation method on column in Primary data model table: " +
@@ -1099,6 +1118,8 @@ public class SchemaChangeHandler extends AlterHandler {
                 } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
                     GlobalStateMgr.getCurrentState().modifyTableReplicationNum(db, olapTable, properties);
                     return null;
+                } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM)) {
+                    return null;
                 }
             }
 
@@ -1213,13 +1234,22 @@ public class SchemaChangeHandler extends AlterHandler {
             if (metaValue == olapTable.enablePersistentIndex()) {
                 return;
             }
+        } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
+            TWriteQuorumType writeQuorum = WriteQuorum
+                    .findTWriteQuorumByName(properties.get(PropertyAnalyzer.PROPERTIES_WRITE_QUORUM));
+            if (writeQuorum == olapTable.writeQuorum()) {
+                return;
+            }
         } else {
             LOG.warn("meta type: {} does not support", metaType);
             return;
         }
 
-        for (Partition partition : partitions) {
-            updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
+        if (metaType == TTabletMetaType.INMEMORY ||
+                metaType == TTabletMetaType.ENABLE_PERSISTENT_INDEX) {
+            for (Partition partition : partitions) {
+                updatePartitionTabletMeta(db, olapTable.getName(), partition.getName(), metaValue, metaType);
+            }
         }
 
         db.writeLock();
@@ -1377,8 +1407,9 @@ public class SchemaChangeHandler extends AlterHandler {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
             }
             OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE) {
-                throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE.");
+            if (olapTable.getState() != OlapTableState.SCHEMA_CHANGE
+                    && olapTable.getState() != OlapTableState.WAITING_STABLE) {
+                throw new DdlException("Table[" + tableName + "] is not under SCHEMA_CHANGE/WAITING_STABLE.");
             }
 
             // find from new alter jobs first

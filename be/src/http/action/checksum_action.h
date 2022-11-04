@@ -40,7 +40,7 @@ public:
 private:
     std::int64_t do_checksum(std::int64_t tablet_id, std::int64_t version, std::int32_t schema_hash, HttpRequest* req);
 
-    ExecEnv* _exec_env;
+    [[maybe_unused]] ExecEnv* _exec_env;
 
 }; // end class ChecksumAction
 

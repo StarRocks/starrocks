@@ -347,8 +347,8 @@ public:
                                             std::vector<uint32_t>& hash_values) const {
         typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
 
-        auto compute_hash = [&columns, &num_rows, &hash_values, this](HashFuncType hash_func,
-                                                                      size_t num_hash_partitions, bool fast_reduce) {
+        auto compute_hash = [&columns, &num_rows, &hash_values](HashFuncType hash_func, size_t num_hash_partitions,
+                                                                bool fast_reduce) {
             for (Column* input_column : columns) {
                 (input_column->*hash_func)(hash_values.data(), 0, num_rows);
             }

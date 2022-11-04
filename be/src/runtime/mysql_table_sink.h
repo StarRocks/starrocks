@@ -58,9 +58,10 @@ public:
 
     RuntimeProfile* profile() override { return _profile; }
 
+    std::vector<TExpr> get_output_expr() const { return _t_output_expr; }
+
 private:
     ObjectPool* _pool;
-    const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
     int _chunk_size;
 

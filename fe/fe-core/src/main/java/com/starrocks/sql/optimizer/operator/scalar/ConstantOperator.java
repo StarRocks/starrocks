@@ -21,8 +21,6 @@ import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
-import java.time.format.SignStyle;
-import java.time.temporal.ChronoField;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -62,8 +60,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
 
     // Don't need fixWidth
     private static final DateTimeFormatter DATE_TIME_FORMATTER_MS =
-            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.")
-                    .appendValue(ChronoField.MICRO_OF_SECOND, 1, 6, SignStyle.NORMAL)
+            DateUtils.unixDatetimeFormatBuilder("%Y-%m-%d %H:%i:%s.%f", false)
                     .toFormatter().withResolverStyle(ResolverStyle.STRICT);
 
     private static void requiredValid(LocalDateTime dateTime) throws SemanticException {
@@ -257,12 +254,13 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return "null";
         } else if (type.isDatetime()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
-            return String.format("%04d-%02d-%02d %02d:%02d:%02d",
-                    time.getYear(), time.getMonthValue(), time.getDayOfMonth(),
-                    time.getHour(), time.getMinute(), time.getSecond());
+            if (time.getNano() != 0) {
+                return time.format(DateUtils.DATE_TIME_MS_FORMATTER_UNIX);
+            }
+            return time.format(DateUtils.DATE_TIME_FORMATTER);
         } else if (type.isDate()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
-            return String.format("%04d-%02d-%02d", time.getYear(), time.getMonthValue(), time.getDayOfMonth());
+            return time.format(DateUtils.DATE_FORMATTER);
         } else if (type.isDouble()) {
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
@@ -375,7 +373,7 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         if (type.isTime() || desc.isTime()) {
             // Don't support constant time cast in FE
             throw UnsupportedException
-                    .unsupportedException(toString() + " cast to " + desc.getPrimitiveType().toString());
+                    .unsupportedException(this + " cast to " + desc.getPrimitiveType().toString());
         }
 
         String childString = toString();
@@ -450,6 +448,6 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
             return ConstantOperator.createChar(childString, desc);
         }
 
-        throw UnsupportedException.unsupportedException(toString() + " cast to " + desc.getPrimitiveType().toString());
+        throw UnsupportedException.unsupportedException(this + " cast to " + desc.getPrimitiveType().toString());
     }
 }

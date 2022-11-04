@@ -131,9 +131,12 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* open_limit;
 
-    bool use_block_cache = false;
+    std::vector<const TIcebergDeleteFile*> deletes;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    bool use_block_cache = false;
+    bool enable_populate_block_cache = false;
 };
 
 struct HdfsScannerContext {
@@ -200,6 +203,8 @@ struct HdfsScannerContext {
 
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+
+    bool enable_block_cache = false;
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -282,7 +287,7 @@ protected:
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream;
+    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
 };
 
 } // namespace starrocks::vectorized

@@ -401,5 +401,33 @@ fi
 cd -
 echo "Finished patching $JEMALLOC_SOURCE"
 
+# patch streamvbyte
+cd $TP_SOURCE_DIR/$STREAMVBYTE_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $STREAMVBYTE_SOURCE = "streamvbyte-0.5.1" ]; then
+    patch -p1 < $TP_PATCH_DIR/streamvbyte.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $STREAMVBYTE_SOURCE"
+
+# patch hyperscan
+cd $TP_SOURCE_DIR/$HYPERSCAN_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $HYPERSCAN_SOURCE = "hyperscan-5.4.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/hyperscan-5.4.0.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $HYPERSCAN_SOURCE"
+
+# patch vpack
+cd $TP_SOURCE_DIR/$VPACK_SOURCE
+if [ ! -f $PATCHED_MARK ] && [ $VPACK_SOURCE = "velocypack-XYZ1.0" ]; then
+    patch -p1 < $TP_PATCH_DIR/velocypack-XYZ1.0.patch
+    touch $PATCHED_MARK
+fi
+cd -
+echo "Finished patching $VPACK_SOURCE"
+
+
 cd -
 

@@ -45,7 +45,7 @@ Input Partition: UNPARTITIONED
 RESULT SINK
 
 25:MERGING-EXCHANGE
-cardinality: 0
+cardinality: 1
 column statistics:
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
@@ -61,7 +61,7 @@ OutPut Exchange Id: 25
 24:SORT
 |  order by: [46, VARCHAR, false] ASC, [51, VARCHAR, false] ASC, [55, SMALLINT, false] ASC
 |  offset: 0
-|  cardinality: 0
+|  cardinality: 1
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
@@ -71,7 +71,7 @@ OutPut Exchange Id: 25
 23:AGGREGATE (merge finalize)
 |  aggregate: sum[([57: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 0
+|  cardinality: 1
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
@@ -79,7 +79,7 @@ OutPut Exchange Id: 25
 |  * sum-->[810.9, 104949.5, 0.0, 8.0, 1.0] ESTIMATE
 |
 22:EXCHANGE
-cardinality: 0
+cardinality: 1
 
 PLAN FRAGMENT 2(F00)
 
@@ -91,7 +91,7 @@ OutPut Exchange Id: 22
 |  STREAMING
 |  aggregate: sum[([56: expr, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [46: N_NAME, VARCHAR, false], [51: N_NAME, VARCHAR, false], [55: year, SMALLINT, false]
-|  cardinality: 0
+|  cardinality: 1
 |  column statistics:
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE
 |  * N_NAME-->[-Infinity, Infinity, 0.0, 25.0, 1.0] ESTIMATE

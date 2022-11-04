@@ -85,7 +85,7 @@ struct AnyValueAggregateData<TYPE_DATE, guard::Guard> {
 };
 
 template <PrimitiveType PT>
-struct AnyValueAggregateData<PT, BinaryPTGuard<PT>> {
+struct AnyValueAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
 
@@ -124,7 +124,7 @@ struct AnyValueElement {
 };
 
 template <PrimitiveType PT>
-struct AnyValueElement<PT, AnyValueAggregateData<PT>, BinaryPTGuard<PT>> {
+struct AnyValueElement<PT, AnyValueAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(AnyValueAggregateData<PT>& state, const Slice& right) const {
         if (UNLIKELY(!state.has_value())) {
             state.buffer.resize(right.size);
@@ -202,7 +202,7 @@ public:
 };
 
 template <PrimitiveType PT, typename State, class OP>
-class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, BinaryPTGuard<PT>> final
+class AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, AnyValueAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {

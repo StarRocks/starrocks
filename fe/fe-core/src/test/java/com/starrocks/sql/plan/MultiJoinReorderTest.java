@@ -42,14 +42,16 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
-        Assert.assertTrue(planFragment.contains("9:NESTLOOP JOIN"));
-        Assert.assertTrue(planFragment.contains("|----8:EXCHANGE\n" +
-                "  |    \n" +
-                "  6:NESTLOOP JOIN"));
-        Assert.assertTrue(planFragment.contains("|----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t3"));
+        Assert.assertTrue(planFragment.contains("  9:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE"));
+        Assert.assertTrue(planFragment.contains("  6:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n"));
     }
 
     @Test
@@ -181,14 +183,11 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |----22:EXCHANGE"));
 
         // Right sub join tree (a)
-        assertContains(planFragment, " 19:NESTLOOP JOIN\n" +
+        assertContains(planFragment, "  16:NESTLOOP JOIN\n" +
                 "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
-                "  |----18:EXCHANGE\n" +
-                "  |    \n" +
-                "  1:OlapScanNode\n" +
-                "     TABLE: t2");
+                "  |----15:EXCHANGE\n");
     }
 
     @Test
@@ -222,14 +221,16 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  \n" +
                 "  |----3:EXCHANGE"));
-        Assert.assertTrue(planFragment.contains("9:NESTLOOP JOIN"));
-        Assert.assertTrue(planFragment.contains("|----8:EXCHANGE\n" +
-                "  |    \n" +
-                "  6:NESTLOOP JOIN"));
-        Assert.assertTrue(planFragment.contains("|----5:EXCHANGE\n" +
-                "  |    \n" +
-                "  0:OlapScanNode\n" +
-                "     TABLE: t3"));
+        Assert.assertTrue(planFragment.contains("  9:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----8:EXCHANGE\n"));
+        Assert.assertTrue(planFragment.contains("  6:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  \n" +
+                "  |----5:EXCHANGE\n"));
     }
 
     @Test
@@ -394,8 +395,7 @@ public class MultiJoinReorderTest extends PlanTestBase {
                 "  |  \n" +
                 "  |----15:EXCHANGE\n" +
                 "  |    \n" +
-                "  2:OlapScanNode\n" +
-                "     TABLE: t0\n");
+                "  13:AGGREGATE (merge finalize)");
     }
 
     @Test

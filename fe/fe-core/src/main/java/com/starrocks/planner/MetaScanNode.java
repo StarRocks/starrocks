@@ -143,4 +143,9 @@ public class MetaScanNode extends ScanNode {
         return output.toString();
     }
 
+    @Override
+    public boolean canUsePipeLine() {
+        return true;
+    }
+
 }

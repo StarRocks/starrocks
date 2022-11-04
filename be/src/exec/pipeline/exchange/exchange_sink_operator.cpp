@@ -8,6 +8,7 @@
 #include <iostream>
 #include <memory>
 #include <random>
+#include <utility>
 
 #include "common/config.h"
 #include "exec/pipeline/exchange/shuffler.h"
@@ -32,13 +33,14 @@ public:
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
     Channel(ExchangeSinkOperator* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
-            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through,
+            PlanNodeId dest_node_id, int32_t num_shuffles, bool enable_exchange_pass_through, bool enable_exchange_perf,
             PassThroughChunkBuffer* pass_through_chunk_buffer)
             : _parent(parent),
               _brpc_dest_addr(brpc_dest),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
               _enable_exchange_pass_through(enable_exchange_pass_through),
+              _enable_exchange_perf(enable_exchange_perf),
               _pass_through_context(pass_through_chunk_buffer, fragment_instance_id, dest_node_id),
               _chunks(num_shuffles) {}
 
@@ -47,18 +49,19 @@ public:
     Status init(RuntimeState* state);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
-    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos);
+    Status send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos);
 
     // Send one chunk to remote, this chunk may be batched in this channel.
     // When the chunk is sent really rather than bachend, *is_real_sent will
     // be set to true.
-    Status send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos, bool* is_real_sent);
+    Status send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos,
+                          bool* is_real_sent);
 
     // Channel will sent input request directly without batch it.
     // This function is only used when broadcast, because request can be reused
     // by all the channels.
-    Status send_chunk_request(PTransmitChunkParamsPtr chunk_request, const butil::IOBuf& attachment,
-                              int64_t attachment_physical_bytes);
+    Status send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
+                              const butil::IOBuf& attachment, int64_t attachment_physical_bytes);
 
     // Used when doing shuffle.
     // This function will copy selective rows in chunks to batch.
@@ -97,6 +100,9 @@ private:
     const PlanNodeId _dest_node_id;
 
     const bool _enable_exchange_pass_through;
+    // enable it to profile exchange's performance, which ignores computing local data for exchange_speed/_bytes,
+    // because local data isn't accessed by remote network.
+    const bool _enable_exchange_perf;
     PassThroughContext _pass_through_context;
 
     bool _is_first_chunk = true;
@@ -112,6 +118,8 @@ private:
 
     bool _is_inited = false;
     bool _use_pass_through = false;
+    // local data is shuffled without really remote network, so it cannot be considered in computing exchange speed.
+    bool _ignore_local_data = false;
 };
 
 bool ExchangeSinkOperator::Channel::is_local() {
@@ -155,6 +163,7 @@ Status ExchangeSinkOperator::Channel::init(RuntimeState* state) {
     }
     _brpc_stub = state->exec_env()->brpc_stub_cache()->get_stub(_brpc_dest_addr);
     _prepare_pass_through();
+    _ignore_local_data = _enable_exchange_perf && is_local();
 
     _is_inited = true;
     return Status::OK();
@@ -168,7 +177,7 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
     }
 
     if (_chunks[driver_sequence]->num_rows() + size > state->chunk_size()) {
-        RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, false));
+        RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
         // we only clear column data, because we need to reuse column schema
         _chunks[driver_sequence]->set_num_rows(0);
     }
@@ -177,15 +186,20 @@ Status ExchangeSinkOperator::Channel::add_rows_selective(vectorized::Chunk* chun
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence,
-                                                     bool eos) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
+                                                     int32_t driver_sequence, bool eos) {
     bool is_real_sent = false;
-    return send_one_chunk(chunk, driver_sequence, eos, &is_real_sent);
+    return send_one_chunk(state, chunk, driver_sequence, eos, &is_real_sent);
 }
 
-Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* chunk, int32_t driver_sequence, bool eos,
-                                                     bool* is_real_sent) {
+Status ExchangeSinkOperator::Channel::send_one_chunk(RuntimeState* state, const vectorized::Chunk* chunk,
+                                                     int32_t driver_sequence, bool eos, bool* is_real_sent) {
     *is_real_sent = false;
+
+    if (_ignore_local_data && !eos) {
+        return Status::OK();
+    }
+
     if (_chunk_request == nullptr) {
         _chunk_request = std::make_shared<PTransmitChunkParams>();
         _chunk_request->set_node_id(_dest_node_id);
@@ -221,6 +235,9 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     if (_current_request_bytes > config::max_transmit_batched_bytes || eos) {
         _chunk_request->set_eos(eos);
         _chunk_request->set_use_pass_through(_use_pass_through);
+        if (auto delta_statistic = state->intermediate_query_statistic()) {
+            delta_statistic->to_pb(_chunk_request->mutable_query_statistics());
+        }
         butil::IOBuf attachment;
         int64_t attachment_physical_bytes = _parent->construct_brpc_attachment(_chunk_request, attachment);
         TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(_chunk_request), attachment,
@@ -234,14 +251,21 @@ Status ExchangeSinkOperator::Channel::send_one_chunk(const vectorized::Chunk* ch
     return Status::OK();
 }
 
-Status ExchangeSinkOperator::Channel::send_chunk_request(PTransmitChunkParamsPtr chunk_request,
+Status ExchangeSinkOperator::Channel::send_chunk_request(RuntimeState* state, PTransmitChunkParamsPtr chunk_request,
                                                          const butil::IOBuf& attachment,
                                                          int64_t attachment_physical_bytes) {
+    if (_ignore_local_data) {
+        return Status::OK();
+    }
     chunk_request->set_node_id(_dest_node_id);
     chunk_request->set_sender_id(_parent->_sender_id);
     chunk_request->set_be_number(_parent->_be_number);
     chunk_request->set_eos(false);
     chunk_request->set_use_pass_through(_use_pass_through);
+
+    if (auto delta_statistic = state->intermediate_query_statistic()) {
+        delta_statistic->to_pb(chunk_request->mutable_query_statistics());
+    }
 
     TransmitChunkInfo info = {this->_fragment_instance_id, _brpc_stub, std::move(chunk_request), attachment,
                               attachment_physical_bytes};
@@ -259,10 +283,10 @@ Status ExchangeSinkOperator::Channel::_close_internal(RuntimeState* state, Fragm
     if (!fragment_ctx->is_canceled()) {
         for (auto driver_sequence = 0; driver_sequence < _chunks.size(); ++driver_sequence) {
             if (_chunks[driver_sequence] != nullptr) {
-                RETURN_IF_ERROR(send_one_chunk(_chunks[driver_sequence].get(), driver_sequence, false));
+                RETURN_IF_ERROR(send_one_chunk(state, _chunks[driver_sequence].get(), driver_sequence, false));
             }
         }
-        RETURN_IF_ERROR(send_one_chunk(nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
+        RETURN_IF_ERROR(send_one_chunk(state, nullptr, ExchangeSinkOperator::DEFAULT_DRIVER_SEQUENCE, true));
     }
 
     return Status::OK();
@@ -272,15 +296,13 @@ void ExchangeSinkOperator::Channel::close(RuntimeState* state, FragmentContext* 
     state->log_error(_close_internal(state, fragment_ctx).get_error_msg());
 }
 
-ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
-                                           int32_t driver_sequence, const std::shared_ptr<SinkBuffer>& buffer,
-                                           TPartitionType::type part_type,
-                                           const std::vector<TPlanFragmentDestination>& destinations,
-                                           bool is_pipeline_level_shuffle, const int32_t num_shuffles_per_channel,
-                                           int32_t sender_id, PlanNodeId dest_node_id,
-                                           const std::vector<ExprContext*>& partition_expr_ctxs,
-                                           bool enable_exchange_pass_through, FragmentContext* const fragment_ctx,
-                                           const std::vector<int32_t>& output_columns)
+ExchangeSinkOperator::ExchangeSinkOperator(
+        OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
+        const std::shared_ptr<SinkBuffer>& buffer, TPartitionType::type part_type,
+        const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
+        const int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
+        const std::vector<ExprContext*>& partition_expr_ctxs, bool enable_exchange_pass_through,
+        bool enable_exchange_perf, FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
         : Operator(factory, id, "exchange_sink", plan_node_id, driver_sequence),
           _buffer(buffer),
           _part_type(part_type),
@@ -308,7 +330,7 @@ ExchangeSinkOperator::ExchangeSinkOperator(OperatorFactory* factory, int32_t id,
         } else {
             std::unique_ptr<Channel> channel = std::make_unique<Channel>(
                     this, destination.brpc_server, fragment_instance_id, dest_node_id, _num_shuffles_per_channel,
-                    enable_exchange_pass_through, pass_through_chunk_buffer);
+                    enable_exchange_pass_through, enable_exchange_perf, pass_through_chunk_buffer);
             _channels.emplace_back(channel.get());
             _instance_id2channel.emplace(fragment_instance_id.lo, std::move(channel));
         }
@@ -343,7 +365,9 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
 
     _be_number = state->be_number();
-
+    if (state->query_options().__isset.transmission_encode_level) {
+        _encode_level = state->query_options().transmission_encode_level;
+    }
     // Set compression type according to query options
     if (state->query_options().__isset.transmission_compression_type) {
         _compress_type = CompressionUtils::to_compression_pb(state->query_options().transmission_compression_type);
@@ -365,11 +389,15 @@ Status ExchangeSinkOperator::prepare(RuntimeState* state) {
     }
     _unique_metrics->add_info_string("DestID", std::to_string(_dest_node_id));
     _unique_metrics->add_info_string("DestFragments", instances);
-    _unique_metrics->add_info_string("PartType", _TPartitionType_VALUES_TO_NAMES.at(_part_type));
+    _unique_metrics->add_info_string("PartType", to_string(_part_type));
+    _unique_metrics->add_info_string("ChannelNum", std::to_string(_channels.size()));
 
     if (_part_type == TPartitionType::HASH_PARTITIONED ||
         _part_type == TPartitionType::BUCKET_SHUFFLE_HASH_PARTITIONED) {
         _partitions_columns.resize(_partition_expr_ctxs.size());
+        _unique_metrics->add_info_string("ShuffleNumPerChannel", std::to_string(_num_shuffles_per_channel));
+        _unique_metrics->add_info_string("TotalShuffleNum", std::to_string(_num_shuffles));
+        _unique_metrics->add_info_string("PipelineLevelShuffle", _is_pipeline_level_shuffle ? "Yes" : "No");
     }
 
     // Randomize the order we open/transmit to channels to avoid thundering herd problems.
@@ -440,7 +468,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
         int has_not_pass_through = false;
         for (auto idx : _channel_indices) {
             if (_channels[idx]->use_pass_through()) {
-                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false));
+                RETURN_IF_ERROR(_channels[idx]->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false));
             } else {
                 has_not_pass_through = true;
             }
@@ -464,7 +492,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
                     if (!_channels[idx]->use_pass_through()) {
                         PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
                         RETURN_IF_ERROR(
-                                _channels[idx]->send_chunk_request(copy, attachment, attachment_physical_bytes));
+                                _channels[idx]->send_chunk_request(state, copy, attachment, attachment_physical_bytes));
                     }
                 }
                 _current_request_bytes = 0;
@@ -488,7 +516,7 @@ Status ExchangeSinkOperator::push_chunk(RuntimeState* state, const vectorized::C
 
         auto& channel = local_channels[_curr_random_channel_idx];
         bool real_sent = false;
-        RETURN_IF_ERROR(channel->send_one_chunk(send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
+        RETURN_IF_ERROR(channel->send_one_chunk(state, send_chunk, DEFAULT_DRIVER_SEQUENCE, false, &real_sent));
         if (real_sent) {
             _curr_random_channel_idx = (_curr_random_channel_idx + 1) % local_channels.size();
         }
@@ -569,7 +597,7 @@ Status ExchangeSinkOperator::set_finishing(RuntimeState* state) {
         int64_t attachment_physical_bytes = construct_brpc_attachment(_chunk_request, attachment);
         for (const auto& [_, channel] : _instance_id2channel) {
             PTransmitChunkParamsPtr copy = std::make_shared<PTransmitChunkParams>(*_chunk_request);
-            channel->send_chunk_request(copy, attachment, attachment_physical_bytes);
+            channel->send_chunk_request(state, copy, attachment, attachment_physical_bytes);
         }
         _current_request_bytes = 0;
         _chunk_request.reset();
@@ -595,15 +623,19 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
         SCOPED_TIMER(_serialize_chunk_timer);
         // We only serialize chunk meta for first chunk
         if (*is_first_chunk) {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src);
+            _encode_context = serde::EncodeContext::get_encode_context_shared_ptr(src->columns().size(), _encode_level);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
             *is_first_chunk = false;
         } else {
-            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src);
+            StatusOr<ChunkPB> res = serde::ProtobufChunkSerde::serialize_without_meta(*src, _encode_context);
             RETURN_IF_ERROR(res);
             res->Swap(dst);
         }
+    }
+    if (_encode_context) {
+        _encode_context->set_encode_levels_in_pb(dst);
     }
     DCHECK(dst->has_uncompressed_size());
     DCHECK_EQ(dst->uncompressed_size(), dst->data().size());
@@ -652,7 +684,7 @@ Status ExchangeSinkOperator::serialize_chunk(const vectorized::Chunk* src, Chunk
     return Status::OK();
 }
 
-int64_t ExchangeSinkOperator::construct_brpc_attachment(PTransmitChunkParamsPtr chunk_request,
+int64_t ExchangeSinkOperator::construct_brpc_attachment(const PTransmitChunkParamsPtr& chunk_request,
                                                         butil::IOBuf& attachment) {
     int64_t attachment_physical_bytes = 0;
     for (int i = 0; i < chunk_request->chunks().size(); ++i) {
@@ -677,8 +709,8 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
         int32_t id, int32_t plan_node_id, std::shared_ptr<SinkBuffer> buffer, TPartitionType::type part_type,
         const std::vector<TPlanFragmentDestination>& destinations, bool is_pipeline_level_shuffle,
         int32_t num_shuffles_per_channel, int32_t sender_id, PlanNodeId dest_node_id,
-        std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through,
-        FragmentContext* const fragment_ctx, const std::vector<int32_t>& output_columns)
+        std::vector<ExprContext*> partition_expr_ctxs, bool enable_exchange_pass_through, bool enable_exchange_perf,
+        FragmentContext* const fragment_ctx, std::vector<int32_t> output_columns)
         : OperatorFactory(id, "exchange_sink", plan_node_id),
           _buffer(std::move(buffer)),
           _part_type(part_type),
@@ -689,14 +721,15 @@ ExchangeSinkOperatorFactory::ExchangeSinkOperatorFactory(
           _dest_node_id(dest_node_id),
           _partition_expr_ctxs(std::move(partition_expr_ctxs)),
           _enable_exchange_pass_through(enable_exchange_pass_through),
+          _enable_exchange_perf(enable_exchange_perf),
           _fragment_ctx(fragment_ctx),
-          _output_columns(output_columns) {}
+          _output_columns(std::move(output_columns)) {}
 
 OperatorPtr ExchangeSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    return std::make_shared<ExchangeSinkOperator>(this, _id, _plan_node_id, driver_sequence, _buffer, _part_type,
-                                                  _destinations, _is_pipeline_level_shuffle, _num_shuffles_per_channel,
-                                                  _sender_id, _dest_node_id, _partition_expr_ctxs,
-                                                  _enable_exchange_pass_through, _fragment_ctx, _output_columns);
+    return std::make_shared<ExchangeSinkOperator>(
+            this, _id, _plan_node_id, driver_sequence, _buffer, _part_type, _destinations, _is_pipeline_level_shuffle,
+            _num_shuffles_per_channel, _sender_id, _dest_node_id, _partition_expr_ctxs, _enable_exchange_pass_through,
+            _enable_exchange_perf, _fragment_ctx, _output_columns);
 }
 
 Status ExchangeSinkOperatorFactory::prepare(RuntimeState* state) {

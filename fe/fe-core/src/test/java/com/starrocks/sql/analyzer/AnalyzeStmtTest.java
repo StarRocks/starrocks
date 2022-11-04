@@ -4,7 +4,6 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
@@ -16,6 +15,7 @@ import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAnalyzeJobStmt;
 import com.starrocks.sql.ast.ShowAnalyzeStatusStmt;
 import com.starrocks.sql.ast.ShowBasicStatsMetaStmt;
@@ -296,12 +296,12 @@ public class AnalyzeStmtTest {
         Assert.assertEquals("SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count), " +
                         " cast(max(cast(max as int(11))) as string), cast(min(cast(min as int(11))) as string) " +
-                        "FROM column_statistics WHERE table_id = 10138 and column_name = \"kk1\" " +
+                        "FROM column_statistics WHERE table_id = 10158 and column_name = \"kk1\" " +
                         "GROUP BY db_id, table_id, column_name " +
                         "UNION ALL SELECT cast(1 as INT), now(), db_id, table_id, column_name, sum(row_count), " +
                         "cast(sum(data_size) as bigint), hll_union_agg(ndv), sum(null_count),  " +
                         "cast(max(cast(max as string)) as string), cast(min(cast(min as string)) as string) " +
-                        "FROM column_statistics WHERE table_id = 10138 and column_name = \"kk2\" " +
+                        "FROM column_statistics WHERE table_id = 10158 and column_name = \"kk2\" " +
                         "GROUP BY db_id, table_id, column_name",
                 StatisticSQLBuilder.buildQueryFullStatisticsSQL(database.getId(), table.getId(), Lists.newArrayList(kk1, kk2)));
     }

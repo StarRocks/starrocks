@@ -66,16 +66,13 @@ public:
     // combination. buffer_size is specified in bytes and a soft limit on
     // how much tuple data is getting accumulated before being sent; it only applies
     // when data is added via add_row() and not sent directly via send_batch().
-    Channel(DataStreamSender* parent, const RowDescriptor& row_desc, const TNetworkAddress& brpc_dest,
-            const TUniqueId& fragment_instance_id, PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
+    Channel(DataStreamSender* parent, const TNetworkAddress& brpc_dest, const TUniqueId& fragment_instance_id,
+            PlanNodeId dest_node_id, int buffer_size, bool is_transfer_chain,
             bool send_query_statistics_with_every_batch)
             : _parent(parent),
-              _row_desc(row_desc),
               _fragment_instance_id(fragment_instance_id),
               _dest_node_id(dest_node_id),
-              _num_data_bytes_sent(0),
-              _request_seq(0),
-              _need_close(false),
+
               _brpc_dest_addr(brpc_dest),
               _is_transfer_chain(is_transfer_chain),
               _send_query_statistics_with_every_batch(send_query_statistics_with_every_batch) {}
@@ -154,18 +151,17 @@ private:
 
     DataStreamSender* _parent;
 
-    const RowDescriptor& _row_desc;
     TUniqueId _fragment_instance_id;
     PlanNodeId _dest_node_id;
 
     // the number of TRowBatch.data bytes sent successfully
-    int64_t _num_data_bytes_sent;
-    int64_t _request_seq;
+    int64_t _num_data_bytes_sent{0};
+    int64_t _request_seq{0};
 
     std::unique_ptr<vectorized::Chunk> _chunk;
     bool _is_first_chunk = true;
 
-    bool _need_close;
+    bool _need_close{false};
 
     TNetworkAddress _brpc_dest_addr;
 
@@ -364,20 +360,20 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
                                    const TDataStreamSink& sink,
                                    const std::vector<TPlanFragmentDestination>& destinations,
                                    int per_channel_buffer_size, bool send_query_statistics_with_every_batch,
-                                   bool enable_exchange_pass_through)
+                                   bool enable_exchange_pass_through, bool enable_exchange_perf)
         : _sender_id(sender_id),
           _state(state),
           _pool(state->obj_pool()),
           _row_desc(row_desc),
           _current_channel_idx(0),
           _part_type(sink.output_partition.type),
-          _ignore_not_found(!sink.__isset.ignore_not_found || sink.ignore_not_found),
           _profile(nullptr),
           _serialize_chunk_timer(nullptr),
           _bytes_sent_counter(nullptr),
           _dest_node_id(sink.dest_node_id),
           _destinations(destinations),
           _enable_exchange_pass_through(enable_exchange_pass_through),
+          _enable_exchange_perf(enable_exchange_perf),
           _output_columns(sink.output_columns) {
     DCHECK_GT(destinations.size(), 0);
     DCHECK(sink.output_partition.type == TPartitionType::UNPARTITIONED ||
@@ -393,9 +389,9 @@ DataStreamSender::DataStreamSender(RuntimeState* state, int sender_id, const Row
         bool is_transfer_chain = (i == 0);
         const auto& fragment_instance_id = destinations[i].fragment_instance_id;
         if (fragment_id_to_channel_index.find(fragment_instance_id.lo) == fragment_id_to_channel_index.end()) {
-            _channel_shared_ptrs.emplace_back(
-                    new Channel(this, row_desc, destinations[i].brpc_server, fragment_instance_id, sink.dest_node_id,
-                                per_channel_buffer_size, is_transfer_chain, send_query_statistics_with_every_batch));
+            _channel_shared_ptrs.emplace_back(new Channel(this, destinations[i].brpc_server, fragment_instance_id,
+                                                          sink.dest_node_id, per_channel_buffer_size, is_transfer_chain,
+                                                          send_query_statistics_with_every_batch));
             fragment_id_to_channel_index.insert({fragment_instance_id.lo, _channel_shared_ptrs.size() - 1});
             _channels.push_back(_channel_shared_ptrs.back().get());
         } else {

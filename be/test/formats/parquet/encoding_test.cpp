@@ -98,8 +98,8 @@ struct DecoderChecker<Slice, is_dictionary> {
             ASSERT_TRUE(st.ok());
 
             const auto* check = (const Slice*)column->raw_data();
-            for (int i = 0; i < values.size(); ++i) {
-                ASSERT_EQ(values[i], *check);
+            for (auto value : values) {
+                ASSERT_EQ(value, *check);
                 check++;
             }
 
@@ -118,8 +118,8 @@ struct DecoderChecker<Slice, is_dictionary> {
             ASSERT_TRUE(st.ok());
 
             const auto* check = (const Slice*)column->data_column()->raw_data();
-            for (int i = 0; i < values.size(); ++i) {
-                ASSERT_EQ(values[i], *check);
+            for (auto value : values) {
+                ASSERT_EQ(value, *check);
                 check++;
             }
 
@@ -203,7 +203,7 @@ TEST_F(ParquetEncodingTest, String) {
 
     std::vector<Slice> slices;
     for (int i = 0; i < 20; ++i) {
-        slices.push_back(values[i]);
+        slices.emplace_back(values[i]);
     }
 
     const EncodingInfo* plain_encoding = nullptr;
@@ -270,7 +270,7 @@ TEST_F(ParquetEncodingTest, FixedString) {
 
     std::vector<Slice> slices;
     for (int i = 100; i < 200; ++i) {
-        slices.push_back(values[i - 100]);
+        slices.emplace_back(values[i - 100]);
     }
 
     const EncodingInfo* plain_encoding = nullptr;

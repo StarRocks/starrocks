@@ -28,13 +28,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.SetPassVar;
-import com.starrocks.analysis.SetUserPropertyStmt;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AuthorizationInfo;
@@ -53,10 +47,16 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.RevokeRoleStmt;
+import com.starrocks.sql.ast.SetPassVar;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -95,7 +95,7 @@ public class Auth implements Writable {
     private ResourcePrivTable resourcePrivTable = new ResourcePrivTable();
     private ImpersonateUserPrivTable impersonateUserPrivTable = new ImpersonateUserPrivTable();
 
-    private RoleManager roleManager = new RoleManager();
+    protected RoleManager roleManager = new RoleManager();
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -129,14 +129,25 @@ public class Auth implements Writable {
         return userPrivTable;
     }
 
-    public DbPrivTable getDbPrivTable() {
+    protected DbPrivTable getDbPrivTable() {
         return dbPrivTable;
     }
 
-    public TablePrivTable getTablePrivTable() {
+    protected TablePrivTable getTablePrivTable() {
         return tablePrivTable;
     }
 
+    protected ResourcePrivTable getResourcePrivTable() {
+        return resourcePrivTable;
+    }
+
+    protected ImpersonateUserPrivTable getImpersonateUserPrivTable() {
+        return impersonateUserPrivTable;
+    }
+
+    protected UserPropertyMgr getPropertyMgr() {
+        return propertyMgr;
+    }
     /**
      * check if role exist, this function can be used in analyze phrase to validate role
      */
@@ -715,7 +726,7 @@ public class Auth implements Writable {
     public void grantRole(GrantRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            grantRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), true, false);
+            grantRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), true, false);
         } finally {
             writeUnlock();
         }
@@ -771,7 +782,7 @@ public class Auth implements Writable {
     public void revokeRole(RevokeRoleStmt stmt) throws DdlException {
         writeLock();
         try {
-            revokeRoleInternal(stmt.getQualifiedRole(), stmt.getUserIdent(), false);
+            revokeRoleInternal(stmt.getGranteeRole(), stmt.getUserIdent(), false);
         } finally {
             writeUnlock();
         }

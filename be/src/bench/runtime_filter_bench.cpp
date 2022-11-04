@@ -13,8 +13,7 @@
 #include "simd/simd.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 //   --------------------------------------------------------------------------------------------------------
 //   Benchmark                                              Time             CPU   Iterations UserCounters...
@@ -49,6 +48,7 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     running_ctx.compatibility = true;
 
     std::vector<Column*> column_ptrs;
+    column_ptrs.reserve(columns.size());
     for (auto& column : columns) {
         column_ptrs.push_back(column.get());
     }
@@ -148,7 +148,6 @@ static void Benchmark_RuntimeFilter_Eval(benchmark::State& state) {
 
 BENCHMARK(Benchmark_RuntimeFilter_Eval)->Apply(RuntimeFilterArg1);
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 BENCHMARK_MAIN();

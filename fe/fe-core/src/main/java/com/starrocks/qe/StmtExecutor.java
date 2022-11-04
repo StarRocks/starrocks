@@ -25,21 +25,10 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AddSqlBlackListStmt;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.DdlStmt;
-import com.starrocks.analysis.DelSqlBlackListStmt;
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.DmlStmt;
-import com.starrocks.analysis.ExportStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.RedirectStatus;
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetVar;
-import com.starrocks.analysis.ShowStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.StringLiteral;
-import com.starrocks.analysis.UnsupportedStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
@@ -82,6 +71,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
 import com.starrocks.qe.QueryState.MysqlStateType;
@@ -92,18 +82,30 @@ import com.starrocks.sql.PlannerProfile;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.analyzer.PrivilegeChecker;
 import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.CreateAnalyzeJobStmt;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
+import com.starrocks.sql.ast.DdlStmt;
+import com.starrocks.sql.ast.DelSqlBlackListStmt;
+import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.KillAnalyzeStmt;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetRoleStmt;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetVar;
+import com.starrocks.sql.ast.ShowStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.UnsupportedStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
@@ -194,6 +196,10 @@ public class StmtExecutor {
         this.originStmt = parsedStmt.getOrigStmt();
         this.serializer = context.getSerializer();
         this.isProxy = false;
+    }
+
+    public Coordinator getCoordinator() {
+        return this.coord;
     }
 
     // At the end of query execution, we begin to add up profile
@@ -341,45 +347,39 @@ public class StmtExecutor {
             ExecPlan execPlan = null;
             boolean execPlanBuildByNewPlanner = false;
 
-            // Entrance to the new planner
-            if (StatementPlanner.supportedByNewPlanner(parsedStmt)) {
-                try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
-                    redirectStatus = parsedStmt.getRedirectStatus();
-                    if (!isForwardToLeader()) {
-                        context.getDumpInfo().reset();
-                        context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
-                        if (parsedStmt instanceof ShowStmt) {
-                            com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
-                            PrivilegeChecker.check(parsedStmt, context);
+            try (PlannerProfile.ScopedTimer _ = PlannerProfile.getScopedTimer("Total")) {
+                redirectStatus = parsedStmt.getRedirectStatus();
+                if (!isForwardToLeader()) {
+                    context.getDumpInfo().reset();
+                    context.getDumpInfo().setOriginStmt(parsedStmt.getOrigStmt().originStmt);
+                    if (parsedStmt instanceof ShowStmt) {
+                        com.starrocks.sql.analyzer.Analyzer.analyze(parsedStmt, context);
+                        PrivilegeChecker.check(parsedStmt, context);
 
-                            QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
-                            if (selectStmt != null) {
-                                parsedStmt = selectStmt;
-                                execPlan = StatementPlanner.plan(parsedStmt, context);
-                            }
-                        } else {
+                        QueryStatement selectStmt = ((ShowStmt) parsedStmt).toSelectStmt();
+                        if (selectStmt != null) {
+                            parsedStmt = selectStmt;
                             execPlan = StatementPlanner.plan(parsedStmt, context);
                         }
-                        execPlanBuildByNewPlanner = true;
-                    }
-                } catch (SemanticException e) {
-                    dumpException(e);
-                    throw new AnalysisException(e.getMessage());
-                } catch (StarRocksPlannerException e) {
-                    dumpException(e);
-                    if (e.getType().equals(ErrorType.USER_ERROR)) {
-                        throw e;
-                    } else if (e.getType().equals(ErrorType.UNSUPPORTED) && e.getMessage().contains("UDF function")) {
-                        LOG.warn("New planner not implement : " + originStmt.originStmt, e);
-                        analyze(context.getSessionVariable().toThrift());
                     } else {
-                        LOG.warn("New planner error: " + originStmt.originStmt, e);
-                        throw e;
+                        execPlan = StatementPlanner.plan(parsedStmt, context);
                     }
+                    execPlanBuildByNewPlanner = true;
                 }
-            } else {
-                // analyze this query
-                analyze(context.getSessionVariable().toThrift());
+            } catch (SemanticException e) {
+                dumpException(e);
+                throw new AnalysisException(e.getMessage());
+            } catch (StarRocksPlannerException e) {
+                dumpException(e);
+                if (e.getType().equals(ErrorType.USER_ERROR)) {
+                    throw e;
+                } else if (e.getType().equals(ErrorType.UNSUPPORTED) && e.getMessage().contains("UDF function")) {
+                    LOG.warn("New planner not implement : " + originStmt.originStmt, e);
+                    analyze(context.getSessionVariable().toThrift());
+                } else {
+                    LOG.warn("New planner error: " + originStmt.originStmt, e);
+                    throw e;
+                }
             }
 
             if (context.isQueryDump()) {
@@ -493,6 +493,8 @@ public class StmtExecutor {
                 handleDelSqlBlackListStmt();
             } else if (parsedStmt instanceof ExecuteAsStmt) {
                 handleExecAsStmt();
+            } else if (parsedStmt instanceof SetRoleStmt) {
+                handleSetRole();
             } else {
                 context.getState().setError("Do not support this query.");
             }
@@ -516,6 +518,7 @@ public class StmtExecutor {
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
         } finally {
+            GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {
                 coord.cancel();
             }
@@ -569,10 +572,6 @@ public class StmtExecutor {
                 parsedStmt.setOrigStmt(originStmt);
             } catch (ParsingException parsingException) {
                 throw new AnalysisException(parsingException.getMessage());
-            } catch (Exception e) {
-                parsedStmt = com.starrocks.sql.parser.SqlParser.parseWithOldParser(originStmt.originStmt,
-                        context.getSessionVariable().getSqlMode(), originStmt.idx);
-                parsedStmt.setOrigStmt(originStmt);
             }
         }
     }
@@ -917,6 +916,10 @@ public class StmtExecutor {
         ExecuteAsExecutor.execute((ExecuteAsStmt) parsedStmt, context);
     }
 
+    private void handleSetRole() throws PrivilegeException, UserException {
+        SetRoleExecutor.execute((SetRoleStmt) parsedStmt, context);
+    }
+
     private void handleUnsupportedStmt() {
         context.getMysqlChannel().reset();
         // do nothing
@@ -1068,7 +1071,11 @@ public class StmtExecutor {
         if (execPlan == null) {
             explainString += "NOT AVAILABLE";
         } else {
-            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+            if (parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.OPTIMIZER)) {
+                explainString += PlannerProfile.printPlannerTimeCost(context.getPlannerProfile());
+            } else {
+                explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+            }
         }
         return explainString;
     }
@@ -1482,6 +1489,15 @@ public class StmtExecutor {
         }
 
         String errMsg = "";
+        if (txnStatus.equals(TransactionStatus.COMMITTED)) {
+            String timeoutInfo = GlobalStateMgr.getCurrentGlobalTransactionMgr()
+                    .getTxnPublishTimeoutDebugInfo(database.getId(), transactionId);
+            LOG.warn("txn {} publish timeout {}", transactionId, timeoutInfo);
+            if (timeoutInfo.length() > 120) {
+                timeoutInfo = timeoutInfo.substring(0, 120) + "...";
+            }
+            errMsg = "Publish timeout " + timeoutInfo;
+        }
         try {
             context.getGlobalStateMgr().getLoadManager().recordFinishedOrCacnelledLoadJob(jobId,
                     EtlJobType.INSERT,

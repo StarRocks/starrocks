@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.mysql.privilege.Auth;
@@ -188,6 +186,54 @@ public class GrantRevokePrivilegeStmtTest {
                 "REVOKE node_priv on RESOURCE not.valid from me", ctx));
         Assert.assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(
                 "REVOKE node_priv on RESOURCE 'not!valid!' from me", ctx));
+    }
+
+    @Test
+    public void testUnsupportedSyntax() throws Exception {
+        try {
+            UtFrameUtils.parseStmtWithNewParser("GRANT select on table db.tbl, db.tbl1 To me", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported syntax: can only grant/revoke on one TABLE"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("REVOKE select on db.tbl, db.tbl1 FROM me", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported syntax: can only grant/revoke on one TABLE"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("GRANT select on db.tbl To me with grant option", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported syntax: WITH GRANT OPTION"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("GRANT impersonate on user test_user, me To me", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            e.printStackTrace();
+            Assert.assertTrue(e.getMessage().contains("unsupported syntax: can only grant/revoke on one USER"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("GRANT usage on resource spark0, spark1 To me", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported syntax: can only grant/revoke on one RESOURCE"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("GRANT ADMIN on SYSTEM To me", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("unsupported privilege type SYSTEM"));
+        }
+
+
     }
 
 }

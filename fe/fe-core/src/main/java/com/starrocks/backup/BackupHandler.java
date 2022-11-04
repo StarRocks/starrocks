@@ -25,19 +25,11 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.AbstractBackupStmt;
-import com.starrocks.analysis.BackupStmt;
-import com.starrocks.analysis.BackupStmt.BackupType;
-import com.starrocks.analysis.CancelBackupStmt;
-import com.starrocks.analysis.CreateRepositoryStmt;
-import com.starrocks.analysis.DropRepositoryStmt;
-import com.starrocks.analysis.RestoreStmt;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.backup.AbstractJob.JobType;
 import com.starrocks.backup.BackupJob.BackupJobState;
 import com.starrocks.backup.BackupJobInfo.BackupTableInfo;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -54,7 +46,14 @@ import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.AbstractBackupStmt;
+import com.starrocks.sql.ast.BackupStmt;
+import com.starrocks.sql.ast.BackupStmt.BackupType;
+import com.starrocks.sql.ast.CancelBackupStmt;
+import com.starrocks.sql.ast.CreateRepositoryStmt;
+import com.starrocks.sql.ast.DropRepositoryStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.RestoreStmt;
 import com.starrocks.task.DirMoveTask;
 import com.starrocks.task.DownloadTask;
 import com.starrocks.task.SnapshotTask;
@@ -311,10 +310,6 @@ public class BackupHandler extends LeaderDaemon implements Writable {
                 }
 
                 OlapTable olapTbl = (OlapTable) tbl;
-                if (olapTbl.getKeysType() == KeysType.PRIMARY_KEYS) {
-                    ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                            "backup do not support primary key table: " + tblName);
-                }
                 if (olapTbl.existTempPartitions()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Do not support backup table with temp partitions");

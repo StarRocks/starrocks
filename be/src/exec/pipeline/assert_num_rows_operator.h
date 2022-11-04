@@ -21,12 +21,11 @@ class AssertNumRowsOperator final : public Operator {
 public:
     AssertNumRowsOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                           const int64_t& desired_num_rows, const std::string& subquery_string,
-                          const TAssertion::type& assertion)
+                          const TAssertion::type assertion)
             : Operator(factory, id, "assert_num_rows_sink", plan_node_id, driver_sequence),
               _desired_num_rows(desired_num_rows),
               _subquery_string(subquery_string),
-              _assertion(std::move(assertion)),
-              _has_assert(false) {}
+              _assertion(assertion) {}
 
     ~AssertNumRowsOperator() override = default;
 
@@ -46,8 +45,7 @@ public:
 private:
     const int64_t& _desired_num_rows;
     const std::string& _subquery_string;
-    const TAssertion::type& _assertion;
-    bool _has_assert;
+    const TAssertion::type _assertion;
 
     int64_t _actual_num_rows = 0;
     vectorized::ChunkPtr _cur_chunk = nullptr;
@@ -58,11 +56,11 @@ private:
 class AssertNumRowsOperatorFactory final : public OperatorFactory {
 public:
     AssertNumRowsOperatorFactory(int32_t id, int32_t plan_node_id, int64_t desired_num_rows,
-                                 const std::string& subquery_string, TAssertion::type&& assertion)
+                                 const std::string& subquery_string, TAssertion::type assertion)
             : OperatorFactory(id, "assert_num_rows_sink", plan_node_id),
               _desired_num_rows(desired_num_rows),
               _subquery_string(subquery_string),
-              _assertion(std::move(assertion)) {}
+              _assertion(assertion) {}
 
     ~AssertNumRowsOperatorFactory() override = default;
 

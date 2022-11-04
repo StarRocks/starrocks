@@ -5,13 +5,13 @@ import com.google.common.base.Joiner;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArrowExpr;
 import com.starrocks.analysis.BetweenPredicate;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.ExistsPredicate;
@@ -28,14 +28,12 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.SetStmt;
-import com.starrocks.analysis.SetType;
-import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.mysql.privilege.Privilege;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
@@ -54,6 +52,9 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.SetStmt;
+import com.starrocks.sql.ast.SetType;
+import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -366,7 +367,14 @@ public class AST2SQL {
             sqlBuilder.append(")");
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias());
+
+                if (node.getColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(")");
+                }
             }
+
             return sqlBuilder.toString();
         }
 
@@ -428,7 +436,7 @@ public class AST2SQL {
         }
 
         @Override
-        public String visitArrayElementExpr(ArrayElementExpr node, Void context) {
+        public String visitCollectionElementExpr(CollectionElementExpr node, Void context) {
             return visit(node.getChild(0)) + "[" + visit(node.getChild(1)) + "]";
         }
 
@@ -528,7 +536,7 @@ public class AST2SQL {
                 sb.append("DISTINCT ");
             }
 
-            if (functionName.equalsIgnoreCase("TIME_SLICE")) {
+            if (functionName.equalsIgnoreCase(FunctionSet.TIME_SLICE) || functionName.equalsIgnoreCase(FunctionSet.DATE_SLICE)) {
                 sb.append(visit(node.getChild(0))).append(", ");
                 sb.append("INTERVAL ");
                 sb.append(visit(node.getChild(1)));

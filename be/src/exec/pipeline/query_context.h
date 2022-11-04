@@ -12,6 +12,7 @@
 #include "gen_cpp/InternalService_types.h" // for TQueryOptions
 #include "gen_cpp/Types_types.h"           // for TUniqueId
 #include "runtime/profile_report_worker.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_state.h"
 #include "util/debug/query_trace.h"
 #include "util/hash_util.hpp"
@@ -31,7 +32,7 @@ public:
     ~QueryContext();
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    TUniqueId query_id() { return _query_id; }
+    TUniqueId query_id() const { return _query_id; }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {
@@ -98,13 +99,22 @@ public:
     Status init_query(workgroup::WorkGroup* wg);
 
     // Some statistic about the query, including cpu, scan_rows, scan_bytes
-    void incr_cpu_cost(int64_t cost) { _cur_cpu_cost_ns += cost; }
-    int64_t cpu_cost() const { return _cur_cpu_cost_ns; }
     int64_t mem_cost_bytes() const { return _mem_tracker->peak_consumption(); }
-    void incr_cur_scan_rows_num(int64_t rows_num) { _cur_scan_rows_num += rows_num; }
-    int64_t cur_scan_rows_num() const { return _cur_scan_rows_num; }
-    void incr_cur_scan_bytes(int64_t scan_bytes) { _cur_scan_bytes += scan_bytes; }
-    int64_t get_scan_bytes() const { return _cur_scan_bytes; }
+    void incr_cpu_cost(int64_t cost) {
+        _total_cpu_cost_ns += cost;
+        _delta_cpu_cost_ns += cost;
+    }
+    void incr_cur_scan_rows_num(int64_t rows_num) {
+        _total_scan_rows_num += rows_num;
+        _delta_scan_rows_num += rows_num;
+    }
+    void incr_cur_scan_bytes(int64_t scan_bytes) {
+        _total_scan_bytes += scan_bytes;
+        _delta_scan_bytes += scan_bytes;
+    }
+    int64_t cpu_cost() const { return _total_cpu_cost_ns; }
+    int64_t cur_scan_rows_num() const { return _total_scan_rows_num; }
+    int64_t get_scan_bytes() const { return _total_scan_bytes; }
 
     // Query start time, used to check how long the query has been running
     // To ensure that the minimum run time of the query will not be killed by the big query checking mechanism
@@ -118,6 +128,14 @@ public:
     starrocks::debug::QueryTrace* query_trace() { return _query_trace.get(); }
 
     std::shared_ptr<starrocks::debug::QueryTrace> shared_query_trace() { return _query_trace; }
+
+    // Delta statistic since last retrieve
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+    // Merged statistic from all executor nodes
+    std::shared_ptr<QueryStatistics> final_query_statistic();
+    std::shared_ptr<QueryStatisticsRecvr> maintained_query_recv();
+    bool is_result_sink() const { return _is_result_sink; }
+    void set_result_sink(bool value) { _is_result_sink = value; }
 
 public:
     static constexpr int DEFAULT_EXPIRE_SECONDS = 300;
@@ -144,9 +162,14 @@ private:
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
-    std::atomic<int64_t> _cur_cpu_cost_ns = 0;
-    std::atomic<int64_t> _cur_scan_rows_num = 0;
-    std::atomic<int64_t> _cur_scan_bytes = 0;
+    std::atomic<int64_t> _total_cpu_cost_ns = 0;
+    std::atomic<int64_t> _total_scan_rows_num = 0;
+    std::atomic<int64_t> _total_scan_bytes = 0;
+    std::atomic<int64_t> _delta_cpu_cost_ns = 0;
+    std::atomic<int64_t> _delta_scan_rows_num = 0;
+    std::atomic<int64_t> _delta_scan_bytes = 0;
+    bool _is_result_sink = false;
+    std::shared_ptr<QueryStatisticsRecvr> _sub_plan_query_statistics_recvr; // For receive
 
     int64_t _scan_limit = 0;
 };

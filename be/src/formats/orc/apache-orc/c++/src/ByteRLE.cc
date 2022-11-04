@@ -185,7 +185,7 @@ uint64_t ByteRleEncoderImpl::getBufferSize() const {
 
 void ByteRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
     uint64_t flushedSize = outputStream->getSize();
-    uint64_t unflushedSize = static_cast<uint64_t>(bufferPosition);
+    auto unflushedSize = static_cast<uint64_t>(bufferPosition);
     if (outputStream->isCompressed()) {
         // start of the compression chunk in the stream
         recorder->add(flushedSize);
@@ -290,7 +290,7 @@ void BooleanRleEncoderImpl::recordPosition(PositionRecorder* recorder) const {
 }
 
 std::unique_ptr<ByteRleEncoder> createBooleanRleEncoder(std::unique_ptr<BufferedOutputStream> output) {
-    BooleanRleEncoderImpl* encoder = new BooleanRleEncoderImpl(std::move(output));
+    auto* encoder = new BooleanRleEncoderImpl(std::move(output));
     return std::unique_ptr<ByteRleEncoder>(reinterpret_cast<ByteRleEncoder*>(encoder));
 }
 
@@ -616,7 +616,7 @@ void BooleanRleDecoderImpl::next(char* data, uint64_t numValues, char* notNull) 
 
 std::unique_ptr<ByteRleDecoder> createBooleanRleDecoder(std::unique_ptr<SeekableInputStream> input,
                                                         ReaderMetrics* metrics) {
-    BooleanRleDecoderImpl* decoder = new BooleanRleDecoderImpl(std::move(input), metrics);
+    auto* decoder = new BooleanRleDecoderImpl(std::move(input), metrics);
     return std::unique_ptr<ByteRleDecoder>(reinterpret_cast<ByteRleDecoder*>(decoder));
 }
 } // namespace orc

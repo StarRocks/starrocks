@@ -24,6 +24,7 @@ public class OptimizerContext {
     private CTEContext cteContext;
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
+    private OptimizerConfig optimizerConfig;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -32,9 +33,15 @@ public class OptimizerContext {
         this.taskScheduler = SeriallyTaskScheduler.create();
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
+        this.optimizerConfig = new OptimizerConfig();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
+        this(memo, columnRefFactory, connectContext, OptimizerConfig.defaultConfig());
+    }
+
+    public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext,
+                            OptimizerConfig optimizerConfig) {
         this.memo = memo;
         this.ruleSet = new RuleSet();
         this.globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -47,6 +54,7 @@ public class OptimizerContext {
         this.cteContext.setEnableCTE(sessionVariable.isCboCteReuse());
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
+        this.optimizerConfig = optimizerConfig;
     }
 
     public Memo getMemo() {
@@ -99,5 +107,9 @@ public class OptimizerContext {
 
     public OptimizerTraceInfo getTraceInfo() {
         return traceInfo;
+    }
+
+    public OptimizerConfig getOptimizerConfig() {
+        return optimizerConfig;
     }
 }

@@ -58,7 +58,7 @@ class CachedFdInputStream : public io::FdInputStream {
 public:
     explicit CachedFdInputStream(FdCache::Handle* h) : io::FdInputStream(FdCache::fd(h)), _h(h) {}
 
-    ~CachedFdInputStream() { FdCache::Instance()->release(_h); }
+    ~CachedFdInputStream() override { FdCache::Instance()->release(_h); }
 
 private:
     FdCache::Handle* _h;
@@ -181,6 +181,7 @@ public:
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
+        _pending_sync = true;
         return Status::OK();
     }
 

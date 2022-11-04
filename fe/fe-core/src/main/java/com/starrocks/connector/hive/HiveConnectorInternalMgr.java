@@ -4,34 +4,26 @@ package com.starrocks.connector.hive;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.starrocks.common.Config;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ReentrantExecutor;
-import com.starrocks.external.CachingRemoteFileConf;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.HiveRemoteFileIO;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.RemoteFileIO;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.hive.conf.HiveConf;
-import org.apache.hadoop.hive.metastore.conf.MetastoreConf;
 
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
+import static com.starrocks.connector.CachingRemoteFileIO.NEVER_REFRESH;
 
 public class HiveConnectorInternalMgr {
     private final String catalogName;
     private final Map<String, String> properties;
     private final boolean enableMetastoreCache;
-    private CachingHiveMetastoreConf hmsConf;
+    private final CachingHiveMetastoreConf hmsConf;
 
     private final boolean enableRemoteFileCache;
-    private CachingRemoteFileConf remoteFileConf;
+    private final CachingRemoteFileConf remoteFileConf;
 
     private ExecutorService refreshHiveMetastoreExecutor;
     private ExecutorService refreshRemoteFileExecutor;
@@ -39,6 +31,7 @@ public class HiveConnectorInternalMgr {
 
     private final boolean isRecursive;
     private final int loadRemoteFileMetadataThreadNum;
+    private final boolean enableHmsEventsIncrementalSync;
 
     public HiveConnectorInternalMgr(String catalogName, Map<String, String> properties) {
         this.catalogName = catalogName;
@@ -52,6 +45,8 @@ public class HiveConnectorInternalMgr {
         this.isRecursive = Boolean.parseBoolean(properties.getOrDefault("hive_recursive_directories", "false"));
         this.loadRemoteFileMetadataThreadNum = Integer.parseInt(properties.getOrDefault("remote_file_load_thread_num",
                 String.valueOf(Config.remote_file_metadata_load_concurrency)));
+        this.enableHmsEventsIncrementalSync = Boolean.parseBoolean(properties.getOrDefault("enable_hms_events_incremental_sync",
+                String.valueOf(Config.enable_hms_events_incremental_sync)));
     }
 
     public void shutdown() {
@@ -68,7 +63,7 @@ public class HiveConnectorInternalMgr {
 
     public IHiveMetastore createHiveMetastore() {
         // TODO(stephen): Abstract the creator class to construct hive meta client
-        HiveMetaClient metaClient = createHiveMetaClient();
+        HiveMetaClient metaClient = HiveMetaClient.createHiveMetaClient(properties);
         IHiveMetastore hiveMetastore = new HiveMetastore(metaClient, catalogName);
         IHiveMetastore baseHiveMetastore;
         if (!enableMetastoreCache) {
@@ -80,7 +75,7 @@ public class HiveConnectorInternalMgr {
                     hiveMetastore,
                     new ReentrantExecutor(refreshHiveMetastoreExecutor, hmsConf.getCacheRefreshThreadMaxNum()),
                     hmsConf.getCacheTtlSec(),
-                    hmsConf.getCacheRefreshIntervalSec(),
+                    enableHmsEventsIncrementalSync ? NEVER_REFRESH : hmsConf.getCacheRefreshIntervalSec(),
                     hmsConf.getCacheMaxNum(),
                     hmsConf.enableListNamesCache());
         }
@@ -103,25 +98,17 @@ public class HiveConnectorInternalMgr {
                     remoteFileIO,
                     new ReentrantExecutor(refreshRemoteFileExecutor, remoteFileConf.getPerQueryCacheMaxSize()),
                     remoteFileConf.getCacheTtlSec(),
-                    remoteFileConf.getCacheRefreshIntervalSec(),
+                    enableHmsEventsIncrementalSync ? NEVER_REFRESH : remoteFileConf.getCacheRefreshIntervalSec(),
                     remoteFileConf.getCacheMaxSize());
         }
 
         return baseRemoteFileIO;
     }
 
-    public HiveMetaClient createHiveMetaClient() {
-        HiveConf conf = new HiveConf();
-        conf.set(MetastoreConf.ConfVars.THRIFT_URIS.getHiveName(), properties.get(HIVE_METASTORE_URIS));
-        conf.set(MetastoreConf.ConfVars.CLIENT_SOCKET_TIMEOUT.getHiveName(),
-                String.valueOf(Config.hive_meta_store_timeout_s));
-        return new HiveMetaClient(conf);
-    }
-
     public ExecutorService getPullRemoteFileExecutor() {
         if (pullRemoteFileExecutor == null) {
             pullRemoteFileExecutor = Executors.newFixedThreadPool(loadRemoteFileMetadataThreadNum,
-                    new ThreadFactoryBuilder().setNameFormat("pull-remote-files-%d").build());
+                    new ThreadFactoryBuilder().setNameFormat("pull-hive-remote-files-%d").build());
         }
 
         return pullRemoteFileExecutor;
@@ -137,5 +124,9 @@ public class HiveConnectorInternalMgr {
 
     public CachingRemoteFileConf getRemoteFileConf() {
         return remoteFileConf;
+    }
+
+    public boolean enableHmsEventsIncrementalSync() {
+        return enableHmsEventsIncrementalSync;
     }
 }

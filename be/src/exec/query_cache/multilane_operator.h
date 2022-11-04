@@ -60,12 +60,12 @@ public:
 
     void set_lane_arbiter(const LaneArbiterPtr& lane_arbiter) { _lane_arbiter = lane_arbiter; }
 
-    Status reset_lane(LaneOwnerType lane_id, std::vector<vectorized::ChunkPtr>&& chunks);
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_id, const std::vector<vectorized::ChunkPtr>& chunks);
 
 private:
     StatusOr<vectorized::ChunkPtr> _pull_chunk_from_lane(RuntimeState* state, Lane& lane, bool passthrough_mode);
     using FinishCallback = std::function<Status(pipeline::OperatorPtr&, RuntimeState*)>;
-    Status _finish(RuntimeState* state, FinishCallback finish_cb);
+    Status _finish(RuntimeState* state, const FinishCallback& finish_cb);
     const size_t _num_lanes;
     LaneArbiterPtr _lane_arbiter = nullptr;
     std::vector<Lane> _lanes;
@@ -78,7 +78,7 @@ private:
 
 class MultilaneOperatorFactory final : public pipeline::OperatorFactory {
 public:
-    MultilaneOperatorFactory(int32_t id, OperatorFactoryPtr factory, size_t num_lanes);
+    MultilaneOperatorFactory(int32_t id, const OperatorFactoryPtr& factory, size_t num_lanes);
     pipeline::OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;

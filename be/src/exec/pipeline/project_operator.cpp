@@ -44,7 +44,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
                 // Note: we must create a new column every time here,
                 // because result_columns[i] is shared_ptr
                 ColumnPtr new_column = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), false);
-                ConstColumn* const_column = down_cast<ConstColumn*>(result_columns[i].get());
+                auto* const_column = down_cast<ConstColumn*>(result_columns[i].get());
                 new_column->append(*const_column->data_column(), 0, 1);
                 new_column->assign(chunk->num_rows(), 0);
                 result_columns[i] = std::move(new_column);
@@ -67,7 +67,7 @@ Status ProjectOperator::push_chunk(RuntimeState* state, const vectorized::ChunkP
     return Status::OK();
 }
 
-Status ProjectOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status ProjectOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
     _cur_chunk = nullptr;
 

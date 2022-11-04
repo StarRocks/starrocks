@@ -197,6 +197,8 @@ private:
     RuntimeState* _runtime_state = nullptr;
 
     bool _enable_colocate_mv_index = config::enable_load_colocate_mv;
+
+    WriteQuorumTypePB _write_quorum_type = WriteQuorumTypePB::MAJORITY;
 };
 
 class IndexChannel {
@@ -231,6 +233,8 @@ private:
     std::unordered_map<int64_t, int64_t> _be_to_tablet_num;
     // BeId
     std::set<int64_t> _failed_channels;
+
+    TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 };
 
 // Write data to Olap Table.
@@ -280,6 +284,8 @@ public:
     // Returns the runtime profile for the sink.
     RuntimeProfile* profile() override { return _profile; }
 
+    ObjectPool* pool() { return _pool; }
+
 private:
     template <PrimitiveType PT>
     void _validate_decimal(RuntimeState* state, vectorized::Column* column, const SlotDescriptor* desc,
@@ -305,7 +311,15 @@ private:
 
     void mark_as_failed(const NodeChannel* ch) { _failed_channels.insert(ch->node_id()); }
     bool is_failed_channel(const NodeChannel* ch) { return _failed_channels.count(ch->node_id()) != 0; }
-    bool has_intolerable_failure() { return _failed_channels.size() >= ((_num_repicas + 1) / 2); }
+    bool has_intolerable_failure() {
+        if (_write_quorum_type == TWriteQuorumType::ALL) {
+            return _failed_channels.size() > 0;
+        } else if (_write_quorum_type == TWriteQuorumType::ONE) {
+            return _failed_channels.size() >= _num_repicas;
+        } else {
+            return _failed_channels.size() >= ((_num_repicas + 1) / 2);
+        }
+    }
 
     void for_each_node_channel(const std::function<void(NodeChannel*)>& func) {
         for (auto& it : _node_channels) {
@@ -416,6 +430,8 @@ private:
     bool _colocate_mv_index = config::enable_load_colocate_mv;
 
     bool _enable_replicated_storage = false;
+
+    TWriteQuorumType::type _write_quorum_type = TWriteQuorumType::MAJORITY;
 };
 
 } // namespace stream_load

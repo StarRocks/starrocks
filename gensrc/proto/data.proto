@@ -64,6 +64,7 @@ message ChunkPB {
     // For some object column types like bitmap/hll/percentile.
     // we may estimate larger serialized_size but actually don't use that much space.
     optional int64 serialized_size  = 9; // how many bytes are really written into data.
+    repeated int32 encode_level = 10; // the encode level for data columns, during upgrade, this must be 0.
 };
 
 message SegmentPB {
@@ -74,4 +75,9 @@ message SegmentPB {
     optional int64 num_rows = 5;
     optional int64 row_size = 6;
     optional string path = 7;
+
+    optional int64 delete_id = 8;
+    optional int64 delete_data_size = 9;
+    optional int64 delete_num_rows = 10;
+    optional string delete_path = 11;
 };

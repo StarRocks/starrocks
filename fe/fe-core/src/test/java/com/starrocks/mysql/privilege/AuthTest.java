@@ -23,10 +23,6 @@ package com.starrocks.mysql.privilege;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Analyzer;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ResourcePattern;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserDesc;
@@ -45,6 +41,10 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
@@ -1276,7 +1276,7 @@ public class AuthTest {
         createRoleSql = String.format("CREATE ROLE %s", role);
         try {
             roleStmt = (CreateRoleStmt) UtFrameUtils.parseStmtWithNewParser(createRoleSql, ctx);
-            roleStmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createRole(roleStmt);
         } catch (Exception e1) {
             e1.printStackTrace();
@@ -1744,7 +1744,8 @@ public class AuthTest {
         userIdentity.analyze();
         UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
         CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-        createUserStmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
+
         auth.createUser(createUserStmt);
 
         Assert.assertNull(auth.getUserPrivTable().getPasswordByApproximate(
@@ -1993,7 +1994,7 @@ public class AuthTest {
             userIdentity.analyze();
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-            createUserStmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
             userToBeCreated.add(userIdentity);
         }
@@ -2063,6 +2064,10 @@ public class AuthTest {
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
+
+                globalStateMgr.isUsingNewPrivilege();
+                minTimes = 0;
+                result = false;
             }
         };
 
@@ -2106,7 +2111,7 @@ public class AuthTest {
         for (UserIdentity userIdentity : userToBeCreated) {
             UserDesc userDesc = new UserDesc(userIdentity, "12345", true);
             CreateUserStmt createUserStmt = new CreateUserStmt(false, userDesc, null);
-            createUserStmt.analyze(analyzer);
+            com.starrocks.sql.analyzer.Analyzer.analyze(createUserStmt, new ConnectContext());
             auth.createUser(createUserStmt);
         }
 

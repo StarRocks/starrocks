@@ -26,6 +26,7 @@
 #include <unistd.h>
 
 #include <boost/thread.hpp>
+#include <memory>
 #include <thread>
 
 namespace starrocks {
@@ -59,8 +60,7 @@ TEST(BlockingQueueTest, TestGetFromShutdownQueue) {
 
 class MultiThreadTest {
 public:
-    MultiThreadTest()
-            : _iterations(10000), _nthreads(5), _queue(_iterations * _nthreads / 10), _num_inserters(_nthreads) {}
+    MultiThreadTest() : _queue(_iterations * _nthreads / 10), _num_inserters(_nthreads) {}
 
     void inserter_thread(int arg) {
         for (int i = 0; i < _iterations; ++i) {
@@ -94,16 +94,16 @@ public:
 
     void Run() {
         for (int i = 0; i < _nthreads; ++i) {
-            _threads.push_back(std::shared_ptr<std::thread>(new std::thread([this, i] { inserter_thread(i); })));
-            _threads.push_back(std::shared_ptr<std::thread>(new std::thread([this] { RemoverThread(); })));
+            _threads.push_back(std::make_shared<std::thread>([this, i] { inserter_thread(i); }));
+            _threads.push_back(std::make_shared<std::thread>([this] { RemoverThread(); }));
         }
 
         // We add an extra thread to ensure that there aren't enough elements in
         // the queue to go around.  This way, we test removal after shutdown.
-        _threads.push_back(std::shared_ptr<std::thread>(new std::thread([this] { RemoverThread(); })));
+        _threads.push_back(std::make_shared<std::thread>([this] { RemoverThread(); }));
 
-        for (int i = 0; i < _threads.size(); ++i) {
-            _threads[i]->join();
+        for (auto& _thread : _threads) {
+            _thread->join();
         }
 
         // Let's check to make sure we got what we should have.
@@ -122,8 +122,8 @@ public:
 private:
     typedef std::vector<std::shared_ptr<std::thread> > ThreadVector;
 
-    int _iterations;
-    int _nthreads;
+    int _iterations{10000};
+    int _nthreads{5};
     BlockingQueue<int32_t> _queue;
     // Lock for _gotten and _num_inserters.
     std::mutex _lock;

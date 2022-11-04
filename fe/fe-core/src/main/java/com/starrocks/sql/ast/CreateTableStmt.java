@@ -6,7 +6,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.ColumnDef;
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.IndexDef;
 import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.TableName;
@@ -47,6 +46,7 @@ public class CreateTableStmt extends DdlStmt {
 
     // set in analyze
     private List<Column> columns = Lists.newArrayList();
+    private List<String> sortKeys = Lists.newArrayList();
 
     private List<Index> indexes = Lists.newArrayList();
 
@@ -84,7 +84,7 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> extProperties,
                            String comment) {
         this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, null, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, null);
+                distributionDesc, properties, extProperties, comment, null, null);
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -99,7 +99,7 @@ public class CreateTableStmt extends DdlStmt {
                            Map<String, String> extProperties,
                            String comment, List<AlterClause> ops) {
         this(ifNotExists, isExternal, tableName, columnDefinitions, engineName, null, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, ops);
+                distributionDesc, properties, extProperties, comment, ops, null);
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -113,9 +113,9 @@ public class CreateTableStmt extends DdlStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> ops) {
+                           String comment, List<AlterClause> ops, List<String> sortKeys) {
         this(ifNotExists, isExternal, tableName, columnDefinitions, null, engineName, charsetName, keysDesc, partitionDesc,
-                distributionDesc, properties, extProperties, comment, ops);
+                distributionDesc, properties, extProperties, comment, ops, sortKeys);
     }
 
     public CreateTableStmt(boolean ifNotExists,
@@ -130,7 +130,7 @@ public class CreateTableStmt extends DdlStmt {
                            DistributionDesc distributionDesc,
                            Map<String, String> properties,
                            Map<String, String> extProperties,
-                           String comment, List<AlterClause> rollupAlterClauseList) {
+                           String comment, List<AlterClause> rollupAlterClauseList, List<String> sortKeys) {
         this.tableName = tableName;
         if (columnDefinitions == null) {
             this.columnDefs = Lists.newArrayList();
@@ -161,6 +161,7 @@ public class CreateTableStmt extends DdlStmt {
 
         this.tableSignature = -1;
         this.rollupAlterClauseList = rollupAlterClauseList == null ? new ArrayList<>() : rollupAlterClauseList;
+        this.sortKeys = sortKeys;
     }
 
     public void addColumnDef(ColumnDef columnDef) {
@@ -213,6 +214,10 @@ public class CreateTableStmt extends DdlStmt {
 
     public String getEngineName() {
         return engineName;
+    }
+
+    public List<String> getSortKeys() {
+        return sortKeys;
     }
 
     public void setEngineName(String engineName) {
@@ -299,10 +304,5 @@ public class CreateTableStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateTableStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

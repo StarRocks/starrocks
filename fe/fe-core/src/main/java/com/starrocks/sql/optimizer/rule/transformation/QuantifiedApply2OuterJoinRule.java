@@ -58,7 +58,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
                 && !SubqueryUtils.containsCorrelationSubquery(input);
     }
 
-    /**
+    /*
      * @todo: support constant in sub-query
      * e.g.
      *   select v0, 1 in (select v0 from t0) from t1
@@ -157,7 +157,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
             this.distinctAggregateOutputs = Lists.newArrayList();
         }
 
-        /**
+        /*
          * In:
          * before: select t0.v1, t0.v2 in (select t1.v2 from t1 where t0.v3 = t1.v3) from t0;
          * after: with xx as (select t1.v2, t1.v3 from t1)
@@ -193,7 +193,7 @@ public class QuantifiedApply2OuterJoinRule extends TransformationRule {
          *                               t1            t0     Agg(distinct)  CTEConsume
          *                                                         \
          *                                                        CTEConsume
-         */
+         * */
         public OptExpression transform() {
             check();
 

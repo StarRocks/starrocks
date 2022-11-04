@@ -370,7 +370,7 @@ public class ComputeNode implements IComputable, Writable {
      * handle Compute node's heartbeat response.
      * return true if any port changed, or alive state is changed.
      */
-    public boolean handleHbResponse(BackendHbResponse hbResponse) {
+    public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
         boolean isChanged = false;
         if (hbResponse.getStatus() == HeartbeatResponse.HbStatus.OK) {
             if (!this.version.equals(hbResponse.getVersion())) {
@@ -438,10 +438,20 @@ public class ComputeNode implements IComputable, Writable {
             // this heartbeat info also need to be synced to follower.
             // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
             // if this heartbeat is not synchronized to the follower, 
-            // that will cause the Follower and master’s memory to be inconsistent
+            // that will cause the Follower and leader’s memory to be inconsistent
             isChanged = true;
         }
-
+        if (!isReplay) {
+            hbResponse.aliveStatus = isAlive.get() ?
+                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+        } else {
+            if (hbResponse.aliveStatus != null) {
+                // The metadata before the upgrade does not contain hbResponse.aliveStatus,
+                // in which case the alive status needs to be handled according to the original logic
+                isAlive.getAndSet(hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE);
+                heartbeatRetryTimes = 0;
+            }
+        }
         return isChanged;
     }
 }

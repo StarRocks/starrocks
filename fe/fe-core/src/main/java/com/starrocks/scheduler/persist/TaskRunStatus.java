@@ -30,6 +30,9 @@ public class TaskRunStatus implements Writable {
     @SerializedName("state")
     private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
 
+    @SerializedName("progress")
+    private int progress;
+
     @SerializedName("dbName")
     private String dbName;
 
@@ -93,6 +96,14 @@ public class TaskRunStatus implements Writable {
 
     public void setState(Constants.TaskRunState state) {
         this.state = state;
+    }
+
+    public int getProgress() {
+        return progress;
+    }
+
+    public void setProgress(int progress) {
+        this.progress = progress;
     }
 
     public String getDbName() {
@@ -179,6 +190,7 @@ public class TaskRunStatus implements Writable {
                 ", createTime=" + createTime +
                 ", finishTime=" + finishTime +
                 ", state=" + state +
+                ", progress=" + progress + "%" +
                 ", dbName='" + getDbName() + '\'' +
                 ", definition='" + definition + '\'' +
                 ", user='" + user + '\'' +

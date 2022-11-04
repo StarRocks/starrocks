@@ -24,9 +24,6 @@ package com.starrocks.task;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ImportColumnDesc;
-import com.starrocks.analysis.ImportColumnsStmt;
-import com.starrocks.analysis.ImportWhereStmt;
 import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AnalysisException;
@@ -37,6 +34,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.ast.ImportColumnsStmt;
+import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
@@ -77,7 +77,7 @@ public class StreamLoadTask {
     private boolean partialUpdate = false;
     private TCompressionType compressionType = TCompressionType.NO_COMPRESSION;
     private int loadParallelRequestNum = 0;
-    private boolean enableReplicatedStorage;
+    private boolean enableReplicatedStorage = false;
 
     public StreamLoadTask(TUniqueId id, long txnId, TFileType fileType, TFileFormatType formatType) {
         this.id = id;
@@ -257,6 +257,9 @@ public class StreamLoadTask {
         }
         if (request.isSetLoad_dop()) {
             loadParallelRequestNum = request.getLoad_dop();
+        }
+        if (request.isSetEnable_replicated_storage()) {
+            enableReplicatedStorage = request.isEnable_replicated_storage();
         }
     }
 

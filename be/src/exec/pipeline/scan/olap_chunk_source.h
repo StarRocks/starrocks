@@ -37,8 +37,6 @@ public:
     void close(RuntimeState* state) override;
 
 private:
-    static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
-
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
     const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
@@ -83,7 +81,6 @@ private:
     // projection iterator, doing the job of choosing |_scanner_columns| from |_reader_columns|.
     std::shared_ptr<vectorized::ChunkIterator> _prj_iter;
 
-    const std::vector<std::string>* _unused_output_columns = nullptr;
     std::unordered_set<uint32_t> _unused_output_column_ids;
 
     // slot descriptors for each one of |output_columns|.
@@ -92,19 +89,11 @@ private:
     // The following are profile meatures
     int64_t _num_rows_read = 0;
 
-    // Local counters for row-size estimation, will be reset after a batch
-    size_t _local_sum_row_bytes = 0;
-    size_t _local_num_rows = 0;
-    size_t _local_sum_chunks = 0;
-    size_t _local_max_chunk_rows = 0;
-
     RuntimeProfile::Counter* _bytes_read_counter = nullptr;
     RuntimeProfile::Counter* _rows_read_counter = nullptr;
 
     RuntimeProfile::Counter* _expr_filter_timer = nullptr;
     RuntimeProfile::Counter* _create_seg_iter_timer = nullptr;
-    RuntimeProfile::Counter* _tablet_counter = nullptr;
-    RuntimeProfile::Counter* _reader_init_timer = nullptr;
     RuntimeProfile::Counter* _io_timer = nullptr;
     RuntimeProfile::Counter* _read_compressed_counter = nullptr;
     RuntimeProfile::Counter* _decompress_timer = nullptr;

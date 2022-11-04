@@ -29,8 +29,7 @@ class Operator {
     friend class PipelineDriver;
 
 public:
-    Operator(OperatorFactory* factory, int32_t id, const std::string& name, int32_t plan_node_id,
-             int32_t driver_sequence);
+    Operator(OperatorFactory* factory, int32_t id, std::string name, int32_t plan_node_id, int32_t driver_sequence);
     virtual ~Operator() = default;
 
     // prepare is used to do the initialization work
@@ -116,7 +115,7 @@ public:
     // partial-hit cache value via the `chunks` parameter, e.g.
     //  MultilaneOperator<ConjugateOperator<AggregateBlockingSinkOperator, AggregateBlockingSourceOperator>>
     // 3. operators decorated by MultilaneOperator except case 2: e.g. ProjectOperator, Chunk AccumulateOperator and etc.
-    virtual Status reset_state(std::vector<ChunkPtr>&& chunks) { return Status::OK(); }
+    virtual Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) { return Status::OK(); }
 
     int32_t get_id() const { return _id; }
 
@@ -158,6 +157,7 @@ public:
     // for example, LocalExchangeSinkOperator, LocalExchangeSourceOperator
     // 2. (s_pseudo_plan_node_id_upper_bound, -1] is for operator which is in the query's plan
     // for example, ResultSink
+    static const int32_t s_pseudo_plan_node_id_for_export_sink;
     static const int32_t s_pseudo_plan_node_id_for_olap_table_sink;
     static const int32_t s_pseudo_plan_node_id_for_result_sink;
     static const int32_t s_pseudo_plan_node_id_upper_bound;
@@ -233,7 +233,7 @@ private:
 
 class OperatorFactory {
 public:
-    OperatorFactory(int32_t id, const std::string& name, int32_t plan_node_id);
+    OperatorFactory(int32_t id, std::string name, int32_t plan_node_id);
     virtual ~OperatorFactory() = default;
     // Create the operator for the specific sequence driver
     // For some operators, when share some status, need to know the degree_of_parallelism

@@ -12,10 +12,9 @@
 
 namespace starrocks::pipeline {
 
-GlobalDriverExecutor::GlobalDriverExecutor(std::string name, std::unique_ptr<ThreadPool> thread_pool,
+GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
                                            bool enable_resource_group)
         : Base(name),
-          _enable_resource_group(enable_resource_group),
           _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
                                               : std::make_unique<QuerySharedDriverQueue>()),
           _thread_pool(std::move(thread_pool)),
@@ -39,7 +38,7 @@ void GlobalDriverExecutor::initialize(int num_threads) {
         // regist pipeline metrics
         auto metrics = StarRocksMetrics::instance()->metrics();
         auto regist_metric = [this, metrics](const std::string& metric_name, std::unique_ptr<UIntGauge>& metric,
-                                             const std::function<unsigned long()> provider) {
+                                             const std::function<unsigned long()>& provider) {
             std::string full_name = _name + "_" + metric_name;
             metric = std::make_unique<UIntGauge>(MetricUnit::NOUNIT);
             metrics->register_metric(full_name, metric.get());
@@ -119,7 +118,12 @@ void GlobalDriverExecutor::_worker_thread() {
                 _finalize_driver(driver, runtime_state, driver->driver_state());
                 continue;
             }
-            auto maybe_state = driver->process(runtime_state, worker_id);
+            StatusOr<DriverState> maybe_state;
+#ifdef NDEBUG
+            TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
+#else
+            maybe_state = driver->process(runtime_state, worker_id);
+#endif
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
 
@@ -218,6 +222,10 @@ void GlobalDriverExecutor::report_exec_state(FragmentContext* fragment_ctx, cons
     };
 
     this->_exec_state_reporter->submit(std::move(report_task));
+}
+
+void GlobalDriverExecutor::iterate_immutable_blocking_driver(const IterateImmutableDriverFunc& call) const {
+    _blocked_driver_poller->iterate_immutable_driver(call);
 }
 
 void GlobalDriverExecutor::_update_profile_by_level(FragmentContext* fragment_ctx, bool done) {

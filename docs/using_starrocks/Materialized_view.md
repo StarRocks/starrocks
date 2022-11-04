@@ -169,8 +169,7 @@ You can create a materialized view based on a specific query statement by using 
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-AS (query)
-[PROPERTIES ("key"="value", ...)];
+AS (query);
 ```
 
 For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
@@ -405,9 +404,9 @@ When a query is executed with a materialized view, the original query statement 
 
 ### Caution
 
-- Prior to StarRocks 2.4, materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
+- Sync materialized views only support aggregate functions on a single column. Query statements in the form of `sum(a+b)` are not supported.
 
-- Prior to StarRocks 2.4, clauses such as JOIN, WHERE, and GROUP BY are not supported in the materialized view creation statements.
+- Clauses such as JOIN, and WHERE are not supported in the sync materialized view creation statements.
 
 - The current version of StarRocks does not support creating multiple materialized views at the same time. A new materialized view can only be created when the one before is completed.
 
@@ -499,12 +498,12 @@ You can create a materialized view based on a specific query statement by using 
 
 ```SQL
 CREATE MATERIALIZED VIEW [IF NOT EXISTS] [database.]mv_name
-AS (query)
 [distribution_desc]
 [REFRESH refresh_scheme_desc]
 [primary_expression]
 [COMMENT ""]
-[PROPERTIES ("key"="value", ...)];
+[PROPERTIES ("key"="value", ...)]
+AS (query);
 ```
 
 For detailed instructions and parameter references, see [SQL Reference - CREATE MATERIALIZED VIEW](../sql-reference/sql-statements/data-definition/CREATE%20MATERIALIZED%20VIEW.md).
@@ -610,6 +609,8 @@ REFRESH MATERIALIZED VIEW order_mv;
 >
 > You can refresh a materialized view with async or manual refresh strategy via this command. However, you cannot refresh a single-table sync refresh materialized view via this command.
 
+You can cancel a refresh task by using the [CANCEL REFRESH MATERIALIZED VIEW](../sql-reference/sql-statements/data-manipulation/CANCEL%20REFRESH%20MATERIALIZED%20VIEW.md) statement.
+
 ### Check the execution status of a multi-table materialized view
 
 You can check the execution status of a multi-table materialized view via the following ways.
@@ -642,4 +643,4 @@ DROP MATERIALIZED VIEW order_mv;
 
 - Partition keys and bucket keys of the async or manual refresh materialized view must be in the query statement; if there is an aggregate function in the query statement, the partition keys and bucket keys must be in the GROUP BY clause.
 
-- The query statement does not support random functions, including rand, random, uuid, and sleep.
+- The query statement does not support random functions, including rand((), random(), uuid()), and sleep().

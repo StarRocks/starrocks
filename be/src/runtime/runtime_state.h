@@ -58,6 +58,8 @@ class ResultBufferMgr;
 class LoadErrorHub;
 class RowDescriptor;
 class RuntimeFilterPort;
+class QueryStatistics;
+class QueryStatisticsRecvr;
 
 namespace pipeline {
 class QueryContext;
@@ -284,6 +286,12 @@ public:
 
     std::vector<TTabletCommitInfo>& tablet_commit_infos() { return _tablet_commit_infos; }
 
+    void append_tablet_commit_infos(std::vector<TTabletCommitInfo>& commit_info) {
+        std::lock_guard<std::mutex> l(_tablet_commit_infos_lock);
+        _tablet_commit_infos.insert(_tablet_commit_infos.end(), std::make_move_iterator(commit_info.begin()),
+                                    std::make_move_iterator(commit_info.end()));
+    }
+
     // get mem limit for load channel
     // if load mem limit is not set, or is zero, using query mem limit instead.
     int64_t get_load_mem_limit() const;
@@ -303,6 +311,10 @@ public:
 
     void set_enable_pipeline_engine(bool enable_pipeline_engine) { _enable_pipeline_engine = enable_pipeline_engine; }
     bool enable_pipeline_engine() const { return _enable_pipeline_engine; }
+
+    bool enable_query_statistic() const;
+    std::shared_ptr<QueryStatistics> intermediate_query_statistic();
+    std::shared_ptr<QueryStatisticsRecvr> query_recv();
 
 private:
     Status create_error_log_file();
@@ -405,6 +417,7 @@ private:
 
     std::string _error_log_file_path;
     std::ofstream* _error_log_file = nullptr; // error file path, absolute path
+    std::mutex _tablet_commit_infos_lock;
     std::vector<TTabletCommitInfo> _tablet_commit_infos;
 
     // prohibit copies

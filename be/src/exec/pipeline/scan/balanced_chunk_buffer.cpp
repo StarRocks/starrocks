@@ -61,6 +61,10 @@ bool BalancedChunkBuffer::try_get(int buffer_index, vectorized::ChunkPtr* output
 }
 
 bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk, ChunkBufferTokenPtr chunk_token) {
+    // CRITICAL (by satanson)
+    // EOS chunks may be empty and must be delivered in order to notify CacheOperator that all chunks of the tablet
+    // has been processed.
+    if (!chunk || (!chunk->owner_info().is_last_chunk() && chunk->num_rows() == 0)) return true;
     if (_strategy == BalanceStrategy::kDirect) {
         return _get_sub_buffer(buffer_index)->put(std::make_pair(std::move(chunk), std::move(chunk_token)));
     } else if (_strategy == BalanceStrategy::kRoundRobin) {
@@ -78,6 +82,21 @@ bool BalancedChunkBuffer::put(int buffer_index, vectorized::ChunkPtr chunk, Chun
 void BalancedChunkBuffer::set_finished(int buffer_index) {
     _get_sub_buffer(buffer_index)->shutdown();
     _get_sub_buffer(buffer_index)->clear();
+}
+
+void BalancedChunkBuffer::update_limiter(vectorized::Chunk* chunk) {
+    static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
+    // Update local counters.
+    LimiterContext& ctx = _limiter_context;
+    ctx.local_sum_row_bytes += chunk->memory_usage();
+    ctx.local_num_rows += chunk->num_rows();
+    ctx.local_max_chunk_rows = std::max(ctx.local_max_chunk_rows, chunk->num_rows());
+
+    if (ctx.local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
+        _limiter->update_avg_row_bytes(ctx.local_sum_row_bytes, ctx.local_num_rows, ctx.local_max_chunk_rows);
+        ctx.local_sum_row_bytes = 0;
+        ctx.local_num_rows = 0;
+    }
 }
 
 } // namespace starrocks::pipeline

@@ -43,7 +43,8 @@ public:
 
     static uint32_t get_segment_max_rows(int64_t max_segment_file_size, int64_t input_row_num, int64_t input_size);
 
-    static void split_column_into_groups(size_t num_columns, size_t num_key_columns, int64_t max_columns_per_group,
+    static void split_column_into_groups(size_t num_columns, const std::vector<ColumnId>& sort_key_idxes,
+                                         int64_t max_columns_per_group,
                                          std::vector<std::vector<uint32_t>>* column_groups);
 
     // choose compaction algorithm according to tablet schema, max columns per group and segment iterator num.

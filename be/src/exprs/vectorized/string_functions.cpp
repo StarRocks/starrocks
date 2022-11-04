@@ -252,7 +252,7 @@ Status StringFunctions::sub_str_prepare(starrocks_udf::FunctionContext* context,
         return Status::OK();
     }
 
-    SubstrState* state = new SubstrState();
+    auto* state = new SubstrState();
     context->set_function_state(scope, state);
 
     // Don't improve for const string, which is rare case.
@@ -286,7 +286,7 @@ Status StringFunctions::sub_str_prepare(starrocks_udf::FunctionContext* context,
 Status unregister_substr_state(starrocks_udf::FunctionContext* context,
                                starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        SubstrState* state = reinterpret_cast<SubstrState*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<SubstrState*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
@@ -308,7 +308,7 @@ Status StringFunctions::left_or_right_prepare(starrocks_udf::FunctionContext* co
     }
 
     auto len_column = context->get_constant_column(1);
-    SubstrState* state = new SubstrState();
+    auto* state = new SubstrState();
     context->set_function_state(scope, state);
     state->is_const = true;
     int len = ColumnHelper::get_const_value<TYPE_INT>(len_column);
@@ -328,7 +328,7 @@ Status StringFunctions::concat_prepare(starrocks_udf::FunctionContext* context,
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
-    ConcatState* state = new ConcatState();
+    auto* state = new ConcatState();
     state->is_const = true;
     state->is_oversize = false;
     const auto num_args = context->get_num_args();
@@ -350,7 +350,7 @@ Status StringFunctions::concat_prepare(starrocks_udf::FunctionContext* context,
     // must not exceeds SIZE_LIMIT, otherwise the result is oversize in which
     // case NULL is returned according to mysql.
     raw::make_room(&tail, OLAP_STRING_MAX_LENGTH);
-    uint8* tail_begin = (uint8_t*)tail.data();
+    auto* tail_begin = (uint8_t*)tail.data();
     size_t tail_off = 0;
 
     for (auto i = 1; i < num_args; ++i) {
@@ -373,7 +373,7 @@ Status StringFunctions::concat_prepare(starrocks_udf::FunctionContext* context,
 Status StringFunctions::concat_close(starrocks_udf::FunctionContext* context,
                                      starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        ConcatState* state = reinterpret_cast<ConcatState*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<ConcatState*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
@@ -441,7 +441,7 @@ static inline void column_builder_non_empty_op(uint8_t* begin, uint8_t* end, Nul
 
 ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, SubstrState* state) {
     ColumnPtr result = BinaryColumn::create();
-    BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+    auto* binary = down_cast<BinaryColumn*>(result.get());
     Bytes& bytes = binary->get_bytes();
     Offsets& offsets = binary->get_offset();
     int len = state->len;
@@ -500,7 +500,7 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
 
 ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, SubstrState* state) {
     ColumnPtr result = BinaryColumn::create();
-    BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+    auto* binary = down_cast<BinaryColumn*>(result.get());
     Bytes& bytes = binary->get_bytes();
     Offsets& offsets = binary->get_offset();
     int len = state->len;
@@ -539,9 +539,9 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
 template <typename StringConstFuncType, typename... Args>
 ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Args&&... args) {
     if (columns[0]->is_nullable()) {
-        NullableColumn* src_nullable = down_cast<NullableColumn*>(columns[0].get());
+        auto* src_nullable = down_cast<NullableColumn*>(columns[0].get());
         if (src_nullable->has_null()) {
-            BinaryColumn* src_binary = down_cast<BinaryColumn*>(src_nullable->data_column().get());
+            auto* src_binary = down_cast<BinaryColumn*>(src_nullable->data_column().get());
             ColumnPtr binary = func(columns, src_binary, std::forward<Args>(args)...);
             NullColumnPtr src_null = NullColumn::create(*(src_nullable->null_column()));
 
@@ -553,12 +553,12 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
                 return binary;
             }
             if (binary->is_constant()) {
-                ConstColumn* dst_const = down_cast<ConstColumn*>(binary.get());
+                auto* dst_const = down_cast<ConstColumn*>(binary.get());
                 dst_const->data_column()->assign(dst_const->size(), 0);
                 return NullableColumn::create(dst_const->data_column(), src_null);
             }
             if (binary->is_nullable()) {
-                NullableColumn* binary_nullable = down_cast<NullableColumn*>(binary.get());
+                auto* binary_nullable = down_cast<NullableColumn*>(binary.get());
                 if (binary_nullable->has_null()) {
                     // case 2: some rows are nulls and some rows are non-nulls, merge the column
                     // inside original result and the null column inside the columns[0].
@@ -574,12 +574,12 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
                 return NullableColumn::create(binary, src_null);
             }
         } else {
-            BinaryColumn* src = down_cast<BinaryColumn*>(src_nullable->data_column().get());
+            auto* src = down_cast<BinaryColumn*>(src_nullable->data_column().get());
             return func(columns, src, std::forward<Args>(args)...);
         }
     } else if (columns[0]->is_constant()) {
-        ConstColumn* src_constant = down_cast<ConstColumn*>(columns[0].get());
-        BinaryColumn* src_binary = down_cast<BinaryColumn*>(src_constant->data_column().get());
+        auto* src_constant = down_cast<ConstColumn*>(columns[0].get());
+        auto* src_binary = down_cast<BinaryColumn*>(src_constant->data_column().get());
         ColumnPtr binary = func(columns, src_binary, std::forward<Args>(args)...);
         if (binary->is_constant()) {
             return binary;
@@ -587,7 +587,7 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             return ConstColumn::create(binary, src_constant->size());
         }
     } else {
-        BinaryColumn* src = down_cast<BinaryColumn*>(columns[0].get());
+        auto* src = down_cast<BinaryColumn*>(columns[0].get());
         return func(columns, src, std::forward<Args>(args)...);
     }
 }
@@ -708,7 +708,7 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
     ColumnViewer<TYPE_INT> len_viewer(len_column);
 
     auto data_column = ColumnHelper::get_data_column(columns[0].get());
-    BinaryColumn* src = down_cast<BinaryColumn*>(data_column);
+    auto* src = down_cast<BinaryColumn*>(data_column);
 
     const auto rows_num = columns[0]->size();
     NullableBinaryColumnBuilder result;
@@ -729,7 +729,7 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
     ColumnViewer<TYPE_INT> len_viewer(columns[1]);
 
     auto data_column = ColumnHelper::get_data_column(columns[0].get());
-    BinaryColumn* src = down_cast<BinaryColumn*>(data_column);
+    auto* src = down_cast<BinaryColumn*>(data_column);
     const auto rows_num = columns[0]->size();
 
     NullableBinaryColumnBuilder result;
@@ -1039,7 +1039,7 @@ Status StringFunctions::pad_prepare(starrocks_udf::FunctionContext* context,
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
     }
-    PadState* state = new PadState();
+    auto* state = new PadState();
     state->is_const = false;
     state->fill_is_const = false;
     context->set_function_state(FunctionContext::FRAGMENT_LOCAL, state);
@@ -1459,7 +1459,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
         // The kernel is to optimized small memory copy using strings::memcpy_inlined
         // and eliminate the extra one memory copy.
 
-        ConstColumn* const_tailing = ColumnHelper::as_raw_column<ConstColumn>(columns[1]);
+        auto* const_tailing = ColumnHelper::as_raw_column<ConstColumn>(columns[1]);
         auto tailing_col = ColumnHelper::cast_to<TYPE_VARCHAR>(const_tailing->data_column());
         const Slice& slice = tailing_col->get_data()[0];
         if (slice.size != 1) {
@@ -1470,7 +1470,7 @@ ColumnPtr StringFunctions::append_trailing_char_if_absent(FunctionContext* conte
         ColumnPtr dst = nullptr;
         BinaryColumn* binary_dst = nullptr;
         if (columns[0]->is_nullable()) {
-            NullableColumn* src_null = ColumnHelper::as_raw_column<NullableColumn>(columns[0]);
+            auto* src_null = ColumnHelper::as_raw_column<NullableColumn>(columns[0]);
             src = ColumnHelper::as_raw_column<BinaryColumn>(src_null->data_column());
 
             ColumnPtr data = RunTimeColumnType<TYPE_VARCHAR>::create();
@@ -1614,7 +1614,7 @@ struct StringCaseToggleFunction {
 public:
     template <PrimitiveType Type, PrimitiveType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
-        BinaryColumn* src = down_cast<BinaryColumn*>(v1.get());
+        auto* src = down_cast<BinaryColumn*>(v1.get());
         Bytes& src_bytes = src->get_bytes();
         Offsets& src_offsets = src->get_offset();
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
@@ -1703,7 +1703,7 @@ static inline void reverse(BinaryColumn* src, Bytes* dst_bytes) {
 struct ReverseFunction {
     template <PrimitiveType Type, PrimitiveType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        BinaryColumn* src = down_cast<BinaryColumn*>(column.get());
+        auto* src = down_cast<BinaryColumn*>(column.get());
         auto& src_bytes = src->get_bytes();
         auto& src_offsets = src->get_offset();
 
@@ -1826,7 +1826,7 @@ template <size_t simd_threshold>
 struct AdaptiveLTrimFunction {
     template <PrimitiveType Type, PrimitiveType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        BinaryColumn* src = down_cast<BinaryColumn*>(column.get());
+        auto* src = down_cast<BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
@@ -1863,7 +1863,7 @@ template <size_t simd_threshold>
 struct AdaptiveRTrimFunction {
     template <PrimitiveType Type, PrimitiveType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        BinaryColumn* src = down_cast<BinaryColumn*>(column.get());
+        auto* src = down_cast<BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
@@ -1900,7 +1900,7 @@ template <size_t simd_threshold>
 struct AdaptiveTrimFunction {
     template <PrimitiveType Type, PrimitiveType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        BinaryColumn* src = down_cast<BinaryColumn*>(column.get());
+        auto* src = down_cast<BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
@@ -2026,7 +2026,7 @@ ColumnPtr StringFunctions::hex_string(FunctionContext* context, const starrocks:
 DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
     // For uneven number of chars return empty string like Hive does.
     if (str.size == 0 || str.size % 2 != 0) {
-        return std::string();
+        return {};
     }
 
     int result_len = str.size / 2;
@@ -2058,7 +2058,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
                 break;
             }
 
-            return std::string();
+            return {};
         }
 
         // second half of byte
@@ -2082,7 +2082,7 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(unhexImpl, str) {
                 break;
             }
 
-            return std::string();
+            return {};
         }
 
         result[res_index] = c;
@@ -2149,7 +2149,7 @@ ColumnPtr StringFunctions::get_char(FunctionContext* context, const Columns& col
 
 static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColumn* src, const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
-    BinaryColumn* binary = down_cast<BinaryColumn*>(builder.data_column().get());
+    auto* binary = down_cast<BinaryColumn*>(builder.data_column().get());
     auto& nulls = builder.get_null_data();
     auto& dst_offsets = binary->get_offset();
     auto& dst_bytes = binary->get_bytes();
@@ -2213,7 +2213,7 @@ static inline ColumnPtr concat_not_const_small(std::vector<ColumnViewer<TYPE_VAR
     dst_offsets[0] = 0;
     dst_bytes.resize(dst_bytes_max_size);
 
-    uint8_t* dst_begin = (uint8_t*)dst_bytes.data();
+    auto* dst_begin = (uint8_t*)dst_bytes.data();
     size_t dst_off = 0;
     bool has_null = false;
 
@@ -2339,7 +2339,7 @@ ColumnPtr concat_ws_small(ColumnViewer<TYPE_VARCHAR>& sep_viewer, std::vector<Co
     raw::make_room(&dst_offsets, num_rows + 1);
     dst_offsets[0] = 0;
     dst_bytes.resize(dst_bytes_max_size);
-    uint8_t* dst_begin = (uint8_t*)dst_bytes.data();
+    auto* dst_begin = (uint8_t*)dst_bytes.data();
     size_t dst_off = 0;
     bool has_null = false;
     for (auto i = 0; i < num_rows; i++) {
@@ -2660,7 +2660,7 @@ Status StringFunctions::regexp_replace_prepare(starrocks_udf::FunctionContext* c
     state->pattern = pattern_str;
 
     std::string search_string;
-    if (RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
+    if (pattern_str.size() && RE2::FullMatch(pattern_str, SUBSTRING_RE, &search_string)) {
         state->use_hyperscan = true;
         state->size_of_pattern = pattern.size;
         std::string re_pattern(pattern.data, pattern.size);
@@ -2881,7 +2881,7 @@ static ColumnPtr regexp_replace_use_hyperscan(StringFunctionsState* state, const
                 state->database, data, value_size, 0, scratch,
                 [](unsigned int id, unsigned long long from, unsigned long long to, unsigned int flags,
                    void* ctx) -> int {
-                    MatchInfoChain* value = (MatchInfoChain*)ctx;
+                    auto* value = (MatchInfoChain*)ctx;
                     if (from >= value->last_to) {
                         MatchInfo info;
                         info.from = from;
@@ -3022,7 +3022,7 @@ Status StringFunctions::parse_url_prepare(starrocks_udf::FunctionContext* contex
         return Status::OK();
     }
 
-    ParseUrlState* state = new ParseUrlState();
+    auto* state = new ParseUrlState();
     context->set_function_state(scope, state);
 
     if (!context->is_notnull_constant_column(1)) {
@@ -3050,7 +3050,7 @@ Status StringFunctions::parse_url_prepare(starrocks_udf::FunctionContext* contex
 Status StringFunctions::parse_url_close(starrocks_udf::FunctionContext* context,
                                         starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        ParseUrlState* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(scope));
+        auto* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(scope));
         delete state;
     }
     return Status::OK();
@@ -3123,8 +3123,7 @@ ColumnPtr StringFunctions::parse_url_const(UrlParser::UrlPart* url_part, Functio
 
 ColumnPtr StringFunctions::parse_url(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     DCHECK_EQ(columns.size(), 2);
-    ParseUrlState* state =
-            reinterpret_cast<ParseUrlState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    auto* state = reinterpret_cast<ParseUrlState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
 
     if (state->const_pattern) {
         UrlParser::UrlPart* url_part = state->url_part.get();

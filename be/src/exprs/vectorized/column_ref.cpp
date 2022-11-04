@@ -40,7 +40,7 @@ ColumnPtr ColumnRef::evaluate(ExprContext* context, Chunk* ptr) {
 }
 
 vectorized::ColumnPtr& ColumnRef::get_column(Expr* expr, vectorized::Chunk* chunk) {
-    ColumnRef* ref = (ColumnRef*)expr;
+    auto* ref = (ColumnRef*)expr;
     ColumnPtr& column = (chunk)->get_column_by_slot_id(ref->slot_id());
     return column;
 }

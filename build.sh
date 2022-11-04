@@ -42,15 +42,14 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
-#build thirdparty libraries if necessary
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/lib64/libbenchmark.a ]]; then
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
     echo "Thirdparty libraries need to be build ..."
     ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
 fi
 
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
+if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/pulsar/Client.h ]]; then
     echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
+    ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
 fi
 
 WITH_BLOCK_CACHE=OFF
@@ -136,13 +135,21 @@ fi
 USE_JEMALLOC=ON
 
 HELP=0
-if [[ $OPTS =~ "-j" ]] && [ $# == 3 ] || [ $# == 1 ] ; then
+if [ $# == 1 ] ; then
     # default
     BUILD_BE=1
     BUILD_FE=1
     BUILD_SPARK_DPP=1
     CLEAN=0
     RUN_UT=0
+elif [[ $OPTS =~ "-j" ]] && [ $# == 3 ]; then
+    # default
+    BUILD_BE=1
+    BUILD_FE=1
+    BUILD_SPARK_DPP=1
+    CLEAN=0
+    RUN_UT=0
+    PARALLEL=$2
 else
     BUILD_BE=0
     BUILD_FE=0

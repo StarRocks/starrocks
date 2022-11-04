@@ -5,12 +5,15 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <memory>
+#include <random>
 
 #include "fs/fs_util.h"
 #include "gutil/strings/split.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/runtime_state.h"
 #include "storage/chunk_helper.h"
 #include "storage/memtable.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -98,16 +101,16 @@ static unique_ptr<Schema> create_schema(const string& desc, int nkey) {
         fd->set_aggregate_method(i < nkey ? OLAP_FIELD_AGGREGATION_NONE : OLAP_FIELD_AGGREGATION_REPLACE);
         fields.emplace_back(fd);
     }
-    ret.reset(new Schema(std::move(fields)));
+    ret = std::make_unique<Schema>(std::move(fields));
     return ret;
 }
 
-static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(const string& desc, ObjectPool& pool) {
+static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(RuntimeState* state, const string& desc,
+                                                                   ObjectPool& pool) {
     TDescriptorTableBuilder dtb;
     TTupleDescriptorBuilder tuple_builder;
     std::vector<std::string> cs = strings::Split(desc, ",", strings::SkipWhitespace());
-    for (int i = 0; i < cs.size(); i++) {
-        auto& c = cs[i];
+    for (auto& c : cs) {
         std::vector<std::string> fs = strings::Split(c, " ", strings::SkipWhitespace());
         if (fs.size() < 2) {
             CHECK(false) << "create_tuple_desc_slots bad desc";
@@ -141,7 +144,7 @@ static const std::vector<SlotDescriptor*>* create_tuple_desc_slots(const string&
     tuple_builder.build(&dtb);
     TDescriptorTable tdesc_tbl = dtb.desc_tbl();
     DescriptorTbl* desc_tbl = nullptr;
-    DescriptorTbl::create(&pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, &pool, tdesc_tbl, &desc_tbl, config::vector_chunk_size);
     return &(desc_tbl->get_tuple_descriptor(0)->slots());
 }
 
@@ -186,9 +189,9 @@ public:
         _root_path = root;
         fs::remove_all(_root_path);
         fs::create_directories(_root_path);
-        _mem_tracker.reset(new MemTracker(-1, "root"));
+        _mem_tracker = std::make_unique<MemTracker>(-1, "root");
         _schema = create_tablet_schema(schema_desc, nkey, ktype);
-        _slots = create_tuple_desc_slots(slot_desc, _obj_pool);
+        _slots = create_tuple_desc_slots(&_runtime_state, slot_desc, _obj_pool);
         RowsetWriterContext writer_context;
         RowsetId rowset_id;
         rowset_id.init(rand() % 1000000000);
@@ -202,8 +205,8 @@ public:
         writer_context.version.first = 10;
         writer_context.version.second = 10;
         ASSERT_TRUE(RowsetFactory::create_rowset_writer(writer_context, &_writer).ok());
-        _mem_table_sink.reset(new MemTableRowsetWriterSink(_writer.get()));
-        _vectorized_schema = std::move(MemTable::convert_schema(_schema.get(), _slots));
+        _mem_table_sink = std::make_unique<MemTableRowsetWriterSink>(_writer.get());
+        _vectorized_schema = MemTable::convert_schema(_schema.get(), _slots);
     }
 
     void TearDown() override {
@@ -243,6 +246,7 @@ public:
 
     std::string _root_path;
 
+    RuntimeState _runtime_state;
     ObjectPool _obj_pool;
     unique_ptr<MemTracker> _mem_tracker;
     shared_ptr<TabletSchema> _schema;
@@ -270,7 +274,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlush) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(mem_table->finalize().ok());
 
@@ -299,7 +303,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
     for (int i = 0; i < n; i++) {
         indexes.emplace_back(i);
     }
-    std::random_shuffle(indexes.begin(), indexes.end());
+    std::shuffle(indexes.begin(), indexes.end(), std::mt19937(std::random_device()()));
     mem_table->insert(*pchunk, indexes.data(), 0, indexes.size());
     ASSERT_TRUE(mem_table->finalize().ok());
 

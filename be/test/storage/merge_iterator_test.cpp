@@ -223,8 +223,8 @@ TEST_F(MergeIteratorTest, mask_merge) {
 
     std::vector<RowSourceMask> source_masks;
     std::vector<uint16_t> expected_sources{0, 0, 0, 0, 0, 0, 1, 1, 2, 1, 2, 2, 1, 1, 1, 1, 2, 2};
-    for (size_t i = 0; i < expected_sources.size(); ++i) {
-        source_masks.emplace_back(RowSourceMask(expected_sources[i], false));
+    for (unsigned short expected_source : expected_sources) {
+        source_masks.emplace_back(RowSourceMask(expected_source, false));
     }
     RowSourceMaskBuffer mask_buffer(0, config::storage_root_path);
     mask_buffer.write(source_masks);
@@ -314,8 +314,8 @@ TEST_F(MergeIteratorTest, mask_merge_boundary_test) {
         expected_sources.push_back(3);
     }
 
-    for (size_t i = 0; i < expected_sources.size(); ++i) {
-        source_masks.emplace_back(RowSourceMask(expected_sources[i], false));
+    for (unsigned short expected_source : expected_sources) {
+        source_masks.emplace_back(RowSourceMask(expected_source, false));
     }
 
     auto sub1 = std::make_shared<VectorChunkIterator>(_schema, COL_INT(v1));

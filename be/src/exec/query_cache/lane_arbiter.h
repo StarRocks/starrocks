@@ -47,7 +47,7 @@ public:
 
     static constexpr LaneAssignment LANE_UNASSIGNED = {-1, -1};
     static constexpr int32_t NO_FREE_LANE = -1L;
-    static constexpr int32_t NEW_LANE_BIT = 1L << 31;
+    static constexpr int32_t NEW_LANE_BIT = static_cast<int32_t>(1) << 31;
 
     LaneArbiter(int num_lanes);
     ~LaneArbiter() = default;

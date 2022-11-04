@@ -3,12 +3,7 @@ package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
-import com.starrocks.analysis.CreateRoleStmt;
-import com.starrocks.analysis.DropRoleStmt;
-import com.starrocks.analysis.DropUserStmt;
 import com.starrocks.analysis.ResourcePattern;
-import com.starrocks.analysis.ShowGrantsStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TablePattern;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.AccessPrivilege;
@@ -31,7 +26,12 @@ import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
+import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.ExecuteAsStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.StatementBase;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -75,18 +75,17 @@ public class PrivilegeStmtAnalyzer {
         /**
          * check if role name valid and get full role name + check if role exists
          */
-        private String analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
-            String qualifiedRole = validRoleName(roleName, canBeAdmin, errMsg);
-            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(qualifiedRole)) {
-                throw new SemanticException("role " + qualifiedRole + " not exist!");
+        private void analyseRoleName(String roleName, ConnectContext session, boolean canBeAdmin, String errMsg) {
+            validRoleName(roleName, canBeAdmin, errMsg);
+            if (!session.getGlobalStateMgr().getAuth().doesRoleExist(roleName)) {
+                throw new SemanticException("role " + roleName + " not exist!");
             }
-            return qualifiedRole;
         }
 
         /**
-         * check if role name valid and get full role name
+         * check if role name valid
          */
-        private String validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
+        private void validRoleName(String roleName, boolean canBeAdmin, String errMsg) {
             try {
                 FeNameFormat.checkRoleName(roleName, canBeAdmin, errMsg);
             } catch (AnalysisException e) {
@@ -95,7 +94,6 @@ public class PrivilegeStmtAnalyzer {
                 // Remove it after all old methods migrate to the new framework
                 throw new SemanticException(e.getMessage());
             }
-            return roleName;
         }
 
         /**
@@ -104,34 +102,48 @@ public class PrivilegeStmtAnalyzer {
          */
         @Override
         public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() == null) {
+                throw new SemanticException("Unsupported syntax: grant/revoke to role is not supported");
+            }
             analyseUser(stmt.getUserIdent(), session, true);
-            stmt.setQualifiedRole(
-                    analyseRoleName(stmt.getRole(), session, true, "Can not granted/revoke role to user"));
+            analyseRoleName(stmt.getGranteeRole(), session, true, "Can not granted/revoke role to user");
             return null;
         }
 
         @Override
         public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            if (stmt.isWithGrantOption()) {
+                throw new SemanticException("unsupported syntax: WITH GRANT OPTION");
+            }
             // validate user/role
             if (stmt.getUserIdentity() != null) {
                 analyseUser(stmt.getUserIdentity(), session, true);
             } else {
-                stmt.setRole(analyseRoleName(stmt.getRole(), session, true, "invalide role"));
+                analyseRoleName(stmt.getRole(), session, true, "invalid role");
             }
 
             // parse privilege actions to PrivBitSet
             PrivBitSet privs = getPrivBitSet(stmt.getPrivList());
             String privType = stmt.getPrivType();
             if (privType.equals("TABLE") || privType.equals("DATABASE")) {
-                analyseTablePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
+                if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one " + privType);
+                }
+                analyseTablePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokensList().get(0));
             } else if (privType.equals("RESOURCE")) {
-                analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokenList());
+                if (stmt.getPrivilegeObjectNameTokensList().size() != 1) {
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one " + privType);
+                }
+                analyseResourcePrivs(stmt, privs, stmt.getPrivilegeObjectNameTokensList().get(0));
             } else if (privType.equals("USER")) {
                 if (stmt.getPrivList().size() != 1 || !privs.containsPrivs(Privilege.IMPERSONATE_PRIV)) {
                     throw new SemanticException("only IMPERSONATE can only be granted on user");
                 }
+                if (stmt.getUserPrivilegeObjectList().size() != 1) {
+                    throw new SemanticException("unsupported syntax: can only grant/revoke on one USER");
+                }
                 stmt.setPrivBitSet(privs);
-                analyseUser(stmt.getUserPrivilegeObject(), session, true);
+                analyseUser(stmt.getUserPrivilegeObjectList().get(0), session, true);
             } else {
                 throw new SemanticException("unsupported privilege type " + privType);
             }
@@ -250,7 +262,7 @@ public class PrivilegeStmtAnalyzer {
             }
         }
 
-        public Void visitCreateAlterUserStmt(BaseCreateAlterUserStmt stmt, ConnectContext session) {
+        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt stmt, ConnectContext session) {
             analyseUser(stmt.getUserIdent(), session, stmt instanceof AlterUserStmt);
             /*
              * IDENTIFIED BY
@@ -288,21 +300,20 @@ public class PrivilegeStmtAnalyzer {
                     // for forward compatibility
                     stmt.setRole(Role.ADMIN_ROLE);
                 }
-                stmt.setRole(
-                        analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user"));
+                analyseRoleName(stmt.getQualifiedRole(), session, true, "Can not granted/revoke role to user");
             }
             return null;
         }
 
         @Override
         public Void visitDropUserStatement(DropUserStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), session, false);
+            analyseUser(stmt.getUserIdentity(), session, false);
             return null;
         }
 
         @Override
         public Void visitCreateRoleStatement(CreateRoleStmt stmt, ConnectContext session) {
-            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not create role"));
+            validRoleName(stmt.getQualifiedRole(), false, "Can not create role");
             return null;
         }
 
@@ -325,7 +336,7 @@ public class PrivilegeStmtAnalyzer {
 
         @Override
         public Void visitDropRoleStatement(DropRoleStmt stmt, ConnectContext session) {
-            stmt.setQualifiedRole(validRoleName(stmt.getQualifiedRole(), false, "Can not drop role"));
+            validRoleName(stmt.getQualifiedRole(), false, "Can not drop role");
             return null;
         }
     }

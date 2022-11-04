@@ -27,6 +27,7 @@
 #include "agent/master_info.h"
 #include "column/column_pool.h"
 #include "common/config.h"
+#include "common/configbase.h"
 #include "common/logging.h"
 #include "exec/pipeline/driver_limiter.h"
 #include "exec/pipeline/pipeline_driver_executor.h"
@@ -280,18 +281,19 @@ Status ExecEnv::_init(const std::vector<StorePath>& store_paths) {
             LOG(ERROR) << "load path mgr init failed." << status.get_error_msg();
             exit(-1);
         }
-#ifndef USE_STAROS
-        _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
-#else
+#if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_location_provider = new lake::StarletLocationProvider();
-#endif
         _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+#elif defined(BE_TEST)
+        _lake_location_provider = new lake::FixedLocationProvider(_store_paths.front().path);
+        _lake_tablet_manager = new lake::TabletManager(_lake_location_provider, config::lake_metadata_cache_limit);
+#endif
 
         // agent_server is not needed for cn
         _agent_server = new AgentServer(this);
         _agent_server->init_or_die();
 
-#ifndef BE_TEST
+#if defined(USE_STAROS) && !defined(BE_TEST)
         _lake_tablet_manager->start_gc();
 #endif
     }
@@ -310,8 +312,8 @@ std::string ExecEnv::token() const {
 }
 
 void ExecEnv::add_rf_event(const RfTracePoint& pt) {
-    std::string msg = strings::Substitute("$0($1)", std::move(pt.msg),
-                                          pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
+    std::string msg =
+            strings::Substitute("$0($1)", pt.msg, pt.network.empty() ? BackendOptions::get_localhost() : pt.network);
     _runtime_filter_cache->add_rf_event(pt.query_id, pt.filter_id, std::move(msg));
 }
 
@@ -394,12 +396,15 @@ Status ExecEnv::init_mem_tracker() {
 }
 
 int64_t ExecEnv::get_storage_page_cache_size() {
-    std::lock_guard<std::mutex>(*config::get_mstring_conf_lock());
+    std::lock_guard<std::mutex> l(*config::get_mstring_conf_lock());
     int64_t mem_limit = MemInfo::physical_mem();
     if (_mem_tracker->has_limit()) {
         mem_limit = _mem_tracker->limit();
     }
-    int64_t storage_cache_limit = ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+    return ParseUtil::parse_mem_spec(config::storage_page_cache_limit, mem_limit);
+}
+
+int64_t ExecEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     if (storage_cache_limit > MemInfo::physical_mem()) {
         LOG(WARNING) << "Config storage_page_cache_limit is greater than memory size, config="
                      << config::storage_page_cache_limit << ", memory=" << MemInfo::physical_mem();
@@ -416,6 +421,7 @@ int64_t ExecEnv::get_storage_page_cache_size() {
 
 Status ExecEnv::_init_storage_page_cache() {
     int64_t storage_cache_limit = get_storage_page_cache_size();
+    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
     StoragePageCache::create_global_cache(_page_cache_mem_tracker, storage_cache_limit);
 
     // TODO(zc): The current memory usage configuration is a bit confusing,
@@ -461,7 +467,9 @@ void ExecEnv::_destroy() {
     SAFE_DELETE(_schema_change_mem_tracker);
     SAFE_DELETE(_compaction_mem_tracker);
 
-    _lake_tablet_manager->prune_metacache();
+    if (_lake_tablet_manager != nullptr) {
+        _lake_tablet_manager->prune_metacache();
+    }
 
     SAFE_DELETE(_bloom_filter_index_mem_tracker);
     SAFE_DELETE(_bitmap_index_mem_tracker);

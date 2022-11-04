@@ -144,7 +144,8 @@ VALUE_GUARD(PrimitiveType, Decimal128PTGuard, pt_is_decimal128, TYPE_DECIMAL128)
 VALUE_GUARD(PrimitiveType, DecimalPTGuard, pt_is_decimal, TYPE_DECIMAL32, TYPE_DECIMAL64, TYPE_DECIMAL128)
 VALUE_GUARD(PrimitiveType, SumDecimal64PTGuard, pt_is_sum_decimal64, TYPE_DECIMAL32, TYPE_DECIMAL64)
 VALUE_GUARD(PrimitiveType, HllPTGuard, pt_is_hll, TYPE_HLL)
-VALUE_GUARD(PrimitiveType, BinaryPTGuard, pt_is_binary, TYPE_CHAR, TYPE_VARCHAR)
+VALUE_GUARD(PrimitiveType, ObjectPTGuard, pt_is_object, TYPE_OBJECT)
+VALUE_GUARD(PrimitiveType, StringPTGuard, pt_is_string, TYPE_CHAR, TYPE_VARCHAR)
 VALUE_GUARD(PrimitiveType, JsonGuard, pt_is_json, TYPE_JSON)
 VALUE_GUARD(PrimitiveType, FunctionGuard, pt_is_function, TYPE_FUNCTION)
 
@@ -173,12 +174,15 @@ UNION_VALUE_GUARD(PrimitiveType, NumericPTGuard, pt_is_numeric, pt_is_number_str
 
 UNION_VALUE_GUARD(PrimitiveType, FixedLengthPTGuard, pt_is_fixedlength, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
                   pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct, pt_is_time_struct)
+UNION_VALUE_GUARD(PrimitiveType, AggregatePTGuard, pt_is_aggregate, pt_is_arithmetic_struct, pt_is_decimalv2_struct,
+                  pt_is_decimal_struct, pt_is_datetime_struct, pt_is_date_struct)
 
 TExprOpcode::type to_in_opcode(PrimitiveType t);
 PrimitiveType thrift_to_type(TPrimitiveType::type ttype);
 TPrimitiveType::type to_thrift(PrimitiveType ptype);
 TColumnType to_tcolumn_type_thrift(TPrimitiveType::type ttype);
 std::string type_to_string(PrimitiveType t);
+std::string type_to_string_v2(PrimitiveType t);
 std::string type_to_odbc_string(PrimitiveType t);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val);
 TTypeDesc gen_type_desc(const TPrimitiveType::type val, const std::string& name);

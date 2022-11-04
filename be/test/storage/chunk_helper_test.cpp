@@ -12,16 +12,17 @@
 #include "gtest/gtest.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
+#include "runtime/runtime_state.h"
 #include "util/logging.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class ChunkHelperTest : public testing::Test {
 public:
-    void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, std::string type, int32_t length,
-                           bool is_nullable);
+    void add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, const std::string& type,
+                           int32_t length, bool is_nullable);
     vectorized::SchemaPtr gen_v_schema(bool is_nullable);
     void check_chunk(Chunk* chunk, size_t column_size, size_t row_size);
     void check_chunk_nullable(Chunk* chunk, size_t column_size, size_t row_size);
@@ -51,7 +52,7 @@ private:
         std::vector<TTupleId> row_tuples{0};
         std::vector<bool> nullable_tuples{true};
         DescriptorTbl* tbl = nullptr;
-        DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+        DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
         auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -59,6 +60,7 @@ private:
         return tuple_desc;
     }
 
+    RuntimeState _runtime_state;
     ObjectPool _pool;
 };
 
@@ -85,7 +87,7 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
@@ -93,8 +95,8 @@ TupleDescriptor* ChunkHelperTest::_create_tuple_desc() {
     return tuple_desc;
 }
 
-void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key, std::string type,
-                                        int32_t length, bool is_nullable) {
+void ChunkHelperTest::add_tablet_column(TabletSchemaPB& tablet_schema_pb, int32_t id, bool is_key,
+                                        const std::string& type, int32_t length, bool is_nullable) {
     ColumnPB* column = tablet_schema_pb.add_column();
     column->set_unique_id(id);
     column->set_name("c" + std::to_string(id));
@@ -140,56 +142,56 @@ void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_si
 
     switch (type) {
     case OLAP_FIELD_TYPE_TINYINT: {
-        const int8_t* data = reinterpret_cast<const int8_t*>(static_cast<Int8Column*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const int8_t*>(static_cast<Int8Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int8_t>(i * 2));
         }
         break;
     }
     case OLAP_FIELD_TYPE_SMALLINT: {
-        const int16_t* data = reinterpret_cast<const int16_t*>(static_cast<Int16Column*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const int16_t*>(static_cast<Int16Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int16_t>(i * 2 * 10));
         }
         break;
     }
     case OLAP_FIELD_TYPE_INT: {
-        const int32_t* data = reinterpret_cast<const int32_t*>(static_cast<Int32Column*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const int32_t*>(static_cast<Int32Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int32_t>(i * 2 * 100));
         }
         break;
     }
     case OLAP_FIELD_TYPE_BIGINT: {
-        const int64_t* data = reinterpret_cast<const int64_t*>(static_cast<Int64Column*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const int64_t*>(static_cast<Int64Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int64_t>(i * 2 * 1000));
         }
         break;
     }
     case OLAP_FIELD_TYPE_LARGEINT: {
-        const int128_t* data = reinterpret_cast<const int128_t*>(static_cast<Int128Column*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const int128_t*>(static_cast<Int128Column*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<int128_t>(i * 2 * 10000));
         }
         break;
     }
     case OLAP_FIELD_TYPE_FLOAT: {
-        const float* data = reinterpret_cast<const float*>(static_cast<FloatColumn*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const float*>(static_cast<FloatColumn*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<float>(i * 2 * 100000));
         }
         break;
     }
     case OLAP_FIELD_TYPE_DOUBLE: {
-        const double* data = reinterpret_cast<const double*>(static_cast<DoubleColumn*>(column)->raw_data());
+        const auto* data = reinterpret_cast<const double*>(static_cast<DoubleColumn*>(column)->raw_data());
         for (int i = 0; i < row_size; i++) {
             ASSERT_EQ(*(data + i), static_cast<double>(i * 2 * 1000000));
         }
         break;
     }
     case OLAP_FIELD_TYPE_VARCHAR: {
-        const BinaryColumn* data = reinterpret_cast<const BinaryColumn*>(column);
+        const auto* data = reinterpret_cast<const BinaryColumn*>(column);
         for (int i = 0; i < row_size; i++) {
             Slice l = data->get_slice(i);
             Slice r(std::to_string(i * 2 * 10000000));
@@ -198,7 +200,7 @@ void ChunkHelperTest::check_column(Column* column, FieldType type, size_t row_si
         break;
     }
     case OLAP_FIELD_TYPE_CHAR: {
-        const BinaryColumn* data = reinterpret_cast<const BinaryColumn*>(column);
+        const auto* data = reinterpret_cast<const BinaryColumn*>(column);
         for (int i = 0; i < row_size; i++) {
             Slice l = data->get_slice(i);
             Slice r(std::to_string(i * 2 * 100000000));
@@ -296,5 +298,4 @@ TEST_F(ChunkHelperTest, Accumulator) {
     EXPECT_EQ(input_rows, output_rows);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -31,6 +31,7 @@
 #include "exec/data_sink.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
+#include "serde/protobuf_serde.h"
 #include "util/raw_container.h"
 #include "util/runtime_profile.h"
 
@@ -67,7 +68,8 @@ public:
     // NOTE: supported partition types are UNPARTITIONED (broadcast) and HASH_PARTITIONED
     DataStreamSender(RuntimeState* state, int sender_id, const RowDescriptor& row_desc, const TDataStreamSink& sink,
                      const std::vector<TPlanFragmentDestination>& destinations, int per_channel_buffer_size,
-                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through);
+                     bool send_query_statistics_with_every_batch, bool enable_exchange_pass_through,
+                     bool enable_exchange_perf);
     ~DataStreamSender() override;
 
     Status init(const TDataSink& thrift_sink) override;
@@ -112,6 +114,7 @@ public:
     int sender_id() const { return _sender_id; }
 
     const bool get_enable_exchange_pass_through() const { return _enable_exchange_pass_through; }
+    const bool get_enable_exchange_perf() const { return _enable_exchange_perf; };
 
     const std::vector<int32_t>& output_columns() const { return _output_columns; }
 
@@ -128,11 +131,7 @@ private:
 
     int _current_channel_idx; // index of current channel to send to if _random == true
 
-    // If true, this sender has been closed. Not valid to call Send() anymore.
-    bool _closed{};
-
     TPartitionType::type _part_type;
-    bool _ignore_not_found;
 
     // Only used when broadcast
     PTransmitChunkParams _chunk_request;
@@ -206,6 +205,7 @@ private:
     std::vector<TPlanFragmentDestination> _destinations;
 
     bool _enable_exchange_pass_through = false;
+    bool _enable_exchange_perf = false;
 
     // Specify the columns which need to send
     std::vector<int32_t> _output_columns;

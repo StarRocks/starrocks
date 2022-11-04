@@ -13,17 +13,18 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.io.Text;
-import com.starrocks.external.iceberg.IcebergCatalog;
-import com.starrocks.external.iceberg.IcebergCatalogType;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.external.iceberg.StarRocksIcebergException;
-import com.starrocks.external.iceberg.io.IcebergCachingFileIO;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.StarRocksIcebergException;
+import com.starrocks.connector.iceberg.io.IcebergCachingFileIO;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TIcebergTable;
 import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.iceberg.BaseTable;
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
 import org.apache.logging.log4j.LogManager;
@@ -36,8 +37,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.external.HiveMetaStoreTableUtils.isInternalCatalog;
-
 public class IcebergTable extends Table {
     private static final Logger LOG = LogManager.getLogger(IcebergTable.class);
 
@@ -48,21 +47,23 @@ public class IcebergTable extends Table {
     private static final String JSON_KEY_RESOURCE_NAME = "resource";
     private static final String JSON_KEY_ICEBERG_PROPERTIES = "icebergProperties";
 
-    public static final String ICEBERG_CATALOG = "iceberg.catalog.type";
+    public static final String ICEBERG_CATALOG_TYPE = "iceberg.catalog.type";
     @Deprecated
     public static final String ICEBERG_CATALOG_LEGACY = "starrocks.catalog-type";
     public static final String ICEBERG_METASTORE_URIS = "iceberg.catalog.hive.metastore.uris";
     public static final String ICEBERG_IMPL = "iceberg.catalog-impl";
+    public static final String ICEBERG_CATALOG = "catalog";
     public static final String ICEBERG_DB = "database";
     public static final String ICEBERG_TABLE = "table";
     public static final String ICEBERG_RESOURCE = "resource";
+    public static final String PARTITION_NULL_VALUE = "null";
 
     private org.apache.iceberg.Table icbTbl; // actual iceberg table
-
+    private boolean isCatalogTbl = false;
+    private String catalog;
     private String db;
     private String table;
     private String resourceName;
-    private String tableLocation;
 
     private final List<String> columnNames = Lists.newArrayList();
 
@@ -72,11 +73,27 @@ public class IcebergTable extends Table {
         super(TableType.ICEBERG);
     }
 
+    public IcebergTable(long id, org.apache.iceberg.Table icbTbl, boolean isCatalogTbl, String name,
+                        List<Column> schema, Map<String, String> properties) throws DdlException {
+        this(id, name, schema, properties);
+        this.icbTbl = icbTbl;
+        this.isCatalogTbl = isCatalogTbl;
+    }
+
     public IcebergTable(long id, String name, List<Column> schema, Map<String, String> properties) throws DdlException {
         super(id, name, TableType.ICEBERG, schema);
+        catalog = properties.get(ICEBERG_CATALOG);
+        db = properties.get(ICEBERG_DB);
+        table = properties.get(ICEBERG_TABLE);
+
+        String catalogType = properties.get(ICEBERG_CATALOG_TYPE);
+        if (catalogType != null && IcebergCatalogType.GLUE_CATALOG == IcebergCatalogType.valueOf(catalogType)) {
+            setGlueCatalogProperties();
+            return;
+        }
         String metastoreURI = properties.get(ICEBERG_METASTORE_URIS);
         if (null != metastoreURI && !isInternalCatalog(metastoreURI)) {
-            setHiveCatalogProperties(properties, metastoreURI);
+            setHiveCatalogProperties(metastoreURI);
             return;
         }
         if (null != properties.get(ICEBERG_IMPL)) {
@@ -86,12 +103,27 @@ public class IcebergTable extends Table {
         validate(properties);
     }
 
+    public String getCatalog() {
+        return catalog;
+    }
+
     public String getDb() {
         return db;
     }
 
     public String getTable() {
         return table;
+    }
+
+    public List<Column> getPartitionColumns() {
+        List<PartitionField> identityPartitionFields = this.getIcebergTable().spec().fields().stream().
+                filter(partitionField -> partitionField.transform().isIdentity()).collect(Collectors.toList());
+        return identityPartitionFields.stream().map(partitionField -> getColumn(partitionField.name())).collect(
+                Collectors.toList());
+    }
+
+    public boolean isUnPartitioned() {
+        return getPartitionColumns().size() == 0;
     }
 
     public String getFileIOMaxTotalBytes() {
@@ -108,7 +140,7 @@ public class IcebergTable extends Table {
     }
 
     public IcebergCatalogType getCatalogType() {
-        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG));
+        return IcebergCatalogType.valueOf(icebergProperties.get(ICEBERG_CATALOG_TYPE));
     }
 
     public String getCatalogImpl() {
@@ -123,8 +155,8 @@ public class IcebergTable extends Table {
         return icebergProperties.get(ICEBERG_METASTORE_URIS);
     }
 
-    public void setTableLocation(String location) {
-        this.tableLocation = location;
+    public boolean isCatalogTbl() {
+        return isCatalogTbl;
     }
 
     public void refreshTable() {
@@ -134,28 +166,34 @@ public class IcebergTable extends Table {
     // icbTbl is used for caching
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {
-            if (this.icbTbl == null) {
-                IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(this);
-                this.icbTbl = catalog.loadTable(this);
+            if (isCatalogTbl) {
+                GlobalStateMgr.getCurrentState().getIcebergRepository().getTable(icbTbl).get();
+            } else {
+                if (this.icbTbl == null) {
+                    IcebergCatalog catalog = IcebergUtil.getIcebergCatalog(this);
+                    this.icbTbl = catalog.loadTable(this);
+                }
             }
         } catch (StarRocksIcebergException e) {
             LOG.error("Load iceberg table failure!", e);
             throw e;
+        } catch (Exception e) {
+            LOG.error("Load iceberg table failure!", e);
         }
         return icbTbl;
     }
 
-    private void setHiveCatalogProperties(Map<String, String> properties, String metastoreURI) {
-        db = properties.get(ICEBERG_DB);
-        table = properties.get(ICEBERG_TABLE);
+    private void setGlueCatalogProperties() {
+        icebergProperties.put(ICEBERG_CATALOG_TYPE, "GLUE_CATALOG");
+    }
+
+    private void setHiveCatalogProperties(String metastoreURI) {
         icebergProperties.put(ICEBERG_METASTORE_URIS, metastoreURI);
-        icebergProperties.put(ICEBERG_CATALOG, "HIVE_CATALOG");
+        icebergProperties.put(ICEBERG_CATALOG_TYPE, "HIVE_CATALOG");
     }
 
     private void setCustomCatalogProperties(Map<String, String> properties) {
-        db = properties.remove(ICEBERG_DB);
-        table = properties.remove(ICEBERG_TABLE);
-        icebergProperties.put(ICEBERG_CATALOG, "CUSTOM_CATALOG");
+        icebergProperties.put(ICEBERG_CATALOG_TYPE, "CUSTOM_CATALOG");
         icebergProperties.put(ICEBERG_IMPL, properties.remove(ICEBERG_IMPL));
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             icebergProperties.put(entry.getKey(), entry.getValue());
@@ -194,7 +232,7 @@ public class IcebergTable extends Table {
         }
         IcebergResource icebergResource = (IcebergResource) resource;
         IcebergCatalogType type = icebergResource.getCatalogType();
-        icebergProperties.put(ICEBERG_CATALOG, type.name());
+        icebergProperties.put(ICEBERG_CATALOG_TYPE, type.name());
         LOG.info("Iceberg table type is " + type.name());
 
         String fileIOCacheMaxTotalBytes = copiedProps.get(IcebergCachingFileIO.FILEIO_CACHE_MAX_TOTAL_BYTES);
@@ -231,24 +269,28 @@ public class IcebergTable extends Table {
 
     private void validateColumn(IcebergCatalog catalog) throws DdlException {
         org.apache.iceberg.Table icebergTable = catalog.loadTable(IcebergUtil.getIcebergTableIdentifier(db, table));
-        // TODO: use TypeUtil#indexByName to handle nested field
-        Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
-                .collect(Collectors.toMap(Types.NestedField::name, field -> field));
-        for (Column column : this.fullSchema) {
-            Types.NestedField icebergColumn = icebergColumns.get(column.getName());
-            if (icebergColumn == null) {
-                throw new DdlException("column [" + column.getName() + "] not exists in iceberg");
+        try {
+            // TODO: use TypeUtil#indexByName to handle nested field
+            Map<String, Types.NestedField> icebergColumns = icebergTable.schema().columns().stream()
+                    .collect(Collectors.toMap(Types.NestedField::name, field -> field));
+            for (Column column : this.fullSchema) {
+                Types.NestedField icebergColumn = icebergColumns.get(column.getName());
+                if (icebergColumn == null) {
+                    throw new DdlException("column [" + column.getName() + "] not exists in iceberg");
+                }
+                if (!validateColumnType(icebergColumn.type(), column.getType())) {
+                    throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
+                            "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
+                }
+                if (!column.isAllowNull()) {
+                    throw new DdlException(
+                            "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
+                }
             }
-            if (!validateColumnType(icebergColumn.type(), column.getType())) {
-                throw new DdlException("can not convert iceberg column type [" + icebergColumn.type() + "] to " +
-                        "starrocks type [" + column.getPrimitiveType() + "], column name: " + column.getName());
-            }
-            if (!column.isAllowNull()) {
-                throw new DdlException(
-                        "iceberg extern table not support no-nullable column: [" + icebergColumn.name() + "]");
-            }
+            LOG.debug("successfully validating columns for " + catalog);
+        } catch (NullPointerException e) {
+            throw new DdlException("Can not find iceberg table " + db + "." + table + " from the resource " + resourceName);
         }
-        LOG.debug("successfully validating columns for " + catalog);
     }
 
     private boolean validateColumnType(Type icebergType, com.starrocks.catalog.Type type) {
@@ -301,12 +343,20 @@ public class IcebergTable extends Table {
         }
     }
 
+    // In the first phase of connector, in order to reduce changes, we use `hive.metastore.uris` as resource name
+    // for table of external catalog. The table of external catalog will not create a real resource.
+    // We will reconstruct this part later. The concept of resource will not be used for external catalog
+
+    // Only iceberg catalog use this method at present. it will be removed after refactoring iceberg catalog.
+    public static boolean isInternalCatalog(String resourceName) {
+        return !resourceName.startsWith("thrift://");
+    }
+
     @Override
     public TTableDescriptor toThrift(List<DescriptorTable.ReferencedPartitionInfo> partitions) {
         Preconditions.checkNotNull(partitions);
 
         TIcebergTable tIcebergTable = new TIcebergTable();
-        tIcebergTable.setLocation(tableLocation);
 
         List<TColumn> tColumns = Lists.newArrayList();
         for (Column column : getBaseSchema()) {

@@ -176,11 +176,16 @@ public:
     // leveldb may change prune() to a pure abstract method.
     virtual void prune() {}
 
-    virtual size_t get_memory_usage() = 0;
     virtual void get_cache_status(rapidjson::Document* document) = 0;
 
     virtual void set_capacity(size_t capacity) = 0;
     virtual size_t get_capacity() = 0;
+    virtual size_t get_memory_usage() = 0;
+    virtual size_t get_lookup_count() = 0;
+    virtual size_t get_hit_count() = 0;
+
+    //  Decrease or increase cache capacity.
+    virtual bool adjust_capacity(int64_t delta, size_t min_capacity = 0) = 0;
 
 private:
     Cache(const Cache&) = delete;
@@ -288,7 +293,6 @@ private:
     // _mutex protects the following state.
     std::mutex _mutex;
     size_t _usage{0};
-    uint64_t _last_id{0};
 
     // Dummy head of LRU list.
     // lru.prev is newest entry, lru.next is oldest entry.
@@ -317,14 +321,19 @@ public:
     Slice value_slice(Handle* handle) override;
     uint64_t new_id() override;
     void prune() override;
-    size_t get_memory_usage() override;
     void get_cache_status(rapidjson::Document* document) override;
     void set_capacity(size_t capacity) override;
+    size_t get_memory_usage() override;
     size_t get_capacity() override;
+    uint64_t get_lookup_count() override;
+    uint64_t get_hit_count() override;
+    bool adjust_capacity(int64_t delta, size_t min_capacity = 0) override;
 
 private:
     static uint32_t _hash_slice(const CacheKey& s);
     static uint32_t _shard(uint32_t hash);
+    void _set_capacity(size_t capacity);
+    size_t _get_stat(size_t (LRUCache::*mem_fun)());
 
     LRUCache _shards[kNumShards];
     std::mutex _mutex;

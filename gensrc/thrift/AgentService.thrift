@@ -39,6 +39,7 @@ struct TTabletSchema {
     7: optional list<Descriptors.TOlapTableIndex> indexes
     8: optional bool is_in_memory
     9: optional i64 id;
+    10: optional list<i32> sort_key_idxes
 }
 
 // this enum stands for different storage format in src_backends
@@ -60,6 +61,7 @@ struct TCreateTabletReq {
     1: required Types.TTabletId tablet_id
     2: required TTabletSchema tablet_schema
     3: optional Types.TVersion version
+    4: optional Types.TVersionHash version_hash // Deprecated
     5: optional Types.TStorageMedium storage_medium
     6: optional bool in_restore_mode
     // this new tablet should be colocate with base tablet
@@ -119,6 +121,7 @@ struct TPushReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
+    4: required Types.TVersionHash version_hash // Deprecated
     5: required i64 timeout
     6: required Types.TPushType push_type
     7: optional string http_file_path
@@ -149,6 +152,7 @@ struct TCloneReq {
     4: optional Types.TStorageMedium storage_medium
     // these are visible version(hash) actually
     5: optional Types.TVersion committed_version
+    6: optional Types.TVersionHash committed_version_hash // Deprecated
     7: optional i32 task_version
     8: optional i64 src_path_hash
     9: optional i64 dest_path_hash
@@ -168,12 +172,14 @@ struct TCancelDeleteDataReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
+    4: required Types.TVersionHash version_hash // Deprecated
 }
 
 struct TCheckConsistencyReq {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: required Types.TVersion version
+    4: required Types.TVersionHash version_hash // Deprecated
 }
 
 struct TUploadReq {
@@ -183,7 +189,7 @@ struct TUploadReq {
     4: optional map<string, string> broker_prop
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    5: optional bool use_broker = false
+    5: optional bool use_broker
     // hdfs_write_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_write_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -197,7 +203,7 @@ struct TDownloadReq {
     4: optional map<string, string> broker_prop
     // If use_broker is set, we will write hdfs thourgh broker
     // If use_broker is not set, we will write through libhdfs/S3 directly
-    5: optional bool use_broker = false
+    5: optional bool use_broker
     // hdfs_read_buffer_size_kb for writing through lib hdfs directly
     6: optional i32 hdfs_read_buffer_size_kb = 0
     // properties from hdfs-site.xml, core-site.xml and load_properties
@@ -208,6 +214,7 @@ struct TSnapshotRequest {
     1: required Types.TTabletId tablet_id
     2: required Types.TSchemaHash schema_hash
     3: optional Types.TVersion version // not used
+    4: optional Types.TVersionHash version_hash // Deprecated
     5: optional i64 timeout
     6: optional list<Types.TVersion> missing_version
     7: optional bool list_files
@@ -218,6 +225,7 @@ struct TSnapshotRequest {
     // [range1_start, range1_end(inclusive), ... rangeN_start (implicit to INT64_MAX)]
     // size must be 2*N + 1
     10:optional list<Types.TVersion> missing_version_ranges
+    11:optional bool is_restore_task = false;
 }
 
 struct TReleaseSnapshotRequest {
@@ -232,6 +240,7 @@ struct TClearRemoteFileReq {
 struct TPartitionVersionInfo {
     1: required Types.TPartitionId partition_id
     2: required Types.TVersion version
+    3: required Types.TVersionHash version_hash // Deprecated
 }
 
 struct TMoveDirReq {
@@ -269,12 +278,14 @@ struct TRecoverTabletReq {
     1: optional Types.TTabletId tablet_id
     2: optional Types.TSchemaHash schema_hash
     3: optional Types.TVersion version
+    4: optional Types.TVersionHash version_hash // Deprecated
 }
 
 enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
-    ENABLE_PERSISTENT_INDEX
+    ENABLE_PERSISTENT_INDEX,
+    WRITE_QUORUM
 }
 
 struct TTabletMetaInfo {

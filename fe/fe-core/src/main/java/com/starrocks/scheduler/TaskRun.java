@@ -2,15 +2,17 @@
 package com.starrocks.scheduler;
 
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.SetVar;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
+import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.SetVar;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
@@ -18,17 +20,21 @@ import org.jetbrains.annotations.NotNull;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.Future;
+import java.util.concurrent.CompletableFuture;
 
 public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
 
+    public static final String PARTITION_START = "PARTITION_START";
+    public static final String PARTITION_END = "PARTITION_END";
+    public static final String FORCE = "FORCE";
+
     private long taskId;
 
     private Map<String, String> properties;
 
-    private Future<?> future;
+    private CompletableFuture<Constants.TaskRunState> future;
 
     private Task task;
 
@@ -37,6 +43,10 @@ public class TaskRun implements Comparable<TaskRun> {
     private TaskRunProcessor processor;
 
     private TaskRunStatus status;
+
+    TaskRun() {
+        future = new CompletableFuture<>();
+    }
 
     public long getTaskId() {
         return taskId;
@@ -54,12 +64,8 @@ public class TaskRun implements Comparable<TaskRun> {
         this.properties = properties;
     }
 
-    public Future<?> getFuture() {
+    public CompletableFuture<Constants.TaskRunState> getFuture() {
         return future;
-    }
-
-    public void setFuture(Future<?> future) {
-        this.future = future;
     }
 
     public Task getTask() {
@@ -122,6 +128,31 @@ public class TaskRun implements Comparable<TaskRun> {
     }
 
     public TaskRunStatus getStatus() {
+        if (status == null) {
+            return null;
+        }
+        switch (status.getState()) {
+            case RUNNING:
+                if (runCtx != null) {
+                    StmtExecutor executor = runCtx.getExecutor();
+                    if (executor != null && executor.getCoordinator() != null) {
+                        long jobId = executor.getCoordinator().getJobId();
+                        if (jobId != -1) {
+                            InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
+                                    .getLoadManager().getLoadJob(jobId);
+                            int progress = job.getProgress();
+                            if (progress == 100) {
+                                progress = 99;
+                            }
+                            status.setProgress(progress);
+                        }
+                    }
+                }
+                break;
+            case SUCCESS:
+                status.setProgress(100);
+                break;
+        }
         return status;
     }
 

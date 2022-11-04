@@ -30,6 +30,7 @@ typedef i32 TSlotId
 typedef i64 TTableId
 typedef i64 TTabletId
 typedef i64 TVersion
+typedef i64 TVersionHash
 typedef i32 TSchemaHash
 typedef i32 TPort
 typedef i64 TCount
@@ -107,7 +108,7 @@ struct TScalarType {
 // Represents a field in a STRUCT type.
 // TODO: Model column stats for struct fields.
 struct TStructField {
-    1: required string name
+    1: optional string name
     2: optional string comment
 }
 
@@ -119,6 +120,9 @@ struct TTypeNode {
 
     // only used for structs; has struct_fields.size() corresponding child types
     3: optional list<TStructField> struct_fields
+
+    // Marking which subfield will be used, this value will be set in FE. Used for MapType and StructType.
+    4: optional list<bool> selected_fields;
 }
 
 // A flattened representation of a tree of column types obtained by depth-first
@@ -356,6 +360,7 @@ enum TTableType {
     HDFS_TABLE,
     ICEBERG_TABLE,
     HUDI_TABLE,
+    DELTALAKE_TABLE,
     JDBC_TABLE,
     VIEW = 20,
     MATERIALIZED_VIEW
@@ -446,4 +451,10 @@ enum TCompressionType {
     DEFLATE = 9;
     BZIP2 = 10;
     LZO = 11; // Deprecated
+}
+
+enum TWriteQuorumType {
+    ONE = 0;
+    MAJORITY = 1;
+    ALL = 2;
 }

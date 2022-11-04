@@ -146,7 +146,7 @@ private:
     std::mutex _status_lock;
     Status _exec_status;
 
-    int _timeout_second;
+    int _timeout_second{-1};
 };
 
 FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId& fragment_instance_id, int backend_num,
@@ -157,8 +157,7 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
           _exec_env(exec_env),
           _coord_addr(coord_addr),
           _executor(exec_env, std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this,
-                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)),
-          _timeout_second(-1) {
+                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
 }
 
@@ -360,7 +359,7 @@ FragmentMgr::~FragmentMgr() {
 
 static void empty_function(PlanFragmentExecutor* exec) {}
 
-void FragmentMgr::exec_actual(std::shared_ptr<FragmentExecState> exec_state, const FinishCallback& cb) {
+void FragmentMgr::exec_actual(const std::shared_ptr<FragmentExecState>& exec_state, const FinishCallback& cb) {
     // This writing is to ensure that MemTracker will not be destructed before the thread ends.
     // This writing method is a bit tricky, and when there is a better way, replace it
     auto profile = exec_state->runtime_state()->runtime_profile_ptr();
@@ -760,7 +759,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
         return Status::InvalidArgument(msg.str());
     }
     TQueryPlanInfo t_query_plan_info;
-    const uint8_t* buf = (const uint8_t*)query_plan_info.data();
+    const auto* buf = (const uint8_t*)query_plan_info.data();
     uint32_t len = query_plan_info.size();
     // deserialize TQueryPlanInfo
     auto st = deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_query_plan_info);
@@ -775,7 +774,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
     ObjectPool obj_pool;
-    st = DescriptorTbl::create(&obj_pool, t_query_plan_info.desc_tbl, &desc_tbl, params.batch_size);
+    st = DescriptorTbl::create(nullptr, &obj_pool, t_query_plan_info.desc_tbl, &desc_tbl, params.batch_size);
     if (!st.ok()) {
         LOG(WARNING) << "open context error: extract DescriptorTbl failure";
         std::stringstream msg;

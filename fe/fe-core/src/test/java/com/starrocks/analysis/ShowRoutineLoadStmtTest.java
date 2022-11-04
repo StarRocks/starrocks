@@ -3,6 +3,8 @@
 package com.starrocks.analysis;
 
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.ast.ShowRoutineLoadStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -25,10 +27,10 @@ public class ShowRoutineLoadStmtTest {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
-        ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb","label"), false);
+        ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb", "label"), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW ROUTINE LOAD FOR `testDb`.`label`", stmt.toString());
+        Assert.assertEquals("label", stmt.getName());
         Assert.assertEquals("testDb", stmt.getDbFullName());
         Assert.assertFalse(stmt.isIncludeHistory());
         Assert.assertEquals(18, stmt.getMetaData().getColumnCount());
@@ -36,14 +38,13 @@ public class ShowRoutineLoadStmtTest {
     }
 
     @Test
-    public void testFromDB() throws Exception {
+    public void testFromDB() {
         ctx = UtFrameUtils.createDefaultCtx();
         ctx.setDatabase("testDb");
 
-        ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb",null), false);
+        ShowRoutineLoadStmt stmt = new ShowRoutineLoadStmt(new LabelName("testDb", null), false);
 
         com.starrocks.sql.analyzer.Analyzer.analyze(stmt, ctx);
-        Assert.assertEquals("SHOW ROUTINE LOAD FROM testDb", stmt.toString());
         Assert.assertEquals("testDb", stmt.getDbFullName());
     }
 

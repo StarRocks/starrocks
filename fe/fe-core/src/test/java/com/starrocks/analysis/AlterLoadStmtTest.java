@@ -3,11 +3,13 @@
 package com.starrocks.analysis;
 
 import com.google.common.collect.Maps;
-import com.starrocks.common.AnalysisException;
-import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.AlterLoadStmt;
+import com.starrocks.sql.ast.CreateRoutineLoadStmt;
+import com.starrocks.sql.ast.LoadStmt;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -51,12 +53,8 @@ public class AlterLoadStmtTest {
             jobProperties.put(LoadStmt.PRIORITY, "NORMAL");
             AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"),
                     jobProperties);
-            try {
-                stmt.analyze(analyzer);
-            } catch (UserException e) {
-                Assert.fail();
-            }
 
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
             Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
             Assert.assertTrue(
                     stmt.getAnalyzedJobProperties().containsKey(LoadStmt.PRIORITY));
@@ -66,11 +64,7 @@ public class AlterLoadStmtTest {
             jobProperties.put(LoadStmt.PRIORITY, "HIGH");
             AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"),
                     jobProperties);
-            try {
-                stmt.analyze(analyzer);
-            } catch (UserException e) {
-                Assert.fail();
-            }
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
             Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
             Assert.assertTrue(
@@ -81,11 +75,7 @@ public class AlterLoadStmtTest {
             jobProperties.put(LoadStmt.PRIORITY, "HIGHEST");
             AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"),
                     jobProperties);
-            try {
-                stmt.analyze(analyzer);
-            } catch (UserException e) {
-                Assert.fail();
-            }
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
             Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
             Assert.assertTrue(
@@ -96,11 +86,7 @@ public class AlterLoadStmtTest {
             jobProperties.put(LoadStmt.PRIORITY, "LOW");
             AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"),
                     jobProperties);
-            try {
-                stmt.analyze(analyzer);
-            } catch (UserException e) {
-                Assert.fail();
-            }
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
             Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
             Assert.assertTrue(
@@ -111,11 +97,7 @@ public class AlterLoadStmtTest {
             jobProperties.put(LoadStmt.PRIORITY, "LOWEST");
             AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"),
                     jobProperties);
-            try {
-                stmt.analyze(analyzer);
-            } catch (UserException e) {
-                Assert.fail();
-            }
+            com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
 
             Assert.assertEquals(1, stmt.getAnalyzedJobProperties().size());
             Assert.assertTrue(
@@ -123,10 +105,10 @@ public class AlterLoadStmtTest {
         }
     }
 
-    @Test(expected = AnalysisException.class)
-    public void testNoPproperties() throws AnalysisException, UserException {
+    @Test(expected = SemanticException.class)
+    public void testNoProperties() {
         AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"), null);
-        stmt.analyze(analyzer);
+        com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
     }
 
     @Test
@@ -137,11 +119,11 @@ public class AlterLoadStmtTest {
             AlterLoadStmt stmt = new AlterLoadStmt(new LabelName("db1", "label1"),
                     jobProperties);
             try {
-                stmt.analyze(analyzer);
+                com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("format is invalid property"));
-            } catch (UserException e) {
+            } catch (Exception e) {
                 Assert.fail();
             }
         }
@@ -153,11 +135,11 @@ public class AlterLoadStmtTest {
                     jobProperties);
 
             try {
-                stmt.analyze(analyzer);
+                com.starrocks.sql.analyzer.Analyzer.analyze(stmt, new ConnectContext());
                 Assert.fail();
-            } catch (AnalysisException e) {
+            } catch (SemanticException e) {
                 Assert.assertTrue(e.getMessage().contains("priority"));
-            } catch (UserException e) {
+            } catch (Exception e) {
                 Assert.fail();
             }
         }

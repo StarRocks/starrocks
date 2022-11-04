@@ -221,6 +221,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     options.array_hive_collection_delimiter = _collection_delimiter;
     options.array_hive_mapkey_delimiter = _mapkey_delimiter;
     options.array_hive_nested_level = 1;
+    options.invalid_field_as_null = false;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -250,6 +251,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
 
         bool has_error = false;
+        std::string error_msg;
         int num_materialize_columns = _scanner_params.materialize_slots.size();
         int field_size = fields.size();
         if (_scanner_params.hive_column_names->size() != field_size) {
@@ -270,6 +272,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 if (!_converters[j]->read_string(column, field, options)) {
                     LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
                                  << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
+                    error_msg = strings::Substitute("CSV parse column [$0] failed, more details please see be log.",
+                                                    _scanner_params.materialize_slots[j]->debug_string());
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;
                     break;
@@ -294,13 +298,15 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 ColumnPtr partition_value = _scanner_ctx.partition_values[p];
                 DCHECK(partition_value->is_constant());
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
-                ColumnPtr data_column = const_column->data_column();
+                const ColumnPtr& data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     column->append_nulls(1);
                 } else {
                     column->append(*data_column, 0, 1);
                 }
             }
+        } else {
+            return Status::InternalError(error_msg);
         }
     }
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
@@ -323,7 +329,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
         // set current range index to the last one, so next time we reach EOF.
         _current_range_index = _scanner_params.scan_ranges.size() - 1;
         // we don't know real stream size in adavance, so we set a very large stream size
-        size_t file_size = static_cast<size_t>(-1);
+        auto file_size = static_cast<size_t>(-1);
         _reader = std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter, file_size);
         return Status::OK();
     }
@@ -335,7 +341,7 @@ Status HdfsTextScanner::_create_or_reinit_reader() {
                                                          scan_range->file_length);
     }
     {
-        HdfsScannerCSVReader* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
+        auto* reader = down_cast<HdfsScannerCSVReader*>(_reader.get());
         RETURN_IF_ERROR(reader->reset(scan_range->offset, scan_range->length));
         if (scan_range->offset != 0) {
             // Always skip first record of scan range with non-zero offset.

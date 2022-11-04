@@ -154,7 +154,7 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
     }
 
     // @todo: should replace to mem pool
-    LikePredicateState* state = new LikePredicateState();
+    auto* state = new LikePredicateState();
     context->set_function_state(scope, state);
 
     state->function = &regex_fn;
@@ -197,8 +197,7 @@ Status LikePredicate::regex_prepare(starrocks_udf::FunctionContext* context,
 Status LikePredicate::regex_close(starrocks_udf::FunctionContext* context,
                                   starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        LikePredicateState* state =
-                reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+        auto* state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
         delete state;
     }
     return Status::OK();
@@ -265,7 +264,7 @@ ColumnPtr LikePredicate::constant_ends_with_fn(FunctionContext* context,
                                                const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
-    auto value = VECTORIZED_FN_ARGS(0);
+    const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
     return VectorizedStrictBinaryFunction<ConstantEndsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
@@ -280,7 +279,7 @@ ColumnPtr LikePredicate::constant_starts_with_fn(FunctionContext* context,
                                                  const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
-    auto value = VECTORIZED_FN_ARGS(0);
+    const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
     return VectorizedStrictBinaryFunction<ConstantStartsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);
@@ -294,7 +293,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(ConstantEqualsImpl, value, pattern) {
 ColumnPtr LikePredicate::constant_equals_fn(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
     auto state = reinterpret_cast<LikePredicateState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
 
-    auto value = VECTORIZED_FN_ARGS(0);
+    const auto& value = VECTORIZED_FN_ARGS(0);
     auto pattern = state->_search_string_column;
 
     return VectorizedStrictBinaryFunction<ConstantEqualsImpl>::evaluate<TYPE_VARCHAR, TYPE_BOOLEAN>(value, pattern);

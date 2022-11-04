@@ -30,6 +30,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
@@ -38,6 +39,7 @@ import com.starrocks.planner.AnalyticEvalNode;
 import com.starrocks.planner.AssertNumRowsNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DecodeNode;
+import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.EmptySetNode;
 import com.starrocks.planner.EsScanNode;
 import com.starrocks.planner.ExceptNode;
@@ -97,6 +99,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperato
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalEsScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalFilterOperator;
@@ -268,7 +271,7 @@ public class PlanFragmentBuilder {
 
         private void setUnUsedOutputColumns(PhysicalOlapScanOperator node, OlapScanNode scanNode,
                                             List<ScalarOperator> predicates, OlapTable referenceTable) {
-            if (!ConnectContext.get().getSessionVariable().isAbleFilterUnusedColumnsInScanStage()) {
+            if (!ConnectContext.get().getSessionVariable().isEnableFilterUnusedColumnsInScanStage()) {
                 return;
             }
 
@@ -289,20 +292,21 @@ public class PlanFragmentBuilder {
                 outputColumnIds.add(colref.getId());
             }
 
-            // we only support single pred like: a = xx, single pre can push down to scan node
-            // complex pred like: a + b = xx, can not push down to scan node yet
-            // so the columns in complex pred, it useful for the stage after scan
+            // NOTE:
+            // - only support push down single predicate(eg, a = xx) to scan node.
+            // - only keys in agg-key model (aggregation/unique_key model) and primary-key model can be included in the unused columns.
+            // - complex pred(eg, a + b = xx) can not be pushed down to scan node yet.
+            // so the columns in complex predicate are useful for the stage after scan.
             Set<Integer> singlePredColumnIds = new HashSet<Integer>();
             Set<Integer> complexPredColumnIds = new HashSet<Integer>();
-            Set<String> aggAndPrimaryKeyTableValueColumnNames = new HashSet<String>();
+            Set<String> aggOrPrimaryKeyTableValueColumnNames = new HashSet<String>();
             if (referenceTable.getKeysType().isAggregationFamily() ||
                     referenceTable.getKeysType() == KeysType.PRIMARY_KEYS) {
-                List<Column> fullColumn = referenceTable.getFullSchema();
-                for (Column col : fullColumn) {
-                    if (!col.isKey()) {
-                        aggAndPrimaryKeyTableValueColumnNames.add(col.getName());
-                    }
-                }
+                aggOrPrimaryKeyTableValueColumnNames =
+                        referenceTable.getFullSchema().stream()
+                                .filter(col -> !col.isKey())
+                                .map(col -> col.getName())
+                                .collect(Collectors.toSet());
             }
 
             for (ScalarOperator predicate : predicates) {
@@ -330,7 +334,7 @@ public class PlanFragmentBuilder {
                 }
             }
 
-            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggAndPrimaryKeyTableValueColumnNames);
+            scanNode.setUnUsedOutputStringColumns(unUsedOutputColumnIds, aggOrPrimaryKeyTableValueColumnNames);
         }
 
         @Override
@@ -606,6 +610,7 @@ public class PlanFragmentBuilder {
 
             // set unused output columns 
             setUnUsedOutputColumns(node, scanNode, predicates, referenceTable);
+            scanNode.setIsSortedByKeyPerTablet(node.needSortedByKeyPerTablet());
 
             // set isPreAggregation
             scanNode.setIsPreAggregation(node.isPreAggregation(), node.getTurnOffReason());
@@ -795,6 +800,56 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), hdfsScanNode, DataPartition.RANDOM);
+            context.getFragments().add(fragment);
+            return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalDeltaLakeScan(OptExpression optExpression, ExecPlan context) {
+            PhysicalDeltaLakeScanOperator node = (PhysicalDeltaLakeScanOperator) optExpression.getOp();
+
+            Table referenceTable = node.getTable();
+            context.getDescTbl().addReferencedTable(referenceTable);
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+            tupleDescriptor.setTable(referenceTable);
+
+            // set slot
+            for (Map.Entry<ColumnRefOperator, Column> entry : node.getColRefToColumnMetaMap().entrySet()) {
+                SlotDescriptor slotDescriptor =
+                        context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                slotDescriptor.setColumn(entry.getValue());
+                slotDescriptor.setIsNullable(entry.getValue().isAllowNull());
+                slotDescriptor.setIsMaterialized(true);
+                context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+            }
+
+            DeltaLakeScanNode deltaLakeScanNode =
+                    new DeltaLakeScanNode(context.getNextNodeId(), tupleDescriptor, "DeltaLakeScanNode");
+            deltaLakeScanNode.computeStatistics(optExpression.getStatistics());
+            try {
+                // set predicate
+                ScalarOperatorToExpr.FormatterContext formatterContext =
+                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+                List<ScalarOperator> predicates = Utils.extractConjuncts(node.getPredicate());
+                for (ScalarOperator predicate : predicates) {
+                    deltaLakeScanNode.getConjuncts()
+                            .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
+                }
+                deltaLakeScanNode.setupScanRangeLocations(context.getDescTbl());
+                HDFSScanNodePredicates scanNodePredicates = deltaLakeScanNode.getScanNodePredicates();
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+            } catch (AnalysisException e) {
+                LOG.warn("Delta lake scan node get scan range locations failed : " + e);
+                throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
+            }
+
+            deltaLakeScanNode.setLimit(node.getLimit());
+
+            tupleDescriptor.computeMemLayout();
+            context.getScanNodes().add(deltaLakeScanNode);
+
+            PlanFragment fragment =
+                    new PlanFragment(context.getNextFragmentId(), deltaLakeScanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -1131,12 +1186,12 @@ public class PlanFragmentBuilder {
 
         /**
          * Remove ExchangeNode between AggNode and ScanNode for the single backend.
-         *
+         * <p>
          * This is used to generate "ScanNode->LocalShuffle->OnePhaseLocalAgg" for the single backend,
          * which contains two steps:
          * 1. Ignore the network cost for ExchangeNode when estimating cost model.
          * 2. Remove ExchangeNode between AggNode and ScanNode when building fragments.
-         *
+         * <p>
          * Specifically, transfer
          * (AggNode->ExchangeNode)->([ProjectNode->]ScanNode)
          * -      *inputFragment         sourceFragment
@@ -1146,7 +1201,7 @@ public class PlanFragmentBuilder {
          * That is, when matching this fragment pattern, remove inputFragment and return sourceFragment.
          *
          * @param inputFragment The input fragment to match the above pattern.
-         * @param context The context of building fragment, which contains all the fragments.
+         * @param context       The context of building fragment, which contains all the fragments.
          * @return SourceFragment if it matches th pattern, otherwise the original inputFragment.
          */
         private PlanFragment removeExchangeNodeForLocalShuffleAgg(PlanFragment inputFragment, ExecPlan context) {
@@ -1205,18 +1260,25 @@ public class PlanFragmentBuilder {
             TupleDescriptor outputTupleDesc = context.getDescTbl().createTupleDescriptor();
 
             ArrayList<Expr> groupingExpressions = Lists.newArrayList();
+            // EXCHANGE_BYTES/_SPEED aggregate the total bytes/ratio on a node, without grouping, remove group-by here.
+            // the group-by expressions just denote the hash distribution of an exchange operator.
+            boolean forExchangePerf = node.getAggregations().values().stream().anyMatch(aggFunc ->
+                    aggFunc.getFnName().equals(FunctionSet.EXCHANGE_BYTES) ||
+                            aggFunc.getFnName().equals(FunctionSet.EXCHANGE_SPEED)) &&
+                    ConnectContext.get().getSessionVariable().getNewPlannerAggStage() == 1;
+            if (!forExchangePerf) {
+                for (ColumnRefOperator grouping : node.getGroupBys()) {
+                    Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
 
-            for (ColumnRefOperator grouping : node.getGroupBys()) {
-                Expr groupingExpr = ScalarOperatorToExpr.buildExecExpression(grouping,
-                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr()));
+                    groupingExpressions.add(groupingExpr);
 
-                groupingExpressions.add(groupingExpr);
-
-                SlotDescriptor slotDesc =
-                        context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
-                slotDesc.setType(groupingExpr.getType());
-                slotDesc.setIsNullable(groupingExpr.isNullable());
-                slotDesc.setIsMaterialized(true);
+                    SlotDescriptor slotDesc =
+                            context.getDescTbl().addSlotDescriptor(outputTupleDesc, new SlotId(grouping.getId()));
+                    slotDesc.setType(groupingExpr.getType());
+                    slotDesc.setIsNullable(groupingExpr.isNullable());
+                    slotDesc.setIsMaterialized(true);
+                }
             }
 
             ArrayList<FunctionCallExpr> aggregateExprList = Lists.newArrayList();
@@ -1278,6 +1340,11 @@ public class PlanFragmentBuilder {
                 if (!partitionExpressions.isEmpty()) {
                     inputFragment.setOutputPartition(DataPartition.hashPartitioned(partitionExpressions));
                 }
+
+                // Check colocate for the first phase in three/four-phase agg whose second phase is pruned.
+                if (!node.isUseStreamingPreAgg() && hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isGlobal()) {
                 if (node.hasSingleDistinct()) {
                     // For SQL: select count(id_int) as a, sum(DISTINCT id_bigint) as b from test_basic group by id_int;
@@ -1328,6 +1395,11 @@ public class PlanFragmentBuilder {
                             .add(ScalarOperatorToExpr.buildExecExpression(predicate, formatterContext));
                 }
                 aggregationNode.setLimit(node.getLimit());
+
+                // Check colocate for one-phase local agg.
+                if (hasColocateOlapScanChildInFragment(aggregationNode)) {
+                    aggregationNode.setColocate(true);
+                }
             } else if (node.getType().isDistinctGlobal()) {
                 aggregateExprList.forEach(FunctionCallExpr::setMergeAggFn);
                 AggregateInfo aggInfo = AggregateInfo.create(
@@ -1362,6 +1434,7 @@ public class PlanFragmentBuilder {
                 throw unsupportedException("Not support aggregate type : " + node.getType());
             }
 
+            aggregationNode.setUseSortAgg(node.isUseSortAgg());
             aggregationNode.setStreamingPreaggregationMode(context.getConnectContext().
                     getSessionVariable().getStreamingPreaggregationMode());
             aggregationNode.setHasNullableGenerateChild();
@@ -1372,10 +1445,6 @@ public class PlanFragmentBuilder {
                 inputFragment.setAssignScanRangesPerDriverSeq(!withLocalShuffle);
                 inputFragment.setEnableSharedScan(withLocalShuffle);
                 aggregationNode.setWithLocalShuffle(withLocalShuffle);
-            }
-            // set aggregate node can use local aggregate
-            if (hasColocateOlapScanChildInFragment(aggregationNode)) {
-                aggregationNode.setColocate(true);
             }
 
             aggregationNode.getAggInfo().setIntermediateAggrExprs(intermediateAggrExprs);
@@ -1659,6 +1728,17 @@ public class PlanFragmentBuilder {
 
             List<Expr> conjuncts = extractConjuncts(node.getPredicate(), context);
             List<Expr> joinOnConjuncts = extractConjuncts(node.getOnPredicate(), context);
+            List<Expr> probePartitionByExprs = Lists.newArrayList();
+            DistributionSpec leftDistributionSpec =
+                    optExpr.getRequiredProperties().get(0).getDistributionProperty().getSpec();
+            DistributionSpec rightDistributionSpec =
+                    optExpr.getRequiredProperties().get(1).getDistributionProperty().getSpec();
+            if (leftDistributionSpec instanceof HashDistributionSpec &&
+                    rightDistributionSpec instanceof HashDistributionSpec) {
+                probePartitionByExprs =
+                        getHashDistributionSpecPartitionByExprs((HashDistributionSpec) leftDistributionSpec,
+                                context);
+            }
 
             NestLoopJoinNode joinNode = new NestLoopJoinNode(context.getNextNodeId(),
                     leftFragment.getPlanRoot(), rightFragment.getPlanRoot(),
@@ -1667,6 +1747,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.addConjuncts(conjuncts);
+            joinNode.setProbePartitionByExprs(probePartitionByExprs);
 
             // Connect parent and child fragment
             rightFragment.getPlanRoot().setFragment(leftFragment);

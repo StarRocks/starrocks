@@ -31,9 +31,9 @@
 #include <arrow/visitor.h>
 #include <arrow/visitor_inline.h>
 #include <gtest/gtest.h>
-#include <stdio.h>
-#include <stdlib.h>
 
+#include <cstdio>
+#include <cstdlib>
 #include <iostream>
 
 #include "column/chunk.h"
@@ -114,9 +114,9 @@ public:
         }
     }
 
-    ~MemoryScratchSinkIssue8676Test() { delete _state; }
+    ~MemoryScratchSinkIssue8676Test() override { delete _state; }
 
-    virtual void SetUp() {
+    void SetUp() override {
         config::periodic_counter_update_period_ms = 500;
         config::storage_root_path = "./data";
 
@@ -127,7 +127,7 @@ public:
         init();
     }
 
-    virtual void TearDown() {
+    void TearDown() override {
         _obj_pool.clear();
         system("rm -rf ./test_run");
     }
@@ -147,8 +147,8 @@ public:
         tuple_desc_builder.build(&desc_tbl_builder);
 
         DescriptorTbl* desc_tbl = nullptr;
-        Status st =
-                DescriptorTbl::create(&_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl, config::vector_chunk_size);
+        Status st = DescriptorTbl::create(_state, &_obj_pool, desc_tbl_builder.desc_tbl(), &desc_tbl,
+                                          config::vector_chunk_size);
         CHECK(st.ok()) << st.to_string();
 
         /// Init RuntimeState
@@ -289,7 +289,7 @@ void MemoryScratchSinkIssue8676Test::init_desc_tbl() {
     t_tuple_desc.__isset.tableId = true;
     _t_desc_table.tupleDescriptors.push_back(t_tuple_desc);
 
-    DescriptorTbl::create(&_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_state, &_obj_pool, _t_desc_table, &_desc_tbl, config::vector_chunk_size);
 
     std::vector<TTupleId> row_tids;
     row_tids.push_back(0);

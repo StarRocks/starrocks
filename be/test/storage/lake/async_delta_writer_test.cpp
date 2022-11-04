@@ -59,7 +59,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -137,8 +136,8 @@ TEST_F(AsyncDeltaWriterTest, test_open) {
     {
         auto tablet_id = -1;
         auto delta_writer = AsyncDeltaWriter::create(tablet_id, _txn_id, _partition_id, nullptr, _mem_tracker.get());
-        ASSERT_ERROR(delta_writer->open());
-        ASSERT_ERROR(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->open());
         delta_writer->close();
     }
     // Call open() multiple times
@@ -229,7 +228,7 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
     opts.stats = &statistics;
     opts.chunk_size = 1024;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
@@ -323,7 +322,7 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
     opts.stats = &statistics;
     opts.chunk_size = kNumThreads * kChunksPerThread * kChunkSize;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));

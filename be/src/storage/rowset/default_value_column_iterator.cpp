@@ -97,6 +97,9 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, ColumnBlockView* dst, b
         }
     }
     _current_rowid += *n;
+    if (_may_contain_deleted_row) {
+        dst->column_block()->set_delete_state(DEL_PARTIAL_SATISFIED);
+    }
     return Status::OK();
 }
 
@@ -119,6 +122,9 @@ Status DefaultValueColumnIterator::next_batch(size_t* n, vectorized::Column* dst
         }
         _current_rowid += *n;
     }
+    if (_may_contain_deleted_row) {
+        dst->set_delete_state(DEL_PARTIAL_SATISFIED);
+    }
     return Status::OK();
 }
 
@@ -136,11 +142,14 @@ Status DefaultValueColumnIterator::next_batch(const vectorized::SparseRange& ran
             for (size_t i = 0; i < to_read; i++) {
                 slices.emplace_back(*reinterpret_cast<const Slice*>(_mem_value));
             }
-            dst->append_strings(slices);
+            [[maybe_unused]] auto ret = dst->append_strings(slices);
         } else {
             dst->append_value_multiple_times(_mem_value, to_read);
         }
         _current_rowid = range.end();
+    }
+    if (_may_contain_deleted_row) {
+        dst->set_delete_state(DEL_PARTIAL_SATISFIED);
     }
     return Status::OK();
 }
@@ -156,6 +165,11 @@ Status DefaultValueColumnIterator::get_row_ranges_by_zone_map(
     DCHECK(row_ranges->empty());
     // TODO
     row_ranges->add({0, static_cast<rowid_t>(_num_rows)});
+    // TODO: Setting `_may_contained_deleted_row` to true is a temporary fix,
+    // which will affect performance in some scenarios.
+    // It is best to filter according to DefaultValue,
+    // but the current Expr framework does not support filter for a single line, which will be added later.
+    _may_contain_deleted_row = true;
     return Status::OK();
 }
 

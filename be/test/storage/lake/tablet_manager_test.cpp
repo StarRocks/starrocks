@@ -23,7 +23,7 @@ namespace starrocks {
 
 class LakeTabletManagerTest : public testing::Test {
 public:
-    LakeTabletManagerTest() : _tablet_manager(nullptr), _test_dir(), _location_provider(nullptr){};
+    LakeTabletManagerTest() : _test_dir(){};
 
     ~LakeTabletManagerTest() override = default;
 
@@ -44,9 +44,9 @@ public:
         (void)FileSystem::Default()->delete_dir_recursive(_test_dir);
     }
 
-    starrocks::lake::TabletManager* _tablet_manager;
+    starrocks::lake::TabletManager* _tablet_manager{nullptr};
     std::string _test_dir;
-    lake::LocationProvider* _location_provider;
+    lake::LocationProvider* _location_provider{nullptr};
 };
 
 // NOLINTNEXTLINE
@@ -89,6 +89,7 @@ TEST_F(LakeTabletManagerTest, create_and_delete_tablet) {
     TCreateTabletReq req;
     req.tablet_id = 65535;
     req.__set_version(1);
+    req.__set_version_hash(0);
     req.tablet_schema.schema_hash = 270068375;
     req.tablet_schema.short_key_column_count = 2;
     EXPECT_OK(_tablet_manager->create_tablet(req));
@@ -273,7 +274,6 @@ TEST_F(LakeTabletManagerTest, tablet_schema_load) {
     schema->set_num_short_key_columns(1);
     schema->set_keys_type(DUP_KEYS);
     schema->set_num_rows_per_row_block(65535);
-    schema->set_compress_kind(COMPRESS_LZ4);
     auto c0 = schema->add_column();
     {
         c0->set_unique_id(0);

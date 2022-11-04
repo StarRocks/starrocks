@@ -223,7 +223,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
     default:
         CHECK(false) << "unsupported keys type " << tablet_schema.keys_type;
     }
-    schema->set_compress_kind(COMPRESS_LZ4);
 
     switch (compression_type) {
     case TCompressionType::LZ4_FRAME:
@@ -235,6 +234,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
         break;
     case TCompressionType::ZSTD:
         schema->set_compression_type(ZSTD);
+        break;
+    case TCompressionType::SNAPPY:
+        schema->set_compression_type(SNAPPY);
         break;
     default:
         LOG(WARNING) << "Unexpected compression type" << compression_type;
@@ -248,7 +250,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
     // set column information
     uint32_t col_ordinal = 0;
-    uint32_t key_count = 0;
     bool has_bf_columns = false;
     for (TColumn tcolumn : tablet_schema.columns) {
         convert_to_new_version(&tcolumn);
@@ -257,7 +258,6 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
 
         RETURN_IF_ERROR(t_column_to_pb_column(col_unique_id, tcolumn, field_version, column));
 
-        key_count += column->is_key();
         has_bf_columns |= column->is_bf_column();
 
         if (tablet_schema.__isset.indexes) {
@@ -272,7 +272,9 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
             }
         }
     }
-
+    for (const auto idx : tablet_schema.sort_key_idxes) {
+        schema->add_sort_key_idxes(idx);
+    }
     schema->set_next_column_unique_id(next_unique_id);
     if (has_bf_columns && tablet_schema.__isset.bloom_filter_fpp) {
         schema->set_bf_fpp(tablet_schema.bloom_filter_fpp);

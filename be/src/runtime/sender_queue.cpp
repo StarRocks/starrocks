@@ -72,7 +72,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
         TRY_CATCH_BAD_ALLOC({
-            serde::ProtobufChunkDeserializer des(_chunk_meta);
+            serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
             ASSIGN_OR_RETURN(*chunk, des.deserialize(pchunk.data()));
         });
     } else {
@@ -90,7 +90,7 @@ Status DataStreamRecvr::SenderQueue::_deserialize_chunk(const ChunkPB& pchunk, v
             SCOPED_TIMER(_recvr->_deserialize_chunk_timer);
             TRY_CATCH_BAD_ALLOC({
                 std::string_view buff(reinterpret_cast<const char*>(uncompressed_buffer->data()), uncompressed_size);
-                serde::ProtobufChunkDeserializer des(_chunk_meta);
+                serde::ProtobufChunkDeserializer des(_chunk_meta, &pchunk, _recvr->get_encode_level());
                 ASSIGN_OR_RETURN(*chunk, des.deserialize(buff));
             });
         }

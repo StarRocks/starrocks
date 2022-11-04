@@ -350,6 +350,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
                                       chunk_source->get_scan_bytes() - prev_scan_bytes);
 
             QUERY_TRACE_ASYNC_FINISH("io_task", category, query_trace_ctx);
+            // make clang happy
+            (void)query_trace_ctx;
         }
     };
 
@@ -394,10 +396,16 @@ Status ScanOperator::_pickup_morsel(RuntimeState* state, int chunk_source_index)
                 return Status::OK();
             } else if (acquire_result == query_cache::AR_PROBE) {
                 auto hit = _cache_operator->probe_cache(lane_owner, version);
-                RETURN_IF_ERROR(_cache_operator->reset_lane(lane_owner));
-                if (hit) {
+                RETURN_IF_ERROR(_cache_operator->reset_lane(state, lane_owner));
+                if (!hit) {
+                    break;
+                }
+                auto cached_version = _cache_operator->cached_version(lane_owner);
+                DCHECK(cached_version <= version);
+                if (cached_version == version) {
                     ASSIGN_OR_RETURN(morsel, _morsel_queue->try_get());
                 } else {
+                    morsel->set_from_version(cached_version + 1);
                     break;
                 }
             } else if (acquire_result == query_cache::AR_SKIP) {
@@ -468,7 +476,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     const auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(scan_operator.get());
     scan_operator->set_degree_of_parallelism(morsel_queue_factory->size());
-    scan_operator->set_need_local_shuffle(morsel_queue_factory->need_local_shuffle());
+    scan_operator->set_could_local_shuffle(morsel_queue_factory->could_local_shuffle());
 
     ops.emplace_back(std::move(scan_operator));
 

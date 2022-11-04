@@ -85,6 +85,34 @@ public:
     virtual void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
     virtual void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const = 0;
 
+    virtual void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                             size_t state_offset, const std::vector<uint8_t>& selection) const {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                create(ctx, states[i] + state_offset);
+            }
+        }
+    }
+
+    virtual void batch_destroy_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                              size_t state_offset, const std::vector<uint8_t>& selection) const {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                destroy(ctx, states[i] + state_offset);
+            }
+        }
+    }
+
+    virtual void batch_finalize_with_selection(FunctionContext* ctx, size_t chunk_size,
+                                               const Buffer<AggDataPtr>& agg_states, size_t state_offset, Column* to,
+                                               const std::vector<uint8_t>& selection) const {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                this->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
     // Contains a loop with calls to "update" function.
     // You can collect arguments into array "states"
     // and do a single call to "update_batch" for devirtualization and inlining.
@@ -150,6 +178,8 @@ protected:
     static const State& data(ConstAggDataPtr __restrict place) { return *reinterpret_cast<const State*>(place); }
 
 public:
+    static constexpr bool pod_state() { return std::is_trivially_destructible_v<State>; }
+
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { new (ptr) State; }
 
     void destroy(FunctionContext* ctx, AggDataPtr __restrict ptr) const final { data(ptr).~State(); }
@@ -158,12 +188,44 @@ public:
 
     size_t alignof_size() const final { return alignof(State); }
 
-    bool is_pod_state() const { return std::is_trivially_destructible_v<State>; }
+    bool is_pod_state() const override { return pod_state(); }
 };
 
 template <typename State, typename Derived>
 class AggregateFunctionBatchHelper : public AggregateFunctionStateHelper<State> {
 public:
+    void batch_create_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                     size_t state_offset, const std::vector<uint8_t>& selection) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                static_cast<const Derived*>(this)->create(ctx, states[i] + state_offset);
+            }
+        }
+    }
+
+    void batch_destroy_with_selection(FunctionContext* ctx, size_t chunk_size, Buffer<AggDataPtr>& states,
+                                      size_t state_offset, const std::vector<uint8_t>& selection) const override {
+        if constexpr (AggregateFunctionStateHelper<State>::pod_state()) {
+            // nothing TODO
+        } else {
+            for (size_t i = 0; i < chunk_size; i++) {
+                if (selection[i] == 0) {
+                    static_cast<const Derived*>(this)->destroy(ctx, states[i] + state_offset);
+                }
+            }
+        }
+    }
+
+    void batch_finalize_with_selection(FunctionContext* ctx, size_t chunk_size, const Buffer<AggDataPtr>& agg_states,
+                                       size_t state_offset, Column* to,
+                                       const std::vector<uint8_t>& selection) const override {
+        for (size_t i = 0; i < chunk_size; i++) {
+            if (selection[i] == 0) {
+                static_cast<const Derived*>(this)->finalize_to_column(ctx, agg_states[i] + state_offset, to);
+            }
+        }
+    }
+
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         for (size_t i = 0; i < chunk_size; ++i) {

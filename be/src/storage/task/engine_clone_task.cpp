@@ -225,6 +225,18 @@ Status EngineCloneTask::_do_clone(Tablet* tablet) {
         auto clone_header_file = strings::Substitute("$0/$1.hdr", schema_hash_dir, tablet_id);
         auto clone_meta_file = strings::Substitute("$0/meta", schema_hash_dir);
 
+        // old tablet may not exists in tablet map, it may still in shutdown tablet map(tablet path not deleted)
+        // new tablet's path maybe the same as old tablet's path, so we need to clear that path before cloning
+        // new files into that directory.
+        // NOTE: there may be concurrent drop tablet operations going on, so current code is still not entirely safe,
+        //       to be safe requires a lock for the whole clone process, which is too heavy for now.
+        // TODO: the correct solution would be:
+        //       making create/drop/clone tablet operation atomic by introducing some kind of tablet lock that is
+        //       more lightweight than the current _get_tablets_shard_lock
+        //       or making the clone process inside lock more lightweight, for example, download files to a temp
+        //       path outside of lock, then do mvs inside lock
+        RETURN_IF_ERROR(tablet_manager->delete_shutdown_tablet_before_clone(tablet_id));
+
         status = _clone_copy(*store, schema_hash_dir, _error_msgs, nullptr);
         if (!status.ok()) {
             (void)fs::remove_all(tablet_dir);
@@ -478,8 +490,7 @@ Status EngineCloneTask::_download_files(DataDir* data_dir, const std::string& re
 
             StringParser::ParseResult result;
             std::string& file_size_str = list[1];
-            int64_t file_size =
-                    StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size(), &result);
+            auto file_size = StringParser::string_to_int<int64_t>(file_size_str.data(), file_size_str.size(), &result);
             if (result != StringParser::PARSE_SUCCESS || file_size < 0) {
                 return Status::InternalError("wrong file size.");
             }

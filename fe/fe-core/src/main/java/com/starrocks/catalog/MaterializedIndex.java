@@ -133,7 +133,7 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
      * Checks whether {@code this} {@link MaterializedIndex} is visible to a transaction.
      * <p>
      * If this {@link MaterializedIndex} is not visible to a transaction,
-     * {@link com.starrocks.transaction.PublishVersionDaemon} will not send {@link com.starrocks.lake.proto.PublishVersionRequest}
+     * {@link com.starrocks.transaction.PublishVersionDaemon} will not send {@link com.starrocks.proto.PublishVersionRequest}
      * to tablets of this index.
      * <p>
      * Only used for {@link com.starrocks.lake.LakeTable} now.
@@ -177,13 +177,13 @@ public class MaterializedIndex extends MetaObject implements Writable, GsonPostP
     }
 
     public void addTablet(Tablet tablet, TabletMeta tabletMeta) {
-        addTablet(tablet, tabletMeta, false);
+        addTablet(tablet, tabletMeta, true);
     }
 
-    public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean isRestore) {
+    public void addTablet(Tablet tablet, TabletMeta tabletMeta, boolean updateInvertedIndex) {
         idToTablets.put(tablet.getId(), tablet);
         tablets.add(tablet);
-        if (!isRestore) {
+        if (updateInvertedIndex) {
             GlobalStateMgr.getCurrentInvertedIndex().addTablet(tablet.getId(), tabletMeta);
         }
     }

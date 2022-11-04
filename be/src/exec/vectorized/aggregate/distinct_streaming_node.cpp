@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/aggregate/distinct_streaming_node.h"
 
+#include <variant>
+
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
@@ -64,25 +66,18 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                        TStreamingPreaggregationMode::FORCE_PREAGGREGATION) {
                 RETURN_IF_ERROR(state->check_mem_limit("AggrNode"));
                 SCOPED_TIMER(_aggregator->agg_compute_timer());
+                TRY_CATCH_ALLOC_SCOPE_START()
 
-                if (false) {
-                }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
-    }
-                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-                else {
-                    DCHECK(false);
-                }
+                _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
+                    _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
+                });
 
                 COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
 
                 _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+                _aggregator->try_convert_to_two_level_set();
 
+                TRY_CATCH_ALLOC_SCOPE_END()
                 continue;
             } else {
                 // TODO: calc the real capacity of hashtable, will add one interface in the class of habletable
@@ -98,41 +93,26 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
                     // hash table is not full or allow expand the hash table according reduction rate
                     SCOPED_TIMER(_aggregator->agg_compute_timer());
 
-                    if (false) {
-                    }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                                             \
-    }
-                    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-                    else {
-                        DCHECK(false);
-                    }
+                    TRY_CATCH_ALLOC_SCOPE_START()
+                    _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
+                        _aggregator->build_hash_set(*hash_set_with_key, input_chunk_size);
+                    });
 
                     COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
-
                     _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
-                    TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
+
+                    _aggregator->try_convert_to_two_level_set();
+                    TRY_CATCH_ALLOC_SCOPE_END()
 
                     continue;
                 } else {
                     {
                         SCOPED_TIMER(_aggregator->agg_compute_timer());
-                        if (false) {
-                        }
-#define HASH_MAP_METHOD(NAME)                                                             \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {     \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set_with_selection<typename decltype( \
-                                    _aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, input_chunk_size));                \
-    }
-                        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-                        else {
-                            DCHECK(false);
-                        }
+                        TRY_CATCH_ALLOC_SCOPE_START()
+                        _aggregator->hash_set_variant().visit([this, input_chunk_size](auto& hash_set_with_key) {
+                            _aggregator->build_hash_set_with_selection(*hash_set_with_key, input_chunk_size);
+                        });
+                        TRY_CATCH_ALLOC_SCOPE_END()
                     }
 
                     {
@@ -181,30 +161,14 @@ Status DistinctStreamingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
 
 void DistinctStreamingNode::_output_chunk_from_hash_set(ChunkPtr* chunk) {
     if (!_aggregator->it_hash().has_value()) {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->hash_set_variant().NAME->hash_set.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
+        _aggregator->hash_set_variant().visit(
+                [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_set_variant().size());
     }
 
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME)                               \
-            _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, runtime_state()->chunk_size(), chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, runtime_state()->chunk_size(), chunk);
+    });
 }
 
 std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::decompose_to_pipeline(
@@ -215,7 +179,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
     // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode =
@@ -225,6 +190,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
                 context->next_operator_id(), id(), aggregator_factory);
         auto source_operator = std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
     auto operators = operators_generator(true);

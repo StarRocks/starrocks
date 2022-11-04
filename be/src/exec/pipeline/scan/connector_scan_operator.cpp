@@ -51,8 +51,8 @@ Status ConnectorScanOperator::do_prepare(RuntimeState* state) {
 void ConnectorScanOperator::do_close(RuntimeState* state) {}
 
 ChunkSourcePtr ConnectorScanOperator::create_chunk_source(MorselPtr morsel, int32_t chunk_source_index) {
-    vectorized::ConnectorScanNode* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
-    ConnectorScanOperatorFactory* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+    auto* scan_node = down_cast<vectorized::ConnectorScanNode*>(_scan_node);
+    auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
     return std::make_shared<ConnectorChunkSource>(_driver_sequence, _chunk_source_profiles[chunk_source_index].get(),
                                                   std::move(morsel), this, scan_node, factory->get_chunk_buffer());
 }
@@ -145,7 +145,7 @@ ConnectorChunkSource::ConnectorChunkSource(int32_t scan_operator_id, RuntimeProf
           _runtime_bloom_filters(op->runtime_bloom_filters()) {
     _conjunct_ctxs = scan_node->conjunct_ctxs();
     _conjunct_ctxs.insert(_conjunct_ctxs.end(), _runtime_in_filters.begin(), _runtime_in_filters.end());
-    ScanMorsel* scan_morsel = (ScanMorsel*)_morsel.get();
+    auto* scan_morsel = (ScanMorsel*)_morsel.get();
     TScanRange* scan_range = scan_morsel->get_scan_range();
 
     if (scan_range->__isset.broker_scan_range) {
@@ -167,6 +167,7 @@ ConnectorChunkSource::~ConnectorChunkSource() {
 Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
+    _ck_acc.set_max_size(state->chunk_size());
     return Status::OK();
 }
 
@@ -191,15 +192,37 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
         return Status::EndOfFile("limit reach");
     }
 
-    do {
-        RETURN_IF_ERROR(_data_source->get_next(state, chunk));
-    } while ((*chunk)->num_rows() == 0);
+    while (_status.ok()) {
+        vectorized::ChunkPtr tmp;
+        _status = _data_source->get_next(state, &tmp);
+        if (_status.ok()) {
+            if (tmp->num_rows() == 0) continue;
+            _ck_acc.push(tmp);
+            if (config::connector_chunk_source_accumulate_chunk_enable) {
+                if (_ck_acc.has_output()) break;
+            } else {
+                _ck_acc.finalize();
+                break;
+            }
+        } else if (!_status.is_end_of_file()) {
+            return _status;
+        } else {
+            _ck_acc.finalize();
+            DCHECK(_status.is_end_of_file());
+        }
+    }
 
-    _rows_read += (*chunk)->num_rows();
+    DCHECK(_status.ok() || _status.is_end_of_file());
     _scan_rows_num = _data_source->raw_rows_read();
     _scan_bytes = _data_source->num_bytes_read();
-
-    return Status::OK();
+    if (_ck_acc.has_output()) {
+        *chunk = std::move(_ck_acc.pull());
+        _rows_read += (*chunk)->num_rows();
+        _chunk_buffer.update_limiter(chunk->get());
+        return Status::OK();
+    }
+    _ck_acc.reset();
+    return Status::EndOfFile("");
 }
 
 const workgroup::WorkGroupScanSchedEntity* ConnectorChunkSource::_scan_sched_entity(

@@ -12,8 +12,7 @@
 #include "storage/tablet_reader.h"
 #include "storage/tablet_reader_params.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 /// Morsel.
 void PhysicalSplitScanMorsel::init_tablet_reader_params(vectorized::TabletReaderParams* params) {
@@ -38,8 +37,8 @@ size_t IndividualMorselQueueFactory::num_original_morsels() const {
 }
 
 IndividualMorselQueueFactory::IndividualMorselQueueFactory(std::map<int, MorselQueuePtr>&& queue_per_driver_seq,
-                                                           bool need_local_shuffle)
-        : _need_local_shuffle(need_local_shuffle) {
+                                                           bool could_local_shuffle)
+        : _could_local_shuffle(could_local_shuffle) {
     if (queue_per_driver_seq.empty()) {
         _queue_per_driver_seq.emplace_back(pipeline::create_empty_morsel_queue());
         return;
@@ -634,5 +633,4 @@ MorselQueuePtr create_empty_morsel_queue() {
     return std::make_unique<FixedMorselQueue>(std::vector<MorselPtr>{});
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

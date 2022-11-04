@@ -106,7 +106,7 @@ void ExecNode::push_down_predicate(RuntimeState* state, std::list<ExprContext*>*
         }
     }
 
-    std::list<ExprContext*>::iterator iter = expr_ctxs->begin();
+    auto iter = expr_ctxs->begin();
     while (iter != expr_ctxs->end()) {
         if ((*iter)->root()->is_bound(_tuple_ids)) {
             (*iter)->prepare(state);
@@ -759,6 +759,7 @@ void ExecNode::collect_scan_nodes(vector<ExecNode*>* nodes) {
     collect_nodes(TPlanNodeType::JDBC_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::MYSQL_SCAN_NODE, nodes);
     collect_nodes(TPlanNodeType::LAKE_SCAN_NODE, nodes);
+    collect_nodes(TPlanNodeType::SCHEMA_SCAN_NODE, nodes);
 }
 
 void ExecNode::init_runtime_profile(const std::string& name) {

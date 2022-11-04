@@ -75,9 +75,12 @@ Status KVStore::init(bool read_only) {
     // defined in olap_define.h
     std::vector<ColumnFamilyDescriptor> cf_descs(NUM_COLUMN_FAMILY_INDEX);
     cf_descs[0].name = DEFAULT_COLUMN_FAMILY;
+    cf_descs[0].options.compression = rocksdb::kSnappyCompression;
     cf_descs[1].name = STARROCKS_COLUMN_FAMILY;
+    cf_descs[1].options.compression = rocksdb::kSnappyCompression;
     cf_descs[2].name = META_COLUMN_FAMILY;
     cf_descs[2].options.prefix_extractor.reset(NewFixedPrefixTransform(PREFIX_LENGTH));
+    cf_descs[2].options.compression = rocksdb::kSnappyCompression;
     static_assert(NUM_COLUMN_FAMILY_INDEX == 3);
 
     rocksdb::Status s;
@@ -90,6 +93,8 @@ Status KVStore::init(bool read_only) {
     if (s.ok() && _db != nullptr) {
         return Status::OK();
     }
+
+    LOG(WARNING) << "Fail to open RocksDB, reason:" << s.ToString() << ", path:" << db_path;
 
     //
     // Open failed, may be it's because the column families we are trying to open is a subset of column families,
@@ -199,7 +204,7 @@ static std::string get_iterate_upper_bound(const std::string& prefix) {
             ret[i] = 0;
         }
     }
-    return std::string();
+    return {};
 }
 
 Status KVStore::iterate(ColumnFamilyIndex column_family_index, const std::string& prefix,

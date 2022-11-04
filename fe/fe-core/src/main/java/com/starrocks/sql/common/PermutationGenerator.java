@@ -8,14 +8,14 @@ import java.util.List;
 
 /**
  * Return permutaion of a list of candidates. eg: inputs: [a, b], [c, d], [e, f], the result will be:
- *    [a, c, e]
- *    [a, c, f]
- *    [a, d, e]
- *    [a, d, f]
- *    [b, c, e]
- *    [b, c, f]
- *    [b, d, e]
- *    [b, d, f]
+ * [a, c, e]
+ * [a, c, f]
+ * [a, d, e]
+ * [a, d, f]
+ * [b, c, e]
+ * [b, c, f]
+ * [b, d, e]
+ * [b, d, f]
  *
  * @param <T>
  */

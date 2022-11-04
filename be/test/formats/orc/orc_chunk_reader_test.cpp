@@ -14,6 +14,7 @@
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks::vectorized {
@@ -43,7 +44,8 @@ struct SlotDesc {
     TypeDescriptor type;
 };
 
-void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, TupleDescriptor** tuple_desc) {
+void create_tuple_descriptor(RuntimeState* state, ObjectPool* pool, const SlotDesc* slot_descs,
+                             TupleDescriptor** tuple_desc) {
     TDescriptorTableBuilder table_desc_builder;
 
     TTupleDescriptorBuilder tuple_desc_builder;
@@ -62,16 +64,17 @@ void create_tuple_descriptor(ObjectPool* pool, const SlotDesc* slot_descs, Tuple
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
     RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
     *tuple_desc = row_desc->tuple_descriptors()[0];
     return;
 }
 
-void create_slot_descriptors(ObjectPool* pool, std::vector<SlotDescriptor*>* res, SlotDesc* slot_descs) {
+void create_slot_descriptors(RuntimeState* state, ObjectPool* pool, std::vector<SlotDescriptor*>* res,
+                             SlotDesc* slot_descs) {
     TupleDescriptor* tuple_desc;
-    create_tuple_descriptor(pool, slot_descs, &tuple_desc);
+    create_tuple_descriptor(state, pool, slot_descs, &tuple_desc);
     *res = tuple_desc->slots();
     return;
 }
@@ -194,7 +197,7 @@ static uint64_t get_hit_rows(OrcChunkReader* reader) {
 
 TEST_F(OrcChunkReaderTest, Normal) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto input_stream = orc::readLocalFile(default_orc_file);
     reader.init(std::move(input_stream));
@@ -217,7 +220,7 @@ public:
 
 TEST_F(OrcChunkReaderTest, SkipStripe) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipStripeRowFilter>();
     reader.set_row_reader_filter(filter);
@@ -279,7 +282,7 @@ static TExprNode create_int_literal_node(TPrimitiveType::type value_type, int64_
 
 template <typename ValueType>
 static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpcode::type opcode,
-                                        SlotDescriptor* slot_desc, ValueType value_type, TExprNode lit_node) {
+                                        SlotDescriptor* slot_desc, ValueType value_type, const TExprNode& lit_node) {
     TExprNode eq_node;
     eq_node.__set_node_type(TExprNodeType::type::BINARY_PRED);
     eq_node.__set_child_type(value_type);
@@ -345,7 +348,7 @@ static ExprContext* create_expr_context(ObjectPool* pool, const std::vector<TExp
 
 TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_custkey == 0, min/max is 1,7.
@@ -366,7 +369,7 @@ TEST_F(OrcChunkReaderTest, SkipFileByConjunctsEQ) {
 
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate == 200000
@@ -394,7 +397,7 @@ TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsEQ) {
 
 TEST_F(OrcChunkReaderTest, SkipStripeByConjunctsInPred) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
 
     // lo_orderdate min/max = 9/200000
@@ -447,7 +450,7 @@ private:
 
 TEST_F(OrcChunkReaderTest, SkipRowGroups) {
     std::vector<SlotDescriptor*> src_slot_descs;
-    create_slot_descriptors(&_pool, &src_slot_descs, default_slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &_pool, &src_slot_descs, default_slot_descs);
     OrcChunkReader reader(_runtime_state.get(), src_slot_descs);
     auto filter = std::make_shared<SkipRowGroupRowFilter>();
     reader.set_row_reader_filter(filter);
@@ -515,7 +518,7 @@ std::vector<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* sta
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
@@ -845,7 +848,7 @@ std::vector<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* sta
     b3.add_slot(b2.build());
     b3.build(&builder);
 
-    Status status = DescriptorTbl::create(pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    Status status = DescriptorTbl::create(state, pool, builder.desc_tbl(), &tbl, config::vector_chunk_size);
     DCHECK(status.ok()) << status.get_error_msg();
     slots.push_back(tbl->get_slot_descriptor(0));
 
@@ -938,7 +941,7 @@ TEST_F(OrcChunkReaderTest, TestReadPositionalColumn) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_positional_column.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1040,7 +1043,7 @@ TEST_F(OrcChunkReaderTest, TestReadArrayBasic) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_array_basic.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1108,7 +1111,7 @@ TEST_F(OrcChunkReaderTest, TestReadPaddingChar) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_padding_char.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);
@@ -1185,7 +1188,7 @@ TEST_F(OrcChunkReaderTest, TestColumnWithUpperCase) {
     static const std::string input_orc_file = "./be/test/exec/test_data/orc_scanner/orc_test_upper_case.orc";
     std::vector<SlotDescriptor*> src_slot_descriptors;
     ObjectPool pool;
-    create_slot_descriptors(&pool, &src_slot_descriptors, slot_descs);
+    create_slot_descriptors(_runtime_state.get(), &pool, &src_slot_descriptors, slot_descs);
 
     {
         OrcChunkReader reader(_runtime_state.get(), src_slot_descriptors);

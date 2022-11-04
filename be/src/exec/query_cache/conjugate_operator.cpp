@@ -2,8 +2,9 @@
 
 #include "exec/query_cache/conjugate_operator.h"
 
-namespace starrocks {
-namespace query_cache {
+#include <utility>
+
+namespace starrocks::query_cache {
 
 static inline std::string base_name_of_conjugate_op(const std::string& s) {
     std::string lc;
@@ -20,10 +21,10 @@ static inline std::string base_name_of_conjugate_op(const std::string& s) {
 }
 
 ConjugateOperator::ConjugateOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence,
-                                     const pipeline::OperatorPtr& sink_op, const pipeline::OperatorPtr& source_op)
+                                     pipeline::OperatorPtr sink_op, pipeline::OperatorPtr source_op)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
-          _sink_op(sink_op),
-          _source_op(source_op) {}
+          _sink_op(std::move(sink_op)),
+          _source_op(std::move(source_op)) {}
 
 Status ConjugateOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
@@ -87,19 +88,19 @@ Status ConjugateOperator::push_chunk(RuntimeState* state, const vectorized::Chun
     return _sink_op->push_chunk(state, chunk);
 }
 
-Status ConjugateOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
-    RETURN_IF_ERROR(_sink_op->reset_state(std::move(chunks)));
-    RETURN_IF_ERROR(_source_op->reset_state({}));
+Status ConjugateOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
+    RETURN_IF_ERROR(_sink_op->reset_state(state, refill_chunks));
+    RETURN_IF_ERROR(_source_op->reset_state(state, {}));
     return Status::OK();
 }
 
 ConjugateOperatorFactory::ConjugateOperatorFactory(pipeline::OpFactoryPtr sink_op_factory,
-                                                   pipeline::OpFactoryPtr source_op_factory)
+                                                   const pipeline::OpFactoryPtr& source_op_factory)
         : pipeline::OperatorFactory(
                   source_op_factory->id(),
                   strings::Substitute("conjugate_$0", base_name_of_conjugate_op(source_op_factory->get_raw_name())),
                   source_op_factory->plan_node_id()),
-          _sink_op_factory(sink_op_factory),
+          _sink_op_factory(std::move(sink_op_factory)),
           _source_op_factory(source_op_factory) {}
 
 Status ConjugateOperatorFactory::prepare(RuntimeState* state) {
@@ -121,5 +122,4 @@ pipeline::OperatorPtr ConjugateOperatorFactory::create(int32_t degree_of_paralle
     return std::make_shared<ConjugateOperator>(this, driver_sequence, sink_op, source_op);
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

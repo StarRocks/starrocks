@@ -118,6 +118,11 @@ public class CreateTableAnalyzer {
         statement.setCharsetName(analyzeCharsetName(statement.getCharsetName()).toLowerCase());
 
         KeysDesc keysDesc = statement.getKeysDesc();
+        if (statement.getSortKeys() != null) {
+            if (keysDesc == null || keysDesc.getKeysType() != KeysType.PRIMARY_KEYS) {
+                throw new IllegalArgumentException("only primary key support sort key");
+            }
+        }
         List<ColumnDef> columnDefs = statement.getColumnDefs();
         PartitionDesc partitionDesc = statement.getPartitionDesc();
         // analyze key desc
@@ -203,7 +208,10 @@ public class CreateTableAnalyzer {
                 if (engineName.equals("mysql") && columnDef.getType().isComplexType()) {
                     throw new SemanticException("%s external table don't support complex type", engineName);
                 }
-                columnDef.setIsKey(true);
+
+                if (!engineName.equals("hive")) {
+                    columnDef.setIsKey(true);
+                }
             }
         }
 

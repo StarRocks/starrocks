@@ -77,6 +77,13 @@ public:
     static StatusOr<TabletSharedPtr> get_tablet(const TInternalScanRange* scan_range);
     static int compute_priority(int32_t num_submitted_tasks);
 
+    int io_tasks_per_scan_operator() const override {
+        if (_sorted_by_keys_per_tablet) {
+            return 1;
+        }
+        return starrocks::ScanNode::io_tasks_per_scan_operator();
+    }
+
 private:
     friend class TabletScanner;
 
@@ -147,7 +154,6 @@ private:
     OlapScanConjunctsManager _conjuncts_manager;
     DictOptimizeParser _dict_optimize_parser;
     const Schema* _chunk_schema = nullptr;
-    ObjectPool _obj_pool;
 
     int32_t _num_scanners = 0;
     int32_t _chunks_per_scanner = 10;
@@ -177,6 +183,9 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+
+    bool _sorted_by_keys_per_tablet = false;
+
     // profile
     RuntimeProfile* _scan_profile = nullptr;
 

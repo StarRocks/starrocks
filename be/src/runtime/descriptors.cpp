@@ -117,8 +117,16 @@ HdfsPartitionDescriptor::HdfsPartitionDescriptor(const THudiTable& thrift_table,
           _location(thrift_partition.location.suffix),
           _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
 
-Status HdfsPartitionDescriptor::create_part_key_exprs(ObjectPool* pool, int32_t chunk_size) {
+HdfsPartitionDescriptor::HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table,
+                                                 const THdfsPartition& thrift_partition)
+        : _file_format(thrift_partition.file_format),
+          _location(thrift_partition.location.suffix),
+          _thrift_partition_key_exprs(thrift_partition.partition_key_exprs) {}
+
+Status HdfsPartitionDescriptor::create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
     RETURN_IF_ERROR(Expr::create_expr_trees(pool, _thrift_partition_key_exprs, &_partition_key_value_evals));
+    RETURN_IF_ERROR(Expr::prepare(_partition_key_value_evals, state));
+    RETURN_IF_ERROR(Expr::open(_partition_key_value_evals, state));
     return Status::OK();
 }
 
@@ -137,6 +145,17 @@ IcebergTableDescriptor::IcebergTableDescriptor(const TTableDescriptor& tdesc, Ob
         : HiveTableDescriptor(tdesc, pool) {
     _table_location = tdesc.icebergTable.location;
     _columns = tdesc.icebergTable.columns;
+}
+
+DeltaLakeTableDescriptor::DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
+        : HiveTableDescriptor(tdesc, pool) {
+    _table_location = tdesc.deltaLakeTable.location;
+    _columns = tdesc.deltaLakeTable.columns;
+    _partition_columns = tdesc.deltaLakeTable.partition_columns;
+    for (const auto& entry : tdesc.deltaLakeTable.partitions) {
+        auto* partition = pool->add(new HdfsPartitionDescriptor(tdesc.deltaLakeTable, entry.second));
+        _partition_id_to_desc_map[entry.first] = partition;
+    }
 }
 
 HudiTableDescriptor::HudiTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)
@@ -537,8 +556,8 @@ std::string RowDescriptor::debug_string() const {
     return ss.str();
 }
 
-Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tbl, DescriptorTbl** tbl,
-                             int32_t chunk_size) {
+Status DescriptorTbl::create(RuntimeState* state, ObjectPool* pool, const TDescriptorTable& thrift_tbl,
+                             DescriptorTbl** tbl, int32_t chunk_size) {
     *tbl = pool->add(new DescriptorTbl());
 
     // deserialize table descriptors first, they are being referenced by tuple descriptors
@@ -566,7 +585,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             break;
         case TTableType::HDFS_TABLE: {
             auto* hdfs_desc = pool->add(new HdfsTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(pool, chunk_size));
+            RETURN_IF_ERROR(hdfs_desc->create_key_exprs(state, pool, chunk_size));
             desc = hdfs_desc;
             break;
         }
@@ -574,9 +593,15 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
             desc = pool->add(new IcebergTableDescriptor(tdesc, pool));
             break;
         }
+        case TTableType::DELTALAKE_TABLE: {
+            auto* delta_lake_desc = pool->add(new DeltaLakeTableDescriptor(tdesc, pool));
+            RETURN_IF_ERROR(delta_lake_desc->create_key_exprs(state, pool, chunk_size));
+            desc = delta_lake_desc;
+            break;
+        }
         case TTableType::HUDI_TABLE: {
             auto* hudi_desc = pool->add(new HudiTableDescriptor(tdesc, pool));
-            RETURN_IF_ERROR(hudi_desc->create_key_exprs(pool, chunk_size));
+            RETURN_IF_ERROR(hudi_desc->create_key_exprs(state, pool, chunk_size));
             desc = hudi_desc;
             break;
         }
@@ -608,7 +633,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
         (*tbl)->_slot_desc_map[tdesc.id] = slot_d;
 
         // link to parent
-        TupleDescriptorMap::iterator entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
+        auto entry = (*tbl)->_tuple_desc_map.find(tdesc.parent);
 
         if (entry == (*tbl)->_tuple_desc_map.end()) {
             return Status::InternalError("unknown tid in slot descriptor msg");
@@ -621,7 +646,7 @@ Status DescriptorTbl::create(ObjectPool* pool, const TDescriptorTable& thrift_tb
 }
 
 TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
-    TableDescriptorMap::const_iterator i = _tbl_desc_map.find(id);
+    auto i = _tbl_desc_map.find(id);
     if (i == _tbl_desc_map.end()) {
         return nullptr;
     } else {
@@ -630,7 +655,7 @@ TableDescriptor* DescriptorTbl::get_table_descriptor(TableId id) const {
 }
 
 TupleDescriptor* DescriptorTbl::get_tuple_descriptor(TupleId id) const {
-    TupleDescriptorMap::const_iterator i = _tuple_desc_map.find(id);
+    auto i = _tuple_desc_map.find(id);
     if (i == _tuple_desc_map.end()) {
         return nullptr;
     } else {
@@ -640,7 +665,7 @@ TupleDescriptor* DescriptorTbl::get_tuple_descriptor(TupleId id) const {
 
 SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     // TODO: is there some boost function to do exactly this?
-    SlotDescriptorMap::const_iterator i = _slot_desc_map.find(id);
+    auto i = _slot_desc_map.find(id);
 
     if (i == _slot_desc_map.end()) {
         return nullptr;

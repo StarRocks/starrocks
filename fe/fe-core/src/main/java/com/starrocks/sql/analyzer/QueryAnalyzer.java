@@ -14,7 +14,6 @@ import com.starrocks.analysis.JoinOperator;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -44,6 +43,7 @@ import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SetQualifier;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
@@ -641,9 +641,9 @@ public class QueryAnalyzer {
                 analyzeExpression(args.get(i), analyzeState, scope);
                 argTypes[i] = args.get(i).getType();
 
-                AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "UNNEST");
-                AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "UNNEST");
-                AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "UNNEST");
+                AnalyzerUtils.verifyNoAggregateFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoWindowFunctions(args.get(i), "Table Function");
+                AnalyzerUtils.verifyNoGroupingFunctions(args.get(i), "Table Function");
             }
 
             Function fn = Expr.getBuiltinFunction(node.getFunctionName().getFunction(), argTypes,
@@ -667,13 +667,33 @@ public class QueryAnalyzer {
             node.setTableFunction(tableFunction);
             node.setChildExpressions(node.getFunctionParams().exprs());
 
+            if (node.getColumnNames() == null) {
+                if (tableFunction.getFunctionName().getFunction().equals("unnest")) {
+                    // If the unnest variadic function does not explicitly specify column name,
+                    // all column names are `unnest`. This refers to the return column name of postgresql.
+                    List<String> columnNames = new ArrayList<>();
+                    for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
+                        columnNames.add("unnest");
+                    }
+                    node.setColumnNames(columnNames);
+                } else {
+                    node.setColumnNames(new ArrayList<>(tableFunction.getDefaultColumnNames()));
+                }
+            } else {
+                if (node.getColumnNames().size() != tableFunction.getTableFnReturnTypes().size()) {
+                    throw new SemanticException("table %s has %s columns available but %s columns specified",
+                            node.getAlias().getTbl(), node.getColumnNames().size(), tableFunction.getTableFnReturnTypes().size());
+                }
+            }
+
             ImmutableList.Builder<Field> fields = ImmutableList.builder();
             for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-                Field field = new Field(tableFunction.getDefaultColumnNames().get(i),
-                        tableFunction.getTableFnReturnTypes().get(i), node.getResolveTableName(),
-                        new SlotRef(node.getResolveTableName(),
-                                node.getTableFunction().getDefaultColumnNames().get(i),
-                                node.getTableFunction().getDefaultColumnNames().get(i)));
+                String colName = node.getColumnNames().get(i);
+
+                Field field = new Field(colName,
+                        tableFunction.getTableFnReturnTypes().get(i),
+                        node.getResolveTableName(),
+                        new SlotRef(node.getResolveTableName(), colName, colName));
                 fields.add(field);
             }
 

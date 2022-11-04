@@ -3,14 +3,17 @@
 
 #include <fmt/format.h>
 
+#include <utility>
+
 #include "block_cache/block_cache.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
+#include "util/stack_util.h"
 
 namespace starrocks::io {
 
-CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<SeekableInputStream> stream)
-        : _filename(filename), _stream(stream), _offset(0) {
+CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<SeekableInputStream> stream)
+        : _filename(std::move(filename)), _stream(std::move(stream)), _offset(0) {
     _size = _stream->get_size().value();
 #ifdef WITH_BLOCK_CACHE
     // _cache_key = _filename;
@@ -29,73 +32,78 @@ CacheInputStream::CacheInputStream(const std::string& filename, std::shared_ptr<
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
     const int64_t BLOCK_SIZE = cache->block_size();
-    int64_t end = _offset + count;
-    int64_t start_block_id = _offset / BLOCK_SIZE;
-    int64_t end_block_id = (end - 1) / BLOCK_SIZE;
-
     char* p = static_cast<char*>(out);
     char* pe = p + count;
 
-    for (int64_t i = start_block_id; i <= end_block_id; i++) {
-        int64_t off = i * BLOCK_SIZE;
-        int64_t size = std::min(BLOCK_SIZE, end - off);
-        int64_t load_size = std::min(BLOCK_SIZE, _size - off);
-
-        // VLOG_FILE << "[CacheInputStream] offset = " << _offset << ", end = " << end << ", block_id = " << i
-        //           << ", off = " << off << ", size = " << size << " , load_size = " << load_size;
-
-        // handle data alignment for first block
-        int64_t shift = 0;
-        if (i == start_block_id) {
-            shift = _offset - start_block_id * BLOCK_SIZE;
-            DCHECK(size > shift);
-        }
-
+    auto read_one_block = [&](size_t offset, size_t size) {
         StatusOr<size_t> res;
+
+        DCHECK(size <= BLOCK_SIZE);
+        {
+            SCOPED_RAW_TIMER(&_stats.read_cache_ns);
+            res = cache->read_cache(_cache_key, _offset, size, p);
+            if (res.ok()) {
+                _stats.read_cache_count += 1;
+                _stats.read_cache_bytes += size;
+                p += size;
+                _offset += size;
+                return Status::OK();
+            }
+        }
+        if (!res.status().is_not_found()) Status::NotFound("");
+        DCHECK(res.status().is_not_found());
+
+        int64_t block_id = offset / BLOCK_SIZE;
+        int64_t block_offset = block_id * BLOCK_SIZE;
+        int64_t shift = offset - block_offset;
+
         char* src = nullptr;
         bool can_zero_copy = false;
-        if ((p + BLOCK_SIZE < pe) && (shift == 0)) {
+        if ((p + BLOCK_SIZE <= pe) && (shift == 0)) {
             can_zero_copy = true;
             src = p;
         } else {
             src = _buffer.data();
         }
 
-        // try to read from cache first.
-        {
-            SCOPED_RAW_TIMER(&_stats.read_cache_ns);
-            res = cache->read_cache(_cache_key, off, load_size, src);
-            if (res.ok()) {
-                _stats.read_cache_count += 1;
-            }
-        }
         // if not found, read from stream and write back to cache.
-        if (res.status().is_not_found()) {
-            RETURN_IF_ERROR(_stream->read_at_fully(off, src, load_size));
-            {
-                SCOPED_RAW_TIMER(&_stats.write_cache_ns);
-                Status r = cache->write_cache(_cache_key, off, load_size, src);
-                if (r.ok()) {
-                    _stats.write_cache_count += 1;
-                    _stats.write_cache_bytes += load_size;
-                } else {
-                    LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
-                }
+        int64_t load_size = std::min(BLOCK_SIZE, _size - block_offset);
+        RETURN_IF_ERROR(_stream->read_at_fully(block_offset, src, load_size));
+
+        if (_enable_populate_cache) {
+            SCOPED_RAW_TIMER(&_stats.write_cache_ns);
+            Status r = cache->write_cache(_cache_key, block_offset, load_size, src);
+            if (r.ok()) {
+                _stats.write_cache_count += 1;
+                _stats.write_cache_bytes += load_size;
+            } else {
+                LOG(WARNING) << "write block cache failed, errmsg: " << r.get_error_msg();
+                // Failed to write cache, but we can keep processing query.
             }
-        } else if (!res.ok()) {
-            return res;
-        } else {
-            _stats.read_cache_bytes += load_size;
         }
 
         if (!can_zero_copy) {
-            src += shift;
-            size -= shift;
-            memcpy(p, src, size);
+            memcpy(p, src + shift, size);
+            _stats.read_cache_bytes += size;
         }
         p += size;
+        _offset += size;
+        return Status::OK();
+    };
+
+    int64_t end_offset = _offset + count;
+    int64_t start_block_id = _offset / BLOCK_SIZE;
+    int64_t end_block_id = (end_offset - 1) / BLOCK_SIZE;
+    // VLOG_FILE << "[XXX] CacheInputStream read _offset = " << _offset << ", count = " << count;
+    for (int64_t i = start_block_id; i <= end_block_id; i++) {
+        size_t off = std::max(_offset, i * BLOCK_SIZE);
+        size_t end = std::min((i + 1) * BLOCK_SIZE, end_offset);
+        size_t size = end - off;
+        // VLOG_FILE << "[XXX] Cache inputStream read_one_block. off = " << off << ", size = " << size;
+        Status st = read_one_block(off, size);
+        if (!st.ok()) return st;
     }
-    _offset += count;
+    DCHECK(p == pe);
     return count;
 }
 #else

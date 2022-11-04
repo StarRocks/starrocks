@@ -132,7 +132,9 @@ Status segment_gc(std::string_view root_location, TabletManager* tablet_mgr) {
 
     // List segment
     auto iter_st = fs->iterate_dir(segment_root_location, [&](std::string_view name) {
-        segments.emplace(name);
+        if (LIKELY(is_segment(name))) {
+            segments.emplace(name);
+        }
         return true;
     });
     if (!iter_st.ok() && !iter_st.is_not_found()) {

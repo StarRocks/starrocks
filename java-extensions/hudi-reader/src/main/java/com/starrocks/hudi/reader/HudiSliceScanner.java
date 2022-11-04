@@ -204,9 +204,6 @@ public class HudiSliceScanner extends ConnectorScanner {
         return (StructObjectInspector) inspector;
     }
 
-    /**
-     * For test only
-     */
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("basePath: ");

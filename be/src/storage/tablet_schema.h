@@ -233,12 +233,12 @@ public:
     size_t field_index(std::string_view field_name) const;
     const TabletColumn& column(size_t ordinal) const;
     const std::vector<TabletColumn>& columns() const;
+    const std::vector<ColumnId> sort_key_idxes() const { return _sort_key_idxes; }
     size_t num_columns() const { return _cols.size(); }
     size_t num_key_columns() const { return _num_key_columns; }
     size_t num_short_key_columns() const { return _num_short_key_columns; }
     size_t num_rows_per_row_block() const { return _num_rows_per_row_block; }
     KeysType keys_type() const { return static_cast<KeysType>(_keys_type); }
-    CompressKind compress_kind() const { return static_cast<CompressKind>(_compress_kind); }
     size_t next_column_unique_id() const { return _next_column_unique_id; }
     bool has_bf_fpp() const { return _has_bf_fpp; }
     double bf_fpp() const { return _bf_fpp; }
@@ -290,9 +290,8 @@ private:
 
     uint16_t _num_key_columns = 0;
     uint16_t _num_short_key_columns = 0;
+    std::vector<ColumnId> _sort_key_idxes;
 
-    // Using `uint8_t` instead of `CompressKind` and `KeysType` for less memory usage.
-    uint8_t _compress_kind = static_cast<uint8_t>(COMPRESS_NONE);
     uint8_t _keys_type = static_cast<uint8_t>(DUP_KEYS);
     CompressionTypePB _compression_type = CompressionTypePB::LZ4_FRAME;
 

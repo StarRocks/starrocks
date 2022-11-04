@@ -43,7 +43,7 @@ under the License.
         <maven.compiler.target>1.8</maven.compiler.target>
         <jprotobuf.version>2.4.12</jprotobuf.version>
         <log4j.version>2.17.1</log4j.version>
-        <jackson.version>2.12.6</jackson.version>
+        <jackson.version>2.13.4</jackson.version>
         <spark.version>2.4.6</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.10.1</parquet.version>
@@ -374,7 +374,7 @@ under the License.
             <dependency>
                 <groupId>com.google.protobuf</groupId>
                 <artifactId>protobuf-java</artifactId>
-                <version>3.16.1</version>
+                <version>3.16.3</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.squareup.okhttp3/okhttp -->
@@ -558,7 +558,6 @@ under the License.
                 <groupId>org.scala-lang</groupId>
                 <artifactId>scala-library</artifactId>
                 <version>2.12.10</version>
-                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.scala-lang/scala-library -->
@@ -580,7 +579,7 @@ under the License.
             <dependency>
                 <groupId>com.opencsv</groupId>
                 <artifactId>opencsv</artifactId>
-                <version>5.4</version>
+                <version>5.7.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-client -->

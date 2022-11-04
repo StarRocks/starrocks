@@ -49,7 +49,6 @@ public:
         schema->set_num_short_key_columns(1);
         schema->set_keys_type(DUP_KEYS);
         schema->set_num_rows_per_row_block(65535);
-        schema->set_compress_kind(COMPRESS_LZ4);
         auto c0 = schema->add_column();
         {
             c0->set_unique_id(next_id());
@@ -147,7 +146,7 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
     opts.stats = &statistics;
     opts.chunk_size = 1024;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
@@ -167,15 +166,6 @@ TEST_F(DuplicateTabletWriterTest, test_write_success) {
 
     check_segment(seg0);
     check_segment(seg1);
-}
-
-TEST_F(DuplicateTabletWriterTest, test_open_fail) {
-    ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestGroupPath));
-    ASSIGN_OR_ABORT(auto tablet, _tablet_manager->get_tablet(_tablet_metadata->id()));
-    ASSIGN_OR_ABORT(auto writer, tablet.new_writer());
-    ASSERT_OK(fs::remove_all(kTestGroupPath));
-    ASSERT_ERROR(writer->open());
-    writer->close();
 }
 
 TEST_F(DuplicateTabletWriterTest, test_write_fail) {

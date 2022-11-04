@@ -384,6 +384,7 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         options.node_id = _node_id;
         options.timeout_ms = params.timeout_ms();
         options.is_replicated_storage = params.is_replicated_storage();
+        options.write_quorum = params.write_quorum();
         if (params.is_replicated_storage()) {
             for (auto& replica : tablet.replicas()) {
                 options.replicas.emplace_back(replica);
@@ -404,7 +405,8 @@ Status LocalTabletsChannel::_open_all_writers(const PTabletWriterOpenRequest& pa
         _tablet_id_to_sorted_indexes.emplace(tablet_ids[i], i);
     }
     std::stringstream ss;
-    ss << "open delta writer ";
+    ss << "LocalTabletsChannel txn_id: " << _txn_id << " load_id: " << print_id(params.id()) << " open delta writer: ";
+
     for (auto& [tablet_id, delta_writer] : _delta_writers) {
         ss << "[" << tablet_id << ":" << delta_writer->replica_state() << "]";
     }

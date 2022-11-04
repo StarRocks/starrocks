@@ -5,7 +5,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
-import com.starrocks.sql.optimizer.base.OutputInputProperty;
+import com.starrocks.sql.optimizer.base.OutputPropertyGroup;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 
 import java.util.Collections;
@@ -26,30 +26,52 @@ public class EnumeratePlan {
             throw new StarRocksPlannerException("Can not extract " + nthExecPlan + " from Memo",
                     ErrorType.INTERNAL_ERROR);
         }
-        // 1. count the valid plan in Memo and record in GroupExpression
-        int planCount = countGroupValidPlan(rootGroup, requiredProperty);
-        if (nthExecPlan > planCount) {
-            throw new StarRocksPlannerException("plan count is " + planCount + ", can not extract the " +
+
+        // 1. get all possible output properties that satisfying the required property
+        List<PhysicalPropertySet> outputProperties =
+                rootGroup.getSatisfyRequiredPropertyGroupExpressions(requiredProperty);
+
+        // 2. count the valid plan in Memo and record in GroupExpression
+        List<Integer> planCounts = Lists.newArrayList();
+        int totalPlanCount = 0;
+        for (PhysicalPropertySet outputProperty : outputProperties) {
+            int planCount = countGroupValidPlan(rootGroup, outputProperty);
+            totalPlanCount += planCount;
+            planCounts.add(planCount);
+        }
+
+        if (nthExecPlan > totalPlanCount) {
+            throw new StarRocksPlannerException("plan count is " + totalPlanCount + ", can not extract the " +
                     nthExecPlan + "th plan", ErrorType.USER_ERROR);
         }
-        // 2. use unranking method to extract the nth plan
-        OptExpression expression = extractNthPlanImpl(requiredProperty, rootGroup, nthExecPlan);
-        expression.setPlanCount(planCount);
+        // 3. use un-ranking method to extract the nth plan
+        int outputPropertyIdx = 0;
+        int remainingNth = nthExecPlan;
+        for (; outputPropertyIdx < outputProperties.size(); outputPropertyIdx++) {
+            if (remainingNth <= planCounts.get(outputPropertyIdx)) {
+                break;
+            }
+            remainingNth -= planCounts.get(outputPropertyIdx);
+        }
+        OptExpression expression = extractNthPlanImpl(rootGroup, outputProperties.get(outputPropertyIdx), remainingNth);
+        expression.setPlanCount(totalPlanCount);
         return expression;
     }
 
-    public static OptExpression extractNthPlanImpl(PhysicalPropertySet requiredProperty, Group group, int nthExecPlan) {
+    public static OptExpression extractNthPlanImpl(Group group, PhysicalPropertySet outputProperty,
+                                                   int nthExecPlan) {
         int planCountOfKGroupExpression = 0;
         List<OptExpression> childPlans = Lists.newArrayList();
         // 1. Calculate the GroupExpression of nthExecPlan in the Group
         GroupExpression chooseGroupExpression = null;
-        for (GroupExpression physicalExpression : group.getSatisfyRequiredGroupExpressions(requiredProperty)) {
-            if (planCountOfKGroupExpression + physicalExpression.getRequiredPropertyPlanCount(requiredProperty) >=
+        Set<GroupExpression> groupExpressions = group.getSatisfyOutputPropertyGroupExpressions(outputProperty);
+        for (GroupExpression groupExpression : groupExpressions) {
+            if (planCountOfKGroupExpression + groupExpression.getOutputPropertyPlanCount(outputProperty) >=
                     nthExecPlan) {
-                chooseGroupExpression = physicalExpression;
+                chooseGroupExpression = groupExpression;
                 break;
             }
-            planCountOfKGroupExpression += physicalExpression.getRequiredPropertyPlanCount(requiredProperty);
+            planCountOfKGroupExpression += groupExpression.getOutputPropertyPlanCount(outputProperty);
         }
 
         Preconditions.checkState(chooseGroupExpression != null);
@@ -57,21 +79,24 @@ public class EnumeratePlan {
         int localRankOfGroupExpression = nthExecPlan - planCountOfKGroupExpression;
         // 3. compute use which output/input properties
         int planCountOfKProperties = 0;
-        List<PhysicalPropertySet> inputProperties = Lists.newArrayList();
-        for (Map.Entry<OutputInputProperty, Integer> entry : chooseGroupExpression
-                .getPropertiesPlanCountMap(requiredProperty).entrySet()) {
-            inputProperties = entry.getKey().getInputProperties();
+        List<PhysicalPropertySet> childrenOutputProperties = Lists.newArrayList();
+        Set<Map.Entry<OutputPropertyGroup, Integer>> entries = chooseGroupExpression
+                .getPropertiesPlanCountMap(outputProperty).entrySet();
+        for (Map.Entry<OutputPropertyGroup, Integer> entry : entries) {
+            OutputPropertyGroup outputPropertyGroup = entry.getKey();
+            childrenOutputProperties = outputPropertyGroup.getChildrenOutputProperties();
 
             if (planCountOfKProperties + entry.getValue() >= localRankOfGroupExpression) {
                 // 4. compute the localProperty-rank in the property.
                 int localRankOfProperties = localRankOfGroupExpression - planCountOfKProperties;
                 // 5. compute sub-ranks of children groups
                 List<Integer> childRankList =
-                        computeNthOfChildGroups(chooseGroupExpression, localRankOfProperties, inputProperties);
+                        computeNthOfChildGroups(chooseGroupExpression, localRankOfProperties,
+                                childrenOutputProperties);
                 // 6. computes the child group recursively
                 for (int childIndex = 0; childIndex < chooseGroupExpression.arity(); ++childIndex) {
-                    OptExpression childPlan = extractNthPlanImpl(inputProperties.get(childIndex),
-                            chooseGroupExpression.inputAt(childIndex), childRankList.get(childIndex));
+                    OptExpression childPlan = extractNthPlanImpl(chooseGroupExpression.inputAt(childIndex),
+                            childrenOutputProperties.get(childIndex), childRankList.get(childIndex));
                     childPlans.add(childPlan);
                 }
                 break;
@@ -80,10 +105,11 @@ public class EnumeratePlan {
         }
         // 7. construct the OptExpression
         OptExpression chooseExpression = OptExpression.create(chooseGroupExpression.getOp(), childPlans);
-        // record inputProperties at optExpression, used for planFragment builder to determine join type
-        chooseExpression.setRequiredProperties(inputProperties);
-        chooseExpression.setStatistics(group.hasConfidenceStatistic(requiredProperty) ?
-                group.getConfidenceStatistic(requiredProperty) :
+        // record childrenOutputProperties at optExpression, used for planFragment builder to determine join type
+        chooseExpression.setRequiredProperties(childrenOutputProperties);
+        chooseExpression.setOutputProperty(outputProperty);
+        chooseExpression.setStatistics(group.hasConfidenceStatistic(outputProperty) ?
+                group.getConfidenceStatistic(outputProperty) :
                 group.getStatistics());
 
         // When build plan fragment, we need the output column of logical property
@@ -93,16 +119,16 @@ public class EnumeratePlan {
 
     // compute sub-ranks of children groups
     public static List<Integer> computeNthOfChildGroups(GroupExpression groupExpression, int localNth,
-                                                        List<PhysicalPropertySet> inputProperties) {
-        // 1. compute the plan count of each child group which satisfied the inputProperties
+                                                        List<PhysicalPropertySet> childrenOutputProperties) {
+        // 1. compute the plan count of each child group which satisfied the childrenOutputProperties
         List<Integer> childGroupExprCountList = Lists.newArrayList();
         for (int childIndex = 0; childIndex < groupExpression.arity(); ++childIndex) {
-            PhysicalPropertySet childInputProperty = inputProperties.get(childIndex);
-            Set<GroupExpression> childGroupExpressions =
-                    groupExpression.inputAt(childIndex).getSatisfyRequiredGroupExpressions(childInputProperty);
+            PhysicalPropertySet childOutputProperty = childrenOutputProperties.get(childIndex);
+            Set<GroupExpression> childGroupExpressions = groupExpression.inputAt(childIndex)
+                    .getSatisfyOutputPropertyGroupExpressions(childOutputProperty);
             int childGroupExprPropertiesCount = childGroupExpressions.stream()
                     .mapToInt(childGroupExpression -> childGroupExpression
-                            .getRequiredPropertyPlanCount(childInputProperty)).sum();
+                            .getOutputPropertyPlanCount(childOutputProperty)).sum();
             childGroupExprCountList.add(childGroupExprPropertiesCount);
         }
 
@@ -160,35 +186,34 @@ public class EnumeratePlan {
     }
 
     // Calculate the valid plan count for the group with required property.
-    public static int countGroupValidPlan(Group group, PhysicalPropertySet requiredProperty) {
+    public static int countGroupValidPlan(Group group, PhysicalPropertySet outputProperty) {
         int groupPlanCount = 0;
-        for (GroupExpression physicalExpression : group.getSatisfyRequiredGroupExpressions(requiredProperty)) {
-            if (physicalExpression.getInputs().isEmpty()) {
+        for (GroupExpression groupExpression : group.getSatisfyOutputPropertyGroupExpressions(outputProperty)) {
+            if (groupExpression.getInputs().isEmpty()) {
                 // It's leaf node of the plan
-                physicalExpression.addPlanCountOfProperties(OutputInputProperty.of(requiredProperty), 1);
-            } else if (physicalExpression.hasValidSubPlan()) {
+                groupExpression.addPlanCountOfProperties(OutputPropertyGroup.of(outputProperty), 1);
+            } else if (groupExpression.hasValidSubPlan()) {
                 // count the plan count of this group expression
-                countGroupExpressionValidPlan(physicalExpression, requiredProperty);
+                countGroupExpressionValidPlan(groupExpression, outputProperty);
             }
-            groupPlanCount += physicalExpression.getRequiredPropertyPlanCount(requiredProperty);
+            groupPlanCount += groupExpression.getOutputPropertyPlanCount(outputProperty);
         }
         return groupPlanCount;
     }
 
     // Calculate the valid plan count for the group expression with required property.
-    public static int countGroupExpressionValidPlan(GroupExpression groupExpression,
-                                                    PhysicalPropertySet requiredProperty) {
-        int groupExpressionPlanCount = 0;
-        for (List<PhysicalPropertySet> inputProperties : groupExpression.getRequiredInputProperties(requiredProperty)) {
+    private static void countGroupExpressionValidPlan(GroupExpression groupExpression,
+                                                      PhysicalPropertySet outputProperty) {
+        for (OutputPropertyGroup outputPropertyGroup : groupExpression.getChildrenOutputProperties(outputProperty)) {
+            List<PhysicalPropertySet> childrenOutputProperties = outputPropertyGroup.getChildrenOutputProperties();
+
             int childPlanCount = 1;
             for (int childIndex = 0; childIndex < groupExpression.arity(); ++childIndex) {
-                childPlanCount *=
-                        countGroupValidPlan(groupExpression.inputAt(childIndex), inputProperties.get(childIndex));
+                childPlanCount *= countGroupValidPlan(groupExpression.inputAt(childIndex),
+                        childrenOutputProperties.get(childIndex));
             }
-            groupExpression.addPlanCountOfProperties(OutputInputProperty.of(requiredProperty, inputProperties),
-                    childPlanCount);
-            groupExpressionPlanCount += childPlanCount;
+
+            groupExpression.addPlanCountOfProperties(outputPropertyGroup, childPlanCount);
         }
-        return groupExpressionPlanCount;
     }
 }

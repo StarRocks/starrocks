@@ -135,7 +135,7 @@ ColumnPtr BinaryColumnBase<T>::replicate(const std::vector<uint32_t>& offsets) {
 template <typename T>
 bool BinaryColumnBase<T>::append_strings(const Buffer<Slice>& strs) {
     for (const auto& s : strs) {
-        const uint8_t* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
+        const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
         _bytes.insert(_bytes.end(), p, p + s.size);
         _offsets.emplace_back(_bytes.size());
     }
@@ -180,7 +180,7 @@ bool BinaryColumnBase<T>::append_strings_overflow(const Buffer<Slice>& strs, siz
         append_fixed_length<T, 128>(strs, &_bytes, &_offsets);
     } else {
         for (const auto& s : strs) {
-            const uint8_t* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
+            const auto* const p = reinterpret_cast<const Bytes::value_type*>(s.data);
             _bytes.insert(_bytes.end(), p, p + s.size);
             _offsets.emplace_back(_bytes.size());
         }
@@ -195,8 +195,8 @@ bool BinaryColumnBase<T>::append_continuous_strings(const Buffer<Slice>& strs) {
         return true;
     }
     size_t new_size = _bytes.size();
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(strs.front().data);
-    const uint8_t* q = reinterpret_cast<const uint8_t*>(strs.back().data + strs.back().size);
+    const auto* p = reinterpret_cast<const uint8_t*>(strs.front().data);
+    const auto* q = reinterpret_cast<const uint8_t*>(strs.back().data + strs.back().size);
     _bytes.insert(_bytes.end(), p, q);
 
     _offsets.reserve(_offsets.size() + strs.size());
@@ -213,28 +213,54 @@ template <typename T>
 bool BinaryColumnBase<T>::append_continuous_fixed_length_strings(const char* data, size_t size, int fixed_length) {
     if (size == 0) return true;
     size_t bytes_size = _bytes.size();
+
+    // copy blob
     size_t data_size = size * fixed_length;
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(data);
-    const uint8_t* q = reinterpret_cast<const uint8_t*>(data + data_size);
+    const auto* p = reinterpret_cast<const uint8_t*>(data);
+    const auto* q = reinterpret_cast<const uint8_t*>(data + data_size);
     _bytes.insert(_bytes.end(), p, q);
 
-    _offsets.reserve(_offsets.size() + size);
-    for (int i = 0; i < size; i++) {
-        bytes_size += fixed_length;
-        _offsets.emplace_back(bytes_size);
+    // copy offsets
+    starrocks::raw::stl_vector_resize_uninitialized(&_offsets, _offsets.size() + size);
+    // _offsets.resize(_offsets.size() + size);
+    T* off_data = _offsets.data() + _offsets.size() - size;
+
+    int i = 0;
+
+#ifdef __AVX2__
+    if constexpr (std::is_same_v<T, uint32_t>) {
+        if ((bytes_size + fixed_length * size) < std::numeric_limits<uint32_t>::max()) {
+            const int times = size / 8;
+
+#define FX(m) (m * fixed_length)
+#define BFX(m) (bytes_size + m * fixed_length)
+            __m256i base = _mm256_set_epi32(BFX(8), BFX(7), BFX(6), BFX(5), BFX(4), BFX(3), BFX(2), BFX(1));
+            __m256i delta = _mm256_set_epi32(FX(8), FX(8), FX(8), FX(8), FX(8), FX(8), FX(8), FX(8));
+            for (int t = 0; t < times; t++) {
+                _mm256_storeu_si256((__m256i*)off_data, base);
+                base = _mm256_add_epi32(base, delta);
+                off_data += 8;
+            }
+
+            i = times * 8;
+            bytes_size += fixed_length * i;
+        }
     }
-    DCHECK_EQ(_bytes.size(), bytes_size);
-    _slices_cache = false;
+#endif
+    for (; i < size; i++) {
+        bytes_size += fixed_length;
+        *(off_data++) = bytes_size;
+    }
     return true;
 }
 
 template <typename T>
 void BinaryColumnBase<T>::append_value_multiple_times(const void* value, size_t count) {
-    const Slice* slice = reinterpret_cast<const Slice*>(value);
+    const auto* slice = reinterpret_cast<const Slice*>(value);
     size_t size = slice->size * count;
     _bytes.reserve(size);
 
-    const uint8_t* const p = reinterpret_cast<const uint8_t*>(slice->data);
+    const auto* const p = reinterpret_cast<const uint8_t*>(slice->data);
     const uint8_t* const pend = p + slice->size;
     for (size_t i = 0; i < count; ++i) {
         _bytes.insert(_bytes.end(), p, pend);
@@ -324,7 +350,7 @@ void BinaryColumnBase<T>::assign(size_t n, size_t idx) {
     _bytes.clear();
     _offsets.clear();
     _offsets.emplace_back(0);
-    const uint8_t* const start = reinterpret_cast<const Bytes::value_type*>(value.data());
+    const auto* const start = reinterpret_cast<const Bytes::value_type*>(value.data());
     const uint8_t* const end = start + value.size();
     for (int i = 0; i < n; ++i) {
         _bytes.insert(_bytes.end(), start, end);
@@ -452,7 +478,7 @@ size_t BinaryColumnBase<T>::filter_range(const Column::Filter& filter, size_t fr
 
 template <typename T>
 int BinaryColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const {
-    const BinaryColumnBase<T>& right_column = down_cast<const BinaryColumnBase<T>&>(rhs);
+    const auto& right_column = down_cast<const BinaryColumnBase<T>&>(rhs);
     return get_slice(left).compare(right_column.get_slice(right));
 }
 
@@ -547,7 +573,7 @@ int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
 
     for (size_t i = from; i < to; ++i) {
         size_t num = _offsets[i + 1] - _offsets[i];
-        const uint8_t* src = reinterpret_cast<const uint8_t*>(_bytes.data() + _offsets[i]);
+        const auto* src = reinterpret_cast<const uint8_t*>(_bytes.data() + _offsets[i]);
 
 #ifdef __AVX2__
         // AVX2 intructions can improve the speed of XOR procedure of one string.
@@ -560,7 +586,7 @@ int64_t BinaryColumnBase<T>::xor_checksum(uint32_t from, uint32_t to) const {
             src += step;
             num -= step;
         }
-        int64_t* checksum_vec = reinterpret_cast<int64_t*>(&avx2_checksum);
+        auto* checksum_vec = reinterpret_cast<int64_t*>(&avx2_checksum);
         size_t eight_byte_step = sizeof(__m256i) / sizeof(int64_t);
         for (size_t j = 0; j < eight_byte_step; ++j) {
             xor_checksum ^= checksum_vec[j];

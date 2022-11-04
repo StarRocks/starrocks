@@ -110,8 +110,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
 
 void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
-    for (int i = 0; i < tuple_desc->slots().size(); i++) {
-        SlotDescriptor* slot = tuple_desc->slots()[i];
+    for (auto slot : tuple_desc->slots()) {
         hive_column_names->emplace_back(slot->col_name());
     }
     params->hive_column_names = hive_column_names;
@@ -132,7 +131,7 @@ TupleDescriptor* HdfsScannerTest::_create_tuple_desc(SlotDesc* descs) {
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
     std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
-    DescriptorTbl::create(&_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
+    DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
     _row_desc = std::make_shared<RowDescriptor>(*tbl, row_tuples, nullable_tuples);
     auto* tuple_desc = _row_desc->tuple_descriptors()[0];
     return tuple_desc;
@@ -249,7 +248,7 @@ static TExprNode create_datetime_literal_node(TPrimitiveType::type value_type, c
 
 template <typename ValueType>
 static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpcode::type opcode,
-                                        SlotDescriptor* slot_desc, ValueType value_type, TExprNode lit_node) {
+                                        SlotDescriptor* slot_desc, ValueType value_type, const TExprNode& lit_node) {
     TExprNode eq_node;
     eq_node.__set_node_type(TExprNodeType::type::BINARY_PRED);
     eq_node.__set_child_type(value_type);
@@ -372,6 +371,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNext) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     Status status = scanner->init(_runtime_state, *param);
     EXPECT_TRUE(status.ok());
 
@@ -438,6 +440,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterNoRows) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
@@ -466,6 +471,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows1) {
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
 
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
+
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;
     // id min/max = 2629/5212, PART_Y min/max=20/20
@@ -493,6 +501,9 @@ TEST_F(HdfsScannerTest, TestOrcGetNextWithMinMaxFilterRows2) {
     // partition values for [PART_x, PART_y]
     std::vector<int64_t> values = {10, 20};
     extend_partition_values(&_pool, param, values);
+
+    ASSERT_OK(Expr::prepare(param->partition_values, _runtime_state));
+    ASSERT_OK(Expr::open(param->partition_values, _runtime_state));
 
     auto* min_max_tuple_desc = _create_tuple_desc(mtypes_orc_min_max_descs);
     param->min_max_tuple_desc = min_max_tuple_desc;

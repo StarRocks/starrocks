@@ -3,11 +3,11 @@
 package com.starrocks.connector.jdbc;
 
 import com.starrocks.catalog.JDBCResource;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.connector.Connector;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.commons.codec.binary.Hex;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -75,11 +75,11 @@ public class JDBCConnector implements Connector {
     }
 
     @Override
-    public ConnectorMetadata getMetadata() throws DdlException {
+    public ConnectorMetadata getMetadata() {
         if (metadata == null) {
             try {
                 metadata = new JDBCMetadata(properties);
-            } catch (DdlException e) {
+            } catch (StarRocksConnectorException e) {
                 LOG.error("Failed to create jdbc metadata on [catalog : {}]", catalogName, e);
                 throw e;
             }

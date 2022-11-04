@@ -1,6 +1,6 @@
 // This file is made available under Elastic License 2.0.
 // This file is based on code available under the Apache license here:
-//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/beta_rowset_test.cpp
+//   https://github.com/apache/incubator-doris/blob/master/be/test/olap/rowset/rowset_test.cpp
 
 // Licensed to the Apache Software Foundation (ASF) under one
 // or more contributor license agreements.  See the NOTICE file
@@ -103,7 +103,6 @@ protected:
         tablet_schema_pb.set_keys_type(PRIMARY_KEYS);
         tablet_schema_pb.set_num_short_key_columns(2);
         tablet_schema_pb.set_num_rows_per_row_block(1024);
-        tablet_schema_pb.set_compress_kind(COMPRESS_NONE);
         tablet_schema_pb.set_next_column_unique_id(4);
 
         ColumnPB* column_1 = tablet_schema_pb.add_column();
@@ -143,6 +142,7 @@ protected:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 2;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -202,7 +202,7 @@ protected:
     }
 
     void create_partial_rowset_writer_context(int64_t tablet_id, const std::vector<int32_t>& column_indexes,
-                                              std::shared_ptr<TabletSchema> partial_schema,
+                                              const std::shared_ptr<TabletSchema>& partial_schema,
                                               RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -584,8 +584,9 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
     return count;
 }
 
-static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, std::shared_ptr<TabletSchema> partial_schema,
-                                       int64_t version, int64_t nkeys) {
+static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
+                                       const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
+                                       int64_t nkeys) {
     vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);

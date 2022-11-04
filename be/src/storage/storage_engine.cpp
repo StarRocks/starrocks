@@ -202,7 +202,7 @@ Status StorageEngine::_init_store_map() {
     SpinLock error_msg_lock;
     std::string error_msg;
     for (auto& path : _options.store_paths) {
-        DataDir* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
+        auto* store = new DataDir(path.path, path.storage_medium, _tablet_manager.get(), _txn_manager.get());
         ScopedCleanup store_release_guard([&]() { delete store; });
         tmp_stores.emplace_back(true, store);
         store_release_guard.cancel();
@@ -340,10 +340,10 @@ void StorageEngine::_start_disk_stat_monitor() {
     static time_t last_sweep_time = 0;
     static const int32_t valid_sweep_interval = 30;
     for (auto& it : _store_map) {
-        if (difftime(time(NULL), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
+        if (difftime(time(nullptr), last_sweep_time) > valid_sweep_interval && it.second->capacity_limit_reached(0)) {
             std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
             _trash_sweeper_cv.notify_one();
-            last_sweep_time = time(NULL);
+            last_sweep_time = time(nullptr);
         }
     }
 }
@@ -526,6 +526,9 @@ void StorageEngine::stop() {
     }
     if (_fd_cache_clean_thread.joinable()) {
         _fd_cache_clean_thread.join();
+    }
+    if (_adjust_cache_thread.joinable()) {
+        _adjust_cache_thread.join();
     }
     if (config::path_gc_check) {
         for (auto& thread : _path_scan_threads) {

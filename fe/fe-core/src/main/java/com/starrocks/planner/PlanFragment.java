@@ -145,6 +145,9 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     private ByteBuffer digest = null;
     private Map<Integer, Integer> slotRemapping = Maps.newHashMap();
     private Map<Long, String> rangeMap = Maps.newHashMap();
+    private boolean hasOlapTableSink = false;
+    private boolean forceSetTableSinkDop = false;
+    private boolean forceAssignScanRangesPerDriverSeq = false;
 
     /**
      * C'tor for fragment with specific partition; the output is by default broadcast.
@@ -222,6 +225,22 @@ public class PlanFragment extends TreeNode<PlanFragment> {
         this.pipelineDop = dop;
     }
 
+    public boolean hasOlapTableSink() {
+        return this.hasOlapTableSink;
+    }
+
+    public void setHasOlapTableSink() {
+        this.hasOlapTableSink = true;
+    }
+
+    public boolean forceSetTableSinkDop() {
+        return this.forceSetTableSinkDop;
+    }
+
+    public void setForceSetTableSinkDop() {
+        this.forceSetTableSinkDop = true;
+    }
+
     public void setEnableSharedScan(boolean enable) {
         this.enableSharedScan = enable;
     }
@@ -236,6 +255,14 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     public void setAssignScanRangesPerDriverSeq(boolean assignScanRangesPerDriverSeq) {
         this.assignScanRangesPerDriverSeq = assignScanRangesPerDriverSeq;
+    }
+
+    public boolean isForceAssignScanRangesPerDriverSeq() {
+        return forceAssignScanRangesPerDriverSeq;
+    }
+
+    public void setForceAssignScanRangesPerDriverSeq() {
+        this.forceAssignScanRangesPerDriverSeq = true;
     }
 
     public void computeLocalRfWaitingSet(PlanNode root, boolean clearGlobalRuntimeFilter) {

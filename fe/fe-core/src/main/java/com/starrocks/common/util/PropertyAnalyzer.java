@@ -88,6 +88,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_ENABLE_PERSISTENT_INDEX = "enable_persistent_index";
 
+    public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -102,6 +104,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
+
+    public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -186,6 +190,22 @@ public class PropertyAnalyzer {
         }
 
         return shortKeyColumnCount;
+    }
+
+    public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
+        int partitionTimeToLive = -1;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
+            try {
+                partitionTimeToLive = Integer.parseInt(properties.get(PROPERTIES_PARTITION_TTL_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Partition TTL Number: " + e.getMessage());
+            }
+            if (partitionTimeToLive <= 0) {
+                throw new AnalysisException("Partition TTL Number should larger than 0.");
+            }
+            properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
+        }
+        return partitionTimeToLive;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)
@@ -280,7 +300,7 @@ public class PropertyAnalyzer {
     }
 
     public static Long analyzeVersionInfo(Map<String, String> properties) throws AnalysisException {
-        Long versionInfo = Partition.PARTITION_INIT_VERSION;
+        long versionInfo = Partition.PARTITION_INIT_VERSION;
         if (properties != null && properties.containsKey(PROPERTIES_VERSION_INFO)) {
             String versionInfoStr = properties.get(PROPERTIES_VERSION_INFO);
             try {
@@ -444,6 +464,22 @@ public class PropertyAnalyzer {
             return CompressionUtils.getCompressTypeByName(compressionType);
         } else {
             throw new AnalysisException("unknown compression type: " + compressionType);
+        }
+    }
+
+    // analyzeWriteQuorum will parse the write quorum from properties
+    public static String analyzeWriteQuorum(Map<String, String> properties) throws AnalysisException {
+        String writeQuorum;
+        if (properties == null || !properties.containsKey(PROPERTIES_WRITE_QUORUM)) {
+            return WriteQuorum.MAJORITY;
+        }
+        writeQuorum = properties.get(PROPERTIES_WRITE_QUORUM);
+        properties.remove(PROPERTIES_WRITE_QUORUM);
+
+        if (WriteQuorum.findTWriteQuorumByName(writeQuorum) != null) {
+            return writeQuorum;
+        } else {
+            throw new AnalysisException("unknown write quorum: " + writeQuorum);
         }
     }
 

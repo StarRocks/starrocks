@@ -574,9 +574,9 @@ void* ReportDiskStateTaskWorkerPool::_worker_thread_callback(void* arg_this) {
             disk.__set_root_path(root_path_info.path);
             disk.__set_path_hash(root_path_info.path_hash);
             disk.__set_storage_medium(root_path_info.storage_medium);
-            disk.__set_disk_total_capacity(static_cast<double>(root_path_info.disk_capacity));
-            disk.__set_data_used_capacity(static_cast<double>(root_path_info.data_used_capacity));
-            disk.__set_disk_available_capacity(static_cast<double>(root_path_info.available));
+            disk.__set_disk_total_capacity(root_path_info.disk_capacity);
+            disk.__set_data_used_capacity(root_path_info.data_used_capacity);
+            disk.__set_disk_available_capacity(root_path_info.available);
             disk.__set_used(root_path_info.is_used);
             disks[root_path_info.path] = disk;
 
@@ -673,7 +673,7 @@ void* ReportWorkgroupTaskWorkerPool::_worker_thread_callback(void* arg_this) {
         StarRocksMetrics::instance()->report_workgroup_requests_total.increment(1);
         request.__set_report_version(g_report_version.load(std::memory_order_relaxed));
         auto workgroups = workgroup::WorkGroupManager::instance()->list_workgroups();
-        request.__set_active_workgroups(std::move(workgroups));
+        request.__set_active_workgroups(workgroups);
         request.__set_backend(BackendOptions::get_localBackend());
         TMasterResult result;
         status = report_task(request, &result);

@@ -804,7 +804,7 @@ public class RestoreJob extends AbstractJob {
                             localTbl.isInMemory(),
                             localTbl.enablePersistentIndex(),
                             localTbl.getPartitionInfo().getTabletType(restorePart.getId()),
-                            localTbl.getCompressionType());
+                            localTbl.getCompressionType(), indexMeta.getSortKeyIdxes());
                     task.setInRestoreMode(true);
                     batchTask.addTask(task);
                 }
@@ -1268,6 +1268,7 @@ public class RestoreJob extends AbstractJob {
                         continue;
                     }
                     DynamicPartitionUtil.registerOrRemoveDynamicPartitionTable(db.getId(), (OlapTable) tbl);
+                    DynamicPartitionUtil.registerOrRemovePartitionTTLTable(db.getId(), (OlapTable) tbl);
                 }
             } finally {
                 db.readUnlock();

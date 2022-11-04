@@ -24,6 +24,7 @@ package com.starrocks.load.loadv2;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.Status;
 import com.starrocks.common.UserException;
@@ -35,6 +36,7 @@ import com.starrocks.load.FailMsg;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.Coordinator;
 import com.starrocks.qe.QeProcessorImpl;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TQueryType;
@@ -74,6 +76,8 @@ public class LoadLoadingTask extends LoadTask {
     private LoadingTaskPlanner planner;
     private ConnectContext context;
 
+    private LoadPlanner loadPlanner;
+
     public LoadLoadingTask(Database db, OlapTable table, BrokerDesc brokerDesc, List<BrokerFileGroup> fileGroups,
             long jobDeadlineMs, long execMemLimit, boolean strictMode,
             long txnId, LoadTaskCallback callback, String timezone,
@@ -101,9 +105,17 @@ public class LoadLoadingTask extends LoadTask {
 
     public void init(TUniqueId loadId, List<List<TBrokerFileStatus>> fileStatusList, int fileNum) throws UserException {
         this.loadId = loadId;
-        planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
-                strictMode, timezone, timeoutS, createTimestamp, partialUpdate);
-        planner.plan(loadId, fileStatusList, fileNum);
+        if (!Config.enable_pipeline_load) {
+            planner = new LoadingTaskPlanner(callback.getCallbackId(), txnId, db.getId(), table, brokerDesc, fileGroups,
+                    strictMode, timezone, timeoutS, createTimestamp, partialUpdate, sessionVariables);
+            planner.setConnectContext(context);
+            planner.plan(loadId, fileStatusList, fileNum);
+        } else {
+            loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
+                timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit, 
+                brokerDesc, fileGroups, fileStatusList, fileNum);
+            loadPlanner.plan();
+        }
     }
 
     public TUniqueId getLoadId() {
@@ -124,12 +136,19 @@ public class LoadLoadingTask extends LoadTask {
 
     private void executeOnce() throws Exception {
         // New one query id,
-        Coordinator curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
-                planner.getFragments(), planner.getScanNodes(),
-                planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
-        curCoordinator.setQueryType(TQueryType.LOAD);
+        Coordinator curCoordinator;
+        if (!Config.enable_pipeline_load) {
+            curCoordinator = new Coordinator(callback.getCallbackId(), loadId, planner.getDescTable(),
+                    planner.getFragments(), planner.getScanNodes(),
+                    planner.getTimezone(), planner.getStartTime(), sessionVariables, context);
+            curCoordinator.setQueryType(TQueryType.LOAD);
+            curCoordinator.setExecMemoryLimit(execMemLimit);
+            curCoordinator.setLoadMemLimit(execMemLimit);
+            curCoordinator.setTimeout((int) (getLeftTimeMs() / 1000));
+        } else {
+            curCoordinator = new Coordinator(loadPlanner);
+        }
         curCoordinator.setLoadJobType(loadJobType);
-        curCoordinator.setExecMemoryLimit(execMemLimit);
         /*
          * For broker load job, user only need to set mem limit by 'exec_mem_limit' property.
          * And the variable 'load_mem_limit' does not make any effect.
@@ -137,8 +156,6 @@ public class LoadLoadingTask extends LoadTask {
          * and to prevent subsequent modification from incorrectly setting the load_mem_limit,
          * here we use exec_mem_limit to directly override the load_mem_limit property.
          */
-        curCoordinator.setLoadMemLimit(execMemLimit);
-        curCoordinator.setTimeout((int) (getLeftTimeMs() / 1000));
 
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
@@ -186,6 +203,11 @@ public class LoadLoadingTask extends LoadTask {
         super.updateRetryInfo();
         UUID uuid = UUID.randomUUID();
         this.loadId = new TUniqueId(uuid.getMostSignificantBits(), uuid.getLeastSignificantBits());
-        planner.updateLoadInfo(this.loadId);
+
+        if (!Config.enable_pipeline_load) {
+            planner.updateLoadInfo(this.loadId);
+        } else {
+            loadPlanner.updateLoadInfo(this.loadId);
+        }
     }
 }

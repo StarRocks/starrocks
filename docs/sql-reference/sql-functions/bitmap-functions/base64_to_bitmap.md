@@ -23,7 +23,7 @@ Returns a value of the BITMAP type.
 
 Create a database named `bitmapdb` and a table named `bitmap`. Use Stream Load to import JSON data into `bitmap_table`. During this process, use base64_to_bitmap to convert the Base64 string in the JSON file into bitmap data.
 
-1. Create a database and a table in StarRocks.
+1. Create a database and a table in StarRocks. In this example, a Primary Key table is created.
 
     ```SQL
     CREATE database bitmapdb;

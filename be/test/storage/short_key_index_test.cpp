@@ -27,8 +27,8 @@ namespace starrocks {
 
 class ShortKeyIndexTest : public testing::Test {
 public:
-    ShortKeyIndexTest() {}
-    virtual ~ShortKeyIndexTest() {}
+    ShortKeyIndexTest() = default;
+    ~ShortKeyIndexTest() override = default;
 };
 
 TEST_F(ShortKeyIndexTest, buider) {

@@ -3,7 +3,6 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.ShowStmt;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.qe.ShowResultSetMetaData;
@@ -12,7 +11,7 @@ import com.starrocks.qe.ShowResultSetMetaData;
  * Show charset statement
  * Acceptable syntax:
  * SHOW {CHAR SET | CHARSET}
- *     [LIKE 'pattern' | WHERE expr]
+ * [LIKE 'pattern' | WHERE expr]
  */
 public class ShowCharsetStmt extends ShowStmt {
     private static final String CHAR_SET_COL = "Charset";
@@ -54,10 +53,5 @@ public class ShowCharsetStmt extends ShowStmt {
     @Override
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 }

@@ -10,8 +10,7 @@
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -53,12 +52,15 @@ Status HiveDataSource::open(RuntimeState* state) {
     _tuple_desc = state->desc_tbl().get_tuple_descriptor(hdfs_scan_node.tuple_id);
     _hive_table = dynamic_cast<const HiveTableDescriptor*>(_tuple_desc->table_desc());
     if (_hive_table == nullptr) {
-        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi table are supported");
+        return Status::RuntimeError("Invalid table type. Only hive/iceberg/hudi/delta lake table are supported");
     }
 
     _use_block_cache = config::block_cache_enable;
     if (state->query_options().__isset.use_scan_block_cache) {
         _use_block_cache &= state->query_options().use_scan_block_cache;
+    }
+    if (state->query_options().__isset.enable_populate_block_cache) {
+        _enable_populate_block_cache = state->query_options().enable_populate_block_cache;
     }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
@@ -286,7 +288,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    for (const auto& delete_file : scan_range.delete_files) {
+        scanner_params.deletes.emplace_back(&delete_file);
+    }
     scanner_params.use_block_cache = _use_block_cache;
+    scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -311,7 +317,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         std::string delta_file_paths;
         if (!scan_range.hudi_logs.empty()) {
             for (const std::string& log : scan_range.hudi_logs) {
-                delta_file_paths.append(partition_full_path.append("/").append(log));
+                delta_file_paths.append(fmt::format("{}/{}", partition_full_path, log));
                 delta_file_paths.append(",");
             }
             delta_file_paths = delta_file_paths.substr(0, delta_file_paths.size() - 1);
@@ -321,7 +327,7 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
         if (scan_range.relative_path.empty()) {
             data_file_path = "";
         } else {
-            data_file_path = partition_full_path.append("/").append(scan_range.relative_path);
+            data_file_path = fmt::format("{}/{}", partition_full_path, scan_range.relative_path);
         }
 
         std::map<std::string, std::string> jni_scanner_params;
@@ -407,5 +413,4 @@ int64_t HiveDataSource::cpu_time_spent() const {
     return _scanner->cpu_time_spent();
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

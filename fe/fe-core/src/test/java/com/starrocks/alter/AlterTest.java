@@ -25,7 +25,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Range;
 import com.staros.proto.ObjectStorageInfo;
 import com.staros.proto.ShardStorageInfo;
-import com.starrocks.analysis.CreateUserStmt;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.UserIdentity;
@@ -71,6 +70,7 @@ import com.starrocks.sql.ast.CancelRefreshMaterializedViewStmt;
 import com.starrocks.sql.ast.ColumnRenameClause;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -895,7 +895,9 @@ public class AlterTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(20001L, 20002L, 20003L),
                         Lists.newArrayList(20004L, 20005L, 20006L),
                         Lists.newArrayList(20007L, 20008L, 20009L));
@@ -964,7 +966,9 @@ public class AlterTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L),
                         Lists.newArrayList(30007L, 30008L, 30009L),
@@ -1853,7 +1857,9 @@ public class AlterTest {
             {
                 agent.getServiceShardStorageInfo();
                 result = shardStorageInfo;
-                agent.createShards(anyInt, (ShardStorageInfo) any);
+                agent.createShardGroup(anyLong);
+                result = null;
+                agent.createShards(anyInt, (ShardStorageInfo) any, anyLong);
                 returns(Lists.newArrayList(30001L, 30002L, 30003L),
                         Lists.newArrayList(30004L, 30005L, 30006L));
                 agent.getPrimaryBackendIdByShard(anyLong);

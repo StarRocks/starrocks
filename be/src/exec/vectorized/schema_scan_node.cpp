@@ -5,6 +5,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "column/column_helper.h"
+#include "exec/pipeline/scan/olap_schema_scan_context.h"
+#include "exec/pipeline/scan/olap_schema_scan_operator.h"
 #include "exec/vectorized/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
 #include "runtime/string_value.h"
@@ -14,11 +16,14 @@ namespace starrocks::vectorized {
 
 SchemaScanNode::SchemaScanNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl& descs)
         : ScanNode(pool, tnode, descs),
+          _tnode(tnode),
           _is_init(false),
           _table_name(tnode.schema_scan_node.table_name),
           _tuple_id(tnode.schema_scan_node.tuple_id),
           _dest_tuple_desc(nullptr),
-          _schema_scanner(nullptr) {}
+          _schema_scanner(nullptr) {
+    _name = "schema_scan";
+}
 
 SchemaScanNode::~SchemaScanNode() {
     if (runtime_state() != nullptr) {
@@ -88,8 +93,7 @@ Status SchemaScanNode::prepare(RuntimeState* state) {
         return Status::InternalError("Failed to get tuple descriptor.");
     }
 
-    const SchemaTableDescriptor* schema_table =
-            static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
+    const auto* schema_table = static_cast<const SchemaTableDescriptor*>(_dest_tuple_desc->table_desc());
 
     if (nullptr == schema_table) {
         return Status::InternalError("Failed to get schema table descriptor.");
@@ -206,10 +210,10 @@ Status SchemaScanNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
         return Status::InternalError("Failed to allocate new chunk.");
     }
 
-    for (size_t i = 0; i < dest_slot_descs.size(); ++i) {
+    for (auto dest_slot_desc : dest_slot_descs) {
         ColumnPtr column =
-                vectorized::ColumnHelper::create_column(dest_slot_descs[i]->type(), dest_slot_descs[i]->is_nullable());
-        chunk_dst->append_column(std::move(column), dest_slot_descs[i]->id());
+                vectorized::ColumnHelper::create_column(dest_slot_desc->type(), dest_slot_desc->is_nullable());
+        chunk_dst->append_column(std::move(column), dest_slot_desc->id());
     }
 
     while (!scanner_eos && chunk_dst->is_empty()) {
@@ -281,6 +285,21 @@ void SchemaScanNode::debug_string(int indentation_level, std::stringstream* out)
 
 Status SchemaScanNode::set_scan_ranges(const std::vector<TScanRangeParams>& scan_ranges) {
     return Status::OK();
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> SchemaScanNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    // the dop of SchemaScanOperator should always be 1.
+    size_t dop = 1;
+
+    size_t buffer_capacity = pipeline::ScanOperator::max_buffer_capacity() * dop;
+    int64_t mem_limit = runtime_state()->query_mem_tracker_ptr()->limit() * config::scan_use_query_mem_ratio;
+    pipeline::ChunkBufferLimiterPtr buffer_limiter = std::make_unique<pipeline::DynamicChunkBufferLimiter>(
+            buffer_capacity, buffer_capacity, mem_limit, runtime_state()->chunk_size());
+
+    auto scan_op = std::make_shared<pipeline::OlapSchemaScanOperatorFactory>(context->next_operator_id(), this, dop,
+                                                                             _tnode, std::move(buffer_limiter));
+    return pipeline::decompose_scan_node_to_pipeline(scan_op, this, context);
 }
 
 } // namespace starrocks::vectorized

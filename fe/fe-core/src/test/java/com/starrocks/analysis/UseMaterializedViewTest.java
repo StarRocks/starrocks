@@ -15,6 +15,7 @@ import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -117,13 +118,13 @@ public class UseMaterializedViewTest {
             MaterializedView materializedView = (MaterializedView) table;
             long baseTableId = materializedView.getBaseTableInfos().iterator().next().getTableId();
             OlapTable baseTable = ((OlapTable) database.getTable(baseTableId));
-            Assert.assertEquals(baseTable.getRelatedMaterializedViews().size(), 2);
+            Assert.assertEquals(2, baseTable.getRelatedMaterializedViews().size());
             StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
             StmtExecutor stmtExecutor = new StmtExecutor(connectContext, statementBase);
             stmtExecutor.execute();
             table = database.getTable("mv_to_drop");
             Assert.assertTrue(table == null);
-            Assert.assertEquals(baseTable.getRelatedMaterializedViews().size(), 1);
+            Assert.assertEquals(1, baseTable.getRelatedMaterializedViews().size());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
         }

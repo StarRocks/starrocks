@@ -3,6 +3,7 @@
 #include <filesystem>
 #include <fstream>
 #include <mutex>
+#include <utility>
 
 #include "common/config.h"
 #include "exec/pipeline/pipeline_driver.h"
@@ -11,8 +12,7 @@
 #include "util/debug/query_trace.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
 QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::string& category, int64_t id, char phase,
                                         int64_t timestamp, int64_t duration, int64_t instance_id, std::uintptr_t driver,
@@ -43,11 +43,9 @@ QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const 
 }
 
 static const char* kSimpleEventFormat =
-        "{\"cat\":\"%s\",\"name\":\"%s\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"id\":\"%ld\",\"ts\":%ld,\"ph\":\"%c\","
-        "\"args\":%s}";
+        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"ph":"%c","args":%s})";
 static const char* kCompleteEventFormat =
-        "{\"cat\":\"%s\",\"name\":\"%s\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"id\":\"%ld\",\"ts\":%ld,\"dur\":%ld,\"ph\":"
-        "\"%c\",\"args\":%s}";
+        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"dur":%ld,"ph":"%c","args":%s})";
 
 std::string QueryTraceEvent::to_string() {
     std::string args_str = args_to_string();
@@ -66,9 +64,9 @@ std::string QueryTraceEvent::args_to_string() {
     }
     std::ostringstream oss;
     oss << "{";
-    oss << fmt::sprintf("\"%s\":\"%s\"", args[0].first.c_str(), args[0].second.c_str());
+    oss << fmt::sprintf(R"("%s":"%s")", args[0].first.c_str(), args[0].second.c_str());
     for (size_t i = 1; i < args.size(); i++) {
-        oss << fmt::sprintf(",\"%s\":\"%s\"", args[i].first.c_str(), args[i].second.c_str());
+        oss << fmt::sprintf(R"(,"%s":"%s")", args[i].first.c_str(), args[i].second.c_str());
     }
     oss << "}";
     return oss.str();
@@ -79,15 +77,17 @@ void EventBuffer::add(QueryTraceEvent&& event) {
     _buffer.emplace_back(std::move(event));
 }
 
-QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
+QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) : _query_id(query_id), _is_enable(is_enable) {
     if (_is_enable) {
         _start_ts = MonotonicMicros();
     }
-#endif
 }
+#else
+QueryTrace::QueryTrace(const TUniqueId& query_id, bool is_enable) {}
+#endif
 
-void QueryTrace::register_drivers(TUniqueId fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
+void QueryTrace::register_drivers(const TUniqueId& fragment_instance_id, starrocks::pipeline::Drivers& drivers) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
     if (!_is_enable) {
         return;
@@ -152,7 +152,8 @@ Status QueryTrace::dump() {
     return Status::OK();
 }
 
-void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragment_instance_id, std::uintptr_t driver) {
+void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, const TUniqueId& fragment_instance_id,
+                                       std::uintptr_t driver) {
 #ifdef ENABLE_QUERY_DEBUG_TRACE
     if (!query_trace->_is_enable) {
         tls_trace_ctx.reset();
@@ -170,7 +171,8 @@ void QueryTrace::set_tls_trace_context(QueryTrace* query_trace, TUniqueId fragme
 #endif
 }
 
-ScopedTracer::ScopedTracer(const std::string& name, const std::string& category) : _name(name), _category(category) {
+ScopedTracer::ScopedTracer(std::string name, std::string category)
+        : _name(std::move(name)), _category(std::move(category)) {
     _start_ts = MonotonicMicros();
 }
 
@@ -182,5 +184,4 @@ ScopedTracer::~ScopedTracer() {
     }
 }
 
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug

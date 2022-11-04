@@ -2,6 +2,8 @@
 
 #include "storage/lake/schema_change.h"
 
+#include <memory>
+
 #include "runtime/current_thread.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/delta_writer.h"
@@ -119,7 +121,7 @@ Status ConvertedSchemaChange::init() {
     _new_chunk = ChunkHelper::new_chunk(_new_schema, config::vector_chunk_size);
 
     _char_field_indexes = ChunkHelper::get_char_field_indexes(_new_schema);
-    _mem_pool.reset(new MemPool());
+    _mem_pool = std::make_unique<MemPool>();
     return Status::OK();
 }
 

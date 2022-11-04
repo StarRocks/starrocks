@@ -508,7 +508,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
         // 3.1.1 construct num of fixed value ScanKey (begin_key == end_key)
         if (_begin_scan_keys.empty()) {
             const set<T>& fixed_value_set = range.get_fixed_value_set();
-            const_iterator_type iter = fixed_value_set.begin();
+            auto iter = fixed_value_set.begin();
 
             for (; iter != fixed_value_set.end(); ++iter) {
                 _begin_scan_keys.emplace_back();
@@ -533,7 +533,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
                 OlapTuple start_base_key_range = _begin_scan_keys[i];
                 OlapTuple end_base_key_range = _end_scan_keys[i];
 
-                const_iterator_type iter = fixed_value_set.begin();
+                auto iter = fixed_value_set.begin();
 
                 for (; iter != fixed_value_set.end(); ++iter) {
                     // alter the first ScanKey in original place
@@ -597,7 +597,7 @@ Status OlapScanKeys::extend_scan_key(ColumnValueRange<T>& range, int32_t max_sca
 }
 
 template <class T>
-ColumnValueRange<T>::ColumnValueRange() {}
+ColumnValueRange<T>::ColumnValueRange() = default;
 
 template <class T>
 ColumnValueRange<T>::ColumnValueRange(std::string col_name, PrimitiveType type, T min, T max)

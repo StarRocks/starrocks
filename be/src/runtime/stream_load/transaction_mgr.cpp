@@ -98,11 +98,11 @@ std::string TransactionMgr::_build_reply(const std::string& label, const std::st
 }
 
 Status TransactionMgr::list_transactions(const HttpRequest* req, std::string* resp) {
-    auto ids = std::move(_exec_env->stream_context_mgr()->get_ids());
+    auto ids = _exec_env->stream_context_mgr()->get_ids();
 
     rapidjson::StringBuffer s;
     rapidjson::PrettyWriter<rapidjson::StringBuffer> writer(s);
-    for (auto id : ids) {
+    for (const auto& id : ids) {
         std::string txn_resp;
         auto ctx = _exec_env->stream_context_mgr()->get(id);
         if (ctx != nullptr) {
@@ -377,9 +377,9 @@ Status TransactionMgr::_rollback_transaction(StreamLoadContext* ctx) {
 }
 
 void TransactionMgr::_clean_stream_context() {
-    auto ids = std::move(_exec_env->stream_context_mgr()->get_ids());
+    auto ids = _exec_env->stream_context_mgr()->get_ids();
 
-    for (auto id : ids) {
+    for (const auto& id : ids) {
         auto ctx = _exec_env->stream_context_mgr()->get(id);
         if (ctx != nullptr) {
             int64_t now = UnixSeconds();

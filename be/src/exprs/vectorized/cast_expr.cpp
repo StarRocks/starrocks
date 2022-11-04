@@ -23,6 +23,7 @@
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
+#include "types/bitmap_value_detail.h"
 #include "types/hll.h"
 #include "util/date_func.h"
 #include "util/json.h"
@@ -143,7 +144,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             value = JsonValue::from_double(viewer.value(row));
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (pt_is_binary<FromType>) {
+        } else if constexpr (pt_is_string<FromType>) {
             auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
             if (maybe.ok()) {
                 value = maybe.value();
@@ -218,7 +219,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 }
                 builder.append_null();
             }
-        } else if constexpr (pt_is_binary<ToType>) {
+        } else if constexpr (pt_is_string<ToType>) {
             // if the json already a string value, get the string directly
             // else cast it to string representation
             if (json->get_type() == JsonType::JSON_STRING) {
@@ -278,7 +279,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
     if (!column->has_null()) {
         for (int row = 0; row < viewer.size(); ++row) {
             auto value = viewer.value(row);
-            int32_t r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
@@ -300,7 +301,7 @@ static ColumnPtr cast_from_string_to_bool_fn(ColumnPtr& column) {
             }
 
             auto value = viewer.value(row);
-            int32_t r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
+            auto r = StringParser::string_to_int<int32_t>(value.data, value.size, &result);
 
             if (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r)) {
                 bool b = StringParser::string_to_bool(value.data, value.size, &result);
@@ -346,6 +347,33 @@ static ColumnPtr cast_from_string_to_hll_fn(ColumnPtr& column) {
     return builder.build(column->is_constant());
 }
 CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_HLL, cast_from_string_to_hll_fn);
+
+template <PrimitiveType FromType, PrimitiveType ToType, bool AllowThrowException>
+static ColumnPtr cast_from_string_to_bitmap_fn(ColumnPtr& column) {
+    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnBuilder<TYPE_OBJECT> builder(viewer.size());
+    for (int row = 0; row < viewer.size(); ++row) {
+        if (viewer.is_null(row)) {
+            builder.append_null();
+            continue;
+        }
+
+        auto value = viewer.value(row);
+
+        BitmapValue bitmap;
+        if (bitmap.valid_and_deserialize(value.data, value.size)) {
+            builder.append(&bitmap);
+        } else {
+            if constexpr (AllowThrowException) {
+                THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(TYPE_VARCHAR, TYPE_OBJECT, value.to_string());
+            }
+            builder.append_null();
+        }
+    }
+
+    return builder.build(column->is_constant());
+}
+CUSTOMIZE_FN_CAST(TYPE_VARCHAR, TYPE_OBJECT, cast_from_string_to_bitmap_fn);
 
 // all int(tinyint, smallint, int, bigint, largeint) cast implements
 DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
@@ -402,7 +430,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     if (column->is_constant()) {
         auto* input = ColumnHelper::get_binary_column(column.get());
         auto slice = input->get_slice(0);
-        RunTimeCppType<ToType> r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
+        auto r = StringParser::string_to_int<RunTimeCppType<ToType>>(slice.data, slice.size, &result);
         if (result != StringParser::PARSE_SUCCESS) {
             if constexpr (AllowThrowException) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, slice.to_string());
@@ -415,9 +443,9 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     res_data_column->resize(sz);
     auto& res_data = res_data_column->get_data();
     if (column->is_nullable()) {
-        NullableColumn* input_column = down_cast<NullableColumn*>(column.get());
+        auto* input_column = down_cast<NullableColumn*>(column.get());
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
-        BinaryColumn* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
         for (int i = 0; i < sz; ++i) {
             if (!null_data[i]) {
@@ -435,7 +463,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
     } else {
         NullColumnPtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
-        BinaryColumn* data_column = down_cast<BinaryColumn*>(column.get());
+        auto* data_column = down_cast<BinaryColumn*>(column.get());
 
         bool has_null = false;
         for (int i = 0; i < sz; ++i) {
@@ -470,8 +498,7 @@ ColumnPtr cast_float_from_string_fn(ColumnPtr& column) {
         }
 
         auto value = viewer.value(row);
-        RunTimeCppType<ToType> r =
-                StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
+        auto r = StringParser::string_to_float<RunTimeCppType<ToType>>(value.data, value.size, &result);
 
         bool is_null = (result != StringParser::PARSE_SUCCESS || std::isnan(r) || std::isinf(r));
         if constexpr (AllowThrowException) {
@@ -525,7 +552,14 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_INT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_INT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_INT, DateToNumber);
@@ -541,8 +575,15 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_BIGINT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_BIGINT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_BIGINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_BIGINT, TimestampToNumber);
@@ -557,8 +598,15 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_LARGEINT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_LARGEINT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_LARGEINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_LARGEINT, TimestampToNumber);
@@ -571,9 +619,16 @@ SELF_CAST(TYPE_FLOAT);
 UNARY_FN_CAST(TYPE_BOOLEAN, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_FLOAT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_FLOAT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_FLOAT, DateToNumber);
@@ -588,8 +643,15 @@ UNARY_FN_CAST(TYPE_BOOLEAN, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_DOUBLE, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_DOUBLE, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DOUBLE, DateToNumber);
@@ -912,7 +974,7 @@ static ColumnPtr cast_from_string_to_time_fn(ColumnPtr& column) {
                     builder.append_null();
                 } else {
                     StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
-                    uint64_t int_value = StringParser::string_to_unsigned_int<uint64_t>(
+                    auto int_value = StringParser::string_to_unsigned_int<uint64_t>(
                             reinterpret_cast<char*>(first_char), first_colon - first_char, &parse_result);
                     if (UNLIKELY(parse_result != StringParser::PARSE_SUCCESS)) {
                         if constexpr (AllowThrowException) {
@@ -1072,7 +1134,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(_now, column); \
         };                                                                                                      \
                                                                                                                 \
-        std::string debug_string() const {                                                                      \
+        std::string debug_string() const override {                                                             \
             std::stringstream out;                                                                              \
             auto expr_debug_string = Expr::debug_string();                                                      \
             out << "VectorizedCastExpr ("                                                                       \
@@ -1396,7 +1458,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
                                                     array_field_type_cast_to.debug_string());
                 return nullptr;
             }
-            ColumnRef* child = new ColumnRef(cast);
+            auto* child = new ColumnRef(cast);
             cast_element_expr->add_child(child);
             if (pool) {
                 pool->add(cast_element_expr);
@@ -1442,7 +1504,7 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
         if (cast_element_expr == nullptr) {
             return nullptr;
         }
-        ColumnRef* child = new ColumnRef(cast);
+        auto* child = new ColumnRef(cast);
         cast_element_expr->add_child(child);
         if (pool) {
             pool->add(cast_element_expr);
@@ -1453,6 +1515,14 @@ Expr* VectorizedCastExprFactory::from_thrift(ObjectPool* pool, const TExprNode& 
             return new CastStringToArray(node, cast_element_expr, cast_to);
         } else {
             return new CastJsonToArray(node, cast_element_expr, cast_to);
+        }
+    }
+
+    if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {
+        if (allow_throw_exception) {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, true>(node);
+        } else {
+            return new VectorizedCastExpr<TYPE_VARCHAR, TYPE_OBJECT, false>(node);
         }
     }
 
@@ -1579,7 +1649,7 @@ Expr* VectorizedCastExprFactory::from_type(const TypeDescriptor& from, const Typ
             LOG(WARNING) << strings::Substitute("Cannot cast $0 to $1.", from.debug_string(), to.debug_string());
             return nullptr;
         }
-        ColumnRef* child = new ColumnRef(node);
+        auto* child = new ColumnRef(node);
         cast_element_expr->add_child(child);
 
         pool->add(child);

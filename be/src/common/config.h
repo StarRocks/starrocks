@@ -52,6 +52,18 @@ CONF_mInt64(tc_free_memory_rate, "0");
 // tcmalloc gc period, default 60, it should be between [1, 180]
 CONF_mInt64(tc_gc_period, "60");
 
+CONF_mBool(enable_auto_adjust_pagecache, "true");
+// Memory urget water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache immediately, it should be between (memory_high_level, 100].
+CONF_mInt64(memory_urgent_level, "85");
+// Memory high water level, if the memory usage exceeds this level, reduce the size of
+// the Pagecache slowly, it should be between [1, memory_urgent_level).
+CONF_mInt64(memory_high_level, "75");
+// Pagecache size adjust period, default 20, it should be between [1, 180].
+CONF_mInt64(pagecache_adjust_period, "20");
+// Sleep time in seconds between pagecache adjust iterations.
+CONF_mInt64(auto_adjust_pagecache_interval_seconds, "10");
+
 // Bound on the total amount of bytes allocated to thread caches.
 // This bound is not strict, so it is possible for the cache to go over this bound
 // in certain circumstances. The maximum value of this flag is capped to 1GB.
@@ -742,6 +754,9 @@ CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
+CONF_Int32(io_tasks_per_scan_operator, "4");
+CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
+CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
@@ -813,7 +828,16 @@ CONF_String(dependency_librdkafka_debug, "all");
 // max loop count when be waiting its fragments finish
 CONF_Int64(loop_count_wait_fragments_finish, "0");
 
+// the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
+// the minimum number of idle connections that connection pool tries to maintain.
+// if the idle connections dip below this value and the total connections in the pool are less than jdbc_connection_pool_size,
+// the connection pool will make a best effort to add additional connections quickly.
+CONF_Int16(jdbc_minimum_idle_connections, "1");
+// the maximum amount of time that a connection is allowed to sit idle in the pool.
+// this setting only applies when jdbc_minimum_idle_connections is less than jdbc_connection_pool_size.
+// The minimum allowed value is 10000(10 seconds).
+CONF_Int32(jdbc_connection_idle_timeout_ms, "600000");
 
 // Now, only get_info is processed by _async_thread_pool, and only needs a small number of threads.
 // The default value is set as the THREAD_POOL_SIZE of RoutineLoadTaskScheduler of FE.
@@ -840,11 +864,11 @@ CONF_Int64(max_length_for_to_base64, "200000");
 CONF_Int64(max_length_for_bitmap_function, "1000000");
 
 CONF_Bool(block_cache_enable, "false");
+CONF_Int64(block_cache_disk_size, "0");
 CONF_String(block_cache_disk_path, "${STARROCKS_HOME}/block_cache/");
-CONF_Int64(block_cache_disk_size, "21474836480"); // 20GB
-//CONF_Int64(block_cache_block_size, "4194304");    // 4MB
-CONF_Int64(block_cache_block_size, "1048576");
+CONF_Int64(block_cache_block_size, "1048576");  // 1MB
 CONF_Int64(block_cache_mem_size, "2147483648"); // 2GB
+CONF_Bool(block_cache_checksum_enable, "true");
 
 CONF_mInt64(l0_l1_merge_ratio, "10");
 

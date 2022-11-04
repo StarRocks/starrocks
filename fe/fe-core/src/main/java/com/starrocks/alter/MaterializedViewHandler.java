@@ -25,7 +25,6 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.CancelStmt;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
@@ -62,6 +61,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.CancelAlterTableStmt;
+import com.starrocks.sql.ast.CancelStmt;
 import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
@@ -1059,8 +1059,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
             }
             OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.ROLLUP) {
-                throw new DdlException("Table[" + tableName + "] is not under ROLLUP. "
+            if (olapTable.getState() != OlapTableState.ROLLUP
+                    && olapTable.getState() != OlapTableState.WAITING_STABLE) {
+                throw new DdlException("Table[" + tableName + "] is not under ROLLUP/WAITING_STABLE. "
                         + "Use 'ALTER TABLE DROP ROLLUP' if you want to.");
             }
 

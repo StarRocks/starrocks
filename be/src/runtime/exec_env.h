@@ -207,6 +207,7 @@ public:
     AgentServer* agent_server() const { return _agent_server; }
 
     int64_t get_storage_page_cache_size();
+    int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
@@ -302,7 +303,7 @@ private:
     StreamContextMgr* _stream_context_mgr = nullptr;
     TransactionMgr* _transaction_mgr = nullptr;
 
-    StorageEngine* _storage_engine = nullptr;
+    [[maybe_unused]] StorageEngine* _storage_engine = nullptr;
 
     StreamLoadExecutor* _stream_load_executor = nullptr;
     RoutineLoadTaskExecutor* _routine_load_task_executor = nullptr;

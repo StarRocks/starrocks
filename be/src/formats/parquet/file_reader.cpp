@@ -21,8 +21,6 @@
 
 namespace starrocks::parquet {
 
-static constexpr uint32_t kFooterSize = 8;
-
 FileReader::FileReader(int chunk_size, RandomAccessFile* file, uint64_t file_size)
         : _chunk_size(chunk_size), _file(file), _file_size(file_size) {}
 
@@ -69,7 +67,7 @@ Status FileReader::_parse_footer() {
     // if local buf is not large enough, we have to allocate on heap and re-read.
     // 4 bytes magic number, 4 bytes for footer_size, so total size is footer_size + 8.
     if ((footer_size + 8) > to_read) {
-        VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
+        // VLOG_FILE << "parquet file has large footer. name = " << _file->filename() << ", footer_size = " << footer_size;
         to_read = footer_size + 8;
         if (_file_size < to_read) {
             return Status::Corruption(strings::Substitute("Invalid parquet file: name=$0, file_size=$1, footer_size=$2",
@@ -256,16 +254,17 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
+        [[maybe_unused]] size_t ret = 0;
         if (!converter->need_convert) {
-            (*min_column)->append_numbers(&min_value, sizeof(int32_t));
-            (*max_column)->append_numbers(&max_value, sizeof(int32_t));
+            ret = (*min_column)->append_numbers(&min_value, sizeof(int32_t));
+            ret = (*max_column)->append_numbers(&max_value, sizeof(int32_t));
         } else {
             vectorized::ColumnPtr min_scr_column = converter->create_src_column();
-            min_scr_column->append_numbers(&min_value, sizeof(int32_t));
+            ret = min_scr_column->append_numbers(&min_value, sizeof(int32_t));
             converter->convert(min_scr_column, min_column->get());
 
             vectorized::ColumnPtr max_scr_column = converter->create_src_column();
-            max_scr_column->append_numbers(&max_value, sizeof(int32_t));
+            ret = max_scr_column->append_numbers(&max_value, sizeof(int32_t));
             converter->convert(max_scr_column, max_column->get());
         }
         break;
@@ -283,16 +282,17 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
+        [[maybe_unused]] size_t ret = 0;
         if (!converter->need_convert) {
-            (*min_column)->append_numbers(&min_value, sizeof(int64_t));
-            (*max_column)->append_numbers(&max_value, sizeof(int64_t));
+            ret = (*min_column)->append_numbers(&min_value, sizeof(int64_t));
+            ret = (*max_column)->append_numbers(&max_value, sizeof(int64_t));
         } else {
             vectorized::ColumnPtr min_scr_column = converter->create_src_column();
-            min_scr_column->append_numbers(&min_value, sizeof(int64_t));
+            ret = min_scr_column->append_numbers(&min_value, sizeof(int64_t));
             converter->convert(min_scr_column, min_column->get());
 
             vectorized::ColumnPtr max_scr_column = converter->create_src_column();
-            max_scr_column->append_numbers(&max_value, sizeof(int64_t));
+            ret = max_scr_column->append_numbers(&max_value, sizeof(int64_t));
             converter->convert(max_scr_column, max_column->get());
         }
         break;
@@ -310,16 +310,17 @@ Status FileReader::_decode_min_max_column(const ParquetField& field, const std::
         std::unique_ptr<ColumnConverter> converter;
         RETURN_IF_ERROR(ColumnConverterFactory::create_converter(field, type, timezone, &converter));
 
+        [[maybe_unused]] bool ret = false;
         if (!converter->need_convert) {
-            (*min_column)->append_strings(std::vector<Slice>{min_slice});
-            (*max_column)->append_strings(std::vector<Slice>{max_slice});
+            ret = (*min_column)->append_strings(std::vector<Slice>{min_slice});
+            ret = (*max_column)->append_strings(std::vector<Slice>{max_slice});
         } else {
             vectorized::ColumnPtr min_scr_column = converter->create_src_column();
-            min_scr_column->append_strings(std::vector<Slice>{min_slice});
+            ret = min_scr_column->append_strings(std::vector<Slice>{min_slice});
             converter->convert(min_scr_column, min_column->get());
 
             vectorized::ColumnPtr max_scr_column = converter->create_src_column();
-            max_scr_column->append_strings(std::vector<Slice>{max_slice});
+            ret = max_scr_column->append_strings(std::vector<Slice>{max_slice});
             converter->convert(max_scr_column, max_column->get());
         }
         break;
@@ -452,6 +453,7 @@ Status FileReader::_init_group_readers() {
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
+        _sb_stream->set_enable_block_cache(fd_scanner_ctx.enable_block_cache);
         param.shared_buffered_stream = _sb_stream.get();
     }
 

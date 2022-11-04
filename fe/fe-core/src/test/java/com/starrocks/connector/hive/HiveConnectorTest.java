@@ -7,17 +7,10 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMetadata;
-import com.starrocks.external.CachingRemoteFileConf;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastore;
-import com.starrocks.external.hive.HiveMetastoreTest;
-import com.starrocks.external.hive.HiveRemoteFileIO;
-import com.starrocks.external.hive.MockedRemoteFileSystem;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.apache.hadoop.conf.Configuration;
@@ -31,7 +24,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import static com.starrocks.external.hive.MockedRemoteFileSystem.TEST_FILES;
+import static com.starrocks.connector.hive.MockedRemoteFileSystem.TEST_FILES;
 
 public class HiveConnectorTest {
     private HiveMetaClient client;
@@ -103,7 +96,7 @@ public class HiveConnectorTest {
         Assert.assertEquals("tbl1", hiveTable.getTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), hiveTable.getPartitionColumnNames());
         Assert.assertEquals(Lists.newArrayList("col2"), hiveTable.getDataColumnNames());
-        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getHdfsPath());
+        Assert.assertEquals("hdfs://127.0.0.1:10000/hive", hiveTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, hiveTable.getPartitionColumns().get(0).getType());
         Assert.assertEquals(ScalarType.INT, hiveTable.getBaseSchema().get(0).getType());
         Assert.assertEquals("hive_catalog", hiveTable.getCatalogName());

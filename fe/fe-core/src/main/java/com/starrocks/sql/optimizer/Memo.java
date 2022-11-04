@@ -270,8 +270,8 @@ public class Memo {
     private void removeOneGroup(Group group) {
         groups.remove(group);
 
-        for (Iterator<Map.Entry<GroupExpression, GroupExpression>>
-                iterator = groupExpressions.entrySet().iterator(); iterator.hasNext(); ) {
+        for (Iterator<Map.Entry<GroupExpression, GroupExpression>> iterator = groupExpressions.entrySet().iterator();
+                iterator.hasNext(); ) {
             GroupExpression groupExpr = iterator.next().getKey();
             if (groupExpr.getGroup() == group) {
                 iterator.remove();

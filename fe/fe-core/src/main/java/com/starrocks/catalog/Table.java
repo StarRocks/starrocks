@@ -77,7 +77,8 @@ public class Table extends MetaObject implements Writable {
         HUDI,
         JDBC,
         MATERIALIZED_VIEW,
-        LAKE
+        LAKE,
+        DELTALAKE
     }
 
     @SerializedName(value = "id")
@@ -124,7 +125,7 @@ public class Table extends MetaObject implements Writable {
 
     // not serialized field
     // record all materialized views based on this Table
-    private Set<Long> relatedMaterializedViews;
+    private Set<MvId> relatedMaterializedViews;
 
     public Table(TableType type) {
         this.type = type;
@@ -506,16 +507,16 @@ public class Table extends MetaObject implements Writable {
     }
 
     // should call this when create materialized view
-    public void addRelatedMaterializedView(long mvId) {
+    public void addRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.add(mvId);
     }
 
     // should call this when drop materialized view
-    public void removeRelatedMaterializedView(long mvId) {
+    public void removeRelatedMaterializedView(MvId mvId) {
         relatedMaterializedViews.remove(mvId);
     }
 
-    public Set<Long> getRelatedMaterializedViews() {
+    public Set<MvId> getRelatedMaterializedViews() {
         return relatedMaterializedViews;
     }
 

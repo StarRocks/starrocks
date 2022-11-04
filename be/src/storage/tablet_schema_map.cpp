@@ -2,10 +2,7 @@
 
 #include "storage/tablet_schema_map.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 
 namespace starrocks {
 

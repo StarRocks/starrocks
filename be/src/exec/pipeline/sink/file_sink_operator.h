@@ -13,15 +13,13 @@ class ExprContext;
 
 namespace pipeline {
 
-class FileSinkBuffer;
+class FileSinkIOBuffer;
 
 class FileSinkOperator final : public Operator {
 public:
     FileSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                     std::shared_ptr<FileSinkBuffer> file_sink_buffer, FragmentContext* const fragment_ctx)
-            : Operator(factory, id, "file_sink", plan_node_id, driver_sequence),
-              _file_sink_buffer(file_sink_buffer),
-              _fragment_ctx(fragment_ctx) {}
+                     std::shared_ptr<FileSinkIOBuffer> file_sink_buffer)
+            : Operator(factory, id, "file_sink", plan_node_id, driver_sequence), _file_sink_buffer(file_sink_buffer) {}
 
     ~FileSinkOperator() override = default;
 
@@ -45,8 +43,7 @@ public:
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
 
 private:
-    std::shared_ptr<FileSinkBuffer> _file_sink_buffer;
-    FragmentContext* const _fragment_ctx;
+    std::shared_ptr<FileSinkIOBuffer> _file_sink_buffer;
 };
 
 class FileSinkOperatorFactory final : public OperatorFactory {
@@ -57,8 +54,7 @@ public:
     ~FileSinkOperatorFactory() override = default;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
-        return std::make_shared<FileSinkOperator>(this, _id, _plan_node_id, driver_sequence, _file_sink_buffer,
-                                                  _fragment_ctx);
+        return std::make_shared<FileSinkOperator>(this, _id, _plan_node_id, driver_sequence, _file_sink_buffer);
     }
 
     Status prepare(RuntimeState* state) override;
@@ -71,8 +67,7 @@ private:
     std::shared_ptr<ResultFileOptions> _file_opts;
     int32_t _num_sinkers;
 
-    std::shared_ptr<FileSinkBuffer> _file_sink_buffer;
-    RuntimeProfile* _profile = nullptr;
+    std::shared_ptr<FileSinkIOBuffer> _file_sink_buffer;
     FragmentContext* const _fragment_ctx;
 };
 } // namespace pipeline

@@ -100,28 +100,22 @@ public:
         _indexes.reserve(count);
         _index_batch_decoder.GetBatch(&_indexes[0], count);
 
+        vectorized::FixedLengthColumn<T>* data_column = nullptr;
+
         if (dst->is_nullable()) {
-            auto* nullable_column = down_cast<vectorized::NullableColumn*>(dst);
-            auto* data_column = down_cast<vectorized::FixedLengthColumn<T>*>(nullable_column->data_column().get());
-            size_t cur_size = data_column->size();
-            data_column->resize_uninitialized(cur_size + count);
-
-            for (int i = 0; i < count; i++) {
-                data_column->get_data()[cur_size + i] = _dict[_indexes[i]];
-            }
-
+            auto nullable_column = down_cast<vectorized::NullableColumn*>(dst);
             nullable_column->null_column()->append_default(count);
+            data_column = down_cast<vectorized::FixedLengthColumn<T>*>(nullable_column->data_column().get());
         } else {
-            // current can't reach here
-            auto* data_column = down_cast<vectorized::FixedLengthColumn<T>*>(dst);
-            size_t cur_size = data_column->size();
-            data_column->resize_uninitialized(cur_size + count);
-
-            for (int i = 0; i < count; i++) {
-                data_column->get_data()[cur_size + i] = _dict[_indexes[i]];
-            }
+            data_column = down_cast<vectorized::FixedLengthColumn<T>*>(dst);
         }
 
+        size_t cur_size = data_column->size();
+        data_column->resize_uninitialized(cur_size + count);
+        T* __restrict__ data = data_column->get_data().data() + cur_size;
+        for (int i = 0; i < count; i++) {
+            data[i] = _dict[_indexes[i]];
+        }
         return Status::OK();
     }
 
@@ -173,7 +167,7 @@ public:
     }
 
     Status get_dict_values(vectorized::Column* column) override {
-        column->append_strings_overflow(_dict, _max_value_length);
+        [[maybe_unused]] auto ret = column->append_strings_overflow(_dict, _max_value_length);
         return Status::OK();
     }
 
@@ -182,7 +176,7 @@ public:
         for (size_t i = 0; i < dict_codes.size(); i++) {
             slices[i] = _dict[dict_codes[i]];
         }
-        column->append_strings_overflow(slices, _max_value_length);
+        [[maybe_unused]] auto ret = column->append_strings_overflow(slices, _max_value_length);
         return Status::OK();
     }
 
@@ -210,7 +204,7 @@ public:
 
         switch (content_type) {
         case DICT_CODE: {
-            dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
+            [[maybe_unused]] auto ret = dst->append_numbers(&_indexes[0], count * SIZE_OF_DICT_CODE_TYPE);
             break;
         }
         case VALUE: {
@@ -218,7 +212,7 @@ public:
             for (int i = 0; i < count; ++i) {
                 _slices[i] = _dict[_indexes[i]];
             }
-            dst->append_strings_overflow(_slices, _max_value_length);
+            [[maybe_unused]] auto ret = dst->append_strings_overflow(_slices, _max_value_length);
             break;
         }
         default:

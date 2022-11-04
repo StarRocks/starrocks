@@ -198,6 +198,7 @@ public class OperationType {
     public static final short OP_FINISH_MULTI_DELETE = 10003;
     public static final short OP_ERASE_MULTI_TABLES = 10004;
     public static final short OP_MODIFY_ENABLE_PERSISTENT_INDEX = 10005;
+    public static final short OP_MODIFY_WRITE_QUORUM = 10006;
 
     // statistic 10010 ~ 10020
     public static final short OP_ADD_ANALYZER_JOB = 10010;
@@ -235,6 +236,7 @@ public class OperationType {
     public static final short OP_CREATE_TASK_RUN = 10081;
     public static final short OP_UPDATE_TASK_RUN = 10082;
     public static final short OP_DROP_TASK_RUNS = 10083;
+    public static final short OP_UPDATE_TASK_RUN_STATE = 10084;
 
     // materialized view 10091 ~ 10100
     public static final short OP_RENAME_MATERIALIZED_VIEW = 10091;
@@ -261,13 +263,14 @@ public class OperationType {
     // only used in lake table currently
     public static final short OP_ADD_PARTITIONS_V2 = 10242;
 
-    // new privilege, all endswith V2
+    // new privilege, all ends with V2
     public static final short OP_CREATE_USER_V2 = 10261;
     public static final short OP_UPDATE_USER_PRIVILEGE_V2 = 10262;
     public static final short OP_ALTER_USER_V2 = 10263;
     public static final short OP_DROP_USER_V2 = 10264;
     public static final short OP_UPDATE_ROLE_PRIVILEGE_V2 = 10265;
     public static final short OP_DROP_ROLE_V2 = 10266;
+    public static final short OP_AUTH_UPGRDE_V2 = 10267;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;

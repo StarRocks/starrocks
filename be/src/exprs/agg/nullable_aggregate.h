@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include "column/column.h"
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -21,10 +22,10 @@ template <typename T>
 constexpr bool IsWindowFunctionSliceState = false;
 
 template <>
-constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsWindowFunctionSliceState<MaxAggregateData<TYPE_VARCHAR>> = true;
 
 template <>
-constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
+inline constexpr bool IsWindowFunctionSliceState<MinAggregateData<TYPE_VARCHAR>> = true;
 
 struct NullableAggregateWindowFunctionState {
     // The following two fields are only used in "update_state_removable_cumulatively"
@@ -349,9 +350,11 @@ public:
                     // all null
                     if constexpr (!IgnoreNull) {
                         for (size_t i = offset; i < offset + batch_nums; i++) {
-                            this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->process_null(
-                                    ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            if (!selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
                         }
                     }
                 } else {
@@ -369,7 +372,7 @@ public:
                                 }
                             }
                         } else {
-                            if (!f_data[i] & !selection[i]) {
+                            if (!f_data[i] && !selection[i]) {
                                 this->data(states[i] + state_offset).is_null = false;
                                 this->nested_function->update(ctx, &data_column,
                                                               this->data(states[i] + state_offset).mutable_nest_state(),
@@ -395,7 +398,7 @@ public:
                         }
                     }
                 } else {
-                    if (!f_data[i] & !selection[i]) {
+                    if (!f_data[i] && !selection[i]) {
                         this->data(states[i] + state_offset).is_null = false;
                         this->nested_function->update(ctx, &data_column,
                                                       this->data(states[i] + state_offset).mutable_nest_state(), i);
@@ -615,6 +618,84 @@ public:
                         partition_end, rows_start_offset, rows_end_offset, ignore_subtraction, ignore_addition);
             }
         }
+    }
+
+    void merge_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                     AggDataPtr* states) const override {
+        auto fast_call_path = [&](const Column* data_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                auto& state_data = this->data(states[i] + state_offset);
+                state_data.is_null = false;
+                this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+            }
+        };
+        auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                auto& state_data = this->data(states[i] + state_offset);
+                if (null_data[i] == 0) {
+                    state_data.is_null = false;
+                    this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                } else if constexpr (!IgnoreNull) {
+                    state_data.is_null = false;
+                    this->nested_function->process_null(ctx, state_data.mutable_nest_state());
+                }
+            }
+        };
+        ColumnHelper::call_nullable_func(column, std::move(fast_call_path), std::move(slow_call_path));
+    }
+
+    void merge_batch_selectively(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column* column,
+                                 AggDataPtr* states, const std::vector<uint8_t>& filter) const override {
+        auto fast_call_path = [&](const Column* data_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (filter[i] == 0) {
+                    auto& state_data = this->data(states[i] + state_offset);
+                    state_data.is_null = false;
+                    this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                }
+            }
+        };
+
+        auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                if (filter[i] == 0) {
+                    auto& state_data = this->data(states[i] + state_offset);
+                    if (null_data[i] == 0) {
+                        state_data.is_null = false;
+                        this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                    } else if constexpr (!IgnoreNull) {
+                        state_data.is_null = false;
+                        this->nested_function->process_null(ctx, state_data.mutable_nest_state());
+                    }
+                }
+            }
+        };
+
+        ColumnHelper::call_nullable_func(column, std::move(fast_call_path), std::move(slow_call_path));
+    }
+
+    void merge_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column* column,
+                                  AggDataPtr __restrict state) const override {
+        auto fast_call_path = [&](const Column* data_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                auto& state_data = this->data(state);
+                state_data.is_null = false;
+                this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+            }
+        };
+        auto slow_call_path = [&](const NullData& null_data, const Column* data_column) {
+            for (size_t i = 0; i < chunk_size; ++i) {
+                auto& state_data = this->data(state);
+                if (null_data[i] == 0) {
+                    state_data.is_null = false;
+                    this->nested_function->merge(ctx, data_column, state_data.mutable_nest_state(), i);
+                } else if constexpr (!IgnoreNull) {
+                    state_data.is_null = false;
+                    this->nested_function->process_null(ctx, state_data.mutable_nest_state());
+                }
+            }
+        };
+        ColumnHelper::call_nullable_func(column, std::move(fast_call_path), std::move(slow_call_path));
     }
 };
 

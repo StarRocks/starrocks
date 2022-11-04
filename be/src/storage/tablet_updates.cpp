@@ -1041,7 +1041,7 @@ RowsetSharedPtr TabletUpdates::_get_rowset(uint32_t rowset_id) {
     if (itr == _rowsets.end()) {
         // TODO: _rowsets will act as a cache in the future
         // need to load rowset from rowsetdb, currently just return null
-        return RowsetSharedPtr();
+        return {};
     }
     return itr->second;
 }
@@ -1887,8 +1887,8 @@ void TabletUpdates::get_compaction_status(std::string* json_result) {
         rowset_ids = _edit_version_infos.back()->rowsets;
         std::sort(rowset_ids.begin(), rowset_ids.end());
         rowsets.reserve(rowset_ids.size());
-        for (uint32_t i = 0; i < rowset_ids.size(); ++i) {
-            auto it = _rowsets.find(rowset_ids[i]);
+        for (unsigned int& rowset_id : rowset_ids) {
+            auto it = _rowsets.find(rowset_id);
             if (it != _rowsets.end()) {
                 rowsets.push_back(it->second);
             } else {
@@ -1946,7 +1946,7 @@ void TabletUpdates::_calc_compaction_score(RowsetStats* stats) {
     const int64_t cost_record_write = 1;
     const int64_t cost_record_read = 4;
     // use double to prevent overflow
-    int64_t delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
+    auto delete_bytes = (int64_t)(stats->byte_size * (double)stats->num_dels / stats->num_rows);
     stats->compaction_score = _compaction_cost_seek + (cost_record_read + cost_record_write) * delete_bytes -
                               cost_record_write * stats->byte_size;
 }
@@ -2586,6 +2586,7 @@ void TabletUpdates::_remove_unused_rowsets() {
         }
         rowset->close();
         rowset->set_need_delete_file();
+        StorageEngine::instance()->release_rowset_id(rowset->rowset_id());
         auto ost = rowset->remove();
         VLOG(1) << "remove rowset " << _tablet.tablet_id() << "@" << rowset->rowset_meta()->get_rowset_seg_id() << "@"
                 << rowset->rowset_id() << ": " << ost << " tablet:" << _tablet.tablet_id();
@@ -2634,7 +2635,7 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
     }
 }
 
-Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
+Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup) {
 #define CHECK_FAIL(status)                                                              \
     do {                                                                                \
         Status st = (status);                                                           \
@@ -2706,7 +2707,9 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         if (snapshot_meta.tablet_meta().schema_hash() != _tablet.schema_hash()) {
             return Status::InvalidArgument("mismatched schema hash");
         }
-        if (snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
+        // If it is the Restore process, we should skip the version check because using the older version data
+        // to overwrite the current data is permitted in Restore process.
+        if (!restore_from_backup && snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
             return Status::Cancelled("snapshot version too small");
         }
         for (const auto& rowset_meta_pb : snapshot_meta.rowset_metas()) {
@@ -2744,7 +2747,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta) {
         std::unique_lock l3(_rowset_stats_lock);
 
         // Check version again after lock acquired.
-        if (snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
+        if (!restore_from_backup && snapshot_meta.snapshot_version() <= _edit_version_infos.back()->version.major()) {
             return Status::Cancelled("snapshot version too small");
         }
 

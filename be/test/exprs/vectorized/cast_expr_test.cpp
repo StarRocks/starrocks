@@ -17,12 +17,11 @@
 #include "runtime/time_types.h"
 #include "util/json.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedCastExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -907,6 +906,287 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
     }
 }
 
+TEST_F(VectorizedCastExprTest, stringCastBitmapFailed0) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    // readable string
+    std::string p("1, 342, 2222");
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(p));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::vector<uint64_t> bits;
+    bits.push_back(1);
+    bits.push_back(342);
+    bits.push_back(2222);
+    BitmapValue bitmap_value(bits);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+    // non-exist type bitmap.
+    *((uint8_t*)(buf.c_str())) = (uint8_t)14;
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    BitmapValue bitmap_value;
+    bitmap_value.add(1);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        std::vector<int64_t> expect_array;
+        expect_array.push_back(1);
+
+        for (int j = 0; j < v->size(); ++j) {
+            std::vector<int64_t> array;
+            v->get_data()[j]->to_array(&array);
+            ASSERT_EQ(expect_array, array);
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    BitmapValue bitmap_value;
+    bitmap_value.add(1);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+
+    size_t half_length = buf.size() / 2;
+
+    // set smaller length.
+    buf.resize(half_length);
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    BitmapValue bitmap_value;
+    bitmap_value.add(1);
+    bitmap_value.add(2);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        std::vector<int64_t> expect_array;
+        expect_array.push_back(1);
+        expect_array.push_back(2);
+
+        for (int j = 0; j < v->size(); ++j) {
+            std::vector<int64_t> array;
+            v->get_data()[j]->to_array(&array);
+            ASSERT_EQ(expect_array, array);
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    BitmapValue bitmap_value;
+    bitmap_value.add(1);
+    bitmap_value.add(2);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+
+    size_t half_length = buf.size() / 2;
+
+    // set smaller length.
+    buf.resize(half_length);
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::vector<uint64_t> bits;
+    bits.push_back(1);
+    bits.push_back(342);
+    bits.push_back(2222);
+    BitmapValue bitmap_value(bits);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        std::vector<int64_t> expect_array;
+        expect_array.push_back(1);
+        expect_array.push_back(342);
+        expect_array.push_back(2222);
+
+        for (int j = 0; j < v->size(); ++j) {
+            std::vector<int64_t> array;
+            v->get_data()[j]->to_array(&array);
+            ASSERT_EQ(expect_array, array);
+        }
+    }
+}
+
+TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
+    expr_node.child_type = TPrimitiveType::VARCHAR;
+    expr_node.type = gen_type_desc(TPrimitiveType::OBJECT);
+
+    std::unique_ptr<Expr> expr(VectorizedCastExprFactory::from_thrift(expr_node));
+
+    std::vector<uint64_t> bits;
+    bits.push_back(1);
+    bits.push_back(342);
+    bits.push_back(2222);
+    BitmapValue bitmap_value(bits);
+
+    std::string buf;
+    buf.resize(bitmap_value.getSizeInBytes());
+    bitmap_value.write((char*)buf.c_str());
+    size_t half_length = buf.size() / 2;
+
+    // set smaller length.
+    buf.resize(half_length);
+
+    MockVectorizedExpr<TYPE_VARCHAR> col1(expr_node, 10, Slice(buf));
+
+    expr->_children.push_back(&col1);
+
+    {
+        ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
+
+        // right cast
+        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        ASSERT_EQ(10, v->size());
+
+        for (int j = 0; j < v->size(); ++j) {
+            ASSERT_TRUE(v->is_null(j));
+        }
+    }
+}
+
 TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
     expr_node.child_type = TPrimitiveType::VARCHAR;
     expr_node.type = gen_type_desc(TPrimitiveType::DATETIME);
@@ -1345,7 +1625,7 @@ TEST_F(VectorizedCastExprTest, timeToVarchar) {
 }
 
 template <PrimitiveType toType>
-static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, std::string json_str) {
+static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& cast_expr, const std::string& json_str) {
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
 
@@ -1367,7 +1647,7 @@ static typename RunTimeColumnType<toType>::Ptr evaluateCastFromJson(TExprNode& c
 }
 
 template <PrimitiveType toType>
-static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, std::string json_str) {
+static ColumnPtr evaluateCastJsonNullable(TExprNode& cast_expr, const std::string& json_str) {
     std::cerr << "evaluate castCast: " << json_str << std::endl;
     TPrimitiveType::type t_type = to_thrift(toType);
     cast_expr.type = gen_type_desc(t_type);
@@ -1631,5 +1911,4 @@ TEST_F(VectorizedCastExprTest, json_to_array) {
     EXPECT_EQ(R"([])", cast_json_to_array(cast_expr, TYPE_JSON, R"( {"a": 1} )"));
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

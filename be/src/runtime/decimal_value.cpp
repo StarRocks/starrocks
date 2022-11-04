@@ -422,8 +422,8 @@ int do_mul(const DecimalValue& value1, const DecimalValue& value2, DecimalValue*
         carry = 0;
         for (buf0 = start0, buf2 = start2; buf2 >= stop2; buf2--, buf0--) {
             int64_t mul_result = ((int64_t)*buf1) * ((int64_t)*buf2);
-            int32_t high = (int32_t)(mul_result / DIG_BASE);
-            int32_t low = (int32_t)(mul_result - ((int64_t)high) * DIG_BASE);
+            auto high = (int32_t)(mul_result / DIG_BASE);
+            auto low = (int32_t)(mul_result - ((int64_t)high) * DIG_BASE);
             add2(*buf0, low, buf0, &carry);
             carry += high;
         }
@@ -574,7 +574,7 @@ int do_div_mod(const DecimalValue& value1, const DecimalValue& value2, DecimalVa
     int32_t i = round_up(prec1);
     int32_t len1 = i + round_up(2 * frac2 + 1) + 1;
     set_if_bigger(&len1, 3);
-    int32_t* tmp1 = new (std::nothrow) int32_t[len1 * sizeof(int32_t)];
+    auto* tmp1 = new (std::nothrow) int32_t[len1 * sizeof(int32_t)];
     if (tmp1 == nullptr) {
         return E_DEC_OOM;
     }
@@ -590,7 +590,7 @@ int do_div_mod(const DecimalValue& value1, const DecimalValue& value2, DecimalVa
     while (*stop2 == 0 && stop2 >= start2) {
         --stop2;
     }
-    int32_t len2 = (int32_t)((stop2++) - start2);
+    auto len2 = (int32_t)((stop2++) - start2);
 
     // calculating norm2 (normalized *start2) - we need *start2 to be large
     // (at least > DIG_BASE/2), but unlike Knuth's Alg. D we don't want to
@@ -599,7 +599,7 @@ int do_div_mod(const DecimalValue& value1, const DecimalValue& value2, DecimalVa
     // on the fly for the purpose of guesstimation only.
     // It's also faster, as we're saving on normalization of buf2
     int64_t norm_factor = DIG_BASE / (*start2 + 1);
-    int32_t norm2 = (int32_t)(norm_factor * start2[0]);
+    auto norm2 = (int32_t)(norm_factor * start2[0]);
     if (len2 > 0) {
         norm2 += (int32_t)(norm_factor * start2[1] / DIG_BASE);
     }
@@ -822,7 +822,7 @@ int DecimalValue::parse_from_str(const char* decimal_str, int32_t length) {
     while (begin < end && std::isdigit(*begin)) {
         ++begin;
     }
-    int32_t int_len = (int32_t)(begin - temp_ptr);
+    auto int_len = (int32_t)(begin - temp_ptr);
     int32_t frac_len = 0;
     if (begin < end && *begin == '.') {
         frac_ptr = begin + 1;

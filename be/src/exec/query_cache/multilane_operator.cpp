@@ -5,8 +5,7 @@
 
 #include "util/defer_op.h"
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t driver_sequence, size_t num_lanes,
                                      pipeline::Operators&& processors, bool can_passthrough)
         : pipeline::Operator(factory, factory->id(), factory->get_raw_name(), factory->plan_node_id(), driver_sequence),
@@ -15,7 +14,7 @@ MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t
     DCHECK_EQ(processors.size(), _num_lanes);
     _lanes.reserve(_num_lanes);
     for (auto i = 0; i < _num_lanes; ++i) {
-        _lanes.push_back(Lane(std::move(processors[i]), i));
+        _lanes.emplace_back(std::move(processors[i]), i);
     }
 }
 
@@ -111,7 +110,7 @@ bool MultilaneOperator::is_finished() const {
 }
 
 Status MultilaneOperator::_finish(starrocks::RuntimeState* state,
-                                  starrocks::query_cache::MultilaneOperator::FinishCallback finish_cb) {
+                                  const starrocks::query_cache::MultilaneOperator::FinishCallback& finish_cb) {
     _input_finished = true;
     auto status = Status::OK();
     for (auto it : _owner_to_lanes) {
@@ -171,7 +170,7 @@ Status MultilaneOperator::push_chunk(RuntimeState* state, const vectorized::Chun
         _passthrough_lane_id = lane_it->lane_id;
         auto& lane = _lanes[_passthrough_lane_id];
         if (lane.processor->is_finished()) {
-            RETURN_IF_ERROR(lane.processor->reset_state({}));
+            RETURN_IF_ERROR(lane.processor->reset_state(state, {}));
         }
         lane.last_chunk_received = false;
         lane.eof_sent = false;
@@ -245,8 +244,7 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
         }
     }
 
-    for (int i = 0; i < _lanes.size(); ++i) {
-        auto& lane = _lanes[i];
+    for (auto& lane : _lanes) {
         auto chunk = _pull_chunk_from_lane(state, lane, passthrough_mode);
         if (!chunk.ok() || chunk.value() != nullptr) {
             return chunk;
@@ -262,7 +260,8 @@ StatusOr<vectorized::ChunkPtr> MultilaneOperator::pull_chunk(RuntimeState* state
     }
 }
 
-Status MultilaneOperator::reset_lane(LaneOwnerType lane_owner, std::vector<vectorized::ChunkPtr>&& chunks) {
+Status MultilaneOperator::reset_lane(RuntimeState* state, LaneOwnerType lane_owner,
+                                     const std::vector<vectorized::ChunkPtr>& chunks) {
     auto lane_id = _lane_arbiter->must_acquire_lane(lane_owner);
     _owner_to_lanes.erase(lane_owner);
     _owner_to_lanes[lane_owner] = lane_id;
@@ -272,10 +271,10 @@ Status MultilaneOperator::reset_lane(LaneOwnerType lane_owner, std::vector<vecto
     lane.lane_owner = lane_owner;
     lane.last_chunk_received = false;
     lane.eof_sent = false;
-    return lane.processor->reset_state(std::move(chunks));
+    return lane.processor->reset_state(state, chunks);
 }
 
-MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, OperatorFactoryPtr factory, size_t num_lanes)
+MultilaneOperatorFactory::MultilaneOperatorFactory(int32_t id, const OperatorFactoryPtr& factory, size_t num_lanes)
         : pipeline::OperatorFactory(id, strings::Substitute("ml_$0", factory->get_raw_name()), factory->plan_node_id()),
           _factory(factory),
           _num_lanes(num_lanes) {}
@@ -302,5 +301,4 @@ pipeline::OperatorPtr MultilaneOperatorFactory::create(int32_t degree_of_paralle
     return op;
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

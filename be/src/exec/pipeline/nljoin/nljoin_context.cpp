@@ -34,7 +34,7 @@ Status NLJoinContext::_init_runtime_filter(RuntimeState* state) {
         DCHECK(one_row_chunk != nullptr);
         auto* pool = state->obj_pool();
         ASSIGN_OR_RETURN(auto rfs, vectorized::CrossJoinNode::rewrite_runtime_filter(
-                                           pool, _rf_descs, one_row_chunk.get(), _conjuncts_ctx));
+                                           pool, _rf_descs, one_row_chunk.get(), _rf_conjuncts_ctx));
         _rf_hub->set_collector(_plan_node_id,
                                std::make_unique<RuntimeFilterCollector>(std::move(rfs), RuntimeBloomFilterList{}));
     } else {
@@ -73,14 +73,12 @@ const std::vector<uint8_t> NLJoinContext::get_shared_build_match_flag() const {
     return _shared_build_match_flag;
 }
 
-void NLJoinContext::append_build_chunk(int32_t sinker_id, vectorized::ChunkPtr chunk) {
+void NLJoinContext::append_build_chunk(int32_t sinker_id, const vectorized::ChunkPtr& chunk) {
     _input_chunks[sinker_id].push_back(chunk);
 }
 
 Status NLJoinContext::finish_one_right_sinker(RuntimeState* state) {
     if (_num_right_sinkers - 1 == _num_finished_right_sinkers.fetch_add(1)) {
-        RETURN_IF_ERROR(_init_runtime_filter(state));
-
         // Accumulate chunks
         ChunkAccumulator accumulator(state->chunk_size());
         for (auto& sink_chunks : _input_chunks) {
@@ -98,6 +96,7 @@ Status NLJoinContext::finish_one_right_sinker(RuntimeState* state) {
         _input_chunks.clear();
         _input_chunks.shrink_to_fit();
 
+        RETURN_IF_ERROR(_init_runtime_filter(state));
         _build_chunk_desired_size = state->chunk_size();
         _all_right_finished = true;
     }

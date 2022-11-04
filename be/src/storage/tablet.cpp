@@ -826,6 +826,10 @@ void Tablet::_print_missed_versions(const std::vector<Version>& missed_versions)
     LOG(WARNING) << ss.str();
 }
 
+Status Tablet::contains_version(const Version& version) {
+    return _contains_version(version);
+}
+
 Status Tablet::_contains_version(const Version& version) {
     // check if there exist a rowset contains the added rowset
     const auto& lower = _rs_version_map.lower_bound(version);
@@ -1135,7 +1139,7 @@ int Tablet::version_count() const {
 
 Version Tablet::max_version() const {
     if (_updates) {
-        return Version(0, _updates->max_version());
+        return {0, _updates->max_version()};
     } else {
         return _tablet_meta->max_version();
     }

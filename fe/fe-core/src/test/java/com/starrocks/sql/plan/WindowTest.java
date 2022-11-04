@@ -108,6 +108,41 @@ public class WindowTest extends PlanTestBase {
     }
 
     @Test
+    public void testLeadAndLagWithBitmapAndHll() throws Exception {
+        String sql = "select lead(id2, 1, bitmap_empty()) OVER () from bitmap_table";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, bitmap_empty())");
+
+        sql = "select lead(id2, 1, null) OVER () from bitmap_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, null)");
+
+        sql = "select lag(id2, 1, bitmap_empty()) OVER () from bitmap_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, bitmap_empty())");
+
+        sql = "select lag(id2, 1, null) OVER () from bitmap_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, null)");
+
+        sql = "select lead(id2, 1, hll_empty()) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, hll_empty())");
+
+        sql = "select lead(id2, 1, null) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lead(2: id2, 1, null)");
+
+        sql = "select lag(id2, 1, hll_empty()) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, hll_empty())");
+
+        sql = "select lag(id2, 1, null) OVER () from hll_table";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "lag(2: id2, 1, null)");
+    }
+
+    @Test
     public void testWindowWithAgg() throws Exception {
         String sql = "SELECT v1, sum(v2),  sum(v2) over (ORDER BY v1) AS `rank` FROM t0 group BY v1, v2";
         String plan = getFragmentPlan(sql);
@@ -243,6 +278,28 @@ public class WindowTest extends PlanTestBase {
                     "  |  order by: <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0\n" +
                     "  |  limit: 4");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk < 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk = 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:TOP-N\n" +
+                    "  |  order by: <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0\n" +
+                    "  |  limit: 4");
         }
         {
             // Two window function share the same sort group cannot be optimized
@@ -364,6 +421,18 @@ public class WindowTest extends PlanTestBase {
                     "  |  partition limit: 4\n" +
                     "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
                     "  |  offset: 0");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        row_number() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk < 4;";
+            plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
         }
         {
             String sql = "select * from (\n" +
@@ -373,6 +442,19 @@ public class WindowTest extends PlanTestBase {
                     ") sub_t0\n" +
                     "where rk <= 4;";
             String plan = getFragmentPlan(sql);
+            assertContains(plan, "  1:PARTITION-TOP-N\n" +
+                    "  |  type: RANK\n" +
+                    "  |  partition by: 3: v3 \n" +
+                    "  |  partition limit: 4\n" +
+                    "  |  order by: <slot 3> 3: v3 ASC, <slot 2> 2: v2 ASC\n" +
+                    "  |  offset: 0");
+            sql = "select * from (\n" +
+                    "    select *, " +
+                    "        rank() over (partition by v3 order by v2) as rk " +
+                    "    from t0\n" +
+                    ") sub_t0\n" +
+                    "where rk = 4;";
+            plan = getFragmentPlan(sql);
             assertContains(plan, "  1:PARTITION-TOP-N\n" +
                     "  |  type: RANK\n" +
                     "  |  partition by: 3: v3 \n" +

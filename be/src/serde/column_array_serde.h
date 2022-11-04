@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 namespace starrocks {
-class TypeDescriptor;
+struct TypeDescriptor;
 }
 
 namespace starrocks::vectorized {
@@ -18,13 +18,15 @@ namespace starrocks::serde {
 class ColumnArraySerde {
 public:
     // 0 means does not support the type of column
-    static int64_t max_serialized_size(const vectorized::Column& column);
+    static int64_t max_serialized_size(const vectorized::Column& column, const int encode_level = 0);
 
     // Return nullptr on error.
-    static uint8_t* serialize(const vectorized::Column& column, uint8_t* buff);
+    static uint8_t* serialize(const vectorized::Column& column, uint8_t* buff, bool sorted = false,
+                              const int encode_level = 0);
 
     // Return nullptr on error.
-    static const uint8_t* deserialize(const uint8_t* buff, vectorized::Column* column);
+    static const uint8_t* deserialize(const uint8_t* buff, vectorized::Column* column, bool sorted = false,
+                                      const int encode_level = 0);
 };
 
 } //  namespace starrocks::serde

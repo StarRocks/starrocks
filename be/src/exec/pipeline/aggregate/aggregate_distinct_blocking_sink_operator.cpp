@@ -27,13 +27,8 @@ Status AggregateDistinctBlockingSinkOperator::set_finishing(RuntimeState* state)
         _aggregator->set_ht_eos();
     }
 
-    if (false) {
-    }
-#define HASH_SET_METHOD(NAME)                                                                   \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) \
-            _aggregator->it_hash() = _aggregator->hash_set_variant().NAME->hash_set.begin();
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+    _aggregator->hash_set_variant().visit(
+            [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
@@ -52,16 +47,8 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
     {
         SCOPED_TIMER(_aggregator->agg_compute_timer());
         bool limit_with_no_agg = _aggregator->limit() != -1;
-
-        if (false) {
-        }
-#define HASH_SET_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == vectorized::AggHashSetVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
-    }
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+        TRY_CATCH_BAD_ALLOC(_aggregator->hash_set_variant().visit(
+                [&](auto& hash_set_with_key) { _aggregator->build_hash_set(*hash_set_with_key, chunk->num_rows()); }););
 
         _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
@@ -77,8 +64,9 @@ Status AggregateDistinctBlockingSinkOperator::push_chunk(RuntimeState* state, co
 
     return Status::OK();
 }
-Status AggregateDistinctBlockingSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status AggregateDistinctBlockingSinkOperator::reset_state(RuntimeState* state,
+                                                          const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
-    return _aggregator->reset_state(std::move(chunks));
+    return _aggregator->reset_state(state, refill_chunks, this);
 }
 } // namespace starrocks::pipeline

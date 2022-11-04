@@ -50,16 +50,12 @@
 #include <brpc/controller.h>
 #include <brpc/protocol.h>
 #include <brpc/reloadable_flags.h>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <brpc/server.h>
-DIAGNOSTIC_POP
-
 #include <butil/containers/flat_map.h>
 #include <butil/containers/flat_map_inl.h>
 #include <butil/endpoint.h>
 #include <butil/fd_utility.h>
 #include <butil/macros.h>
 #include <butil/strings/string_piece.h>
+
+#include "common/compiler_util.h"

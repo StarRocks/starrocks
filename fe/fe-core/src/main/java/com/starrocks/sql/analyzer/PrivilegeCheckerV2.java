@@ -2,32 +2,33 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.DeleteStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.privilege.PrivilegeTypes;
+import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.ViewRelation;
 
-import java.util.Arrays;
-
 public class PrivilegeCheckerV2 {
 
-    private PrivilegeCheckerV2() {}
+    private PrivilegeCheckerV2() {
+    }
 
     public static void check(StatementBase statement, ConnectContext session) {
         new PrivilegeCheckerVisitor().check(statement, session);
@@ -35,35 +36,26 @@ public class PrivilegeCheckerV2 {
 
     public static void checkTableAction(ConnectContext context,
                                         TableName tableName,
-                                        PrivilegeTypes.TableActions action) {
+                                        PrivilegeType.TableAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             throw new SemanticException("external catalog is not supported for now!");
         }
         String actionStr = action.toString();
-        if (!context.getGlobalStateMgr().getPrivilegeManager().check(
-                context,
-                PrivilegeTypes.TABLE.toString(),
-                actionStr,
-                Arrays.asList(tableName.getDb(), tableName.getTbl()))) {
+        if (!PrivilegeManager.checkTableAction(context, tableName.getDb(), tableName.getTbl(), action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_TABLEACCESS_DENIED_ERROR,
                     actionStr, context.getQualifiedUser(), context.getRemoteIP(), tableName);
         }
     }
 
-    static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeTypes.DbActions action) {
+    static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             throw new SemanticException("external catalog is not supported for now!");
         }
         String db = tableName.getDb();
-        if (!context.getGlobalStateMgr().getPrivilegeManager().check(
-                context,
-                PrivilegeTypes.DATABASE.toString(),
-                action.toString(),
-                Arrays.asList(db))) {
+        if (!PrivilegeManager.checkDbAction(context, db, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), db);
         }
-
     }
 
     /**
@@ -76,24 +68,25 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
-            checkDbAction(session, statement.getDbTbl(), PrivilegeTypes.DbActions.CREATE_TABLE);
+            checkDbAction(session, statement.getDbTbl(), PrivilegeType.DbAction.CREATE_TABLE);
             return null;
         }
 
         @Override
         public Void visitDeleteStatement(DeleteStmt statement, ConnectContext session) {
-            checkTableAction(session, statement.getTableName(), PrivilegeTypes.TableActions.DELETE);
+            checkTableAction(session, statement.getTableName(), PrivilegeType.TableAction.DELETE);
             return null;
         }
 
         @Override
-        public Void visitDropTableStmt(DropTableStmt statement, ConnectContext session) {
-            checkDbAction(session, statement.getTbl(), PrivilegeTypes.DbActions.DROP);
+        public Void visitDropTableStatement(DropTableStmt statement, ConnectContext session) {
+            checkTableAction(session, statement.getTbl(), PrivilegeType.TableAction.DROP);
             return null;
         }
+
         @Override
         public Void visitInsertStatement(InsertStmt statement, ConnectContext session) {
-            checkTableAction(session, statement.getTableName(), PrivilegeTypes.TableActions.INSERT);
+            checkTableAction(session, statement.getTableName(), PrivilegeType.TableAction.INSERT);
             return null;
         }
 
@@ -159,9 +152,18 @@ public class PrivilegeCheckerV2 {
 
             @Override
             public Void visitTable(TableRelation node, Void context) {
-                checkTableAction(session, node.getName(), PrivilegeTypes.TableActions.SELECT);
+                checkTableAction(session, node.getName(), PrivilegeType.TableAction.SELECT);
                 return null;
             }
+        }
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
         }
     }
 }

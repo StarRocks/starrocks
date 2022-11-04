@@ -98,8 +98,8 @@ void PInternalServiceImplBase<T>::transmit_chunk(google::protobuf::RpcController
     // NOTE: we should give a default value to response to avoid concurrent risk
     // If we don't give response here, stream manager will call done->Run before
     // transmit_data(), which will cause a dirty memory access.
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    PTransmitChunkParams* req = const_cast<PTransmitChunkParams*>(request);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* req = const_cast<PTransmitChunkParams*>(request);
     const auto receive_timestamp = GetCurrentTimeNanos();
     response->set_receive_timestamp(receive_timestamp);
     if (cntl->request_attachment().size() > 0) {
@@ -235,7 +235,7 @@ Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl) 
     auto ser_request = cntl->request_attachment().to_string();
     TExecPlanFragmentParams t_request;
     {
-        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, &t_request));
     }
@@ -255,7 +255,7 @@ Status PInternalServiceImplBase<T>::_exec_batch_plan_fragments(brpc::Controller*
     auto ser_request = cntl->request_attachment().to_string();
     std::shared_ptr<TExecBatchPlanFragmentsParams> t_batch_requests = std::make_shared<TExecBatchPlanFragmentsParams>();
     {
-        const uint8_t* buf = (const uint8_t*)ser_request.data();
+        const auto* buf = (const uint8_t*)ser_request.data();
         uint32_t len = ser_request.size();
         RETURN_IF_ERROR(deserialize_thrift_msg(buf, &len, TProtocolType::BINARY, t_batch_requests.get()));
     }
@@ -385,8 +385,8 @@ template <typename T>
 void PInternalServiceImplBase<T>::fetch_data(google::protobuf::RpcController* cntl_base,
                                              const PFetchDataRequest* request, PFetchDataResult* result,
                                              google::protobuf::Closure* done) {
-    brpc::Controller* cntl = static_cast<brpc::Controller*>(cntl_base);
-    GetResultBatchCtx* ctx = new GetResultBatchCtx(cntl, result, done);
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
 }
 
@@ -471,7 +471,7 @@ void PInternalServiceImplBase<T>::_get_info_impl(
     if (request->has_kafka_offset_batch_request()) {
         MonotonicStopWatch watch;
         watch.start();
-        for (auto offset_req : request->kafka_offset_batch_request().requests()) {
+        for (const auto& offset_req : request->kafka_offset_batch_request().requests()) {
             std::vector<int64_t> beginning_offsets;
             std::vector<int64_t> latest_offsets;
 
@@ -546,7 +546,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
                                                                                        &partitions);
         if (st.ok()) {
             PPulsarMetaProxyResult* pulsar_result = response->mutable_pulsar_meta_result();
-            for (std::string p : partitions) {
+            for (const std::string& p : partitions) {
                 pulsar_result->add_partitions(p);
             }
         }
@@ -568,7 +568,7 @@ void PInternalServiceImplBase<T>::_get_pulsar_info_impl(
         return;
     }
     if (request->has_pulsar_backlog_batch_request()) {
-        for (auto backlog_req : request->pulsar_backlog_batch_request().requests()) {
+        for (const auto& backlog_req : request->pulsar_backlog_batch_request().requests()) {
             std::vector<int64_t> backlog_nums;
             Status st =
                     _exec_env->routine_load_task_executor()->get_pulsar_partition_backlog(backlog_req, &backlog_nums);

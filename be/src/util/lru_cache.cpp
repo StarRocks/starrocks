@@ -114,7 +114,7 @@ bool HandleTable::_resize() {
         new_length *= 2;
     }
 
-    LRUHandle** new_list = new (std::nothrow) LRUHandle*[new_length];
+    auto** new_list = new (std::nothrow) LRUHandle*[new_length];
 
     if (nullptr == new_list) {
         LOG(FATAL) << "failed to malloc new hash list. new_length=" << new_length;
@@ -234,7 +234,7 @@ void LRUCache::release(Cache::Handle* handle) {
     if (handle == nullptr) {
         return;
     }
-    LRUHandle* e = reinterpret_cast<LRUHandle*>(handle);
+    auto* e = reinterpret_cast<LRUHandle*>(handle);
     bool last_ref = false;
     {
         std::lock_guard l(_mutex);
@@ -296,7 +296,7 @@ void LRUCache::_evict_one_entry(LRUHandle* e) {
 
 Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value, size_t charge,
                                 void (*deleter)(const CacheKey& key, void* value), CachePriority priority) {
-    LRUHandle* e = reinterpret_cast<LRUHandle*>(malloc(sizeof(LRUHandle) - 1 + key.size()));
+    auto* e = reinterpret_cast<LRUHandle*>(malloc(sizeof(LRUHandle) - 1 + key.size()));
     e->value = value;
     e->deleter = deleter;
     e->charge = charge;
@@ -402,14 +402,28 @@ ShardedLRUCache::ShardedLRUCache(size_t capacity) : _last_id(0), _capacity(capac
     }
 }
 
-void ShardedLRUCache::set_capacity(size_t capacity) {
-    // Maybe multi client try to set capactity, we protect it using mutex.
-    std::lock_guard l(_mutex);
+void ShardedLRUCache::_set_capacity(size_t capacity) {
     const size_t per_shard = (capacity + (kNumShards - 1)) / kNumShards;
     for (auto& _shard : _shards) {
         _shard.set_capacity(per_shard);
     }
     _capacity = capacity;
+}
+
+void ShardedLRUCache::set_capacity(size_t capacity) {
+    // Maybe multi client try to set capactity, we protect it using mutex.
+    std::lock_guard l(_mutex);
+    _set_capacity(capacity);
+}
+
+bool ShardedLRUCache::adjust_capacity(int64_t delta, size_t min_capacity) {
+    std::lock_guard l(_mutex);
+    int64_t new_capacity = _capacity + delta;
+    if (new_capacity < static_cast<int64_t>(min_capacity)) {
+        return false;
+    }
+    _set_capacity(new_capacity);
+    return true;
 }
 
 Cache::Handle* ShardedLRUCache::insert(const CacheKey& key, void* value, size_t charge,
@@ -424,7 +438,7 @@ Cache::Handle* ShardedLRUCache::lookup(const CacheKey& key) {
 }
 
 void ShardedLRUCache::release(Handle* handle) {
-    LRUHandle* h = reinterpret_cast<LRUHandle*>(handle);
+    auto* h = reinterpret_cast<LRUHandle*>(handle);
     _shards[_shard(h->hash)].release(handle);
 }
 
@@ -439,7 +453,7 @@ void* ShardedLRUCache::value(Handle* handle) {
 
 Slice ShardedLRUCache::value_slice(Handle* handle) {
     auto lru_handle = reinterpret_cast<LRUHandle*>(handle);
-    return Slice((char*)lru_handle->value, lru_handle->charge);
+    return {(char*)lru_handle->value, lru_handle->charge};
 }
 
 uint64_t ShardedLRUCache::new_id() {
@@ -447,9 +461,15 @@ uint64_t ShardedLRUCache::new_id() {
     return ++(_last_id);
 }
 
+size_t ShardedLRUCache::_get_stat(size_t (LRUCache::*mem_fun)()) {
+    size_t n = 0;
+    for (auto& shard : _shards) {
+        n += (shard.*mem_fun)();
+    }
+    return n;
+}
 size_t ShardedLRUCache::get_capacity() {
-    std::lock_guard l(_mutex);
-    return _capacity;
+    return _get_stat(&LRUCache::get_capacity);
 }
 
 void ShardedLRUCache::prune() {
@@ -461,11 +481,15 @@ void ShardedLRUCache::prune() {
 }
 
 size_t ShardedLRUCache::get_memory_usage() {
-    size_t total_usage = 0;
-    for (auto& _shard : _shards) {
-        total_usage += _shard.get_usage();
-    }
-    return total_usage;
+    return _get_stat(&LRUCache::get_usage);
+}
+
+size_t ShardedLRUCache::get_lookup_count() {
+    return _get_stat(&LRUCache::get_lookup_count);
+}
+
+size_t ShardedLRUCache::get_hit_count() {
+    return _get_stat(&LRUCache::get_hit_count);
 }
 
 void ShardedLRUCache::get_cache_status(rapidjson::Document* document) {

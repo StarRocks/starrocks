@@ -2,6 +2,8 @@
 
 #include "aggregate_blocking_sink_operator.h"
 
+#include <variant>
+
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
@@ -26,14 +28,9 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
+        _aggregator->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
 
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                   \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) \
-            _aggregator->it_hash() = _aggregator->_state_allocator.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,
         // In update phase, we directly return empty chunk.
@@ -48,9 +45,9 @@ Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     return Status::OK();
 }
 
-Status AggregateBlockingSinkOperator::reset_state(std::vector<ChunkPtr>&& chunks) {
+Status AggregateBlockingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
-    return _aggregator->reset_state(std::move(chunks));
+    return _aggregator->reset_state(state, refill_chunks, this);
 }
 
 StatusOr<vectorized::ChunkPtr> AggregateBlockingSinkOperator::pull_chunk(RuntimeState* state) {
@@ -72,14 +69,9 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const vect
     if (!_aggregator->is_none_group_by_exprs()) {
         if (false) {
         }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) {                      \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit));                          \
-    }
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
+        TRY_CATCH_BAD_ALLOC(_aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+            _aggregator->build_hash_map(*hash_map_with_key, chunk_size, agg_group_by_with_limit);
+        }));
         _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
         TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
     }

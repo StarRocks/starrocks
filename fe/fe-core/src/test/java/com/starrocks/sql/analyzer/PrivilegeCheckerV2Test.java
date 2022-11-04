@@ -2,13 +2,13 @@
 
 package com.starrocks.sql.analyzer;
 
-import com.starrocks.analysis.CreateUserStmt;
-import com.starrocks.analysis.StatementBase;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.GrantPrivilegeStmt;
 import com.starrocks.sql.ast.RevokePrivilegeStmt;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
@@ -37,6 +37,7 @@ public class PrivilegeCheckerV2Test {
         rootUser = starRocksAssert.getCtx().getCurrentUserIdentity();
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
+        privilegeManager.initBuiltinRolesAndUsers();
         ctxToRoot();
         createUsers();
     }
@@ -97,9 +98,11 @@ public class PrivilegeCheckerV2Test {
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
+            System.out.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains(expectError));
         }
     }
+
     @Test
     public void testTableSelectDeleteInsert() throws Exception {
         verifyGrantRevoke(
@@ -130,8 +133,22 @@ public class PrivilegeCheckerV2Test {
                 "Access denied for user 'test' to database 'db1'");
         verifyGrantRevoke(
                 "drop table db1.tbl1",
-                "grant drop on database db1 to test",
-                "revoke drop on database db1 from test",
-                "Access denied for user 'test' to database 'db1'");
+                "grant drop on db1.tbl1 to test",
+                "revoke drop on db1.tbl1 from test",
+                "DROP command denied to user 'test'");
+    }
+
+    @Test
+    public void testGrantRevoke() throws Exception {
+        verifyGrantRevoke(
+                "grant select on db1.tbl1 to test",
+                "grant select on db1.tbl1 to test with grant option",
+                "revoke select on db1.tbl1 from test",
+                "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+        verifyGrantRevoke(
+                "revoke select on db1.tbl1 from test",
+                "grant select on db1.tbl1 to test with grant option",
+                "revoke select on db1.tbl1 from test with grant option",
+                "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
     }
 }

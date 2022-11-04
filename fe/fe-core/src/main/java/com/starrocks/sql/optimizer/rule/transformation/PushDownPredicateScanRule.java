@@ -34,6 +34,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_SCAN);
     public static final PushDownPredicateScanRule HUDI_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_HUDI_SCAN);
+    public static final PushDownPredicateScanRule DELTALAKE_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_DELTALAKE_SCAN);
     public static final PushDownPredicateScanRule SCHEMA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_SCHEMA_SCAN);
     public static final PushDownPredicateScanRule MYSQL_SCAN =
@@ -67,8 +69,9 @@ public class PushDownPredicateScanRule extends TransformationRule {
 
         // clone a new scan operator and rewrite predicate.
         Operator.Builder builder = OperatorBuilderFactory.build(logicalScanOperator);
-        LogicalScanOperator newScanOperator = (LogicalScanOperator) builder.withOperator(logicalScanOperator).build();
-        newScanOperator.setPredicate(predicates);
+        LogicalScanOperator newScanOperator = (LogicalScanOperator) builder.withOperator(logicalScanOperator)
+                .setPredicate(predicates)
+                .build();
         newScanOperator.buildColumnFilters(predicates);
         Map<ColumnRefOperator, ScalarOperator> projectMap =
                 newScanOperator.getOutputColumns().stream()

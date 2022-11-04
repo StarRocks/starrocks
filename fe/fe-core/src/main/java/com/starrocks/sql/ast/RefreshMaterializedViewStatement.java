@@ -1,14 +1,19 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
 import com.starrocks.analysis.TableName;
 
 public class RefreshMaterializedViewStatement extends DdlStmt {
     private final TableName mvName;
+    private final PartitionRangeDesc partitionRangeDesc;
+    private final boolean forceRefresh;
 
-    public RefreshMaterializedViewStatement(TableName mvName) {
+    public RefreshMaterializedViewStatement(TableName mvName,
+                                            PartitionRangeDesc partitionRangeDesc,
+                                            boolean forceRefresh) {
         this.mvName = mvName;
+        this.partitionRangeDesc = partitionRangeDesc;
+        this.forceRefresh = forceRefresh;
     }
 
     public TableName getMvName() {
@@ -20,8 +25,11 @@ public class RefreshMaterializedViewStatement extends DdlStmt {
         return visitor.visitRefreshMaterializedViewStatement(this, context);
     }
 
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
+    public PartitionRangeDesc getPartitionRangeDesc() {
+        return partitionRangeDesc;
+    }
+
+    public boolean isForceRefresh() {
+        return forceRefresh;
     }
 }

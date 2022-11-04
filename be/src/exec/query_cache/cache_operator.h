@@ -34,8 +34,9 @@ public:
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     bool probe_cache(int64_t tablet_id, int64_t version);
-    Status reset_lane(LaneOwnerType lane_owner);
+    Status reset_lane(RuntimeState* state, LaneOwnerType lane_owner);
     void populate_cache(int64_t tablet_id);
+    int64_t cached_version(int64_t tablet_id);
     Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
     StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
     bool has_output() const override;
@@ -49,6 +50,9 @@ public:
     }
 
 private:
+    void _update_probe_metrics(int64_t, const std::vector<vectorized::ChunkPtr>& chunks);
+    void _handle_stale_cache_value(int64_t tablet_id, CacheValue& cache_value, PerLaneBufferPtr& buffer,
+                                   int64_t version);
     bool _should_passthrough(size_t num_rows, size_t num_bytes);
     vectorized::ChunkPtr _pull_chunk_from_per_lane_buffer(PerLaneBufferPtr& buffer);
     CacheManagerRawPtr _cache_mgr;

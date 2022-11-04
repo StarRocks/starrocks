@@ -61,10 +61,10 @@ public:
         auto schema = ChunkHelper::convert_schema_to_format_v2(tablet->tablet_schema());
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 1)));
-            cols[2]->append_datum(vectorized::Datum((int32_t)(keys[i] % 1000 + 2)));
+        for (long key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 1)));
+            cols[2]->append_datum(vectorized::Datum((int32_t)(key % 1000 + 2)));
         }
         if (one_delete == nullptr && !keys.empty()) {
             CHECK_OK(writer->flush_chunk(*chunk));
@@ -80,6 +80,7 @@ public:
         TCreateTabletReq request;
         request.tablet_id = tablet_id;
         request.__set_version(1);
+        request.__set_version_hash(0);
         request.tablet_schema.schema_hash = schema_hash;
         request.tablet_schema.short_key_column_count = 6;
         request.tablet_schema.keys_type = TKeysType::PRIMARY_KEYS;
@@ -109,7 +110,7 @@ public:
 
     RowsetSharedPtr create_partial_rowset(const TabletSharedPtr& tablet, const vector<int64_t>& keys,
                                           std::vector<int32_t>& column_indexes,
-                                          std::shared_ptr<TabletSchema> partial_schema) {
+                                          const std::shared_ptr<TabletSchema>& partial_schema) {
         // create partial rowset
         RowsetWriterContext writer_context;
         RowsetId rowset_id = StorageEngine::instance()->next_rowset_id();
@@ -133,9 +134,9 @@ public:
         auto chunk = ChunkHelper::new_chunk(schema, keys.size());
         EXPECT_TRUE(2 == chunk->num_columns());
         auto& cols = chunk->columns();
-        for (size_t i = 0; i < keys.size(); i++) {
-            cols[0]->append_datum(vectorized::Datum(keys[i]));
-            cols[1]->append_datum(vectorized::Datum((int16_t)(keys[i] % 100 + 3)));
+        for (long key : keys) {
+            cols[0]->append_datum(vectorized::Datum(key));
+            cols[1]->append_datum(vectorized::Datum((int16_t)(key % 100 + 3)));
         }
         CHECK_OK(writer->flush_chunk(*chunk));
         RowsetSharedPtr partial_rowset = *writer->build();

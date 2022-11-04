@@ -44,7 +44,7 @@ namespace starrocks {
 
 class BitShufflePageTest : public testing::Test {
 public:
-    virtual ~BitShufflePageTest() {}
+    ~BitShufflePageTest() override = default;
 
     template <FieldType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
@@ -107,8 +107,8 @@ public:
         status = page_decoder.next_batch(&size, &column_block_view);
         ASSERT_TRUE(status.ok());
 
-        CppType* values = reinterpret_cast<CppType*>(block.data());
-        CppType* decoded = (CppType*)values;
+        auto* values = reinterpret_cast<CppType*>(block.data());
+        auto* decoded = (CppType*)values;
         for (uint i = 0; i < size; i++) {
             if (src[i] != decoded[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << decoded[i];
@@ -117,7 +117,7 @@ public:
 
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
-            int seek_off = random() % size;
+            uint32_t seek_off = random() % size;
             page_decoder.seek_to_position_in_page(seek_off);
             EXPECT_EQ((int32_t)(seek_off), page_decoder.current_index());
             CppType ret;

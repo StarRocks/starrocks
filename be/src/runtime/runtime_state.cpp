@@ -38,6 +38,7 @@
 #include "runtime/exec_env.h"
 #include "runtime/load_path_mgr.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/query_statistics.h"
 #include "runtime/runtime_filter_worker.h"
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
@@ -279,10 +280,12 @@ Status RuntimeState::check_query_state(const std::string& msg) {
 }
 
 Status RuntimeState::check_mem_limit(const std::string& msg) {
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wnonnull-compare"
+    DIAGNOSTIC_PUSH
+#if defined(__GNUC__) && !defined(__clang__)
+    DIAGNOSTIC_IGNORE("-Wnonnull-compare")
+#endif
     RETURN_IF_LIMIT_EXCEEDED(this, msg);
-#pragma pop
+    DIAGNOSTIC_POP
     return Status::OK();
 }
 
@@ -311,6 +314,7 @@ bool RuntimeState::has_reached_max_error_msg_num(bool is_summary) {
 }
 
 void RuntimeState::append_error_msg_to_file(const std::string& line, const std::string& error_msg, bool is_summary) {
+    std::lock_guard<std::mutex> l(_error_log_lock);
     if (_query_options.query_type != TQueryType::LOAD) {
         return;
     }
@@ -347,8 +351,6 @@ void RuntimeState::append_error_msg_to_file(const std::string& line, const std::
         (*_error_log_file) << out.str() << std::endl;
     }
 }
-
-const int64_t HUB_MAX_ERROR_NUM = 10;
 
 int64_t RuntimeState::get_load_mem_limit() const {
     if (_query_options.__isset.load_mem_limit && _query_options.load_mem_limit > 0) {
@@ -397,4 +399,21 @@ Status RuntimeState::_build_global_dict(const GlobalDictLists& global_dict_list,
     return Status::OK();
 }
 
+bool RuntimeState::enable_query_statistic() const {
+    return _query_options.__isset.enable_pipeline_query_statistic && _query_options.enable_pipeline_query_statistic;
+}
+
+std::shared_ptr<QueryStatistics> RuntimeState::intermediate_query_statistic() {
+    if (!enable_query_statistic()) {
+        return nullptr;
+    }
+    return _query_ctx->intermediate_query_statistic();
+}
+
+std::shared_ptr<QueryStatisticsRecvr> RuntimeState::query_recv() {
+    if (!enable_query_statistic()) {
+        return nullptr;
+    }
+    return _query_ctx->maintained_query_recv();
+}
 } // end namespace starrocks

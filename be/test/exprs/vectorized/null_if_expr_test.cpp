@@ -9,12 +9,11 @@
 #include "exprs/vectorized/condition_expr.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class VectorizedNullIfExprTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -116,5 +115,4 @@ TEST_F(VectorizedNullIfExprTest, nullIfLeftNullRightNull) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

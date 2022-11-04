@@ -81,7 +81,7 @@ struct SegmentWriterOptions {
 class SegmentWriter {
 public:
     SegmentWriter(std::unique_ptr<WritableFile> block, uint32_t segment_id, const TabletSchema* tablet_schema,
-                  const SegmentWriterOptions& opts);
+                  SegmentWriterOptions opts);
     ~SegmentWriter();
 
     SegmentWriter(const SegmentWriter&) = delete;

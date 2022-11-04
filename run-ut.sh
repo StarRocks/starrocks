@@ -37,6 +37,7 @@ Usage: $0 <options>
      --gtest_filter                 specify test cases
      --with-aws                     enable to test aws
      --with-bench                   enable to build with benchmark
+     --with-gcov                    enable to build with gcov
      --use-staros                   enable to build with staros
      -j                             build parallel
 
@@ -46,6 +47,7 @@ Usage: $0 <options>
     $0 --run --gtest_filter scan*   build and run ut of specified cases
     $0 --clean                      clean and build ut
     $0 --clean --run                clean, build and run ut
+    $0 --clean --run --with-gcov    clean, build and run ut with gcov
     $0 --help                       display usage
   "
   exit 1
@@ -60,6 +62,7 @@ OPTS=$(getopt \
   -l 'with-aws' \
   -l 'with-bench' \
   -l 'use-staros' \
+  -l 'with-gcov' \
   -o 'j:' \
   -l 'help' \
   -- "$@")
@@ -78,6 +81,7 @@ WITH_AWS=OFF
 WITH_BENCH=OFF
 USE_STAROS=OFF
 WITH_BLOCK_CACHE=OFF
+WITH_GCOV=OFF
 while true; do
     case "$1" in
         --clean) CLEAN=1 ; shift ;;
@@ -86,6 +90,7 @@ while true; do
         --help) HELP=1 ; shift ;; 
         --with-aws) WITH_AWS=ON; shift ;;
         --with-bench) WITH_BENCH=ON; shift ;;
+        --with-gcov) WITH_GCOV=ON; shift ;;
         --use-staros) USE_STAROS=ON; shift ;;
         -j) PARALLEL=$2; shift 2 ;;
         --) shift ;  break ;;
@@ -99,7 +104,7 @@ if [ ${HELP} -eq 1 ]; then
 fi
 
 CMAKE_BUILD_TYPE=${BUILD_TYPE:-ASAN}
-CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE^^}"
+CMAKE_BUILD_TYPE="${CMAKE_BUILD_TYPE}"
 if [[ -z ${USE_SSE4_2} ]]; then
     USE_SSE4_2=ON
 fi
@@ -132,7 +137,7 @@ if [ "${USE_STAROS}" == "ON"  ]; then
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH}  \
-              -DUSE_STAROS=${USE_STAROS} \
+              -DUSE_STAROS=${USE_STAROS} -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -Dprotobuf_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/protobuf \
               -Dabsl_DIR=${STARLET_INSTALL_DIR}/third_party/lib/cmake/absl \
@@ -146,6 +151,7 @@ else
               -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
               -DMAKE_TEST=ON -DCMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE} \
               -DUSE_AVX2=$USE_AVX2 -DUSE_SSE4_2=$USE_SSE4_2 \
+              -DWITH_GCOV=${WITH_GCOV} \
               -DWITH_BLOCK_CACHE=${WITH_BLOCK_CACHE} \
               -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DWITH_BENCH=${WITH_BENCH} ../
 fi

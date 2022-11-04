@@ -123,7 +123,7 @@ StreamLoadAction::StreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {
 StreamLoadAction::~StreamLoadAction() = default;
 
 void StreamLoadAction::handle(HttpRequest* req) {
-    StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
+    auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr) {
         return;
     }
@@ -193,7 +193,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 int StreamLoadAction::on_header(HttpRequest* req) {
     streaming_load_current_processing.increment(1);
 
-    StreamLoadContext* ctx = new StreamLoadContext(_exec_env);
+    auto* ctx = new StreamLoadContext(_exec_env);
     ctx->ref();
     req->set_handler_ctx(ctx);
 
@@ -304,7 +304,7 @@ Status StreamLoadAction::_on_header(HttpRequest* http_req, StreamLoadContext* ct
 }
 
 void StreamLoadAction::on_chunk_data(HttpRequest* req) {
-    StreamLoadContext* ctx = (StreamLoadContext*)req->handler_ctx();
+    auto* ctx = (StreamLoadContext*)req->handler_ctx();
     if (ctx == nullptr || !ctx->status.ok()) {
         return;
     }
@@ -360,7 +360,7 @@ void StreamLoadAction::on_chunk_data(HttpRequest* req) {
 }
 
 void StreamLoadAction::free_handler_ctx(void* param) {
-    StreamLoadContext* ctx = (StreamLoadContext*)param;
+    auto* ctx = (StreamLoadContext*)param;
     if (ctx == nullptr) {
         return;
     }
@@ -487,6 +487,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
             request.__set_load_dop(parallel_request_num);
         } catch (const std::invalid_argument& e) {
             return Status::InvalidArgument("Invalid load_dop format");
+        }
+    }
+    if (!http_req->header(HTTP_ENABLE_REPLICATED_STORAGE).empty()) {
+        if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "false")) {
+            request.__set_enable_replicated_storage(false);
+        } else if (boost::iequals(http_req->header(HTTP_ENABLE_REPLICATED_STORAGE), "true")) {
+            request.__set_enable_replicated_storage(true);
+        } else {
+            return Status::InvalidArgument("Invalid enable replicated storage flag format. Must be bool type");
         }
     }
     if (ctx->timeout_second != -1) {

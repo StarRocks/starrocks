@@ -53,13 +53,13 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -223,7 +223,7 @@ public class Explain {
             PhysicalHudiScanOperator scan = (PhysicalHudiScanOperator) optExpression.getOp();
 
             StringBuilder sb = new StringBuilder("- Hudi-SCAN [")
-                    .append(((HudiTable) scan.getTable()).getTable())
+                    .append(((HudiTable) scan.getTable()).getTableName())
                     .append("]")
                     .append(buildOutputColumns(scan,
                             "[" + scan.getOutputColumns().stream().map(new ExpressionPrinter()::print)
@@ -680,8 +680,8 @@ public class Explain {
         }
 
         @Override
-        public String visitArrayElement(ArrayElementOperator array, Void context) {
-            return array.getChildren().stream().map(this::print).collect(Collectors.joining(", "));
+        public String visitCollectionElement(CollectionElementOperator collectSubOp, Void context) {
+            return collectSubOp.getChildren().stream().map(this::print).collect(Collectors.joining(", "));
         }
 
         @Override

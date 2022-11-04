@@ -11,7 +11,6 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.UserException;
-import com.starrocks.external.RemoteFileInfo;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -25,6 +24,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.PartitionRenameClause;
+import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
 import com.starrocks.sql.ast.TableRenameClause;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -39,7 +39,7 @@ public interface ConnectorMetadata {
      *
      * @return a list of string containing all database names of connector
      */
-    default List<String> listDbNames() throws DdlException {
+    default List<String> listDbNames() {
         return Lists.newArrayList();
     }
 
@@ -49,7 +49,7 @@ public interface ConnectorMetadata {
      * @param dbName - the string of which all table names are listed
      * @return a list of string containing all table names of `dbName`
      */
-    default List<String> listTableNames(String dbName) throws DdlException {
+    default List<String> listTableNames(String dbName) {
         return Lists.newArrayList();
     }
 
@@ -97,6 +97,15 @@ public interface ConnectorMetadata {
                                           List<ColumnRefOperator> columns,
                                           List<PartitionKey> partitionKeys) {
         return Statistics.builder().build();
+    }
+
+    /**
+     * Clean the query level cache after the query.
+     */
+    default void clear() {
+    }
+
+    default void refreshTable(String srDbName, Table table, List<String> partitionNames) {
     }
 
     default void createDb(String dbName) throws DdlException, AlreadyExistsException {
@@ -160,6 +169,11 @@ public interface ConnectorMetadata {
     }
 
     default void refreshMaterializedView(String dbName, String mvName, int priority)
+            throws DdlException, MetaNotFoundException {
+    }
+
+    default void refreshMaterializedView(RefreshMaterializedViewStatement refreshMaterializedViewStatement,
+                                         int priority)
             throws DdlException, MetaNotFoundException {
     }
 

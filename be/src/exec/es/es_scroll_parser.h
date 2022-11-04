@@ -1,19 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
 #pragma once
-#include <string>
-
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
 #include <rapidjson/stringbuffer.h>
 #include <rapidjson/writer.h>
-DIAGNOSTIC_POP
+
+#include <string>
 
 #include "column/chunk.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "common/compiler_util.h"
 #include "http/http_client.h"
 #include "runtime/descriptors.h"
 #include "runtime/primitive_type.h"
@@ -82,8 +79,6 @@ private:
     rapidjson::SizeType _cur_line;
     rapidjson::Document _document_node;
     rapidjson::Value _inner_hits_node;
-    // TODO: This value assigned but never used.
-    bool _doc_value_mode;
 
     rapidjson::StringBuffer _scratch_buffer;
     rapidjson::Writer<rapidjson::StringBuffer> _temp_writer;

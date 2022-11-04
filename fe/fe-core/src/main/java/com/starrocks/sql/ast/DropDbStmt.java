@@ -2,8 +2,6 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.analysis.DdlStmt;
-
 // DROP DB Statement
 public class DropDbStmt extends DdlStmt {
     private final boolean ifExists;
@@ -35,11 +33,6 @@ public class DropDbStmt extends DdlStmt {
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitDropDbStatement(this, context);
-    }
-
-    @Override
-    public boolean isSupportNewPlanner() {
-        return true;
     }
 
 }

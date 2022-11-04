@@ -49,9 +49,9 @@
 #include "exprs/vectorized/java_function_call_expr.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
+#include "exprs/vectorized/map_element_expr.h"
 #include "exprs/vectorized/placeholder_ref.h"
-#include "gen_cpp/Exprs_types.h"
-#include "gen_cpp/Types_types.h"
+#include "exprs/vectorized/subfield_expr.h"
 #include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -82,7 +82,7 @@ Expr::Expr(const Expr& expr)
           _fn(expr._fn),
           _fn_context_index(expr._fn_context_index) {}
 
-Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
+Expr::Expr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
@@ -233,8 +233,13 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     if (parent == nullptr) {
         DCHECK(root_expr != nullptr);
         DCHECK(ctx != nullptr);
-        *root_expr = expr;
-        *ctx = pool->add(new ExprContext(expr));
+        if (root_expr == nullptr || ctx == nullptr) {
+            return Status::InternalError(
+                    "Failed to reconstruct expression tree from thrift. Invalid input root_expr or ctx");
+        } else {
+            *root_expr = expr;
+            *ctx = pool->add(new ExprContext(expr));
+        }
     }
     return Status::OK();
 }
@@ -273,7 +278,18 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::CAST_EXPR: {
         if (texpr_node.__isset.child_type || texpr_node.__isset.child_type_desc) {
             *expr = pool->add(vectorized::VectorizedCastExprFactory::from_thrift(pool, texpr_node));
-            break;
+            if (*expr == nullptr) {
+                PrimitiveType to_type = TypeDescriptor::from_thrift(texpr_node.type).type;
+                PrimitiveType from_type = thrift_to_type(texpr_node.child_type);
+                std::string err_msg = fmt::format(
+                        "Vectorized engine does not support the operator, cast from {} to {} failed, maybe use switch "
+                        "function",
+                        type_to_string_v2(from_type), type_to_string_v2(to_type));
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            } else {
+                break;
+            }
         } else {
             // @TODO: will call FunctionExpr, implement later
             return Status::InternalError("Vectorized engine not support unknown child type cast");
@@ -325,6 +341,12 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
         break;
     case TExprNodeType::ARRAY_ELEMENT_EXPR:
         *expr = pool->add(vectorized::ArrayElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::MAP_ELEMENT_EXPR:
+        *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::SUBFIELD_EXPR:
+        *expr = pool->add(vectorized::SubfieldExprFactory::from_thrift(texpr_node));
         break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));

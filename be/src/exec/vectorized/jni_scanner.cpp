@@ -94,7 +94,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get the HashMap methods."));
 
     string message = "Initialize a scanner with parameters: ";
-    for (auto it : _jni_scanner_params) {
+    for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
         message.append(it.first);
@@ -132,7 +132,7 @@ template <PrimitiveType type, typename CppType>
 void JniScanner::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
         using ColumnType = typename vectorized::RunTimeColumnType<type>;
-        ColumnType* runtime_column = down_cast<ColumnType*>(column);
+        auto* runtime_column = down_cast<ColumnType*>(column);
         runtime_column->append(value);
     };
 
@@ -151,7 +151,7 @@ template <PrimitiveType type, typename CppType>
 Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index,
                                           ColumnPtr& column) {
     bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-    CppType* column_ptr = reinterpret_cast<CppType*>(chunk_meta_ptr[chunk_meta_index++]);
+    auto* column_ptr = reinterpret_cast<CppType*>(chunk_meta_ptr[chunk_meta_index++]);
 
     auto* nullable_column = down_cast<NullableColumn*>(column.get());
     nullable_column->resize(num_rows);
@@ -161,7 +161,7 @@ Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, i
 
     auto* data_column = nullable_column->data_column().get();
     using ColumnType = typename vectorized::RunTimeColumnType<type>;
-    ColumnType* runtime_column = down_cast<ColumnType*>(data_column);
+    auto* runtime_column = down_cast<ColumnType*>(data_column);
     memcpy(runtime_column->get_data().data(), column_ptr, num_rows * sizeof(CppType));
 
     nullable_column->update_has_null();
@@ -208,7 +208,7 @@ Status JniScanner::_append_string_data(long num_rows, long* chunk_meta_ptr, int&
 
     auto* data_column = nullable_column->data_column().get();
     using ColumnType = typename vectorized::RunTimeColumnType<type>;
-    ColumnType* runtime_column = down_cast<ColumnType*>(data_column);
+    auto* runtime_column = down_cast<ColumnType*>(data_column);
 
     int total_length = offset_ptr[num_rows];
     runtime_column->get_bytes().resize(total_length);

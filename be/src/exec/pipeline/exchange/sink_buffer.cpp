@@ -2,12 +2,9 @@
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
-#include <chrono>
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <chrono>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -203,7 +200,7 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works) {
+void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 

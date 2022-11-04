@@ -30,6 +30,9 @@ PipelineDriver::~PipelineDriver() noexcept {
 Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _runtime_state = runtime_state;
 
+    auto* prepare_timer = ADD_TIMER(_runtime_profile, "DriverPrepareTime");
+    SCOPED_TIMER(prepare_timer);
+
     // TotalTime is reserved name
     _total_timer = ADD_TIMER(_runtime_profile, "DriverTotalTime");
     _active_timer = ADD_TIMER(_runtime_profile, "ActiveTime");
@@ -38,6 +41,7 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
     _schedule_timer = ADD_TIMER(_runtime_profile, "ScheduleTime");
     _schedule_counter = ADD_COUNTER(_runtime_profile, "ScheduleCount", TUnit::UNIT);
     _yield_by_time_limit_counter = ADD_COUNTER(_runtime_profile, "YieldByTimeLimit", TUnit::UNIT);
+    _yield_by_preempt_counter = ADD_COUNTER(_runtime_profile, "YieldByPreempt", TUnit::UNIT);
     _block_by_precondition_counter = ADD_COUNTER(_runtime_profile, "BlockByPrecondition", TUnit::UNIT);
     _block_by_output_full_counter = ADD_COUNTER(_runtime_profile, "BlockByOutputFull", TUnit::UNIT);
     _block_by_input_empty_counter = ADD_COUNTER(_runtime_profile, "BlockByInputEmpty", TUnit::UNIT);
@@ -262,14 +266,13 @@ StatusOr<DriverState> PipelineDriver::process(RuntimeState* runtime_state, int w
             // exceed the designated thresholds.
             if (time_spent >= YIELD_MAX_TIME_SPENT) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_time_limit_counter, 1);
                 break;
             }
-
             if (_workgroup != nullptr && time_spent >= YIELD_PREEMPT_MAX_TIME_SPENT &&
                 _workgroup->driver_sched_entity()->in_queue()->should_yield(this, time_spent)) {
                 should_yield = true;
-                COUNTER_UPDATE(_yield_by_time_limit_counter, time_spent >= YIELD_MAX_TIME_SPENT);
+                COUNTER_UPDATE(_yield_by_preempt_counter, 1);
                 break;
             }
         }
@@ -406,12 +409,14 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
             // Acquire the pointer to avoid be released when removing query
             auto query_trace = _query_ctx->shared_query_trace();
             auto wg = _workgroup;
+            auto fragment_ctx_ptr = uintptr_t(_fragment_ctx);
+            auto query_ctx_ptr = uintptr_t(_query_ctx);
             if (ExecEnv::GetInstance()->query_context_mgr()->remove(query_id)) {
                 if (wg) {
                     VLOG_ROW << "decrease num running queries in workgroup " << wg->id() << "query_id=" << query_id
-                             << ",fragment_ctx address=" << _fragment_ctx << ",fragment_instance_id=" << frag_id
+                             << ",fragment_ctx address=" << fragment_ctx_ptr << ",fragment_instance_id=" << frag_id
                              << ",active_drivers=" << active_drivers << ", active_fragments=" << active_fragments
-                             << ", query_ctx address=" << _query_ctx;
+                             << ", query_ctx address=" << query_ctx_ptr;
                     wg->decr_num_queries();
                 }
             }
@@ -429,16 +434,22 @@ void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
 void PipelineDriver::_update_overhead_timer() {
     int64_t overhead_time = _active_timer->value();
     RuntimeProfile* profile = _runtime_profile.get();
-    std::vector<RuntimeProfile*> children;
-    profile->get_children(&children);
-    for (auto* child_profile : children) {
-        auto* total_timer = child_profile->get_counter("OperatorTotalTime");
-        if (total_timer != nullptr) {
-            overhead_time -= total_timer->value();
-        }
+    std::vector<RuntimeProfile*> operator_profiles;
+    profile->get_children(&operator_profiles);
+    for (auto* operator_profile : operator_profiles) {
+        auto* common_metrics = operator_profile->get_child("CommonMetrics");
+        DCHECK(common_metrics != nullptr);
+        auto* total_timer = common_metrics->get_counter("OperatorTotalTime");
+        DCHECK(total_timer != nullptr);
+        overhead_time -= total_timer->value();
     }
 
-    COUNTER_UPDATE(_overhead_timer, overhead_time);
+    if (overhead_time < 0) {
+        // All the time are recorded indenpendently, and there may be errors
+        COUNTER_UPDATE(_overhead_timer, 0);
+    } else {
+        COUNTER_UPDATE(_overhead_timer, overhead_time);
+    }
 }
 
 std::string PipelineDriver::to_readable_string() const {

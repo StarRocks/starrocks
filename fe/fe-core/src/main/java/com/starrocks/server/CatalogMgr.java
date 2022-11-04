@@ -23,7 +23,7 @@ import com.starrocks.common.proc.ProcNodeInterface;
 import com.starrocks.common.proc.ProcResult;
 import com.starrocks.connector.ConnectorContext;
 import com.starrocks.connector.ConnectorMgr;
-import com.starrocks.external.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.persist.DropCatalogLog;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -98,7 +98,6 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
-
     }
 
     public void dropCatalog(DropCatalogStmt stmt) {
@@ -186,13 +185,6 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
-    }
-
-    public boolean existSameUrlCatalog(String url) {
-        long hasSameUriCatalogNum =  catalogs.entrySet().stream()
-                .filter(entry -> entry.getValue().getConfig().getOrDefault(HIVE_METASTORE_URIS, "").equals(url))
-                .count();
-        return hasSameUriCatalogNum > 1;
     }
 
     public long loadCatalogs(DataInputStream dis, long checksum) throws IOException, DdlException {
@@ -302,7 +294,7 @@ public class CatalogMgr {
             try {
                 for (Map.Entry<String, Catalog> entry : catalogs.entrySet()) {
                     Catalog catalog = entry.getValue();
-                    if (catalog == null) {
+                    if (catalog == null || isResourceMappingCatalog(catalog.getName())) {
                         continue;
                     }
                     catalog.getProcNodeData(result);
@@ -323,7 +315,12 @@ public class CatalogMgr {
         }
 
         public static String getResourceMappingCatalogName(String resourceName, String type) {
-            return RESOURCE_MAPPING_CATALOG_PREFIX + type + "_" + resourceName;
+            return (RESOURCE_MAPPING_CATALOG_PREFIX + type + "_" + resourceName).toLowerCase(Locale.ROOT);
+        }
+
+        public static String toResourceName(String catalogName, String type) {
+            return isResourceMappingCatalog(catalogName) ?
+                    catalogName.substring(RESOURCE_MAPPING_CATALOG_PREFIX.length() + type.length() + 1) : catalogName;
         }
     }
 }

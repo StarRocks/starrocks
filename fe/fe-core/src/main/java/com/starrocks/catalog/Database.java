@@ -60,6 +60,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
 /**
@@ -461,7 +462,7 @@ public class Database extends MetaObject implements Writable {
                 throw new DdlException("There are still some transactions in the COMMITTED state waiting to be completed. " +
                         "The table [" + table.getName() +
                         "] cannot be dropped. If you want to forcibly drop(cannot be recovered)," +
-                        " please use \"DROP table FORCE\".");
+                        " please use \"DROP TABLE <table> FORCE\".");
             }
             runnable = unprotectDropTable(table.getId(), isForce, false);
             DropInfo info = new DropInfo(id, table.getId(), -1L, isForce);
@@ -845,5 +846,9 @@ public class Database extends MetaObject implements Writable {
     // the invoker should hold db's writeLock
     public void setExist(boolean exist) {
         this.exist = exist;
+    }
+
+    public List<Table> getHiveTables() {
+        return idToTable.values().stream().filter(Table::isHiveTable).collect(Collectors.toList());
     }
 }

@@ -34,9 +34,11 @@ import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.thrift.TAggregationNode;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TExpr;
@@ -66,6 +68,8 @@ public class AggregationNode extends PlanNode {
 
     private String streamingPreaggregationMode = "auto";
 
+    private boolean useSortAgg = false;
+    
     private boolean withLocalShuffle = false;
 
     /**
@@ -122,6 +126,10 @@ public class AggregationNode extends PlanNode {
         this.streamingPreaggregationMode = mode;
     }
 
+    public void setUseSortAgg(boolean useSortAgg) {
+        this.useSortAgg = useSortAgg;
+    }
+
     @Override
     public void computeStats(Analyzer analyzer) {
     }
@@ -174,6 +182,7 @@ public class AggregationNode extends PlanNode {
         if (sqlAggFuncBuilder.length() > 0) {
             msg.agg_node.setSql_aggregate_functions(sqlAggFuncBuilder.toString());
         }
+        msg.agg_node.setUse_sort_agg(useSortAgg);
 
         List<Expr> groupingExprs = aggInfo.getGroupingExprs();
         if (groupingExprs != null) {
@@ -204,6 +213,7 @@ public class AggregationNode extends PlanNode {
             msg.agg_node.setStreaming_preaggregation_mode(TStreamingPreaggregationMode.AUTO);
         }
         msg.agg_node.setAgg_func_set_version(FeConstants.AGG_FUNC_VERSION);
+        msg.agg_node.setInterpolate_passthrough(useStreamingPreagg && ConnectContext.get().getSessionVariable().isInterpolatePassthrough());
     }
 
     protected String getDisplayLabelDetail() {
@@ -241,6 +251,9 @@ public class AggregationNode extends PlanNode {
 
         if (!conjuncts.isEmpty()) {
             output.append(detailPrefix).append("having: ").append(getVerboseExplain(conjuncts, detailLevel)).append("\n");
+        }
+        if (useSortAgg) {
+            output.append(detailPrefix).append("sorted streaming: true\n");
         }
 
         if (withLocalShuffle) {

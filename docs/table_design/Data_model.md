@@ -65,21 +65,13 @@ The statement for creating the table is as follows:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS detail (
-
     event_time DATETIME NOT NULL COMMENT "datetime of event",
-
     event_type INT NOT NULL COMMENT "type of event",
-
     user_id INT COMMENT "id of user",
-
     device_code INT COMMENT "device code",
-
     channel INT COMMENT ""
-
 )
-
 DUPLICATE KEY(event_time, event_type)
-
 DISTRIBUTED BY HASH(user_id) BUCKETS 8;
 ```
 
@@ -156,15 +148,10 @@ The statement for creating the table is as follows:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS example_db.aggregate_tbl (
-
     site_id LARGEINT NOT NULL COMMENT "id of site",
-
     date DATE NOT NULL COMMENT "time of event",
-
     city_code VARCHAR(20) COMMENT "city_code of user",
-
     pv BIGINT SUM DEFAULT "0" COMMENT "total page views"
-
 )
 
 DISTRIBUTED BY HASH(site_id) BUCKETS 8;
@@ -233,19 +220,12 @@ The statement for creating the table is as follows:
 
 ```SQL
 CREATE TABLE IF NOT EXISTS orders (
-
     create_time DATE NOT NULL COMMENT "create time of an order",
-
     order_id BIGINT NOT NULL COMMENT "id of an order",
-
     order_state INT COMMENT "state of an order",
-
     total_price BIGINT COMMENT "price of an order"
-
 )
-
 UNIQUE KEY(create_time, order_id)
-
 DISTRIBUTED BY HASH(order_id) BUCKETS 8;
 ```
 
@@ -317,80 +297,48 @@ Example 1: Suppose that you need to analyze orders on a daily basis. In this exa
 
 ```SQL
 create table orders (
-
     dt date NOT NULL,
-
     order_id bigint NOT NULL,
-
     user_id int NOT NULL,
-
     merchant_id int NOT NULL,
-
     good_id int NOT NULL,
-
     good_name string NOT NULL,
-
     price int NOT NULL,
-
     cnt int NOT NULL,
-
     revenue int NOT NULL,
-
     state tinyint NOT NULL
-
 ) PRIMARY KEY (dt, order_id)
-
 PARTITION BY RANGE(`dt`) (
-
     PARTITION p20210820 VALUES [('2021-08-20'), ('2021-08-21')),
-
     PARTITION p20210821 VALUES [('2021-08-21'), ('2021-08-22')),
-
     ...
-
     PARTITION p20210929 VALUES [('2021-09-29'), ('2021-09-30')),
-
     PARTITION p20210930 VALUES [('2021-09-30'), ('2021-10-01'))
-
 ) DISTRIBUTED BY HASH(order_id) BUCKETS 4
-
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+"enable_persistent_index" = "true");
 ```
 
 Example 2: Suppose that you need to analyze user behavior in real time. In this example, create a table named `users`, define `user_id` as the primary key, and define the other columns as metric columns.
 
 ```SQL
 create table users (
-
     user_id bigint NOT NULL,
-
     name string NOT NULL,
-
     email string NULL,
-
     address string NULL,
-
     age tinyint NULL,
-
     sex tinyint NULL,
-
     last_active datetime,
-
     property0 tinyint NOT NULL,
-
     property1 tinyint NOT NULL,
-
     property2 tinyint NOT NULL,
-
     property3 tinyint NOT NULL,
-
     ....
-
 ) PRIMARY KEY (user_id)
-
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
-
-PROPERTIES("replication_num" = "3");
+PROPERTIES("replication_num" = "3",
+"enable_persistent_index" = "true");
 ```
 
 ### Usage notes
@@ -417,11 +365,21 @@ PROPERTIES("replication_num" = "3");
 
       In the preceding formula, `9` is the immutable overhead per row, and `1.5` is the average extra overhead per hash table.
 
+- `enable_persistent_index`: the primary key index can be persisted to disk and stored in memory to avoid it taking up too much memory. Generally, the primary key index can only take up 1/10 of the memory it does before. You can set this property in `PROPERTIES` when you create a table. Valid values are true or false. Default value is true.
+
+  > - If you want to modify this parameter after the table is created, please see the part Modify the properties of table in [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+  > - It is recommended to set this property to true if the disk is SSD.
+  > - As of version 2.3.0, StarRocks supports to set this property.
+
+- Since version 2.3.0, the indicator column now supports BITMAP, HLL data types.
+
 - When you create a table, you cannot create BITMAP indexes or Bloom Filter indexes on the metric columns of the table.
+
+- Since version 2.4.0, the Primary Key model supports to build a materialized view for a one table or multiple tables.
 
 - The Primary Key model does not support materialized views.
 
-- You cannot use the ALTER TABLE statement to change the data types of the columns for a table that uses the Primary Key model. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
+- You cannot use the ALTER TABLE statement to change the data types of the primary key columns and reorder metric columns. For the syntax and examples of using the ALTER TABLE statement, see [ALTER TABLE](../sql-reference/sql-statements/data-definition/ALTER%20TABLE.md).
 
 ### What to do next
 

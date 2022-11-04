@@ -67,6 +67,7 @@ private:
     RuntimeState* _runtime_state = nullptr;
     vectorized::HdfsScanner* _scanner = nullptr;
     bool _use_block_cache = false;
+    bool _enable_populate_block_cache = false;
 
     // ============ conjuncts =================
     std::vector<ExprContext*> _min_max_conjunct_ctxs;

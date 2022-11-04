@@ -21,16 +21,14 @@
 
 #include "storage/tablet_manager.h"
 
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bvar/bvar.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 #include <re2/re2.h>
 
 #include <ctime>
 #include <memory>
 
+#include "common/config.h"
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "runtime/current_thread.h"
@@ -72,8 +70,7 @@ bvar::PassiveStatus<std::string> g_shutdown_tablets("starrocks_shutdown_tablets"
 TabletManager::TabletManager(int32_t tablet_map_lock_shard_size)
         : _tablets_shards(tablet_map_lock_shard_size),
           _tablets_shards_mask(tablet_map_lock_shard_size - 1),
-          _last_update_stat_ms(0),
-          _cur_shard(0) {
+          _last_update_stat_ms(0) {
     CHECK_GT(_tablets_shards.size(), 0) << "tablets shard count greater than 0";
     CHECK_EQ(_tablets_shards.size() & _tablets_shards_mask, 0) << "tablets shard count must be power of two";
 }
@@ -326,6 +323,22 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
             LOG(WARNING) << "Fail to create " << new_tablet->schema_hash_path() << ": " << st.to_string();
             continue;
         }
+
+        if (config::sync_tablet_meta) {
+            std::filesystem::path schema_hash_path(new_tablet->schema_hash_path());
+            std::filesystem::path tablet_id_path = schema_hash_path.parent_path();
+            Status st = fs::sync_dir(tablet_id_path.string());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << tablet_id_path.string() << ": " << st.to_string();
+                continue;
+            }
+            std::filesystem::path shard_id_path = tablet_id_path.parent_path();
+            st = fs::sync_dir(shard_id_path.string());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << shard_id_path.string() << ": " << st.to_string();
+                continue;
+            }
+        }
         return new_tablet;
     }
     return nullptr;
@@ -375,6 +388,7 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(TTabletId t
         std::string errmsg = strings::Substitute("Failed to get tablet(tablet_id=$0),reason=$1", tablet_id, err);
         return Status::InternalError(errmsg);
     }
+    std::shared_lock rlock(tablet->get_header_lock());
     std::vector<RowsetSharedPtr> rowsets;
     RETURN_IF_ERROR(tablet->capture_consistent_rowsets(Version{from_version, to_version}, &rowsets));
     return std::make_tuple(std::move(tablet), std::move(rowsets));
@@ -943,6 +957,48 @@ Status TabletManager::delete_shutdown_tablet(int64_t tablet_id) {
     return Status::OK();
 }
 
+Status TabletManager::delete_shutdown_tablet_before_clone(int64_t tablet_id) {
+    std::unique_lock l(_get_tablets_shard_lock(tablet_id));
+    auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
+    if (old_tablet_ptr != nullptr) {
+        if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
+            // Must reset old_tablet_ptr, otherwise `delete_shutdown_tablet()` will never success.
+            old_tablet_ptr.reset();
+            int retry = RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED;
+            Status st = Status::OK();
+            do {
+                st = delete_shutdown_tablet(tablet_id);
+                if (st.ok() || st.is_not_found()) {
+                    LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id
+                              << " successfully, retried " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
+                              << " times";
+                    break;
+                } else if (st.code() == TStatusCode::RESOURCE_BUSY) {
+                    // The SHUTDOWN tablet being referenced by other thread is just a temporal state, so we retry
+                    // a few times before mark this clone task failed to avoid too much wasted work.
+                    retry--;
+                    if (retry > 0) {
+                        SleepFor(MonoDelta::FromSeconds(RETRY_INTERVAL_ON_SHUTDOWN_TABLET_OCCUPIED));
+                    }
+                } else {
+                    break;
+                }
+            } while (retry > 0);
+            if (!st.ok() && !st.is_not_found()) {
+                LOG(WARNING) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN"
+                             << " tablet failed after " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
+                             << " times retry, tablet:" << tablet_id << " st:" << st;
+                return st;
+            }
+        } else {
+            // normally this should not happen, unless in when doing clone, another create tablet task is performed
+            return Status::AlreadyExist(fmt::format(
+                    "delete_shutdown_tablet_before_clone error: tablet already exists tablet: {}", tablet_id));
+        }
+    }
+    return Status::OK();
+}
+
 void TabletManager::register_clone_tablet(int64_t tablet_id) {
     TabletsShard& shard = _get_tablets_shard(tablet_id);
     std::unique_lock wlock(shard.lock);
@@ -1346,43 +1402,6 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
     }
 
     std::unique_lock l(_get_tablets_shard_lock(tablet_id));
-    // TODO: if old tablet exists, should do an atomic "replace_or_add" approach instead
-    auto old_tablet_ptr = _get_tablet_unlocked(tablet_id, true, nullptr);
-    if (old_tablet_ptr != nullptr) {
-        if (old_tablet_ptr->tablet_state() == TabletState::TABLET_SHUTDOWN) {
-            // Must reset old_tablet_ptr, otherwise `delete_shutdown_tablet()` will never success.
-            old_tablet_ptr.reset();
-            int retry = RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED;
-            Status st = Status::OK();
-            do {
-                st = delete_shutdown_tablet(tablet_id);
-                if (st.ok() || st.is_not_found()) {
-                    LOG(INFO) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN tablet:" << tablet_id
-                              << " successfully, retried " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
-                              << " times";
-                    break;
-                } else if (st.code() == TStatusCode::RESOURCE_BUSY) {
-                    // The SHUTDOWN tablet being referenced by other thread is just a temporal state, so we retry
-                    // a few times before mark this clone task failed to avoid too much wasted work.
-                    retry--;
-                    if (retry > 0) {
-                        SleepFor(MonoDelta::FromSeconds(RETRY_INTERVAL_ON_SHUTDOWN_TABLET_OCCUPIED));
-                    }
-                } else {
-                    break;
-                }
-            } while (retry > 0);
-            if (!st.ok() && !st.is_not_found()) {
-                LOG(WARNING) << "before adding new cloned tablet, delete stale TABLET_SHUTDOWN"
-                             << " tablet failed after " << RETRY_TIMES_ON_SHUTDOWN_TABLET_OCCUPIED - retry
-                             << " times retry, tablet:" << tablet_id << " st:" << st;
-                return st;
-            }
-        } else {
-            return Status::InternalError("tablet already exist");
-        }
-    }
-
     RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
     if (!tablet->init().ok()) {

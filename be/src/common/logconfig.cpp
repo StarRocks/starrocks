@@ -38,11 +38,11 @@ static bool logging_initialized = false;
 static std::mutex logging_mutex;
 
 static bool iequals(const std::string& a, const std::string& b) {
-    unsigned int sz = a.size();
+    size_t sz = a.size();
     if (b.size() != sz) {
         return false;
     }
-    for (unsigned int i = 0; i < sz; ++i) {
+    for (size_t i = 0; i < sz; ++i) {
         if (tolower(a[i]) != tolower(b[i])) {
             return false;
         }
@@ -74,7 +74,7 @@ static int print_unique_id(char* buffer, const TUniqueId& uid) {
     return 36;
 }
 
-static void failure_writer(const char* data, int size) {
+static void dump_trace_info() {
     static bool start_dump = false;
     if (!start_dump) {
         auto query_id = CurrentThread::current().query_id();
@@ -88,8 +88,17 @@ static void failure_writer(const char* data, int size) {
         res = sprintf(buffer + res, "\n") + res;
         [[maybe_unused]] auto wt = write(STDERR_FILENO, buffer, res);
     }
-    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
     start_dump = true;
+}
+
+static void failure_writer(const char* data, int size) {
+    dump_trace_info();
+    [[maybe_unused]] auto wt = write(STDERR_FILENO, data, size);
+}
+
+static void failure_function() {
+    dump_trace_info();
+    std::abort();
 }
 
 bool init_glog(const char* basename, bool install_signal_handler) {
@@ -101,9 +110,9 @@ bool init_glog(const char* basename, bool install_signal_handler) {
 
     if (install_signal_handler) {
         google::InstallFailureSignalHandler();
+        google::InstallFailureWriter(failure_writer);
+        google::InstallFailureFunction(failure_function);
     }
-
-    google::InstallFailureWriter(failure_writer);
 
     // Don't log to stderr.
     FLAGS_stderrthreshold = 5;
@@ -158,7 +167,7 @@ bool init_glog(const char* basename, bool install_signal_handler) {
             const char* sizecstr = sizestr.c_str();
             int64_t ret64 = strtoll(sizecstr, &end, 10);
             if ((errno == 0) && (end == sizecstr + strlen(sizecstr))) {
-                int32_t retval = static_cast<int32_t>(ret64);
+                auto retval = static_cast<int32_t>(ret64);
                 if (retval == ret64) {
                     FLAGS_max_log_size = retval;
                     ok = true;
@@ -197,11 +206,11 @@ void shutdown_logging() {
 
 std::string FormatTimestampForLog(MicrosecondsInt64 micros_since_epoch) {
     time_t secs_since_epoch = micros_since_epoch / 1000000;
-    int usecs = micros_since_epoch % 1000000;
+    int64_t usecs = micros_since_epoch % 1000000;
     struct tm tm_time;
     localtime_r(&secs_since_epoch, &tm_time);
 
-    return StringPrintf("%02d%02d %02d:%02d:%02d.%06d", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
+    return StringPrintf("%02d%02d %02d:%02d:%02d.%06ld", 1 + tm_time.tm_mon, tm_time.tm_mday, tm_time.tm_hour,
                         tm_time.tm_min, tm_time.tm_sec, usecs);
 }
 

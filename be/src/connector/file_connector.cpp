@@ -9,8 +9,7 @@
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 DataSourceProviderPtr FileConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
@@ -107,7 +106,7 @@ Status FileDataSource::get_next(RuntimeState* state, vectorized::ChunkPtr* chunk
         size_t before_rows = (*chunk)->num_rows();
 
         const TQueryOptions& query_options = state->query_options();
-        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::Broker) {
+        if (query_options.__isset.load_job_type && query_options.load_job_type == TLoadJobType::BROKER) {
             size_t before_size = (*chunk)->bytes_usage();
             state->update_num_rows_load_from_source(before_rows);
             state->update_num_bytes_load_from_source(before_size);
@@ -169,5 +168,4 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

@@ -23,6 +23,7 @@
 
 #include <memory>
 #include <sstream>
+#include <utility>
 
 #include "column/binary_column.h"
 #include "column/chunk.h"
@@ -57,22 +58,22 @@ NodeChannel::NodeChannel(OlapTableSink* parent, int64_t node_id) : _parent(paren
     _mem_tracker = std::make_unique<MemTracker>(64 * 1024 * 1024, "", nullptr);
 }
 
-NodeChannel::~NodeChannel() {
-    for (size_t i = 0; i < _open_closures.size(); i++) {
-        if (_open_closures[i] != nullptr) {
-            if (_open_closures[i]->unref()) {
-                delete _open_closures[i];
+NodeChannel::~NodeChannel() noexcept {
+    for (auto& _open_closure : _open_closures) {
+        if (_open_closure != nullptr) {
+            if (_open_closure->unref()) {
+                delete _open_closure;
             }
-            _open_closures[i] = nullptr;
+            _open_closure = nullptr;
         }
     }
 
-    for (size_t i = 0; i < _add_batch_closures.size(); i++) {
-        if (_add_batch_closures[i] != nullptr) {
-            if (_add_batch_closures[i]->unref()) {
-                delete _add_batch_closures[i];
+    for (auto& _add_batch_closure : _add_batch_closures) {
+        if (_add_batch_closure != nullptr) {
+            if (_add_batch_closure->unref()) {
+                delete _add_batch_closure;
             }
-            _add_batch_closures[i] = nullptr;
+            _add_batch_closure = nullptr;
         }
     }
 
@@ -134,6 +135,12 @@ Status NodeChannel::init(RuntimeState* state) {
         _add_batch_closures.emplace_back(closure);
     }
 
+    if (_parent->_write_quorum_type == TWriteQuorumType::ONE) {
+        _write_quorum_type = WriteQuorumTypePB::ONE;
+    } else if (_parent->_write_quorum_type == TWriteQuorumType::ALL) {
+        _write_quorum_type = WriteQuorumTypePB::ALL;
+    }
+
     // for get global_dict
     _runtime_state = state;
 
@@ -163,6 +170,7 @@ void NodeChannel::_open(int64_t index_id, RefCountClosure<PTabletWriterOpenResul
     request.set_is_lake_tablet(_parent->_is_lake_table);
     request.set_is_replicated_storage(_parent->_enable_replicated_storage);
     request.set_node_id(_node_id);
+    request.set_write_quorum(_write_quorum_type);
     for (auto& tablet : _index_tablets_map[index_id]) {
         auto ptablet = request.add_tablets();
         ptablet->Swap(&tablet);
@@ -655,9 +663,7 @@ Status NodeChannel::close_wait(RuntimeState* state) {
     RETURN_IF_ERROR(_wait_all_prev_request());
 
     // 3. commit tablet infos
-    state->tablet_commit_infos().insert(state->tablet_commit_infos().end(),
-                                        std::make_move_iterator(_tablet_commit_infos.begin()),
-                                        std::make_move_iterator(_tablet_commit_infos.end()));
+    state->append_tablet_commit_infos(_tablet_commit_infos);
 
     return _err_st;
 }
@@ -721,11 +727,18 @@ Status IndexChannel::init(RuntimeState* state, const std::vector<PTabletWithPart
     for (auto& it : _node_channels) {
         RETURN_IF_ERROR(it.second->init(state));
     }
+    _write_quorum_type = _parent->_write_quorum_type;
     return Status::OK();
 }
 
 bool IndexChannel::has_intolerable_failure() {
-    return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
+    if (_write_quorum_type == TWriteQuorumType::ALL) {
+        return _failed_channels.size() > 0;
+    } else if (_write_quorum_type == TWriteQuorumType::ONE) {
+        return _failed_channels.size() >= _parent->_num_repicas;
+    } else {
+        return _failed_channels.size() >= ((_parent->_num_repicas + 1) / 2);
+    }
 }
 
 OlapTableSink::OlapTableSink(ObjectPool* pool, const std::vector<TExpr>& texprs, Status* status) : _pool(pool) {
@@ -747,6 +760,9 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     _tuple_desc_id = table_sink.tuple_id;
     _is_lake_table = table_sink.is_lake_table;
     _keys_type = table_sink.keys_type;
+    if (table_sink.__isset.write_quorum_type) {
+        _write_quorum_type = table_sink.write_quorum_type;
+    }
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -766,7 +782,7 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
 
-    if (state->query_options().__isset.enable_replicated_storage && _keys_type != TKeysType::PRIMARY_KEYS) {
+    if (state->query_options().__isset.enable_replicated_storage) {
         _enable_replicated_storage = state->query_options().enable_replicated_storage;
     }
 
@@ -1303,7 +1319,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
     _span->AddEvent("close");
     _span->SetAttribute("input_rows", _number_input_rows);
     _span->SetAttribute("output_rows", _number_output_rows);
-    Status status = close_status;
+    Status status = std::move(close_status);
     if (status.ok()) {
         // only if status is ok can we call this _profile->total_time_counter().
         // if status is not ok, this sink may not be prepared, so that _profile is null
@@ -1363,9 +1379,7 @@ Status OlapTableSink::close_wait(RuntimeState* state, Status close_status) {
         COUNTER_SET(_send_rpc_timer, actual_consume_ns);
 
         // _number_input_rows don't contain num_rows_load_filtered and num_rows_load_unselected in scan node
-        int64_t num_rows_load_total =
-                _number_input_rows + state->num_rows_load_filtered() + state->num_rows_load_unselected();
-        state->set_num_rows_load_from_sink(num_rows_load_total);
+        state->update_num_rows_load_from_sink(state->num_rows_load_filtered() + state->num_rows_load_unselected());
         state->update_num_rows_load_filtered(_number_filtered_rows);
 
         // print log of add batch time of all node, for tracing load performance easily
@@ -1490,7 +1504,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
                     vectorized::NullableColumn::create(column_ptr, vectorized::NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
         } else if (!desc->is_nullable() && column_ptr->is_nullable()) {
-            vectorized::NullableColumn* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
+            auto* nullable = down_cast<vectorized::NullableColumn*>(column_ptr.get());
             // Non-nullable column shouldn't have null value,
             // If there is null value, which means expr compute has a error.
             if (nullable->has_null()) {
@@ -1543,7 +1557,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, vectorized::Chunk* chunk
         }
         case TYPE_DECIMALV2: {
             column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::DecimalColumn* decimal = down_cast<vectorized::DecimalColumn*>(column);
+            auto* decimal = down_cast<vectorized::DecimalColumn*>(column);
             std::vector<DecimalV2Value>& datas = decimal->get_data();
             int scale = desc->type().scale;
             for (size_t j = 0; j < num_rows; ++j) {
@@ -1581,7 +1595,7 @@ void OlapTableSink::_padding_char_column(vectorized::Chunk* chunk) {
         if (desc->type().type == TYPE_CHAR) {
             vectorized::Column* column = chunk->get_column_by_slot_id(desc->id()).get();
             vectorized::Column* data_column = vectorized::ColumnHelper::get_data_column(column);
-            vectorized::BinaryColumn* binary = down_cast<vectorized::BinaryColumn*>(data_column);
+            auto* binary = down_cast<vectorized::BinaryColumn*>(data_column);
             vectorized::Offsets& offset = binary->get_offset();
             uint32_t len = desc->type().len;
 

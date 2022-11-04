@@ -30,6 +30,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
@@ -45,10 +46,13 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ListUtil;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.load.EtlJobType;
 import com.starrocks.load.loadv2.LoadJob;
+import com.starrocks.mysql.privilege.Auth;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.DataSink;
 import com.starrocks.planner.DataStreamSink;
+import com.starrocks.planner.DeltaLakeScanNode;
 import com.starrocks.planner.ExchangeNode;
 import com.starrocks.planner.ExportSink;
 import com.starrocks.planner.HdfsScanNode;
@@ -75,6 +79,7 @@ import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.FrontendOptions;
+import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.system.Backend;
@@ -225,6 +230,7 @@ public class Coordinator {
     private final Set<Integer> replicateScanIds = new HashSet<>();
     private final Set<Integer> bucketShuffleFragmentIds = new HashSet<>();
     private final Set<Integer> rightOrFullBucketShuffleFragmentIds = new HashSet<>();
+    private EtlJobType etlJobType;
 
     private final boolean usePipeline;
 
@@ -284,7 +290,12 @@ public class Coordinator {
         this.isBlockQuery = true;
         this.jobId = jobId;
         this.queryId = queryId;
-        this.connectContext = null;
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setQualifiedUser(Auth.ROOT_USER);
+        connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
+        connectContext.getSessionVariable().setEnablePipelineEngine(true);
+        connectContext.getSessionVariable().setPipelineDop(0);
+        this.connectContext = connectContext;
         this.descTable = descTable.toThrift();
         this.fragments = fragments;
         this.scanNodes = scanNodes;
@@ -348,6 +359,63 @@ public class Coordinator {
         nextInstanceId.setHi(queryId.hi);
         nextInstanceId.setLo(queryId.lo + 1);
 
+        this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
+    }
+
+    public Coordinator(LoadPlanner loadPlanner) {
+        this.etlJobType = loadPlanner.getEtlJobType();
+        this.isBlockQuery = true;
+        this.jobId = loadPlanner.getLoadJobId();
+        ConnectContext context = loadPlanner.getContext(); 
+        this.queryId = loadPlanner.getLoadId();
+        this.connectContext = context;
+        this.descTable = loadPlanner.getDescTable().toThrift();
+        this.fragments = loadPlanner.getFragments();
+        this.scanNodes = loadPlanner.getScanNodes();
+
+        this.queryOptions = context.getSessionVariable().toThrift();
+        this.queryOptions.setQuery_type(TQueryType.LOAD);
+        this.queryOptions.setQuery_timeout((int) loadPlanner.getTimeout());
+        this.queryOptions.setMem_limit(loadPlanner.getExecMemLimit());
+        this.queryOptions.setLoad_mem_limit(loadPlanner.getLoadMemLimit());
+        Map<String, String> sessionVariables = loadPlanner.getSessionVariables();
+        if (sessionVariables != null) {
+            if (sessionVariables.containsKey(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE)) {
+                final TCompressionType loadCompressionType = CompressionUtils
+                        .findTCompressionByName(
+                                sessionVariables.get(SessionVariable.LOAD_TRANSMISSION_COMPRESSION_TYPE));
+                if (loadCompressionType != null) {
+                    this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
+                }
+            }
+            if (sessionVariables.containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
+                this.queryOptions.setEnable_replicated_storage(
+                        Boolean.parseBoolean(sessionVariables.get(SessionVariable.ENABLE_REPLICATED_STORAGE)));
+            }
+        }
+
+        long startTime = loadPlanner.getStartTime();
+        String timezone = loadPlanner.getTimeZone();
+        if (timezone.equals("CST")) {
+            this.queryGlobals.setTime_zone(TimeUtils.DEFAULT_TIME_ZONE);
+        } else {
+            this.queryGlobals.setTime_zone(timezone);
+        }
+        String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
+        this.queryGlobals.setNow_string(nowString);
+        this.queryGlobals.setTimestamp_ms(startTime);
+        if (context.getLastQueryId() != null) {
+            this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
+        }
+    
+        this.needReport = true;
+        this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();;
+        this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
+        this.nextInstanceId = new TUniqueId();
+        nextInstanceId.setHi(queryId.hi);
+        nextInstanceId.setLo(queryId.lo + 1);
+
+        
         this.usePipeline = canUsePipeline(this.connectContext, this.fragments);
     }
 
@@ -719,6 +787,28 @@ public class Coordinator {
                     infightFInstanceExecParamList.add(params.instanceExecParams);
                 }
 
+                // if pipeline is enable and current fragment contain olap table sink, in fe we will 
+                // calculate the number of all tablet sinks in advance and assign them to each fragment instance
+                boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
+                int tabletSinkTotalDop = 0;
+                int accTabletSinkDop = 0;
+                if (enablePipelineTableSinkDop) {
+                    for (List<FInstanceExecParam> fInstanceExecParamList : infightFInstanceExecParamList) {
+                        for (FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
+                            if (!forceSetTableSinkDop) {
+                                tabletSinkTotalDop += instanceExecParam.getPipelineDop();
+                            } else {
+                                tabletSinkTotalDop += fragment.getPipelineDop();
+                            }
+                        }
+                    }
+                }
+
+                if (tabletSinkTotalDop < 0) {
+                    throw new UserException("tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
+                }
+
                 boolean isFirst = true;
                 for (List<FInstanceExecParam> fInstanceExecParamList : infightFInstanceExecParamList) {
                     TDescriptorTable descTable = new TDescriptorTable();
@@ -737,7 +827,17 @@ public class Coordinator {
                     Map<TUniqueId, TNetworkAddress> instanceId2Host =
                             fInstanceExecParamList.stream().collect(Collectors.toMap(f -> f.instanceId, f -> f.host));
                     List<TExecPlanFragmentParams> tParams =
-                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine);
+                            params.toThrift(instanceId2Host.keySet(), descTable, dbIds, enablePipelineEngine,
+                                accTabletSinkDop, tabletSinkTotalDop);
+                    if (enablePipelineTableSinkDop) {
+                        for (FInstanceExecParam instanceExecParam : fInstanceExecParamList) {
+                            if (!forceSetTableSinkDop) {
+                                accTabletSinkDop += instanceExecParam.getPipelineDop();
+                            } else {
+                                accTabletSinkDop += fragment.getPipelineDop();
+                            }
+                        }
+                    }
                     List<Pair<BackendExecState, Future<PExecPlanFragmentResult>>> futures = Lists.newArrayList();
 
                     // This is a load process, and it is the first fragment.
@@ -956,6 +1056,29 @@ public class Coordinator {
                     Map<TNetworkAddress, List<FInstanceExecParam>> requestsPerHost = params.instanceExecParams.stream()
                             .collect(Collectors.groupingBy(FInstanceExecParam::getHost, HashMap::new,
                                     Collectors.mapping(Function.identity(), Collectors.toList())));
+                    // if pipeline is enable and current fragment contain olap table sink, in fe we will 
+                    // calculate the number of all tablet sinks in advance and assign them to each fragment instance
+                    boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+                    boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
+                    int tabletSinkTotalDop = 0;
+                    int accTabletSinkDop = 0;
+                    if (enablePipelineTableSinkDop) {
+                        for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : 
+                                    requestsPerHost.entrySet()) {
+                            List<FInstanceExecParam> requests = hostAndRequests.getValue();
+                            for (FInstanceExecParam request : requests) {
+                                if (!forceSetTableSinkDop) {
+                                    tabletSinkTotalDop += request.getPipelineDop();
+                                } else {
+                                    tabletSinkTotalDop += fragment.getPipelineDop();
+                                }
+                            }
+                        }
+                    }
+
+                    if (tabletSinkTotalDop < 0) {
+                        throw new UserException("tabletSinkTotalDop = " + String.valueOf(tabletSinkTotalDop) + " should be >= 0");
+                    }
 
                     for (Map.Entry<TNetworkAddress, List<FInstanceExecParam>> hostAndRequests : requestsPerHost.entrySet()) {
                         TNetworkAddress host = hostAndRequests.getKey();
@@ -988,7 +1111,17 @@ public class Coordinator {
                                 .map(FInstanceExecParam::getInstanceId)
                                 .collect(Collectors.toSet());
                         TExecBatchPlanFragmentsParams tRequest =
-                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine);
+                                params.toThriftInBatch(curInstanceIds, host, curDescTable, dbIds, enablePipelineEngine, 
+                                    accTabletSinkDop, tabletSinkTotalDop);
+                        if (enablePipelineTableSinkDop) {
+                            for (FInstanceExecParam request : requests) {
+                                if (!forceSetTableSinkDop) {
+                                    accTabletSinkDop += request.getPipelineDop();
+                                } else {
+                                    accTabletSinkDop += fragment.getPipelineDop();
+                                }
+                            }
+                        }
                         TExecPlanFragmentParams tCommonParams = tRequest.getCommon_param();
                         List<TExecPlanFragmentParams> tUniqueParamsList = tRequest.getUnique_param_per_instance();
                         Preconditions.checkState(!tUniqueParamsList.isEmpty());
@@ -1825,7 +1958,8 @@ public class Coordinator {
                         parallelExecInstanceNum, pipelineDop, usePipeline, params);
                 computeBucketSeq2InstanceOrdinal(params, fragmentIdToBucketNumMap.get(fragment.getFragmentId()));
             } else {
-                boolean assignScanRangesPerDriverSeq = usePipeline && fragment.isAssignScanRangesPerDriverSeq();
+                boolean assignScanRangesPerDriverSeq = usePipeline && 
+                        (fragment.isAssignScanRangesPerDriverSeq() || fragment.isForceAssignScanRangesPerDriverSeq());
                 for (Map.Entry<TNetworkAddress, Map<Integer, List<TScanRangeParams>>> tNetworkAddressMapEntry :
                         fragmentExecParamsMap.get(fragment.getFragmentId()).scanRangeAssignment.entrySet()) {
                     TNetworkAddress key = tNetworkAddressMapEntry.getKey();
@@ -1850,7 +1984,8 @@ public class Coordinator {
                             params.instanceExecParams.add(instanceParam);
 
                             boolean assignPerDriverSeq = assignScanRangesPerDriverSeq &&
-                                    enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop);
+                                    (enableAssignScanRangesPerDriverSeq(scanRangeParams, pipelineDop) 
+                                    || fragment.isForceAssignScanRangesPerDriverSeq());
                             if (!assignPerDriverSeq) {
                                 instanceParam.perNodeScanRanges.put(planNodeId, scanRangeParams);
                             } else {
@@ -2137,6 +2272,14 @@ public class Coordinator {
                     });
                 }
 
+                if (assignPerDriverSeq) {
+                    instanceParam.nodeToPerDriverSeqScanRanges.forEach((scanId, perDriverSeqScanRanges) -> {
+                        for (int driverSeq = 0; driverSeq < instanceParam.pipelineDop; ++driverSeq) {
+                            perDriverSeqScanRanges.computeIfAbsent(driverSeq, k -> new ArrayList<>());
+                        }
+                    });
+                }
+
                 params.instanceExecParams.add(instanceParam);
             }
         }
@@ -2165,9 +2308,11 @@ public class Coordinator {
             FragmentScanRangeAssignment assignment =
                     fragmentExecParamsMap.get(scanNode.getFragmentId()).scanRangeAssignment;
             if ((scanNode instanceof HdfsScanNode) || (scanNode instanceof IcebergScanNode) ||
-                    scanNode instanceof HudiScanNode) {
+                    scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
+                    queryOptions.setEnable_populate_block_cache(
+                            connectContext.getSessionVariable().getEnablePopulateBlockCache());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,
@@ -2885,7 +3030,8 @@ public class Coordinator {
          */
         private void toThriftForCommonParams(TExecPlanFragmentParams commonParams,
                                              TNetworkAddress destHost, TDescriptorTable descTable,
-                                             boolean isEnablePipelineEngine) {
+                                             boolean isEnablePipelineEngine, int tabletSinkTotalDop) {
+            boolean enablePipelineTableSinkDop = isEnablePipelineEngine && fragment.hasOlapTableSink();
             commonParams.setProtocol_version(InternalServiceVersion.V1);
             commonParams.setFragment(fragment.toThrift());
             commonParams.setDesc_tbl(descTable);
@@ -2897,7 +3043,11 @@ public class Coordinator {
             commonParams.params.setQuery_id(queryId);
             commonParams.params.setInstances_number(hostToNumbers.get(destHost));
             commonParams.params.setDestinations(destinations);
-            commonParams.params.setNum_senders(instanceExecParams.size());
+            if (enablePipelineTableSinkDop) {
+                commonParams.params.setNum_senders(tabletSinkTotalDop);
+            } else {
+                commonParams.params.setNum_senders(instanceExecParams.size());
+            }
             commonParams.params.setPer_exch_num_senders(perExchNumSenders);
             if (runtimeFilterParams.isSetRuntime_filter_builder_number()) {
                 commonParams.params.setRuntime_filter_params(runtimeFilterParams);
@@ -2921,6 +3071,7 @@ public class Coordinator {
                     commonParams.setEnable_shared_scan(
                             sessionVariable.isEnableSharedScan() && fragment.isEnableSharedScan());
                     commonParams.params.setEnable_exchange_pass_through(sessionVariable.isEnableExchangePassThrough());
+                    commonParams.params.setEnable_exchange_perf(sessionVariable.isEnableExchangePerf());
 
                     boolean enableResourceGroup = sessionVariable.isEnableResourceGroup();
                     commonParams.setEnable_resource_group(enableResourceGroup);
@@ -2946,8 +3097,13 @@ public class Coordinator {
          * @param enablePipelineEngine Whether enable pipeline engine.
          */
         private void toThriftForUniqueParams(TExecPlanFragmentParams uniqueParams, int fragmentIndex,
-                                             FInstanceExecParam instanceExecParam, boolean enablePipelineEngine)
+                                             FInstanceExecParam instanceExecParam, boolean enablePipelineEngine,
+                                             int accTabletSinkDop, int curTabletSinkDop)
                 throws Exception {
+            // if pipeline is enable and current fragment contain olap table sink, in fe we will 
+            // calculate the number of all tablet sinks in advance and assign them to each fragment instance
+            boolean enablePipelineTableSinkDop = enablePipelineEngine && fragment.hasOlapTableSink();
+
             uniqueParams.setProtocol_version(InternalServiceVersion.V1);
             uniqueParams.setBackend_num(instanceExecParam.backendNum);
             if (enablePipelineEngine) {
@@ -3002,7 +3158,12 @@ public class Coordinator {
             uniqueParams.params.setPer_node_scan_ranges(scanRanges);
             uniqueParams.params.setNode_to_per_driver_seq_scan_ranges(instanceExecParam.nodeToPerDriverSeqScanRanges);
 
-            uniqueParams.params.setSender_id(fragmentIndex);
+            if (enablePipelineTableSinkDop) {
+                uniqueParams.params.setSender_id(accTabletSinkDop);
+                uniqueParams.params.setPipeline_sink_dop(curTabletSinkDop);
+            } else {
+                uniqueParams.params.setSender_id(fragmentIndex);
+            }
         }
 
         /**
@@ -3039,9 +3200,10 @@ public class Coordinator {
         }
 
         List<TExecPlanFragmentParams> toThrift(Set<TUniqueId> inFlightInstanceIds,
-                                               TDescriptorTable descTable,
-                                               Set<Long> dbIds,
-                                               boolean enablePipelineEngine) throws Exception {
+                                               TDescriptorTable descTable, Set<Long> dbIds,
+                                               boolean enablePipelineEngine, int accTabletSinkDop, 
+                                               int tabletSinkTotalDop) throws Exception {
+            boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
             setBucketSeqToInstanceForRuntimeFilters();
 
             List<TExecPlanFragmentParams> paramsList = Lists.newArrayList();
@@ -3050,23 +3212,36 @@ public class Coordinator {
                 if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
                     continue;
                 }
+                int curTabletSinkDop = 0;
+                if (forceSetTableSinkDop) {
+                    curTabletSinkDop = fragment.getPipelineDop();
+                } else {
+                    curTabletSinkDop = instanceExecParam.getPipelineDop();
+                }
                 TExecPlanFragmentParams params = new TExecPlanFragmentParams();
 
-                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine);
-                toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine);
+                toThriftForCommonParams(params, instanceExecParam.getHost(), descTable, enablePipelineEngine, 
+                        tabletSinkTotalDop);
+                toThriftForUniqueParams(params, i, instanceExecParam, enablePipelineEngine,
+                        accTabletSinkDop, curTabletSinkDop);
 
                 paramsList.add(params);
+                accTabletSinkDop += curTabletSinkDop;
             }
             return paramsList;
         }
 
         TExecBatchPlanFragmentsParams toThriftInBatch(
                 Set<TUniqueId> inFlightInstanceIds, TNetworkAddress destHost, TDescriptorTable descTable,
-                Set<Long> dbIds, boolean enablePipelineEngine) throws Exception {
+                Set<Long> dbIds, boolean enablePipelineEngine, int accTabletSinkDop, 
+                int tabletSinkTotalDop) throws Exception {
+
+            boolean forceSetTableSinkDop = fragment.forceSetTableSinkDop();
+
             setBucketSeqToInstanceForRuntimeFilters();
 
             TExecPlanFragmentParams commonParams = new TExecPlanFragmentParams();
-            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine);
+            toThriftForCommonParams(commonParams, destHost, descTable, enablePipelineEngine, tabletSinkTotalDop);
             fillRequiredFieldsToThrift(commonParams);
 
             List<TExecPlanFragmentParams> uniqueParamsList = Lists.newArrayList();
@@ -3075,12 +3250,20 @@ public class Coordinator {
                 if (!inFlightInstanceIds.contains(instanceExecParam.instanceId)) {
                     continue;
                 }
+                int curTabletSinkDop = 0;
+                if (forceSetTableSinkDop) {
+                    curTabletSinkDop = fragment.getPipelineDop();
+                } else {
+                    curTabletSinkDop = instanceExecParam.getPipelineDop();
+                }
 
                 TExecPlanFragmentParams uniqueParams = new TExecPlanFragmentParams();
-                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine);
+                toThriftForUniqueParams(uniqueParams, i, instanceExecParam, enablePipelineEngine, 
+                        accTabletSinkDop, curTabletSinkDop);
                 fillRequiredFieldsToThrift(uniqueParams);
 
                 uniqueParamsList.add(uniqueParams);
+                accTabletSinkDop += curTabletSinkDop;
             }
 
             TExecBatchPlanFragmentsParams request = new TExecBatchPlanFragmentsParams();

@@ -29,8 +29,8 @@ namespace starrocks {
 
 class StringUtilTest : public testing::Test {
 public:
-    StringUtilTest() {}
-    virtual ~StringUtilTest() {}
+    StringUtilTest() = default;
+    ~StringUtilTest() override = default;
 };
 
 TEST_F(StringUtilTest, normal) {

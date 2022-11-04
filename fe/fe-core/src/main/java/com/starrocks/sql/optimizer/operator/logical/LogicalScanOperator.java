@@ -28,6 +28,7 @@ import java.util.Set;
 
 public abstract class LogicalScanOperator extends LogicalOperator {
     protected final Table table;
+    private final Table.TableType tableType = Table.TableType.OLAP;
 
     /**
      * colRefToColumnMetaMap is the map from column reference to StarRocks column in meta

@@ -2,6 +2,8 @@
 
 #include "exec/vectorized/aggregate/distinct_blocking_node.h"
 
+#include <variant>
+
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_blocking_source_operator.h"
 #include "exec/pipeline/aggregate/aggregate_distinct_streaming_sink_operator.h"
@@ -52,16 +54,9 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
 
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
-            if (false) {
-            }
-#define HASH_SET_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_set<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                *_aggregator->hash_set_variant().NAME, chunk->num_rows()));                                            \
-    }
-            APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
-
+            TRY_CATCH_BAD_ALLOC(_aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+                _aggregator->build_hash_set(*hash_set_with_key, chunk->num_rows());
+            }));
             _mem_tracker->set(_aggregator->hash_set_variant().reserved_memory_usage(_aggregator->mem_pool()));
             TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_set());
 
@@ -81,14 +76,8 @@ Status DistinctBlockingNode::open(RuntimeState* state) {
     if (_aggregator->hash_set_variant().size() == 0) {
         _aggregator->set_ht_eos();
     }
-
-    if (false) {
-    }
-#define HASH_SET_METHOD(NAME)                                                                                \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->hash_set_variant().NAME->hash_set.begin();
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+    _aggregator->hash_set_variant().visit(
+            [&](auto& hash_set_with_key) { _aggregator->it_hash() = hash_set_with_key->hash_set.begin(); });
 
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
 
@@ -110,14 +99,9 @@ Status DistinctBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool
     }
     int32_t chunk_size = runtime_state()->chunk_size();
 
-    if (false) {
-    }
-#define HASH_SET_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_set_variant().type == AggHashSetVariant::Type::NAME)                               \
-            _aggregator->convert_hash_set_to_chunk<decltype(_aggregator->hash_set_variant().NAME)::element_type>( \
-                    *_aggregator->hash_set_variant().NAME, chunk_size, chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_SET_METHOD)
-#undef HASH_SET_METHOD
+    _aggregator->hash_set_variant().visit([&](auto& hash_set_with_key) {
+        _aggregator->convert_hash_set_to_chunk(*hash_set_with_key, chunk_size, chunk);
+    });
 
     size_t old_size = (*chunk)->num_rows();
     eval_join_runtime_filters(chunk->get());
@@ -139,18 +123,21 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
 
     // shared by sink operator and source operator
-
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
         std::vector<ExprContext*> partition_expr_ctxs;
         Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &partition_expr_ctxs);
+        Expr::prepare(partition_expr_ctxs, runtime_state());
+        Expr::open(partition_expr_ctxs, runtime_state());
         auto sink_operator = std::make_shared<AggregateDistinctBlockingSinkOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory, std::move(partition_expr_ctxs));
         auto source_operator = std::make_shared<AggregateDistinctBlockingSourceOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>{sink_operator, source_operator};
     };
 
@@ -167,7 +154,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     // Initialize OperatorFactory's fields involving runtime filters.
     this->init_runtime_filter_for_operator(source_operator.get(), context, rc_rf_probe_collector);
 
-    if (context->need_local_shuffle(ops_with_sink)) {
+    if (could_local_shuffle) {
         auto partition_expr_ctxs =
                 dynamic_cast<AggregateDistinctBlockingSinkOperatorFactory*>(sink_operator.get())->partition_by_exprs();
         ops_with_sink =
@@ -180,8 +167,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctBlockingNode::d
     auto degree_of_parallelism = ((SourceOperatorFactory*)(ops_with_sink[0].get()))->degree_of_parallelism();
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
     dynamic_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
-            ->set_need_local_shuffle(
-                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
+            ->set_could_local_shuffle(
+                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
     ops_with_source.push_back(std::move(source_operator));
 
     if (should_cache) {

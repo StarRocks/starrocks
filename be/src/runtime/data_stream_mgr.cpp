@@ -84,7 +84,7 @@ std::shared_ptr<DataStreamRecvr> DataStreamMgr::find_recvr(const TUniqueId& frag
             return sub_iter->second;
         }
     }
-    return std::shared_ptr<DataStreamRecvr>();
+    return {};
 }
 
 Status DataStreamMgr::transmit_data(const PTransmitDataParams* request, ::google::protobuf::Closure** done) {
@@ -205,8 +205,8 @@ void DataStreamMgr::cancel(const TUniqueId& fragment_instance_id) {
         auto iter = receiver_map.find(fragment_instance_id);
         if (iter != receiver_map.end()) {
             // all of the value should collect
-            for (auto sub_iter = iter->second->begin(); sub_iter != iter->second->end(); sub_iter++) {
-                recvrs.push_back(sub_iter->second);
+            for (auto& sub_iter : *iter->second) {
+                recvrs.push_back(sub_iter.second);
             }
         }
     }
