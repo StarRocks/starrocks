@@ -179,7 +179,8 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
     // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         // shared by sink operator factory and source operator factory
         AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
         AggrMode aggr_mode =
@@ -189,6 +190,7 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > DistinctStreamingNode::
                 context->next_operator_id(), id(), aggregator_factory);
         auto source_operator = std::make_shared<AggregateDistinctStreamingSourceOperatorFactory>(
                 context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
     auto operators = operators_generator(true);
