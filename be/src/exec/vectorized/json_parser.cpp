@@ -4,8 +4,6 @@
 
 #include <fmt/format.h>
 
-#include <algorithm>
-
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::vectorized {
@@ -48,9 +46,6 @@ Status JsonDocumentStreamParser::get_current(simdjson::ondemand::object* row) no
         }
         return Status::EndOfFile("all documents of the stream are iterated");
     } catch (simdjson::simdjson_error& e) {
-        // record current index.
-        _off = _doc_stream_itr.current_index();
-
         std::string err_msg;
         if (e.error() == simdjson::CAPACITY) {
             // It's necessary to tell the user when they try to load json array whose payload size is beyond the simdjson::ondemand::parser's buffer.
@@ -75,7 +70,12 @@ Status JsonDocumentStreamParser::advance() noexcept {
 }
 
 std::string JsonDocumentStreamParser::left_bytes_string(size_t sz) noexcept {
-    return std::string(reinterpret_cast<char*>(_data) + _off, std::min(_len - _off, sz));
+    if (_len == 0) {
+        return {};
+    }
+
+    auto off = _doc_stream_itr.current_index();
+    return std::string(reinterpret_cast<char*>(_data) + off, _len - off);
 }
 
 Status JsonArrayParser::parse(uint8_t* data, size_t len, size_t allocated) noexcept {

@@ -38,8 +38,6 @@ public:
 private:
     uint8_t* _data = nullptr;
     size_t _len = 0;
-    // _off records offset when the parser get failure.
-    size_t _off = 0;
 
     // data is parsed as a document stream.
 
