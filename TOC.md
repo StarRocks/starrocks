@@ -16,7 +16,7 @@
   + [数据模型](/table_design/Data_model.md)
   + 数据分布
     + [数据分布](/table_design/Data_distribution.md)
-    + [动态分区](/table_design/dynamic_partition.md)
+    + [动态分区](/table_design/dynamic_partitioning.md)
     + [临时分区](/table_design/Temporary_partition.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
 + 导入数据
