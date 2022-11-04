@@ -18,7 +18,7 @@
     + [数据分布](/table_design/Data_distribution.md)
     + [临时分区](/table_design/Temporary_partition.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
-+ 数据导入
++ 导入数据
   + [导入总览](/loading/Loading_intro.md)
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
@@ -31,10 +31,6 @@
   + [导入过程中实现数据转换](/loading/Etl_in_loading.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
-+ 数据导出
-  + [导出总览](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
 + 查询数据源
   + [使用 catalog 管理内部和外部数据](/data_source/Manage_data.md)
   + [外部表](/data_source/External_table.md)
@@ -462,7 +458,7 @@
   + [系统变量](/reference/System_variable.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
-+ 数据导出
++ 导出数据
   + [导出总览](/unloading/Export.md)
   + [Spark Connector](/unloading/Spark_connector.md)
   + [Flink Connector](/unloading/Flink_connector.md)
