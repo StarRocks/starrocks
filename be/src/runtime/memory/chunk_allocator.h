@@ -29,7 +29,7 @@
 
 namespace starrocks {
 
-class Chunk;
+struct Chunk;
 class ChunkArena;
 class MemTracker;
 

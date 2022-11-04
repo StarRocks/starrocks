@@ -17,10 +17,9 @@
 #include "util/hash_util.hpp"
 #include "util/spinlock.h"
 
-namespace starrocks {
-namespace debug {
+namespace starrocks::debug {
 
-class QueryTraceContext;
+struct QueryTraceContext;
 
 struct QueryTraceEvent {
     std::string name;
@@ -138,5 +137,4 @@ inline thread_local QueryTraceContext tls_trace_ctx;
             buffer->add(event);                       \
         }                                             \
     } while (0);
-} // namespace debug
-} // namespace starrocks
+} // namespace starrocks::debug
