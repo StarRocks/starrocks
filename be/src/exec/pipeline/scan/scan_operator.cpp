@@ -325,7 +325,7 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
             [[maybe_unused]] std::string category;
-            category = fmt::sprintf("chunk_source_0x%x", query_trace_ctx.id);
+            category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 
             DeferOp timer_defer([chunk_source]() {

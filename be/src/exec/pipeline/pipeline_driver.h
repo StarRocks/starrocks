@@ -159,7 +159,7 @@ public:
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
         }
-        _driver_name = fmt::sprintf("driver(node=%d/id=%d)", _source_node_id, _driver_id);
+        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
     }
 
     PipelineDriver(const PipelineDriver& driver)
