@@ -167,7 +167,8 @@ private:
     //
     // col_int   | col_map
     // 7         | {"abc-123":-327}
-    std::string _file_map_char_key_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test_map_char_key.parquet";
+    std::string _file_map_char_key_path =
+            "./be/test/exec/test_data/parquet_scanner/file_reader_test_map_char_key.parquet";
 
     // c0                      int
     // c1                      struct<c1_0:int,c1_1:array<int>>
