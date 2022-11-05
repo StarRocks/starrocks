@@ -26,7 +26,7 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
     }
     try {
         if (src.empty()) {
-            return JsonValue(noneJsonSlice());
+            return JsonValue(emptyStringJsonSlice());
         }
         // Check the first character for its type
         auto end = src.get_data() + src.get_size();
@@ -50,7 +50,7 @@ StatusOr<JsonValue> JsonValue::parse_json_or_string(const Slice& src) {
 Status JsonValue::parse(const Slice& src, JsonValue* out) {
     try {
         if (src.empty()) {
-            *out = JsonValue(noneJsonSlice());
+            *out = JsonValue(emptyStringJsonSlice());
             return Status::OK();
         }
         if (src.size > kJSONLengthLimit) {
