@@ -99,7 +99,7 @@ private:
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
                                      const orc::Type& orc_type, const bool case_sensitive);
 
-    Status set_include_column_id_by_type(const OrcMappingPtr mapping, const TypeDescriptor& desc,
+    Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
                                          std::list<uint64_t>* column_id_list);
 
     static std::string format_column_name(const std::string& col_name, bool case_sensitive);

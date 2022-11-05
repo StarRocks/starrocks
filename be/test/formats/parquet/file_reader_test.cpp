@@ -481,10 +481,14 @@ HdfsScannerContext* FileReaderTest::_create_file_map_char_key_context() {
     TypeDescriptor type_map_char(PrimitiveType::TYPE_MAP);
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR));
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_char.selected_fields.emplace_back(true);
+    type_map_char.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_varchar(PrimitiveType::TYPE_MAP);
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_varchar.selected_fields.emplace_back(true);
+    type_map_varchar.selected_fields.emplace_back(true);
 
     SlotDesc slot_descs[] = {
             {"c1", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT)},
@@ -1055,10 +1059,14 @@ TEST_F(FileReaderTest, TestReadMapCharKeyColumn) {
     TypeDescriptor type_map_char(PrimitiveType::TYPE_MAP);
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_CHAR));
     type_map_char.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_char.selected_fields.emplace_back(true);
+    type_map_char.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_varchar(PrimitiveType::TYPE_MAP);
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_varchar.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map_varchar.selected_fields.emplace_back(true);
+    type_map_varchar.selected_fields.emplace_back(true);
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);

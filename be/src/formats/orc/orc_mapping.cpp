@@ -155,7 +155,7 @@ Status OrcMapping::set_include_column_id(const uint64_t slot_pos, const TypeDesc
     return Status::OK();
 }
 
-Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr mapping, const TypeDescriptor& desc,
+Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
                                                  std::list<uint64_t>* column_id_list) {
     DCHECK(mapping != nullptr);
     DCHECK(desc.is_complex_type());
