@@ -297,6 +297,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+    public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -732,6 +733,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
+
+    @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
+    private int nestedMvRewriteMaxLevel = 3;
     
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
@@ -1363,6 +1367,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
+    }
+
+    public int getNestedMvRewriteMaxLevel() {
+        return nestedMvRewriteMaxLevel;
+    }
+
+    // 1 means the mvs directly based on base table
+    public void setNestedMvRewriteMaxLevel(int nestedMvRewriteMaxLevel) {
+        if (nestedMvRewriteMaxLevel <= 0) {
+            nestedMvRewriteMaxLevel = 1;
+        }
+        this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
     }
 
     // Serialize to thrift object
