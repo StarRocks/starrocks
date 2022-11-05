@@ -52,12 +52,6 @@ if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/pulsar/Client.h ]]; then
     ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
 fi
 
-WITH_BLOCK_CACHE=OFF
-if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
-    echo "Thirdparty libraries need to be build ..."
-    ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
-fi
-
 PARALLEL=$[$(nproc)/4+1]
 
 # Check args
@@ -128,11 +122,22 @@ if [[ -z $(grep -o 'sse[^ ]*' /proc/cpuinfo) ]]; then
     USE_SSE4_2=OFF
 fi
 
+if [[ -z ${WITH_BLOCK_CACHE} ]]; then
+	WITH_BLOCK_CACHE=OFF
+fi
+
+if [[ "${WITH_BLOCK_CACHE}" == "ON" && ! -f ${STARROCKS_THIRDPARTY}/installed/cachelib/lib/libcachelib_allocator.a ]]; then
+    echo "WITH_BLOCK_CACHE=ON but missing depdency libraries(cachelib)"
+    exit 1
+fi
+
 if [[ -z ${ENABLE_QUERY_DEBUG_TRACE} ]]; then
 	ENABLE_QUERY_DEBUG_TRACE=OFF
 fi
 
-USE_JEMALLOC=ON
+if [[ -z ${USE_JEMALLOC} ]]; then
+    USE_JEMALLOC=ON
+fi
 
 HELP=0
 if [ $# == 1 ] ; then
@@ -197,6 +202,8 @@ echo "Get params:
     USE_AVX2            -- $USE_AVX2
     PARALLEL            -- $PARALLEL
     ENABLE_QUERY_DEBUG_TRACE -- $ENABLE_QUERY_DEBUG_TRACE
+    WITH_BLOCK_CACHE    -- $WITH_BLOCK_CACHE
+    USE_JEMALLOC        -- $USE_JEMALLOC
 "
 
 # Clean and build generated code

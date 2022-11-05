@@ -51,6 +51,7 @@ public:
         _runtime_filters = runtime_filters;
     }
     void set_read_limit(const uint64_t limit) { _read_limit = limit; }
+    Status parse_runtime_filters(RuntimeState* state);
 
 protected:
     int64_t _read_limit = -1; // no limit
@@ -58,7 +59,6 @@ protected:
     const vectorized::RuntimeFilterProbeCollector* _runtime_filters;
     RuntimeProfile* _runtime_profile;
     const TupleDescriptor* _tuple_desc = nullptr;
-
     void _init_chunk(vectorized::ChunkPtr* chunk, size_t n) { *chunk = ChunkHelper::new_chunk(*_tuple_desc, n); }
 };
 
