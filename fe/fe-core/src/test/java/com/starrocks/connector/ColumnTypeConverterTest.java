@@ -89,7 +89,7 @@ public class ColumnTypeConverterTest {
         Type resType = fromHiveTypeToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createDefaultString();
+        itemType = ScalarType.createDefaultExternalTableString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = fromHiveTypeToArrayType(typeStr);
@@ -147,7 +147,7 @@ public class ColumnTypeConverterTest {
         Assert.assertEquals(mapType, resType);
 
         keyType = ScalarType.createType(PrimitiveType.DATE);
-        valueType = ScalarType.createDefaultString();
+        valueType = ScalarType.createDefaultExternalTableString();
         mapType = new MapType(keyType, valueType);
         typeStr = "map<date,string>";
         resType = fromHiveTypeToMapType(typeStr);
@@ -214,7 +214,7 @@ public class ColumnTypeConverterTest {
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
-        Type stringType = ScalarType.createDefaultString();
+        Type stringType = ScalarType.createDefaultExternalTableString();
         typeStr = "string";
         resType = ColumnTypeConverter.fromHiveType(typeStr);
         Assert.assertEquals(resType, stringType);
