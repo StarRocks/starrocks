@@ -444,7 +444,7 @@ The mapping between the target database and StarRocks varies based on the type o
 
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
-## Hive external table
+## Apache Hive external table
 
 ### Create a Hive resource
 
@@ -778,7 +778,7 @@ After an external table is created, you can query the data in Apache Iceberg by 
 select count(*) from iceberg_tbl;
 ~~~
 
-## Hudi external table
+## Apache Hudi external table
 
 StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
 
