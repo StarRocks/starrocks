@@ -4,10 +4,8 @@ package com.starrocks.sql.optimizer;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
@@ -206,16 +204,15 @@ public class Optimizer {
     private void registerMaterializedViews(OptExpression logicOperatorTree, ConnectContext connectContext) {
         List<Table> tables = Utils.getAllTables(logicOperatorTree);
 
-        // include nested materialized views
-        Set<MaterializedView> relatedMvs = Sets.newHashSet();
-        Utils.getRelatedMvs(tables, relatedMvs);
+        // get all related materialized views, include nested mvs
+        Set<MaterializedView> relatedMvs =
+                Utils.getRelatedMvs(connectContext.getSessionVariable().getNestedMvRewriteMaxLevel(), tables);
 
         for (MaterializedView mv : relatedMvs) {
             if (!mv.isActive()) {
                 continue;
             }
-            Set<String> partitionNamesToRefresh = Sets.newHashSet();
-            // Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
+            Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
             PartitionInfo partitionInfo = mv.getPartitionInfo();
             if (partitionInfo instanceof SinglePartitionInfo) {
                 if (!partitionNamesToRefresh.isEmpty()) {
@@ -228,23 +225,16 @@ public class Optimizer {
             }
 
             // 1. build mv query logical plan
-            String mvSql = mv.getViewDefineSql();
             ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-            Pair<OptExpression, LogicalPlan> plans = Utils.getRuleOptimizedLogicalPlan(mvSql, columnRefFactory, connectContext);
-            if (plans == null) {
-                continue;
-            }
-            OptExpression mvPlan = plans.first;
+            MaterializedViewOptimizer mvOptimizer = new MaterializedViewOptimizer();
+            OptExpression mvPlan = mvOptimizer.optimize(mv, columnRefFactory, connectContext);
             if (!Utils.isValidMVPlan(mvPlan)) {
                 continue;
             }
-            if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
-                Utils.updatePartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, mvPlan);
-            }
 
-            List<ColumnRefOperator> outputExpressions = plans.second.getOutputColumn();
-            MaterializationContext materializationContext = new MaterializationContext(mv, mvPlan,
-                    columnRefFactory, outputExpressions, partitionNamesToRefresh);
+            List<ColumnRefOperator> outputExpressions = mvOptimizer.getOutputExpressions();
+            MaterializationContext materializationContext = new MaterializationContext(
+                    mv, mvPlan, columnRefFactory, outputExpressions);
 
             // generate scan mv plan
             Database db = context.getCatalog().getDb(mv.getDbId());
@@ -252,16 +242,15 @@ public class Optimizer {
             String selectMvSql = "select * from " + tableName.toSql();
             Pair<OptExpression, LogicalPlan> scanMvPlans =
                     Utils.getRuleOptimizedLogicalPlan(selectMvSql, context.getColumnRefFactory(), connectContext);
-            OptExpression mvOptimizedPlan = scanMvPlans.first;
-            if (!Utils.isLogicalSPJ(mvOptimizedPlan)) {
+            OptExpression scanMvPlan = scanMvPlans.first;
+            if (!Utils.isLogicalSPJ(scanMvPlan)) {
                 continue;
             }
-            if (!(mvOptimizedPlan.getOp() instanceof LogicalOlapScanOperator)) {
+            if (!(scanMvPlan.getOp() instanceof LogicalOlapScanOperator)) {
                 continue;
             }
-            materializationContext.setScanMvOperator(mvOptimizedPlan.getOp());
-            List<ColumnRefOperator> mvOutputExpressions = scanMvPlans.second.getOutputColumn();
-            materializationContext.setScanMvOutputExpressions(mvOutputExpressions);
+            materializationContext.setScanMvOperator(scanMvPlan.getOp());
+            materializationContext.setScanMvOutputExpressions(scanMvPlans.second.getOutputColumn());
             context.addCandidateMvs(materializationContext);
         }
     }

@@ -2,10 +2,9 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
@@ -23,6 +22,8 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
@@ -179,7 +180,8 @@ public class OptimizerTest {
                         "PARTITION BY RANGE(k1)\n" +
                         "(\n" +
                         "    PARTITION p1 values [('2022-02-01'),('2022-02-16')),\n" +
-                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01'))\n" +
+                        "    PARTITION p2 values [('2022-02-16'),('2022-03-01')),\n" +
+                        "    PARTITION p3 values [('2022-03-01'),('2022-03-10'))\n" +
                         ")\n" +
                         "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
                         "PROPERTIES('replication_num' = '1');")
@@ -196,7 +198,7 @@ public class OptimizerTest {
         refreshMaterializedView("test", "mv_3");
         refreshMaterializedView("test", "mv_4");
 
-        cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-21\", 20, 30)");
+        cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
 
         String sql = "select k1, sum(v1) from tbl_with_mv group by k1";
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
@@ -215,18 +217,56 @@ public class OptimizerTest {
         Assert.assertEquals("mv_4", materializationContext.getMv().getName());
 
         MaterializedView mv = getMv("test", "mv_4");
-        ExpressionRangePartitionInfo partitionInfo = (ExpressionRangePartitionInfo) mv.getPartitionInfo();
-        Expr partitionExpr = partitionInfo.getPartitionExprs().get(0);
-        Pair<Table, Column> partitionTableAndColumn = Utils.getPartitionTableAndColumn(partitionExpr, mv.getBaseTableInfos());
+        Pair<Table, Column> partitionTableAndColumn = mv.getPartitionTableAndColumn();
         Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-        List<OptExpression> scanExpr = Utils.collectScanExprs(logicalPlan.getRoot());
+        List<OptExpression> scanExpr = Utils.collectScanExprs(materializationContext.getMvExpression());
         Assert.assertEquals(1, scanExpr.size());
         Assert.assertNotNull(scanExpr.get(0).getOp().getPredicate());
         ScalarOperator scalarOperator  = scanExpr.get(0).getOp().getPredicate();
         Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
+        Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
+
+        refreshMaterializedView("test", "mv_4");
+        cluster.runSql("test", "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
+        Optimizer optimizer2 = new Optimizer();
+        OptExpression expr2 = optimizer2.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+        Assert.assertNotNull(expr2);
+        MaterializationContext materializationContext2 = optimizer2.getContext().getCandidateMvs().iterator().next();
+        Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
+        List<OptExpression> scanExpr2 = Utils.collectScanExprs(materializationContext2.getMvExpression());
+        Assert.assertEquals(1, scanExpr2.size());
+        Assert.assertNotNull(scanExpr2.get(0).getOp().getPredicate());
+        ScalarOperator scalarOperator2  = scanExpr2.get(0).getOp().getPredicate();
+        Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
+        Assert.assertTrue(((CompoundPredicateOperator) scalarOperator2).isOr());
 
         starRocksAssert.dropMaterializedView("mv_3");
         starRocksAssert.dropMaterializedView("mv_4");
+
+        starRocksAssert.withNewMaterializedView("create materialized view mv_5\n" +
+                "PARTITION BY date_trunc(\"month\", k1)\n" +
+                "distributed by hash(k2) buckets 3\n" +
+                "refresh manual\n" +
+                "as select k1, k2, v1  from tbl_with_mv;");
+        refreshMaterializedView("test", "mv_5");
+        cluster.runSql("test", "insert into tbl_with_mv partition(p3) values(\"2020-03-05\", 20, 30)");
+        Optimizer optimizer3 = new Optimizer();
+        OptExpression expr3 = optimizer3.optimize(connectContext, logicalPlan.getRoot(), new PhysicalPropertySet(),
+                new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+        Assert.assertNotNull(expr3);
+        MaterializationContext materializationContext3 = optimizer3.getContext().getCandidateMvs().iterator().next();
+        Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
+        List<OptExpression> scanExpr3 = Utils.collectScanExprs(materializationContext3.getMvExpression());
+        Assert.assertEquals(1, scanExpr3.size());
+        Assert.assertNotNull(scanExpr3.get(0).getOp().getPredicate());
+        ScalarOperator scalarOperator3  = scanExpr3.get(0).getOp().getPredicate();
+        Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
+        Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
+        Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
+        Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof CallOperator);
+        CallOperator callOperator = (CallOperator) scalarOperator3.getChild(0).getChild(0);
+        Assert.assertEquals(FunctionSet.DATE_TRUNC, callOperator.getFnName());
     }
 }

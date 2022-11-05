@@ -3,35 +3,28 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.List;
-import java.util.Set;
 
 public class MaterializationContext {
     private MaterializedView mv;
     // scan materialized view operator
     private Operator scanMvOperator;
-    // Logical OptExpression for query of materialized view
+    // logical OptExpression for query of materialized view
     private OptExpression mvExpression;
 
-    // for column -> relationId mapping, column -> table mapping
     private ColumnRefFactory mvColumnRefFactory;
 
     // output expressions of mv define sql
-    List<ColumnRefOperator> mvOutputExpressions;
+    private List<ColumnRefOperator> mvOutputExpressions;
 
     // output expressions of select * from mv
-    List<ColumnRefOperator> scanMvOutputExpressions;
+    private List<ColumnRefOperator> scanMvOutputExpressions;
 
-    // for partitioned mv, records the partitions that need to be refreshed
-    Set<String> partitionNamesToRefresh;
-
-    // Logical OptExpression for query
+    // logical OptExpression for query
     private OptExpression queryExpression;
 
     private ColumnRefFactory queryRefFactory;
@@ -41,13 +34,11 @@ public class MaterializationContext {
     public MaterializationContext(MaterializedView mv,
                                   OptExpression mvExpression,
                                   ColumnRefFactory columnRefFactory,
-                                  List<ColumnRefOperator> mvOutputExpressions,
-                                  Set<String> partitionNamesToRefresh) {
+                                  List<ColumnRefOperator> mvOutputExpressions) {
         this.mv = mv;
         this.mvExpression = mvExpression;
         this.mvColumnRefFactory = columnRefFactory;
         this.mvOutputExpressions = mvOutputExpressions;
-        this.partitionNamesToRefresh = partitionNamesToRefresh;
     }
 
     public MaterializedView getMv() {
@@ -104,9 +95,5 @@ public class MaterializationContext {
 
     public void setOptimizerContext(OptimizerContext optimizerContext) {
         this.optimizerContext = optimizerContext;
-    }
-
-    public Set<String> getPartitionNamesToRefresh() {
-        return partitionNamesToRefresh;
     }
 }
