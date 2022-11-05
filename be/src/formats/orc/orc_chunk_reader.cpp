@@ -914,8 +914,7 @@ static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
     auto* col_array = down_cast<ArrayColumn*>(col_nullable->data_column().get());
 
     if (!orc_list->hasNulls) {
-        fill_array_column(orc_list, col_nullable->data_column(), from, size, type_desc, mapping,
-                          ctx);
+        fill_array_column(orc_list, col_nullable->data_column(), from, size, type_desc, mapping, ctx);
         col_nullable->null_column()->resize(col_array->size());
         return;
     }
@@ -931,8 +930,7 @@ static void fill_array_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& 
             j++;
         }
         if (j > i) {
-            fill_array_column(orc_list, col_nullable->data_column(), i, j - i, type_desc, mapping,
-                              ctx);
+            fill_array_column(orc_list, col_nullable->data_column(), i, j - i, type_desc, mapping, ctx);
             col_nullable->null_column()->resize(col_array->size());
         }
 
@@ -1042,8 +1040,8 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
 
         orc::ColumnVectorBatch* field_cvb = orc_list->fieldsColumnIdMap[column_id];
         const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
-        fn_fill_elements(field_cvb, field_columns[child_index], from, size, field_type,
-                             mapping->get_child_mapping(i), ctx);
+        fn_fill_elements(field_cvb, field_columns[child_index], from, size, field_type, mapping->get_child_mapping(i),
+                         ctx);
         child_index++;
     }
 
