@@ -662,39 +662,39 @@ public class PrivilegeManager {
         }
     }
 
+    protected boolean checkAction(
+            PrivilegeCollection collection, PrivilegeType type, String actionName, List<String> objectNames)
+            throws PrivilegeException {
+        short typeId = analyzeType(type.name());
+        Action want = provider.getAction(typeId, actionName);
+        if (objectNames == null) {
+            return provider.check(typeId, want, null, collection);
+        } else {
+            PEntryObject object = provider.generateObject(
+                    type.name(), objectNames, globalStateMgr);
+            return provider.check(typeId, want, object, collection);
+        }
+    }
+
     protected boolean checkSystemAction(PrivilegeCollection collection, PrivilegeType.SystemAction action)
             throws PrivilegeException {
-        short systemTypeId = analyzeType(PrivilegeType.SYSTEM.name());
-        Action want = provider.getAction(systemTypeId, action.name());
-        return provider.check(systemTypeId, want, null, collection);
+        return checkAction(collection, PrivilegeType.SYSTEM, action.name(), null);
     }
 
     protected boolean checkTableAction(
             PrivilegeCollection collection, String db, String table, PrivilegeType.TableAction action)
             throws PrivilegeException {
-        short tableTypeId = analyzeType(PrivilegeType.TABLE.name());
-        Action want = provider.getAction(tableTypeId, action.name());
-        PEntryObject object = provider.generateObject(
-                PrivilegeType.TABLE.name(), Arrays.asList(db, table), globalStateMgr);
-        return provider.check(tableTypeId, want, object, collection);
+        return checkAction(collection, PrivilegeType.TABLE, action.name(), Arrays.asList(db, table));
     }
 
     protected boolean checkDbAction(PrivilegeCollection collection, String db, PrivilegeType.DbAction action)
             throws PrivilegeException {
-        short dbTypeId = analyzeType(PrivilegeType.DATABASE.name());
-        Action want = provider.getAction(dbTypeId, action.name());
-        PEntryObject object = provider.generateObject(
-                PrivilegeType.DATABASE.name(), Arrays.asList(db), globalStateMgr);
-        return provider.check(dbTypeId, want, object, collection);
+        return checkAction(collection, PrivilegeType.DATABASE, action.name(), Arrays.asList(db));
     }
 
     protected boolean checkResourceAction(PrivilegeCollection collection, String name, PrivilegeType.ResourceAction action)
             throws PrivilegeException {
-        short typeId = analyzeType(PrivilegeType.RESOURCE.name());
-        Action want = provider.getAction(typeId, action.name());
-        PEntryObject object = provider.generateObject(
-                PrivilegeType.RESOURCE.name(), Arrays.asList(name), globalStateMgr);
-        return provider.check(typeId, want, object, collection);
+        return checkAction(collection, PrivilegeType.RESOURCE, action.name(), Arrays.asList(name));
     }
 
     public boolean canExecuteAs(ConnectContext context, UserIdentity impersonateUser) {
