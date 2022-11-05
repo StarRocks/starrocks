@@ -53,7 +53,6 @@ public:
 
     void pin_chunk_token(ChunkBufferTokenPtr chunk_token);
     void unpin_chunk_token();
-    uint32_t get_pseudo_unique_id() const { return _pseudo_unique_id; }
 
 protected:
     // MUST be implemented by different ChunkSource
@@ -80,9 +79,6 @@ protected:
     BalancedChunkBuffer& _chunk_buffer;
     Status _status = Status::OK();
     ChunkBufferTokenPtr _chunk_token;
-
-    // It's only for trace, so no need to 100% unique.
-    uint32_t _pseudo_unique_id = 0;
 
 private:
     // _scan_timer = _io_task_wait_timer + _io_task_exec_timer

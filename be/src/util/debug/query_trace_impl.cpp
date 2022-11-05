@@ -33,8 +33,8 @@ QueryTraceEvent QueryTraceEvent::create(const std::string& name, const std::stri
 
 QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const std::string& category, int64_t id,
                                                  char phase, const QueryTraceContext& ctx) {
-    return create(name, category, id, phase, MonotonicMicros() - ctx.start_ts, -1, ctx.fragment_instance_id, ctx.driver,
-                  {});
+    return create(name, category, id, phase, MonotonicMicros() - ctx.start_ts, QueryTraceContext::DEFAULT_EVENT_ID,
+                  ctx.fragment_instance_id, ctx.driver, {});
 }
 
 QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const std::string& category, int64_t id,
@@ -44,20 +44,20 @@ QueryTraceEvent QueryTraceEvent::create_with_ctx(const std::string& name, const 
 }
 
 static const char* kSimpleEventFormat =
-        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
+        R"({"cat":"%s","name":"%s","pid":"0x%x","tid":"0x%x","id":"0x%x","ts":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
 static const char* kCompleteEventFormat =
-        R"({"cat":"%s","name":"%s","pid":"%ld","tid":"%ld","id":"%ld","ts":%ld,"dur":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
+        R"({"cat":"%s","name":"%s","pid":"0x%x","tid":"0x%x","id":"0x%x","ts":%ld,"dur":%ld,"ph":"%c","args":%s,"tidx":"0x%x"})";
 
 std::string QueryTraceEvent::to_string() {
     std::string args_str = args_to_string();
     size_t tidx = std::hash<std::thread::id>{}(thread_id);
 
     if (phase == 'X') {
-        return fmt::sprintf(kCompleteEventFormat, category.c_str(), name.c_str(), instance_id, (int64_t)driver, id,
-                            timestamp, duration, phase, args_str.c_str(), tidx);
+        return fmt::sprintf(kCompleteEventFormat, category.c_str(), name.c_str(), (uint64_t)instance_id,
+                            (uint64_t)driver, id, timestamp, duration, phase, args_str.c_str(), tidx);
     } else {
-        return fmt::sprintf(kSimpleEventFormat, category.c_str(), name.c_str(), instance_id, (int64_t)driver, id,
-                            timestamp, phase, args_str.c_str(), tidx);
+        return fmt::sprintf(kSimpleEventFormat, category.c_str(), name.c_str(), (uint64_t)instance_id, (uint64_t)driver,
+                            id, timestamp, phase, args_str.c_str(), tidx);
     }
 }
 
@@ -182,8 +182,9 @@ ScopedTracer::ScopedTracer(std::string name, std::string category)
 ScopedTracer::~ScopedTracer() {
     if (tls_trace_ctx.event_buffer != nullptr) {
         _duration = MonotonicMicros() - _start_ts;
-        tls_trace_ctx.event_buffer->add(QueryTraceEvent::create_with_ctx(
-                _name, _category, -1, 'X', _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
+        tls_trace_ctx.event_buffer->add(
+                QueryTraceEvent::create_with_ctx(_name, _category, QueryTraceContext::DEFAULT_EVENT_ID, 'X',
+                                                 _start_ts - tls_trace_ctx.start_ts, _duration, tls_trace_ctx));
     }
 }
 

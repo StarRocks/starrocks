@@ -16,11 +16,7 @@ ChunkSource::ChunkSource(int32_t scan_operator_id, RuntimeProfile* runtime_profi
           _runtime_profile(runtime_profile),
           _morsel(std::move(morsel)),
           _chunk_buffer(chunk_buffer),
-          _chunk_token(nullptr) {
-    std::random_device rd;
-    std::mt19937 gen32(rd());
-    _pseudo_unique_id = gen32() & 0x0ffffff;
-}
+          _chunk_token(nullptr) {}
 
 Status ChunkSource::prepare(RuntimeState* state) {
     _scan_timer = ADD_TIMER(_runtime_profile, "ScanTime");

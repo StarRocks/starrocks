@@ -324,8 +324,8 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
             auto& chunk_source = _chunk_sources[chunk_source_index];
-            [[maybe_unused]] char category[64];
-            snprintf(category, sizeof(category), "chunk_source_0x%x", chunk_source->get_pseudo_unique_id());
+            [[maybe_unused]] std::string category;
+            category = fmt::sprintf("chunk_source_0x%x", query_trace_ctx.id);
             QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 
             DeferOp timer_defer([chunk_source]() {
