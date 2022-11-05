@@ -620,11 +620,16 @@ class MinMaxPredicate : public Expr {
 public:
     using CppType = RunTimeCppType<Type>;
     MinMaxPredicate(SlotId slot_id, const CppType& min_value, const CppType& max_value)
-            : Expr(TypeDescriptor(Type), false), _slot_id(slot_id), _min_value(min_value), _max_value(max_value) {}
+            : Expr(TypeDescriptor(Type), false), _slot_id(slot_id), _min_value(min_value), _max_value(max_value) {
+        _node_type = TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR;
+    }
     ~MinMaxPredicate() override = default;
     Expr* clone(ObjectPool* pool) const override {
         return pool->add(new MinMaxPredicate<Type>(_slot_id, _min_value, _max_value));
     }
+
+    bool is_constant() const override { return false; }
+    bool is_bound(const std::vector<TupleId>& tuple_ids) const override { return false; }
 
     ColumnPtr evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) override {
         const vectorized::ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
