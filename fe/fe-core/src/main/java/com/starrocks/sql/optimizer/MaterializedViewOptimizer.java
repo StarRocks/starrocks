@@ -47,7 +47,7 @@ public class MaterializedViewOptimizer {
         OptExpression mvPlan = plans.first;
         Set<String> partitionNamesToRefresh = mv.getPartitionNamesToRefreshForMv();
         if (mv.getPartitionInfo() instanceof ExpressionRangePartitionInfo && !partitionNamesToRefresh.isEmpty()) {
-            updatePartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, mvPlan);
+            getPartialPartitionPredicate(mv, columnRefFactory, partitionNamesToRefresh, mvPlan);
         }
         return mvPlan;
     }
@@ -56,8 +56,13 @@ public class MaterializedViewOptimizer {
         return outputExpressions;
     }
 
-    public void updatePartialPartitionPredicate(MaterializedView mv, ColumnRefFactory columnRefFactory,
-                                                       Set<String> partitionsToRefresh, OptExpression mvPlan) {
+    // try to get partitial partition predicate of partitioned mv.
+    // for example, mv1 has two partition: p1:[2022-01-01, 2022-01-02), p2:[2022-01-02, 2022-01-03).
+    // p1 is updated, p2 is outdated.
+    // mv1's base partition table is t1, partition column is k1.
+    // then this function will add predicate: k1 >= "2022-01-01" and k1 < "2022-01-02" to scan node of t1
+    public void getPartialPartitionPredicate(MaterializedView mv, ColumnRefFactory columnRefFactory,
+                                             Set<String> partitionsToRefresh, OptExpression mvPlan) {
         // to support partial partition rewrite
         PartitionInfo partitionInfo = mv.getPartitionInfo();
         if (!(partitionInfo instanceof ExpressionRangePartitionInfo)) {
