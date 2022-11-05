@@ -123,7 +123,7 @@ Status QueryTrace::dump() {
         std::string file_name =
                 fmt::format("{}/{}.json", starrocks::config::query_debug_trace_dir, print_id(_query_id));
         std::ofstream oss(file_name.c_str(), std::ios::out | std::ios::binary);
-        oss << "{\"traceEvents\":[";
+        oss << "{\"traceEvents\":[\n";
         bool is_first = true;
         for (auto& [fragment_id, driver_set] : _fragment_drivers) {
             std::string fragment_id_str = print_id(fragment_id);
@@ -145,7 +145,7 @@ Status QueryTrace::dump() {
                 oss << iter.to_string();
             }
         }
-        oss << "]}";
+        oss << "\n]}";
 
         oss.close();
     } catch (std::exception& e) {
