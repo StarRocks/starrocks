@@ -25,17 +25,11 @@ The time interval starts from A.D. `0001-01-01 00:00:00`.
 
 ## Examples
 
-Example 1: Convert a given time to the start time of a 5-second time interval.
-
-In this example, the time granularity is 5 second. The first time interval is from `2022-04-26 19:01:00` to `2022-04-26 19:01:04`. `2022-04-26 19:01:07` falls into the second interval which starts from `2022-04-26 19:01:05` and this value is returned.
+Example 1: Can't use time_slice for date with time(hour/minute/second).
 
 ```Plain
 mysql> select time_slice('2022-04-26 19:01:07', interval 5 second);
-+------------------------------------------------------+
-| time_slice('2022-04-26 19:01:07', INTERVAL 5 SECOND) |
-+------------------------------------------------------+
-| 2022-04-26 19:01:05                                  |
-+------------------------------------------------------+
+ERROR 1064 (HY000): can't use time_slice for date with time(hour/minute/second)
 ```
 
 Example 2: Convert a given time to the start time of a 5-day time interval.
