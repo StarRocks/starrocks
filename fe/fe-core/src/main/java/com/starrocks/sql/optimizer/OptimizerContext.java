@@ -2,7 +2,7 @@
 
 package com.starrocks.sql.optimizer;
 
-import com.google.common.collect.Sets;
+import com.google.common.collect.Lists;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.VariableMgr;
@@ -14,7 +14,7 @@ import com.starrocks.sql.optimizer.task.SeriallyTaskScheduler;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
 
-import java.util.Set;
+import java.util.List;
 
 public class OptimizerContext {
     private final Memo memo;
@@ -28,7 +28,7 @@ public class OptimizerContext {
     private TaskContext currentTaskContext;
     private OptimizerTraceInfo traceInfo;
     private OptimizerConfig optimizerConfig;
-    private Set<MaterializationContext> candidateMvs;
+    private List<MaterializationContext> candidateMvs;
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory) {
         this.memo = memo;
@@ -38,7 +38,7 @@ public class OptimizerContext {
         this.columnRefFactory = columnRefFactory;
         this.sessionVariable = VariableMgr.newSessionVariable();
         this.optimizerConfig = new OptimizerConfig();
-        this.candidateMvs = Sets.newHashSet();
+        this.candidateMvs = Lists.newArrayList();
     }
 
     public OptimizerContext(Memo memo, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
@@ -60,7 +60,7 @@ public class OptimizerContext {
         this.cteContext.setInlineCTERatio(sessionVariable.getCboCTERuseRatio());
         this.cteContext.setMaxCTELimit(sessionVariable.getCboCTEMaxLimit());
         this.optimizerConfig = optimizerConfig;
-        this.candidateMvs = Sets.newHashSet();
+        this.candidateMvs = Lists.newArrayList();
     }
 
     public Memo getMemo() {
@@ -119,7 +119,7 @@ public class OptimizerContext {
         return optimizerConfig;
     }
 
-    public Set<MaterializationContext> getCandidateMvs() {
+    public List<MaterializationContext> getCandidateMvs() {
         return candidateMvs;
     }
 

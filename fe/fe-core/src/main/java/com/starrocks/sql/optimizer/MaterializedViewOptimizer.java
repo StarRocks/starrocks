@@ -181,20 +181,4 @@ public class MaterializedViewOptimizer {
         }
         return rangeParts;
     }
-
-    public Pair<Table, Column> getPartitionTableAndColumn(Expr partitionExpr,
-                                                                 List<MaterializedView.BaseTableInfo> baseTables) {
-        List<SlotRef> slotRefs = com.clearspring.analytics.util.Lists.newArrayList();
-        partitionExpr.collect(SlotRef.class, slotRefs);
-        // if partitionExpr is FunctionCallExpr, get first SlotRef
-        Preconditions.checkState(slotRefs.size() == 1);
-        SlotRef slotRef = slotRefs.get(0);
-        for (MaterializedView.BaseTableInfo tableInfo : baseTables) {
-            if (slotRef.getTblNameWithoutAnalyzed().getTbl().equals(tableInfo.getTableName())) {
-                Table table = tableInfo.getTable();
-                return Pair.create(table, table.getColumn(slotRef.getColumnName()));
-            }
-        }
-        return null;
-    }
 }
