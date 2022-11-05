@@ -11,11 +11,13 @@
 
 #include "butil/time.h"
 #include "column/vectorized_fwd.h"
+#include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "gtest/gtest-param-test.h"
 #include "gutil/strings/strip.h"
 #include "testutil/assert.h"
+#include "util/defer_op.h"
 #include "util/json.h"
 
 namespace starrocks {
@@ -60,6 +62,7 @@ public:
     TExprNode expr_node;
 };
 
+<<<<<<< HEAD
 TEST_F(JsonFunctionsTest, get_json_intTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -171,6 +174,8 @@ TEST_F(JsonFunctionsTest, get_json_stringTest) {
                         .ok());
 }
 
+=======
+>>>>>>> 6a7cc6fb8 ([BugFix] fix get_json_int function exception (#12988))
 TEST_F(JsonFunctionsTest, get_json_string_casting) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
@@ -885,5 +890,145 @@ INSTANTIATE_TEST_SUITE_P(JsonKeysTest, JsonKeysTestFixture,
 
 // clang-format on
 
+<<<<<<< HEAD
 } // namespace vectorized
 } // namespace starrocks
+=======
+// 1: JSON Input
+// 2. Path
+// 3. get_json_int execpted result
+// 4. get_json_string expected result
+// 5. get_json_double expected result
+using GetJsonXXXParam = std::tuple<std::string, std::string, int, std::string, double>;
+
+class GetJsonXXXTestFixture : public ::testing::TestWithParam<GetJsonXXXParam> {
+public:
+    StatusOr<Columns> setup() {
+        _ctx = std::unique_ptr<FunctionContext>(FunctionContext::create_test_context());
+        auto ints = JsonColumn::create();
+        ColumnBuilder<TYPE_VARCHAR> builder(1);
+
+        std::string param_json = std::get<0>(GetParam());
+        std::string param_path = std::get<1>(GetParam());
+
+        JsonValue json;
+        Status st = JsonValue::parse(param_json, &json);
+        if (!st.ok()) {
+            return st;
+        }
+        ints->append(&json);
+        if (param_path == "NULL") {
+            builder.append_null();
+        } else {
+            builder.append(param_path);
+        }
+        Columns columns{ints, builder.build(true)};
+
+        _ctx->impl()->set_constant_columns(columns);
+        JsonFunctions::native_json_path_prepare(_ctx.get(), FunctionContext::FunctionStateScope::FRAGMENT_LOCAL);
+        return columns;
+    }
+
+    void tear_down() {
+        ASSERT_TRUE(JsonFunctions::native_json_path_close(
+                            _ctx.get(), FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+public:
+    std::unique_ptr<FunctionContext> _ctx;
+};
+
+TEST_P(GetJsonXXXTestFixture, get_json_int) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    int expected = std::get<2>(GetParam());
+
+    ColumnPtr result = JsonFunctions::get_native_json_int(_ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+
+    ASSERT_EQ(1, result->size());
+    Datum datum = result->get(0);
+    if (expected == 0) {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        int64_t value = datum.get_int32();
+        ASSERT_EQ(expected, value);
+    }
+}
+
+TEST_P(GetJsonXXXTestFixture, get_json_string) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    std::string param_result = std::get<3>(GetParam());
+    StripWhiteSpace(&param_result);
+
+    ColumnPtr result = JsonFunctions::get_native_json_string(_ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+
+    ASSERT_EQ(1, result->size());
+    Datum datum = result->get(0);
+    if (param_result == "NULL") {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        auto value = datum.get_slice();
+        std::string value_str(value);
+        ASSERT_EQ(param_result, value_str);
+    }
+}
+
+TEST_P(GetJsonXXXTestFixture, get_json_double) {
+    auto maybe_columns = setup();
+    ASSERT_TRUE(maybe_columns.ok());
+    DeferOp defer([&]() { tear_down(); });
+    Columns columns = std::move(maybe_columns.value());
+
+    double expected = std::get<4>(GetParam());
+
+    ColumnPtr result = JsonFunctions::get_native_json_double(_ctx.get(), columns);
+    ASSERT_TRUE(!!result);
+    ASSERT_EQ(1, result->size());
+
+    Datum datum = result->get(0);
+    if (expected == 0) {
+        ASSERT_TRUE(datum.is_null());
+    } else {
+        ASSERT_TRUE(!datum.is_null());
+        double value = datum.get_double();
+        ASSERT_EQ(expected, value);
+    }
+}
+
+INSTANTIATE_TEST_SUITE_P(GetJsonXXXTest, GetJsonXXXTestFixture,
+                         ::testing::Values(
+                                 // clang-format: off
+
+                                 std::make_tuple(R"( {"k1":1} )", "NULL", 0, "NULL", 0.0),
+                                 std::make_tuple(R"( {"k1":1} )", "$", 0, R"( {"k1": 1} )", 0.0),
+                                 std::make_tuple(R"( {"k1":1} )", "", 0, R"( NULL )", 0.0),
+                                 std::make_tuple(R"( {"k0": null} )", "$.k1", 0, "NULL", 0.0),
+                                 std::make_tuple(R"( {"k1": 1} )", "$.k1", 1, "1", 1.0),
+                                 std::make_tuple(R"( {"k1": -1} )", "$.k1", -1, R"( -1 )", -1),
+                                 std::make_tuple(R"( {"k1": 1.1} )", "$.k1", 1, R"( 1.1 )", 1.1),
+                                 std::make_tuple(R"( {"k1": 3.14} )", "$.k1", 3, R"( 3.14 )", 3.14),
+                                 std::make_tuple(R"( {"k1": null} )", "$.k1", 0, R"( NULL )", 0.0),
+                                 std::make_tuple(R"( {"k1": "value" } )", "$.k1", 0, R"( value )", 0.0),
+                                 std::make_tuple(R"( {"k1": {"k2": 1}} )", "$.k1", 0, R"( {"k2": 1} )", 0.0),
+                                 std::make_tuple(R"( {"k1": [1,2,3] } )", "$.k1", 0, R"( [1, 2, 3] )", 0.0),
+
+                                 // nested path
+                                 std::make_tuple(R"( {"k1.k2": [1,2,3] } )", "$.\"k1.k2\"", 0, R"( [1, 2, 3] )", 0.0)
+
+                                 // clang-format: on
+                                 ));
+
+} // namespace starrocks::vectorized
+>>>>>>> 6a7cc6fb8 ([BugFix] fix get_json_int function exception (#12988))
