@@ -135,6 +135,7 @@ std::ostream* ReaderOptions::getErrorStream() const {
 struct RowReaderOptionsPrivate {
     ColumnSelection selection;
     std::list<uint64_t> includedColumnIndexes;
+    std::list<uint64_t> lazyLoadColumnIndexes;
     std::list<std::string> includedColumnNames;
     std::list<std::string> lazyLoadColumnNames;
     uint64_t dataStart;
@@ -201,6 +202,13 @@ RowReaderOptions& RowReaderOptions::include(const std::list<std::string>& includ
 
 RowReaderOptions& RowReaderOptions::includeLazyLoadColumnNames(const std::list<std::string>& include) {
     privateBits->lazyLoadColumnNames.assign(include.begin(), include.end());
+    privateBits->lazyLoadColumnIndexes.clear();
+    return *this;
+}
+
+RowReaderOptions& RowReaderOptions::includeLazyLoadColumnIndexes(const std::list<std::uint64_t>& include) {
+    privateBits->lazyLoadColumnIndexes.assign(include.begin(), include.end());
+    privateBits->lazyLoadColumnNames.clear();
     return *this;
 }
 
@@ -239,6 +247,10 @@ const std::list<std::string>& RowReaderOptions::getIncludeNames() const {
 
 const std::list<std::string>& RowReaderOptions::getLazyLoadColumnNames() const {
     return privateBits->lazyLoadColumnNames;
+}
+
+const std::list<uint64_t>& RowReaderOptions::getLazyLoadColumnIndexes() const {
+    return privateBits->lazyLoadColumnIndexes;
 }
 
 uint64_t RowReaderOptions::getOffset() const {

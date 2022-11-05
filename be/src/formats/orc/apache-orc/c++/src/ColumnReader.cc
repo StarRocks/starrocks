@@ -32,6 +32,7 @@
 #include "RLE.hh"
 #include "orc/Exceptions.hh"
 #include "orc/Int128.hh"
+
 namespace orc {
 
 StripeStreams::~StripeStreams() {
@@ -115,17 +116,6 @@ void ColumnReader::seekToRowGroup(PositionProviderMap* positions) {
     if (notNullDecoder) {
         notNullDecoder->seek(positions->at(columnId));
     }
-}
-
-void ColumnReader::lazyLoadSeekToRowGroup(PositionProviderMap* positions) {
-    throw ParseError("ColumnReader::lazyLoadSeekToRowGroup not implemented");
-}
-
-void ColumnReader::lazyLoadSkip(uint64_t numValues) {
-    throw ParseError("ColumnReader::lazyLoadSkip not implemented");
-}
-void ColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
-    throw ParseError("ColumnReader::lazyLoadNext not implemented");
 }
 
 /**
@@ -1038,6 +1028,12 @@ StructColumnReader::StructColumnReader(const Type& type, StripeStreams& stripe) 
                 } else {
                     children.push_back(buildReader(child, stripe));
                     fieldIndex.push_back(fi);
+                    if (child.getKind() == TypeKind::STRUCT) {
+                        // If current child is a struct type, considering it's subfields may need
+                        // lazy load, we should add it to lazyLoadChildren too.
+                        lazyLoadChildren.push_back(buildReader(child, stripe));
+                        lazyLoadFieldIndex.push_back(fi);
+                    }
                 }
                 fi++;
             }
@@ -1078,10 +1074,19 @@ void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnRe
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
         uint64_t fi = fieldIndex[i];
-        if (encoded) {
-            (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+        if (lazyLoad) {
+            if (encoded) {
+                (*iter)->lazyLoadNextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues,
+                                             notNull);
+            } else {
+                (*iter)->lazyLoadNext(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            }
         } else {
-            (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            if (encoded) {
+                (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            } else {
+                (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
+            }
         }
     }
 }
@@ -1104,6 +1109,7 @@ void StructColumnReader::lazyLoadSkip(uint64_t numValues) {
         ptr->skip(numValues);
     }
 }
+
 void StructColumnReader::lazyLoadNext(ColumnVectorBatch& rowBatch, uint64_t numValues, char* notNull) {
     nextInternal<false, true>(lazyLoadChildren, lazyLoadFieldIndex, rowBatch, numValues, notNull);
 }

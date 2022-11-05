@@ -505,16 +505,22 @@ HdfsScannerContext* FileReaderTest::_create_file_map_base_context() {
     TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
     type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_map.children.emplace_back(type_map);
+    type_map_map.selected_fields.emplace_back(true);
+    type_map_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
     type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
     type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_array.children.emplace_back(type_array);
+    type_map_array.selected_fields.emplace_back(true);
+    type_map_array.selected_fields.emplace_back(true);
 
     // tuple desc
     SlotDesc slot_descs[] = {
@@ -1092,16 +1098,22 @@ TEST_F(FileReaderTest, TestReadMapColumn) {
     TypeDescriptor type_map(PrimitiveType::TYPE_MAP);
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
+    type_map.selected_fields.emplace_back(true);
+    type_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_map_map(PrimitiveType::TYPE_MAP);
     type_map_map.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_map.children.emplace_back(type_map);
+    type_map_map.selected_fields.emplace_back(true);
+    type_map_map.selected_fields.emplace_back(true);
 
     TypeDescriptor type_array(PrimitiveType::TYPE_ARRAY);
     type_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_INT));
     TypeDescriptor type_map_array(PrimitiveType::TYPE_MAP);
     type_map_array.children.emplace_back(TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR));
     type_map_array.children.emplace_back(type_array);
+    type_map_array.selected_fields.emplace_back(true);
+    type_map_array.selected_fields.emplace_back(true);
 
     vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
     _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);

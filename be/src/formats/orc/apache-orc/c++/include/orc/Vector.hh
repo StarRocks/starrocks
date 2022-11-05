@@ -28,6 +28,7 @@
 #include <list>
 #include <memory>
 #include <stdexcept>
+#include <unordered_map>
 #include <vector>
 
 #include "Int128.hh"
@@ -189,6 +190,7 @@ struct StructVectorBatch : public ColumnVectorBatch {
     bool hasVariableLength() override;
 
     std::vector<ColumnVectorBatch*> fields;
+    std::unordered_map<uint64_t, ColumnVectorBatch*> fieldsColumnIdMap;
     void filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size) override;
     void filterOnFields(uint8_t* f_data, uint32_t f_size, uint32_t true_size, const std::vector<int>& fields,
                         bool onLazyLoad) override;
