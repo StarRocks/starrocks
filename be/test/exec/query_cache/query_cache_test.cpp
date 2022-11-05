@@ -24,7 +24,7 @@
 namespace starrocks::vectorized {
 struct CacheTest : public ::testing::Test {
     RuntimeState state;
-    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(1024);
+    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 };
 
 TEST_F(CacheTest, testLaneArbiter) {
@@ -86,28 +86,29 @@ TEST_F(CacheTest, testCacheManager) {
     auto create_cache_value = [](size_t byte_size) {
         auto chk = std::make_shared<Chunk>();
         auto col = Int8Column::create();
-        col->resize(byte_size);
+        auto payload = byte_size - sizeof(query_cache::CacheValue);
+        col->resize(payload);
         chk->append_column(col, 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
     for (auto i = 0; i < 10; ++i) {
-        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
         auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
@@ -134,7 +135,7 @@ TEST_F(CacheTest, testCacheManager) {
     ASSERT_GE(cache_mgr->hit_count(), 0);
 
     for (auto i = 0; i < 10; ++i) {
-        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
     ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
     ASSERT_GE(cache_mgr->memory_usage(), 0);
