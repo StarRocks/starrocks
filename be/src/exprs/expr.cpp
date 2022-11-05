@@ -370,6 +370,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
     case TExprNodeType::TUPLE_IS_NULL_PRED:
+    case TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR:
         break;
     }
     if (*expr == nullptr) {
@@ -598,6 +599,10 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
 
 ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
     return nullptr;
+}
+
+ColumnPtr Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+    return evaluate(context, ptr);
 }
 
 vectorized::ColumnRef* Expr::get_column_ref() {

@@ -29,7 +29,7 @@ public:
 
     ~HorizontalCompactionTask() override;
 
-    Status execute() override;
+    Status execute(Stats* stats) override;
 
 private:
     int64_t _txn_id;

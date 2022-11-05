@@ -29,6 +29,8 @@ import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.expressions.Expression;
 import org.apache.iceberg.expressions.Expressions;
 import org.apache.iceberg.types.Types;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
 import java.util.List;
@@ -39,6 +41,7 @@ import java.util.stream.Collectors;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.CONNECTOR_ID_GENERATOR;
 
 public class IcebergUtil {
+    private static final Logger LOG = LogManager.getLogger(IcebergUtil.class);
 
     /**
      * Get Iceberg table identifier by table property
@@ -267,7 +270,14 @@ public class IcebergUtil {
             List<Column> fullSchema = Lists.newArrayList();
             for (Map.Entry<String, Types.NestedField> entry : icebergColumns.entrySet()) {
                 Types.NestedField icebergColumn = entry.getValue();
-                Type srType = convertColumnType(icebergColumn.type());
+                Type srType;
+                try {
+                    srType = convertColumnType(icebergColumn.type());
+                } catch (InternalError | Exception e) {
+                    LOG.error("Failed to convert iceberg type {}", icebergColumn.type().toString(), e);
+                    srType = Type.UNKNOWN_TYPE;
+                }
+
                 Column column = new Column(icebergColumn.name(), srType, true);
                 fullSchema.add(column);
             }
