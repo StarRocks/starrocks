@@ -115,9 +115,9 @@ Status QueryTrace::dump() {
         return Status::OK();
     }
     static const char* kProcessNameMetaEventFormat =
-            "{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
+            "{\"name\":\"process_name\",\"ph\":\"M\",\"pid\":\"0x%x\",\"args\":{\"name\":\"%s\"}}";
     static const char* kThreadNameMetaEventFormat =
-            "{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":\"%ld\",\"tid\":\"%ld\",\"args\":{\"name\":\"%s\"}}";
+            "{\"name\":\"thread_name\",\"ph\":\"M\",\"pid\":\"0x%x\",\"tid\":\"0x%x\",\"args\":{\"name\":\"%s\"}}";
     try {
         std::filesystem::create_directory(starrocks::config::query_debug_trace_dir);
         std::string file_name =
@@ -128,12 +128,12 @@ Status QueryTrace::dump() {
         for (auto& [fragment_id, driver_set] : _fragment_drivers) {
             std::string fragment_id_str = print_id(fragment_id);
             oss << (is_first ? "" : ",\n");
-            oss << fmt::sprintf(kProcessNameMetaEventFormat, fragment_id.lo, fragment_id_str.c_str());
+            oss << fmt::sprintf(kProcessNameMetaEventFormat, (uint64_t)fragment_id.lo, fragment_id_str.c_str());
             is_first = false;
             for (auto& driver : *driver_set) {
                 starrocks::pipeline::DriverRawPtr ptr = reinterpret_cast<starrocks::pipeline::DriverRawPtr>(driver);
                 oss << (is_first ? "" : ",\n");
-                oss << fmt::sprintf(kThreadNameMetaEventFormat, fragment_id.lo, (int64_t)driver,
+                oss << fmt::sprintf(kThreadNameMetaEventFormat, (uint64_t)fragment_id.lo, (uint64_t)driver,
                                     ptr->get_name().c_str());
             }
         }
