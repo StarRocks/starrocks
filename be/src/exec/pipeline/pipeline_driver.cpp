@@ -13,6 +13,7 @@
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/exec_env.h"
 #include "runtime/runtime_state.h"
@@ -56,8 +57,20 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
 
     DCHECK(_state == DriverState::NOT_READY);
 
-    source_operator()->add_morsel_queue(_morsel_queue);
+    auto* source_op = source_operator();
+    // attach ticket_checker to both ScanOperator and SplitMorselQueue
+    auto should_attach_ticket_checker = (dynamic_cast<ScanOperator*>(source_op) != nullptr) &&
+                                        (dynamic_cast<SplitMorselQueue*>(_morsel_queue) != nullptr) &&
+                                        _fragment_ctx->enable_cache();
+    if (should_attach_ticket_checker) {
+        auto* scan_op = dynamic_cast<ScanOperator*>(source_op);
+        auto* split_morsel_queue = dynamic_cast<SplitMorselQueue*>(_morsel_queue);
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        scan_op->set_ticket_checker(ticket_checker);
+        split_morsel_queue->set_ticket_checker(ticket_checker);
+    }
 
+    source_op->add_morsel_queue(_morsel_queue);
     // fill OperatorWithDependency instances into _dependencies from _operators.
     DCHECK(_dependencies.empty());
     _dependencies.reserve(_operators.size());
