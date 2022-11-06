@@ -124,7 +124,7 @@ bool NLJoinProbeOperator::need_input() const {
 }
 
 bool NLJoinProbeOperator::is_finished() const {
-    return _cross_join_context->is_finished() || ((_input_finished || _skip_probe()) && !has_output());
+    return (_input_finished || _skip_probe()) && !has_output();
 }
 
 Status NLJoinProbeOperator::set_finishing(RuntimeState* state) {
@@ -199,7 +199,8 @@ ChunkPtr NLJoinProbeOperator::_init_output_chunk(RuntimeState* state) const {
     return chunk;
 }
 
-void NLJoinProbeOperator::iterate_enumerate_chunk(ChunkPtr chunk, std::function<void(bool, size_t, size_t)> call) {
+void NLJoinProbeOperator::iterate_enumerate_chunk(const ChunkPtr& chunk,
+                                                  std::function<void(bool, size_t, size_t)> call) {
     if (_num_build_chunks() == 1) {
         // Multiple probe rows with one build chunk
         size_t num_build_rows = _cross_join_context->num_build_rows();
@@ -207,7 +208,7 @@ void NLJoinProbeOperator::iterate_enumerate_chunk(ChunkPtr chunk, std::function<
             call(true, i, i + num_build_rows);
         }
     } else {
-        // Single probe row
+        // Partial probe row
         call(false, 0, chunk->num_rows());
     }
 }
@@ -278,7 +279,12 @@ Status NLJoinProbeOperator::_probe(RuntimeState* state, ChunkPtr chunk) {
             } else if (_is_left_anti_join()) {
                 // Keep the first row if all nows not matched
                 if (first_matched == end) {
-                    (*filter)[start] = 1;
+                    if (complete_probe_row || _probe_row_finished) {
+                        (*filter)[start] = 1;
+                    }
+                } else {
+                    // Once matched, this row would be thrown
+                    _probe_row_finished = true;
                 }
             }
         });
@@ -328,7 +334,6 @@ ChunkPtr NLJoinProbeOperator::_permute_chunk(RuntimeState* state) {
             _permute_probe_row(state, chunk);
             _move_build_chunk_index(0);
             _probe_row_finished = true;
-            ++_probe_row_current;
             return chunk;
         }
 

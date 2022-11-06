@@ -63,7 +63,7 @@ private:
     Status _permute_right_join(RuntimeState* state);
     void _permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
-    void iterate_enumerate_chunk(ChunkPtr chunk, std::function<void(bool, size_t, size_t)> call);
+    void iterate_enumerate_chunk(const ChunkPtr& chunk, std::function<void(bool, size_t, size_t)> call);
 
     // Join type check
     bool _is_left_join() const;
