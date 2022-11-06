@@ -37,6 +37,7 @@ public:
     connector::ConnectorType connector_type() { return _connector_type; }
 
     int io_tasks_per_scan_operator() const override;
+    int scan_operator_dop_multiplier() const override;
 
 private:
     RuntimeState* _runtime_state = nullptr;

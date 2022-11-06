@@ -329,12 +329,13 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
+        size_t scan_dop = dop * scan_node->scan_operator_dop_multiplier();
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
 
         PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
-        if (scan_ranges.size() >= dop && _fragment_ctx->enable_cache()) {
+        if (scan_ranges.size() >= scan_dop && _fragment_ctx->enable_cache()) {
             for (auto k = 0; k < scan_ranges.size(); ++k) {
-                scan_ranges_per_driver[k % dop].push_back(scan_ranges[k]);
+                scan_ranges_per_driver[k % scan_dop].push_back(scan_ranges[k]);
             }
         }
 
@@ -378,7 +379,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
         ASSIGN_OR_RETURN(auto morsel_queue_factory,
                          scan_node->convert_scan_range_to_morsel_queue_factory(
-                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), dop,
+                                 scan_ranges, scan_ranges_per_driver_seq, scan_node->id(), scan_dop,
                                  enable_tablet_internal_parallel, tablet_internal_parallel_mode));
         scan_node->enable_shared_scan(enable_shared_scan && morsel_queue_factory->is_shared());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory));
@@ -388,12 +389,14 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     int64_t physical_scan_limit = 0;
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
+        size_t scan_dop = dop * scan_node->scan_operator_dop_multiplier();
+
         if (scan_node->limit() > 0) {
-            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // the upper bound of records we actually will scan is `lim it * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
             // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
             logical_scan_limit += scan_node->limit();
-            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+            physical_scan_limit += scan_node->limit() * scan_dop * scan_node->io_tasks_per_scan_operator();
         } else {
             // Not sure how many rows will be scan.
             logical_scan_limit = -1;

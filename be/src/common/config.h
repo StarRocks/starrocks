@@ -755,6 +755,8 @@ CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
 
 CONF_Int32(connector_io_tasks_per_scan_operator, "16");
 CONF_Int32(io_tasks_per_scan_operator, "4");
+CONF_Int32(connector_scan_operator_dop_multiplier, "4");
+CONF_Int32(scan_operator_dop_multiplier, "1");
 CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
 CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
