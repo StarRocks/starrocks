@@ -102,7 +102,7 @@ public:
     const std::string& name() const { return _name; }
 
     virtual int io_tasks_per_scan_operator() const { return config::io_tasks_per_scan_operator; }
-    virtual int scan_operator_dop_multiplier() const { return config::scan_operator_dop_multiplier; }
+    virtual double scan_operator_dop_multiplier() const { return config::scan_operator_dop_multiplier; }
 
     // TODO: support more share_scan strategy
     void enable_shared_scan(bool enable);

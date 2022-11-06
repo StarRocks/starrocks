@@ -560,7 +560,7 @@ int ConnectorScanNode::io_tasks_per_scan_operator() const {
     return config::connector_io_tasks_per_scan_operator;
 }
 
-int ConnectorScanNode::scan_operator_dop_multiplier() const {
+double ConnectorScanNode::scan_operator_dop_multiplier() const {
     return config::connector_scan_operator_dop_multiplier;
 }
 

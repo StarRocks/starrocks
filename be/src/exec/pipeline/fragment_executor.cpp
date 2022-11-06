@@ -329,7 +329,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
-        size_t scan_dop = dop * scan_node->scan_operator_dop_multiplier();
+        size_t scan_dop = size_t(dop * scan_node->scan_operator_dop_multiplier());
         const std::vector<TScanRangeParams>& scan_ranges = request.scan_ranges_of_node(scan_node->id());
 
         PerDriverScanRangesMap& scan_ranges_per_driver = _fragment_ctx->scan_ranges_per_driver();
@@ -389,10 +389,10 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
     int64_t physical_scan_limit = 0;
     for (auto& i : scan_nodes) {
         auto* scan_node = down_cast<ScanNode*>(i);
-        size_t scan_dop = dop * scan_node->scan_operator_dop_multiplier();
+        size_t scan_dop = size_t(dop * scan_node->scan_operator_dop_multiplier());
 
         if (scan_node->limit() > 0) {
-            // the upper bound of records we actually will scan is `lim it * dop * io_parallelism`.
+            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
             // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
             // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
             logical_scan_limit += scan_node->limit();
