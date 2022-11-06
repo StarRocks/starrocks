@@ -192,7 +192,7 @@ import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt.QuotaType;
-import com.starrocks.sql.ast.AlterDatabaseRename;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterSystemStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
@@ -1918,7 +1918,7 @@ public class GlobalStateMgr {
         localMetastore.replayAlterDatabaseQuota(dbName, quota, quotaType);
     }
 
-    public void renameDatabase(AlterDatabaseRename stmt) throws DdlException {
+    public void renameDatabase(AlterDatabaseRenameStatement stmt) throws DdlException {
         localMetastore.renameDatabase(stmt);
     }
 

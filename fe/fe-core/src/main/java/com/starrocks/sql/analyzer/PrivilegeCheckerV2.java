@@ -10,7 +10,12 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
+=======
+import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
+import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
+>>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -23,7 +28,11 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.DropFileStmt;
+=======
+import com.starrocks.sql.ast.DropDbStmt;
+>>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -33,8 +42,10 @@ import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
@@ -47,6 +58,13 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+=======
+import com.starrocks.sql.ast.ShowCreateDbStmt;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.ast.SubqueryRelation;
+import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UseDbStmt;
+>>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
 import com.starrocks.sql.ast.ViewRelation;
 
 public class PrivilegeCheckerV2 {
@@ -72,14 +90,31 @@ public class PrivilegeCheckerV2 {
         }
     }
 
+<<<<<<< HEAD
     static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+=======
+    static void checkDbAction(ConnectContext context, String catalogName, String dbName,
+                              PrivilegeType.DbAction action) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException("external catalog is not supported for now!");
+>>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
         }
-        String db = tableName.getDb();
-        if (!PrivilegeManager.checkDbAction(context, db, action)) {
+        if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    context.getQualifiedUser(), db);
+                    context.getQualifiedUser(), dbName, action.name());
+        }
+    }
+
+    static void checkAnyActionInDb(ConnectContext context, String catalogName, String dbName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException("external catalog is not supported for now!");
+        }
+
+        if (!PrivilegeManager.checkAnyActionInDb(context, dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    context.getQualifiedUser(), dbName);
         }
     }
 
@@ -104,7 +139,8 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateTableStatement(CreateTableStmt statement, ConnectContext session) {
-            checkDbAction(session, statement.getDbTbl(), PrivilegeType.DbAction.CREATE_TABLE);
+            TableName tableName = statement.getDbTbl();
+            checkDbAction(session, tableName.getCatalog(), tableName.getDb(), PrivilegeType.DbAction.CREATE_TABLE);
             return null;
         }
 
@@ -193,7 +229,58 @@ public class PrivilegeCheckerV2 {
             }
         }
 
+<<<<<<< HEAD
         // ---------------------------------------- External Resource Statement---------------------------------------------
+=======
+        // --------------------------------- Database Statement ---------------------------------
+
+        @Override
+        public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
+            checkAnyActionInDb(context, statement.getCatalogName(), statement.getDbName());
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
+            checkAnyActionInDb(context, statement.getCatalogName(), statement.getDb());
+            return null;
+        }
+
+        public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
+            // TODO(yiming): check the `CREATE_DATABASE` action on internal catalog after catalog object is added
+            return null;
+        }
+
+        public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.ALTER);
+            return null;
+        }
+
+        public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.ALTER);
+            return null;
+        }
+
+        public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
+            checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
+            return null;
+        }
+
+        // --------------------------------- Grant/Revoke Statement ---------------------------------
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        // --------------------------------- External Resource Statement ---------------------------------
+
+>>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
