@@ -189,7 +189,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     }
 
     csv::Converter::Options options;
-    options.invalid_field_as_null = false;
+    options.invalid_field_as_null = true;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
