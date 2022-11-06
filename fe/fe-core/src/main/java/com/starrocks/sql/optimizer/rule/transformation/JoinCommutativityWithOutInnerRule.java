@@ -19,7 +19,9 @@ public class JoinCommutativityWithOutInnerRule extends TransformationRule {
     // NOTE: not support transform LEFT ANTI/SEMI to RIGHT ANTI/SEMI, since we don't want to support it
     private static final Map<JoinOperator, JoinOperator> JOIN_COMMUTATIVITY_MAP =
             ImmutableMap.<JoinOperator, JoinOperator>builder()
+                    .put(JoinOperator.LEFT_ANTI_JOIN, JoinOperator.RIGHT_ANTI_JOIN)
                     .put(JoinOperator.RIGHT_ANTI_JOIN, JoinOperator.LEFT_ANTI_JOIN)
+                    .put(JoinOperator.LEFT_SEMI_JOIN, JoinOperator.RIGHT_SEMI_JOIN)
                     .put(JoinOperator.RIGHT_SEMI_JOIN, JoinOperator.LEFT_SEMI_JOIN)
                     .put(JoinOperator.LEFT_OUTER_JOIN, JoinOperator.RIGHT_OUTER_JOIN)
                     .put(JoinOperator.RIGHT_OUTER_JOIN, JoinOperator.LEFT_OUTER_JOIN)
