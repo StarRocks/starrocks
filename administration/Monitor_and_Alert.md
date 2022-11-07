@@ -13,7 +13,7 @@ StarRocksManager 的监控可以分成 **集群** 和 **节点** 两个维度。
 * 集群性能监控
   * CPU 使用率
   * 内存使用
-  * 磁盘I/O使用率，磁盘使用量、磁盘空闲量
+  * 磁盘 I/O 使用率，磁盘使用量、磁盘空闲量
   * 发包带宽、收包带宽，发包数、收包数
 * 集群查询监控
   * QPS
@@ -29,7 +29,7 @@ StarRocksManager 的监控可以分成 **集群** 和 **节点** 两个维度。
   * 增量合并数据组速率
   * 增量合并数据量
 
-在**节点**页面可以看到所有BE/FE的机器列表和状态等基础信息
+在**节点**页面可以看到所有 BE/FE 的机器列表和状态等基础信息
 
 ![8.10.1-1](../assets/8.10.1-1.png)
 
@@ -275,10 +275,10 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |be_bytes_written_per_second|bytes/s|平均值|BE 写入速度。|
 |be_base_compaction_bytes_per_second|bytes/s|平均值|BE 的基线合并速率。|
 |be_cumulative_compaction_bytes_per_second|bytes/s|平均值|BE 的增量合并速率。|
-|be_base_compaction_rowsets_per_second|rowsets/s|平均值|BE的基线合并 rowsets 合并速率。|
-|be_cumulative_compaction_rowsets_per_second|rowsets/s|平均值|BE的增量合并 rowsets 合并速率。|
+|be_base_compaction_rowsets_per_second|rowsets/s|平均值|BE 的基线合并 rowsets 合并速率。|
+|be_cumulative_compaction_rowsets_per_second|rowsets/s|平均值|BE 的增量合并 rowsets 合并速率。|
 |be_base_compaction_failed|个/秒|平均值|BE 基线合并失败。|
-|be_clone_failed|个/秒|平均值|BE克隆失败|
+|be_clone_failed|个/秒|平均值|BE 克隆失败|
 |be_create_rollup_failed|个/秒|平均值|BE 创建物化视图失败。|
 |be_create_tablet_failed|个/秒|平均值|BE 创建 tablet 失败。|
 |be_cumulative_compaction_failed|个/秒|平均值|BE 增量合并失败。|
@@ -349,7 +349,7 @@ Grafana 中，Row 代表一组图表的集合。如上图中的 Overview、Clust
 |cpu_softirq| 百分比|平均值|cpu_softirq 使用率。|
 |cpu_steal| 百分比|平均值|cpu_steal 使用率。|
 |disk_free|bytes|平均值|空闲磁盘容量。|
-|disk_io_svctm|Ms|平均值|磁盘IO服务时间。|
+|disk_io_svctm|Ms|平均值|磁盘 IO 服务时间。|
 |disk_io_util|百分比|平均值|磁盘使用率。|
 |disk_used|bytes|平均值|已用磁盘容量。|
 |starrocks_fe_query_resource_group|个|累计值|该资源组中查询任务的数量|
