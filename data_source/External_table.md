@@ -1044,7 +1044,7 @@ SELECT COUNT(*) FROM hudi_tbl;
 
 **提示问题**：
 
-SQL 错误 [1064] [42000]: data cannot be inserted into table with empty partition.Use `SHOW PARTITIONS FROM external_t` to see the currently partitions of this table.
+SQL 错误 [1064] [42000]: data cannot be inserted into table with empty partition.Use `SHOW PARTITIONS FROM external_t;` to see the currently partitions of this table.
 
 查看Partitions时提示另一错误：SHOW PARTITIONS FROM external_t
 SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE table
