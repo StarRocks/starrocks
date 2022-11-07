@@ -507,14 +507,14 @@
   + [Flink Connector](/unloading/Flink_connector.md)
 + 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
-  + 数据迁移
+  + 导入导出
     + 导入
       + [导入通用 FAQ](/faq/loading/Loading_faq.md)
       + [Stream Load](/faq/loading/Stream_load_faq.md)
       + [Routine Load](/faq/loading/Routine_load_faq.md)
       + [Broker Load](/faq/loading/Broker_load_faq.md)
       + [Insert Into](/faq/loading/Insert_into_faq.md)
-      + [MySQL 实时同步至 StarRocks 常见问题](/faq/loading/synchronize_mysql_into_sr.md)
+      + [MySQL 实时同步至 StarRocks](/faq/loading/synchronize_mysql_into_sr.md)
       + [Flink connector](/faq/loading/Flink_connector_faq.md)
       + [DataX](/faq/loading/DataX_faq.md)
       + [CloudCanal 数据导入](/faq/loading/CloudCanal_load_faq.md)

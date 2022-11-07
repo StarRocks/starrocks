@@ -31,42 +31,27 @@ state.checkpoints.dir: file:///tmp/flink-checkpoints-directory
 
 - `state.checkpoints.dir`：Checkpoint 数据存储目录。
 
-## 3. 手动停止的 Flink job 后，如何恢复 Flink job 至停止前的状态
+### 如何手动停止的 Flink job，并且后续恢复 Flink job 至停止前的状态
 
-如果您需要手动停止 Flink job，并且后续希望从停止前的状态恢复 Flink job，则可以先评估业务侧是否可以停止 MySQL 服务，然后根据评估结果执行如下步骤。
+可以在停止 Flink job 时手动触发 [savepoint](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/savepoints/)（savepoint是依据 Checkpointing 机制所创建的流作业执行状态的一致镜像），后续可以从指定 savepoint 中恢复flinkjob。
 
-- 如果业务侧无法停止 MySQL 服务。
-
-  - 可以在停止  Flink job 时手动触发 [savepoint](https://nightlies.apache.org/flink/flink-docs-master/docs/ops/state/savepoints/)（savepoint是依据 Checkpointing 机制所创建的流作业执行状态的一致镜像），后续可以从指定 savepoint 中恢复flinkjob。
-
-  - 使用 Savepoint 停止作业。这将自动触发  Flink job `jobId` 的 savepoint，并停止该 job。此外，你可以指定一个目标文件系统目录来存储 Savepoint 。
+1. 使用 Savepoint 停止作业。这将自动触发  Flink job `jobId` 的 savepoint，并停止该 job。此外，你可以指定一个目标文件系统目录来存储 Savepoint 。
 
     ```Bash
     bin/flink stop --type [native/canonical] --savepointPath [:targetDirectory] :jobId
     ```
 
-    参数说明：
+    > 说明
+    >
+    > - `jobId`: 您可以通过 Flink  WebUI 查看 Flink job ID，或者在命令行执行`flink list –running` 进行查看。
+    > - `targetDirectory`: 您也可以在 Flink 配置文件 **flink-conf.yml** 中 `state.savepoints.dir` 配置 savepoint 的默认目录。 触发 savepoint 时，将使用此目录来存储 savepoint，无需指定目录。
+    >
+    > ```Bash
+    > state.savepoints.dir: [file://或hdfs://]/home/user/savepoints_dir
+    > ```
 
-    - `jobId`: 您可以通过 Flink  WebUI 查看 Flink job ID，或者在命令行执行`flink list –running` 进行查看。
-    - `targetDirectory`: 您也可以在 Flink 配置文件 **flink-conf.yml** 中 `state.savepoints.dir` 配置 savepoint 的默认目录。 触发 savepoint 时，将使用此目录来存储 savepoint，无需指定目录。
-
-      ```Bash
-      state.savepoints.dir: [file://或hdfs://]/home/user/savepoints_dir
-      ```
-
-  - 如果需要恢复 Flink job 至停止前的状态，则您需要在重新提交 Flink job 时指定savepoint。
+2. 如果需要恢复 Flink job 至停止前的状态，则您需要在重新提交 Flink job 时指定savepoint。
 
     ```Bash
-    bin/flink run -c com.starrocks.connector.flink.tools.ExecuteSQL -s savepoints_dir/savepoints-xxxxxxxx flink-connector-starrocks-xxxx.jar -f flink-create.all.sql 
+    ./flink run -c com.starrocks.connector.flink.tools.ExecuteSQL -s savepoints_dir/savepoints-xxxxxxxx flink-connector-starrocks-xxxx.jar -f flink-create.all.sql 
     ```
-
-- 如果业务侧可以停止 MySQL 服务。
-  - 停止 MySQL 服务。
-  - 停止 Flink job。
-
-    ```bash
-    bin/flink stop jobId
-    ```
-
-  - 如果需要恢复 Flink job 至停止前的状态，则您需要在重新提交 Flink job 时修改 **flink-create.all.sql** ，在 source table 增加属性`'scan.startup.mode'='latest-offset'`，指定从 MySQL binlog 文件最新位点开始消费。
-  - 恢复 MySQL 服务。
