@@ -671,7 +671,7 @@ ColumnPtr MathFunctions::conv_string(FunctionContext* context, const Columns& co
 Status MathFunctions::rand_prepare(starrocks_udf::FunctionContext* context,
                                    starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
-        auto* seed = reinterpret_cast<uint32_t*>(context->allocate(sizeof(uint32_t)));
+        auto* seed = new uint32_t;
         context->set_function_state(scope, seed);
         if (context->get_num_args() == 1) {
             // This is a call to RandSeed, initialize the seed
@@ -701,7 +701,7 @@ Status MathFunctions::rand_close(starrocks_udf::FunctionContext* context,
                                  starrocks_udf::FunctionContext::FunctionStateScope scope) {
     if (scope == FunctionContext::THREAD_LOCAL) {
         auto* seed = reinterpret_cast<uint8_t*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
-        context->free(seed);
+        delete seed;
     }
     return Status::OK();
 }
