@@ -159,7 +159,8 @@ public class StreamLoadPlanner {
         TWriteQuorumType writeQuorum = destTable.writeQuorum();
 
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum);
+        OlapTableSink olapTableSink = new OlapTableSink(destTable, tupleDesc, partitionIds, writeQuorum,
+                destTable.enableReplicatedStorage());
         olapTableSink.init(loadId, streamLoadTask.getTxnId(), db.getId(), streamLoadTask.getTimeout());
         olapTableSink.complete();
 
@@ -205,7 +206,6 @@ public class StreamLoadPlanner {
         queryOptions.setQuery_type(TQueryType.LOAD);
         queryOptions.setQuery_timeout(streamLoadTask.getTimeout());
         queryOptions.setLoad_transmission_compression_type(streamLoadTask.getTransmisionCompressionType());
-        queryOptions.setEnable_replicated_storage(streamLoadTask.getEnableReplicatedStorage());
 
         // Disable load_dop for LakeTable temporary, because BE's `LakeTabletsChannel` does not support
         // parallel send from a single sender.
@@ -230,7 +230,7 @@ public class StreamLoadPlanner {
         LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", loadId,
                 streamLoadTask.getTxnId(),
                 queryOptions.getLoad_dop(),
-                queryOptions.getLoad_transmission_compression_type(), streamLoadTask.getEnableReplicatedStorage(),
+                queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(),
                 writeQuorum);
         return params;
     }

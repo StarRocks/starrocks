@@ -109,12 +109,20 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant ALL on db1.tbl0, db1.tbl0 to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
+        sql = "revoke select on tttable db1.tbl0 from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find type TTTABLE in"));
+        }
+
         sql = "revoke select on database db1 from test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid action SELECT for DATABASE"));
+            Assert.assertTrue(e.getMessage().contains("cannot find action SELECT in"));
         }
 
         sql = "grant insert on table dbx to test_user";

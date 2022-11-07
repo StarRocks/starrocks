@@ -605,7 +605,19 @@ public class AST2SQL {
         }
 
         public String visitVariableExpr(VariableExpr node, Void context) {
-            return visitExpression(node, context);
+            StringBuilder sb = new StringBuilder();
+            if (node.getSetType() == SetType.USER) {
+                sb.append("@");
+            } else {
+                sb.append("@@");
+                if (node.getSetType() == SetType.GLOBAL) {
+                    sb.append("GLOBAL.");
+                } else {
+                    sb.append("SESSION.");
+                }
+            }
+            sb.append(node.getName());
+            return sb.toString();
         }
 
         @Override

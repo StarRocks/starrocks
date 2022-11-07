@@ -683,6 +683,8 @@ void run_update_meta_info_task(const std::shared_ptr<UpdateTabletMetaInfoAgentTa
                 break;
             case TTabletMetaType::WRITE_QUORUM:
                 break;
+            case TTabletMetaType::REPLICATED_STORAGE:
+                break;
             case TTabletMetaType::ENABLE_PERSISTENT_INDEX:
                 LOG(INFO) << "update tablet:" << tablet->tablet_id()
                           << " enable_persistent_index:" << tablet_meta_info.enable_persistent_index;

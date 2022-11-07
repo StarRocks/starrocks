@@ -17,13 +17,14 @@
 #include "exec/query_cache/conjugate_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/query_cache/multilane_operator.h"
+#include "exec/query_cache/ticket_checker.h"
 #include "exec/query_cache/transform_operator.h"
 #include "gutil/strings/substitute.h"
 
 namespace starrocks::vectorized {
 struct CacheTest : public ::testing::Test {
     RuntimeState state;
-    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(1024);
+    query_cache::CacheManagerPtr cache_mgr = std::make_shared<query_cache::CacheManager>(10240);
 };
 
 TEST_F(CacheTest, testLaneArbiter) {
@@ -85,28 +86,29 @@ TEST_F(CacheTest, testCacheManager) {
     auto create_cache_value = [](size_t byte_size) {
         auto chk = std::make_shared<Chunk>();
         auto col = Int8Column::create();
-        col->resize(byte_size);
+        auto payload = byte_size - sizeof(query_cache::CacheValue);
+        col->resize(payload);
         chk->append_column(col, 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
 
     for (auto i = 0; i < 10; ++i) {
-        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 0; i < 10; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_TRUE(status.ok());
     }
 
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
     for (auto i = 10; i < 20; ++i) {
         auto status = cache_mgr->probe(strings::Substitute("key_$0", i));
         ASSERT_FALSE(status.ok());
     }
-    ASSERT_EQ(cache_mgr->memory_usage(), 400);
+    ASSERT_EQ(cache_mgr->memory_usage(), 960);
 
     for (auto i = 20; i < 30; ++i) {
         auto status = cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(100));
@@ -133,7 +135,7 @@ TEST_F(CacheTest, testCacheManager) {
     ASSERT_GE(cache_mgr->hit_count(), 0);
 
     for (auto i = 0; i < 10; ++i) {
-        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(40));
+        cache_mgr->populate(strings::Substitute("key_$0", i), create_cache_value(96));
     }
     ASSERT_EQ(cache_mgr->capacity(), CACHE_CAPACITY);
     ASSERT_GE(cache_mgr->memory_usage(), 0);
@@ -1161,6 +1163,36 @@ TEST_F(CacheTest, testPartialHit) {
     };
     test_framework(cache_mgr, 4, 1, state, mul2_func, plus1_func, 0.0, add_func, probe_total_hit_actions, {},
                    eq_validator_gen(801.0 * 801.0));
+}
+
+TEST_F(CacheTest, testTicketChecker) {
+    auto test_func1 = [](int64_t id, int n) {
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        for (auto i = 0; i < n; ++i) {
+            ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
+        }
+        for (auto i = 0; i < n; ++i) {
+            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
+        }
+    };
+
+    test_func1(1L, 1);
+    test_func1(1L, 10);
+    test_func1(1L, 100);
+
+    auto test_func2 = [](int64_t id, int n) {
+        auto ticket_checker = std::make_shared<query_cache::TicketChecker>();
+        for (auto i = 0; i < n; ++i) {
+            ticket_checker->enter(1L, i + 1 == n);
+            ASSERT_EQ(ticket_checker->are_all_ready(id), i + 1 == n);
+            ASSERT_EQ(ticket_checker->leave(1L), i + 1 == n);
+        }
+    };
+
+    test_func2(1L, 1);
+    test_func2(1L, 10);
+    test_func2(1L, 100);
 }
 
 } // namespace starrocks::vectorized

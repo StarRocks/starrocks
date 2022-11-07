@@ -27,7 +27,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TWriteQuorumType;
 
 import java.util.List;
 import java.util.Optional;
@@ -83,8 +82,8 @@ public class UpdatePlanner {
             for (Partition partition : table.getPartitions()) {
                 partitionIds.add(partition.getId());
             }
-            TWriteQuorumType writeQuorum = table.writeQuorum();
-            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, writeQuorum);
+            DataSink dataSink = new OlapTableSink(table, olapTuple, partitionIds, table.writeQuorum(),
+                    table.enableReplicatedStorage());
             execPlan.getFragments().get(0).setSink(dataSink);
             execPlan.getFragments().get(0).setLoadGlobalDicts(globalDicts);
             if (isEnablePipeline && canUsePipeline) {

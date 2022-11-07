@@ -190,7 +190,9 @@ Status SchemaDescriptor::map_to_field(const std::vector<tparquet::SchemaElement>
         return Status::InvalidArgument("key_value in map group must be a repeated group");
     }
     auto& key_schema = t_schemas[pos + 2];
-    if (!is_required(key_schema)) {
+    // when key type is char or varchar in hive, not string
+    // the real type is BYTE_ARRAY which is OPTIONAL
+    if ((!is_required(key_schema)) && (key_schema.type != tparquet::Type::type::BYTE_ARRAY)) {
         return Status::InvalidArgument("key in map group must be required");
     }
 

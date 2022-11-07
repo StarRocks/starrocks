@@ -5,21 +5,34 @@ package com.starrocks.privilege;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Collection;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
 public interface AuthorizationProvider {
 
     /**
-     * return id & version
+     * return plugin id & version
      */
     short getPluginId();
     short getPluginVersion();
 
     /**
-     * validated type(string) -> validated action list(string)
+     * analyze type string -> id
      */
-    Map<String, List<String>> getValidPrivilegeTypeToActions();
+    Set<String> getAllTypes();
+    short getTypeIdByName(String typeStr) throws PrivilegeException;
+
+    /**
+     * analyze action type id -> action
+     */
+    Collection<Action> getAllActions(short typeId) throws PrivilegeException;
+    Action getAction(short typeId, String actionName) throws PrivilegeException;
+
+    /**
+     * analyze plural type name -> type name
+     */
+    String getTypeNameByPlural(String plural) throws PrivilegeException;
 
     /**
      * generate PEntryObject by tokenlist

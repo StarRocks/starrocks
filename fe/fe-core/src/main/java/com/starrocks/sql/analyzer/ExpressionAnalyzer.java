@@ -1025,43 +1025,21 @@ public class ExpressionAnalyzer {
                     }
 
                     Type variableType = userVariable.getResolvedExpression().getType();
-                    String variableValue = userVariable.getResolvedExpression().getStringValue();
+                    node.setType(variableType);
 
                     if (userVariable.getResolvedExpression() instanceof NullLiteral) {
-                        node.setType(variableType);
                         node.setIsNull();
-                        return null;
+                    } else {
+                        Object variableValue = userVariable.getResolvedExpression().getRealValue();
+                        node.setValue(variableValue);
                     }
-
-                    node.setType(variableType);
-                    switch (variableType.getPrimitiveType()) {
-                        case BOOLEAN:
-                            node.setBoolValue(Boolean.parseBoolean(variableValue));
-                            break;
-                        case TINYINT:
-                        case SMALLINT:
-                        case INT:
-                        case BIGINT:
-                            node.setIntValue(Long.parseLong(variableValue));
-                        case FLOAT:
-                        case DOUBLE:
-                            node.setFloatValue(Double.parseDouble(variableValue));
-                            break;
-                        case CHAR:
-                        case VARCHAR:
-                            node.setStringValue(variableValue);
-                            break;
-                        default:
-                            break;
+                } else {
+                    VariableMgr.fillValue(session.getSessionVariable(), node);
+                    if (!Strings.isNullOrEmpty(node.getName()) &&
+                            node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                        node.setType(Type.VARCHAR);
+                        node.setValue(SqlModeHelper.decode((long) node.getValue()));
                     }
-                    return null;
-                }
-
-                VariableMgr.fillValue(session.getSessionVariable(), node);
-                if (!Strings.isNullOrEmpty(node.getName()) &&
-                        node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
-                    node.setType(Type.VARCHAR);
-                    node.setStringValue(SqlModeHelper.decode(node.getIntValue()));
                 }
             } catch (AnalysisException | DdlException e) {
                 throw new SemanticException(e.getMessage());

@@ -84,6 +84,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // the default write quorum
     private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
 
+    // the default disable replicated storage
+    private boolean enableReplicatedStorage = false;
+
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
     // 2. Before checkpoint, we relay delete job journal log to persist.
@@ -124,6 +127,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
                 break;
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
+                break;
+            case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+                buildReplicatedStorage();
                 break;
             default:
                 break;
@@ -183,6 +189,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
                         WriteQuorum.MAJORITY));
         return this;
     }
+
+    public TableProperty buildReplicatedStorage() {
+        enableReplicatedStorage = Boolean
+                .parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, "false"));
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -237,6 +250,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return writeQuorum;
     }
 
+    public boolean enableReplicatedStorage() {
+        return enableReplicatedStorage;
+    }
+
     public TStorageFormat getStorageFormat() {
         return storageFormat;
     }
@@ -289,5 +306,6 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildWriteQuorum();
         buildPartitionTTL();
         buildPartitionRefreshNumber();
+        buildReplicatedStorage();
     }
 }

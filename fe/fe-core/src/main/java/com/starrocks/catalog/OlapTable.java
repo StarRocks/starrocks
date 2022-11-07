@@ -1644,6 +1644,23 @@ public class OlapTable extends Table implements GsonPostProcessable {
         tableProperty.buildEnablePersistentIndex();
     }
 
+    public Boolean enableReplicatedStorage() {
+        if (tableProperty != null) {
+            return tableProperty.enableReplicatedStorage();
+        }
+        return false;
+    }
+
+    public void setEnableReplicatedStorage(boolean enableReplicatedStorage) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                        Boolean.valueOf(enableReplicatedStorage).toString());
+        tableProperty.buildReplicatedStorage();
+    }
+
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();

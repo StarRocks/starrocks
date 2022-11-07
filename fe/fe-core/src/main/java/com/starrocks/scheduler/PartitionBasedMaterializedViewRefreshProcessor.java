@@ -443,7 +443,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     }
 
     private boolean needToRefreshTable(OlapTable olapTable) {
-        return !materializedView.getNeedRefreshPartitionNames(olapTable).isEmpty();
+        return !materializedView.getUpdatedPartitionNamesOfTable(olapTable).isEmpty();
     }
 
     private boolean needToRefreshNonPartitionTable(Table partitionTable) {
@@ -529,7 +529,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         }
         // check if there is a load in the base table and add it to the refresh candidate
         Set<String> result = getMVPartitionNamesByBasePartitionNames(
-                materializedView.getNeedRefreshPartitionNames(getPartitionTableAndColumn(snapshotBaseTables).first));
+                materializedView.getUpdatedPartitionNamesOfTable(getPartitionTableAndColumn(snapshotBaseTables).first));
         result.retainAll(mvRangePartitionNames);
         return result;
     }

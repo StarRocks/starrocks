@@ -763,6 +763,9 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
     if (table_sink.__isset.write_quorum_type) {
         _write_quorum_type = table_sink.write_quorum_type;
     }
+    if (table_sink.__isset.enable_replicated_storage) {
+        _enable_replicated_storage = table_sink.enable_replicated_storage;
+    }
     _schema = std::make_shared<OlapTableSchemaParam>();
     RETURN_IF_ERROR(_schema->init(table_sink.schema));
     _vectorized_partition = _pool->add(new vectorized::OlapTablePartitionParam(_schema, table_sink.partition));
@@ -781,10 +784,6 @@ Status OlapTableSink::init(const TDataSink& t_sink) {
 
 Status OlapTableSink::prepare(RuntimeState* state) {
     _span->AddEvent("prepare");
-
-    if (state->query_options().__isset.enable_replicated_storage) {
-        _enable_replicated_storage = state->query_options().enable_replicated_storage;
-    }
 
     // profile must add to state's object pool
     _profile = state->obj_pool()->add(new RuntimeProfile("OlapTableSink"));
