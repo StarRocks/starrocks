@@ -141,7 +141,7 @@ ALTER TABLE tbl SET ("colocate_with" = "");
 
 Colocation 表的副本分布需遵循 Group 中指定的分布，所以其副本修复和均衡相较于普通分片有所区别。
 
-Group 具有 **Stable** 属性，当 **Stable** 为 **true** 时（即 Stable 状态），表示当前 Group 内的表的所有分片没有正在进行的变动，Colocation 特性可以正常使用。当 **Stable** 为 **false** 时（即 Unstable 状态），表示当前 Group 内有部分表的分片正在做修复或迁移，此时，相关表的 Colocate Join 将退化为普通 Join。
+Group 具有 **IsStable** 属性，当 **IsStable** 为 **true** 时（即 Stable 状态），表示当前 Group 内的表的所有分片没有正在进行的变动，Colocation 特性可以正常使用。当 **IsStable** 为 **false** 时（即 Unstable 状态），表示当前 Group 内有部分表的分片正在做修复或迁移，此时，相关表的 Colocate Join 将退化为普通 Join。
 
 ### 副本修复
 
