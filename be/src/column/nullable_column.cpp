@@ -38,6 +38,13 @@ size_t NullableColumn::null_count() const {
     return SIMD::count_nonzero(_null_column->get_data());
 }
 
+size_t NullableColumn::null_count(size_t offset, size_t count) const {
+    if (!_has_null) {
+        return 0;
+    }
+    return SIMD::count_nonzero(_null_column->raw_data() + offset, count);
+}
+
 void NullableColumn::append_datum(const Datum& datum) {
     if (datum.is_null()) {
         append_nulls(1);

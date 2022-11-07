@@ -126,6 +126,7 @@ public:
     Datum get(size_t idx) const override;
 
     std::pair<size_t, size_t> get_element_offset_size(size_t idx) const;
+    size_t get_element_null_count(size_t idx) const;
     size_t get_element_size(size_t idx) const;
 
     bool set_null(size_t idx) override;

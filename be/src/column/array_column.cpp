@@ -86,7 +86,7 @@ void ArrayColumn::append_datum(const Datum& datum) {
 void ArrayColumn::append_array_element(const Column& elem, size_t null_elem) {
     _elements->append(elem);
     _elements->append_nulls(null_elem);
-    _offsets->append(_offsets->get_data().back() + elem.size());
+    _offsets->append(_offsets->get_data().back() + elem.size() + null_elem);
 }
 
 void ArrayColumn::append(const Column& src, size_t offset, size_t count) {
@@ -457,6 +457,12 @@ std::pair<size_t, size_t> ArrayColumn::get_element_offset_size(size_t idx) const
     size_t offset = _offsets->get_data()[idx];
     size_t size = _offsets->get_data()[idx + 1] - _offsets->get_data()[idx];
     return {offset, size};
+}
+
+size_t ArrayColumn::get_element_null_count(size_t idx) const {
+    auto offset_size = get_element_offset_size(idx);
+    auto nullable = down_cast<NullableColumn*>(_elements.get());
+    return nullable->null_count(offset_size.first, offset_size.second);
 }
 
 size_t ArrayColumn::get_element_size(size_t idx) const {
