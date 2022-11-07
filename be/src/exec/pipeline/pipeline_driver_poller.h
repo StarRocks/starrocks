@@ -55,6 +55,12 @@ private:
     scoped_refptr<Thread> _polling_thread;
     std::atomic<bool> _is_polling_thread_initialized;
     std::atomic<bool> _is_shutdown;
+
+    int64_t _debug_cnt = 0;
+    int64_t _debug_time = 0;
+    int64_t _debug_driver_size = 0;
+    int64_t _debug_driver_queue_empty_times = 0;
+    std::vector<int64_t> _debug_driver_ready_counts;
 };
 } // namespace pipeline
 } // namespace starrocks

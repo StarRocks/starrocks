@@ -49,68 +49,104 @@ void PipelineDriverPoller::run_internal() {
             }
         }
 
-        auto driver_it = local_blocked_drivers.begin();
-        while (driver_it != local_blocked_drivers.end()) {
-            auto* driver = *driver_it;
+        if (++_debug_cnt >= 1000) {
+            std::sort(_debug_driver_ready_counts.begin(), _debug_driver_ready_counts.end());
+            std::stringstream ss;
+            int64_t total_ready_counts = 0;
+            for (auto i = 0; i < _debug_driver_ready_counts.size(); i++) {
+                total_ready_counts += _debug_driver_ready_counts[i];
+                if (i == 0) {
+                    ss << _debug_driver_ready_counts[i];
+                } else {
+                    ss << ", " << _debug_driver_ready_counts[i];
+                }
+            }
+            LOG(ERROR) << "traverse time=" << _debug_time / _debug_cnt / 1000
+                       << "us, drivers_size=" << _debug_driver_size / _debug_cnt
+                       << ", empty_driver_queue_times=" << _debug_driver_queue_empty_times
+                       << "\n\t ready_counts=" << ss.str()
+                       << "\n\t avg_ready_counts=" << total_ready_counts / _debug_driver_ready_counts.size();
 
-            if (driver->query_ctx()->is_query_expired()) {
-                // there are not any drivers belonging to a query context can make progress for an expiration period
-                // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
-                // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
-                //
-                // If the fragment is expired when the source operator is already pending i/o task,
-                // The state of driver shouldn't be changed.
-                LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
-                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
-                driver->fragment_ctx()->cancel(Status::TimedOut(fmt::format(
-                        "Query exceeded time limit of {} seconds", driver->query_ctx()->get_query_expire_seconds())));
-                driver->cancel_operators(driver->fragment_ctx()->runtime_state());
-                if (driver->is_still_pending_finish()) {
-                    driver->set_driver_state(DriverState::PENDING_FINISH);
-                    ++driver_it;
-                } else {
-                    driver->set_driver_state(DriverState::FINISH);
+            _debug_cnt = 0;
+            _debug_time = 0;
+            _debug_driver_size = 0;
+            _debug_driver_queue_empty_times = 0;
+            _debug_driver_ready_counts.clear();
+        }
+        _debug_driver_size += local_blocked_drivers.size();
+        if (_driver_queue->empty()) {
+            _debug_driver_queue_empty_times++;
+        }
+
+        auto driver_it = local_blocked_drivers.begin();
+        int64_t timer = 0;
+        {
+            SCOPED_RAW_TIMER(&timer);
+            while (driver_it != local_blocked_drivers.end()) {
+                auto* driver = *driver_it;
+
+                if (driver->query_ctx()->is_query_expired()) {
+                    // there are not any drivers belonging to a query context can make progress for an expiration period
+                    // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
+                    // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
+                    //
+                    // If the fragment is expired when the source operator is already pending i/o task,
+                    // The state of driver shouldn't be changed.
+                    LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
+                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                    driver->fragment_ctx()->cancel(
+                            Status::TimedOut(fmt::format("Query exceeded time limit of {} seconds",
+                                                         driver->query_ctx()->get_query_expire_seconds())));
+                    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+                    if (driver->is_still_pending_finish()) {
+                        driver->set_driver_state(DriverState::PENDING_FINISH);
+                        ++driver_it;
+                    } else {
+                        driver->set_driver_state(DriverState::FINISH);
+                        remove_blocked_driver(local_blocked_drivers, driver_it);
+                        ready_drivers.emplace_back(driver);
+                    }
+                } else if (driver->fragment_ctx()->is_canceled()) {
+                    // If the fragment is cancelled when the source operator is already pending i/o task,
+                    // The state of driver shouldn't be changed.
+                    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+                    if (driver->is_still_pending_finish()) {
+                        driver->set_driver_state(DriverState::PENDING_FINISH);
+                        ++driver_it;
+                    } else {
+                        driver->set_driver_state(DriverState::CANCELED);
+                        remove_blocked_driver(local_blocked_drivers, driver_it);
+                        ready_drivers.emplace_back(driver);
+                    }
+                } else if (driver->pending_finish()) {
+                    if (driver->is_still_pending_finish()) {
+                        ++driver_it;
+                    } else {
+                        // driver->pending_finish() return true means that when a driver's sink operator is finished,
+                        // but its source operator still has pending io task that executed in io threads and has
+                        // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
+                        // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
+                        // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
+                        // FragmentContext is unregistered prematurely.
+                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                       : DriverState::FINISH);
+                        remove_blocked_driver(local_blocked_drivers, driver_it);
+                        ready_drivers.emplace_back(driver);
+                    }
+                } else if (driver->is_finished()) {
                     remove_blocked_driver(local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
-                }
-            } else if (driver->fragment_ctx()->is_canceled()) {
-                // If the fragment is cancelled when the source operator is already pending i/o task,
-                // The state of driver shouldn't be changed.
-                driver->cancel_operators(driver->fragment_ctx()->runtime_state());
-                if (driver->is_still_pending_finish()) {
-                    driver->set_driver_state(DriverState::PENDING_FINISH);
-                    ++driver_it;
-                } else {
-                    driver->set_driver_state(DriverState::CANCELED);
+                } else if (driver->is_not_blocked()) {
+                    driver->set_driver_state(DriverState::READY);
                     remove_blocked_driver(local_blocked_drivers, driver_it);
                     ready_drivers.emplace_back(driver);
-                }
-            } else if (driver->pending_finish()) {
-                if (driver->is_still_pending_finish()) {
-                    ++driver_it;
                 } else {
-                    // driver->pending_finish() return true means that when a driver's sink operator is finished,
-                    // but its source operator still has pending io task that executed in io threads and has
-                    // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
-                    // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
-                    // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
-                    // FragmentContext is unregistered prematurely.
-                    driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                                   : DriverState::FINISH);
-                    remove_blocked_driver(local_blocked_drivers, driver_it);
-                    ready_drivers.emplace_back(driver);
+                    ++driver_it;
                 }
-            } else if (driver->is_finished()) {
-                remove_blocked_driver(local_blocked_drivers, driver_it);
-                ready_drivers.emplace_back(driver);
-            } else if (driver->is_not_blocked()) {
-                driver->set_driver_state(DriverState::READY);
-                remove_blocked_driver(local_blocked_drivers, driver_it);
-                ready_drivers.emplace_back(driver);
-            } else {
-                ++driver_it;
             }
         }
+        _debug_time += timer;
+        _debug_driver_ready_counts.push_back(ready_drivers.size());
 
         if (ready_drivers.empty()) {
             spin_count += 1;
