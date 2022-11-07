@@ -1,14 +1,12 @@
-# 导出总览
+# 使用 Broker 导出数据
 
-本文介绍如何把 StarRocks 集群中的数据，导出并存储到其他介质上。
-
-StarRocks 提供的数据导出功能。您可以使用该功能将指定表或分区上的数据，以 CSV 的格式，通过 Broker 程序导出到外部云存储系统，如 HDFS、阿里云 OSS、AWS S3、或其他兼容 S3 协议的对象存储服务。
+本文介绍如何把 StarRocks 集群中指定表或分区上的数据，以 CSV 的格式，通过 Broker 程序导出到外部云存储系统，如 HDFS、阿里云 OSS、AWS S3、或其他兼容 S3 协议的对象存储服务。
 
 ## 前提条件
 
-Broker Load 需要借助 Broker 程序程访问外部云存储系统。因此，使用 Broker Load 前，需要提前部署好 Broker 程序。
+您可以通过 [SHOW BROKER](/sql-reference/sql-statements/Administration/SHOW%20BROKER.md) 语句来查看集群中已经部署的 Broker。如果集群中没有部署 Broker，请参见[部署 Broker 节点](/administration/deploy_broker.md)完成 Broker 部署。
 
-有关如何部署 Broker 程序的信息，请参见[部署 Broker 节点](/administration/deploy_broker.md)。
+本文档假设您的 StarRocks 集群中已部署一组名为“mybroker”的 Broker。
 
 ## 注意事项
 
@@ -68,33 +66,19 @@ Broker Load 需要借助 Broker 程序程访问外部云存储系统。因此，
 
 ```SQL
 EXPORT TABLE db1.tbl1 
-
 PARTITION (p1,p2)
-
 (col1, col3)
-
 TO "hdfs://HDFS_IP:HDFS_Port/export/lineorder_" 
-
 PROPERTIES
-
 (
-
     "column_separator"=",",
-
     "load_mem_limit"="2147483648",
-
     "timeout" = "3600"
-
 )
-
-WITH BROKER "broker1"
-
+WITH BROKER "mybroker"
 (
-
     "username" = "user",
-
     "password" = "passwd"
-
 );
 ```
 
@@ -119,25 +103,16 @@ SHOW EXPORT WHERE queryid = "edee47f0-abe1-11ec-b9d1-00163e1e238f";
 系统返回如下导出结果：
 
 ```Plain%20Text
-     JobId: 14008
-
-     State: FINISHED
-
-  Progress: 100%
-
-  TaskInfo: {"partitions":["*"],"mem limit":2147483648,"column separator":",","line delimiter":"\n","tablet num":1,"broker":"hdfs","coord num":1,"db":"default_cluster:db1","tbl":"tbl3",columns:["col1", "col3"]}
-
-      Path: oss://bj-test/export/
-
+JobId: 14008
+State: FINISHED
+Progress: 100%
+TaskInfo: {"partitions":["*"],"mem limit":2147483648,"column separator":",","line delimiter":"\n","tablet num":1,"broker":"hdfs","coord num":1,"db":"default_cluster:db1","tbl":"tbl3",columns:["col1", "col3"]}
+Path: oss://bj-test/export/
 CreateTime: 2019-06-25 17:08:24
-
- StartTime: 2019-06-25 17:08:28
-
+StartTime: 2019-06-25 17:08:28
 FinishTime: 2019-06-25 17:08:34
-
-   Timeout: 3600
-
-  ErrorMsg: N/A
+Timeout: 3600
+ErrorMsg: N/A
 ```
 
 有关 SHOW EXPORT 语句的详细语法和参数说明，请参见 [SHOW EXPORT](/sql-reference/sql-statements/data-manipulation/SHOW%20EXPORT.md)。
