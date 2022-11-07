@@ -160,6 +160,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                 return st;
             }
 
+            // TODO(yangzaorang): 需要引入ESCAPE，ENCLOSE
             _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
@@ -176,9 +177,11 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
                     _curr_reader.reset();
                     return status;
                 }
+                // TODO(yangzaorang): 如果做了start_offset操作，那么我们接下来解析数据的时候，需要跳过一个record。这里加一个flag
                 CSVReader::Record dummy;
                 RETURN_IF_ERROR(_curr_reader->next_record(&dummy));
             }
+            // TODO(yangzaorang): 这里的skip header放到大循环里去做
             // TODO(yangzaorang): what if skip header beyond the _scan_range.ranges[_curr_file_index].size
             if (_skip_header) {
                 for (int64_t i = 0; i < _skip_header; i++) {
@@ -190,6 +193,8 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             return Status::EndOfFile("CSVScanner");
         }
 
+        // src_chunk是每次parse csv文件的容器，可以重复使用，我们可以忽略之。
+        // 所以关键点是_parse_csv这个函数
         src_chunk->set_num_rows(0);
         Status status = _parse_csv(src_chunk.get());
 
@@ -230,7 +235,12 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
 
     csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
 
+    // 这里的循环表示我们获取到capacity条记录，则停止循环
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+
+
+
+        // --------------------------------------------------------- 
         status = _curr_reader->next_record(&record);
         if (status.is_end_of_file()) {
             break;
@@ -259,9 +269,13 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             }
             continue;
         }
+        // ---------------------------------------------------------
+
+
 
         SCOPED_RAW_TIMER(&_counter->fill_ns);
         bool has_error = false;
+        // 遍历获取到的fields，所以这块还是可以复用
         for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
             auto slot = _src_slot_descriptors[j];
             if (slot == nullptr) {
@@ -269,6 +283,7 @@ Status CSVScanner::_parse_csv(Chunk* chunk) {
             }
             const Slice& field = fields[j];
             options.type_desc = &(slot->type());
+            // 此时，field引用的还是buff中的共享内存，直到这一步将数据复制走。所以每读到一条record，我们就可以compact buff了。
             if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
                 chunk->set_num_rows(num_rows);
                 if (_counter->num_rows_filtered++ < 50) {
