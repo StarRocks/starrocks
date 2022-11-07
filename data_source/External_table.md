@@ -940,8 +940,9 @@ StarRocks 支持通过外表的方式查询 Hudi 数据湖中的数据，帮助�
 
 ### 注意事项
 
-* Hudi 外表是只读的，只能用于查询操作。
-* 当前支持 Hudi 的表类型为 Copy on write (下文简称 COW)，暂不支持 Merge on read (下文简称 MOR)表类型。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
+* Hudi 外表只能用于查询操作，不支持写入。
+* 当前支持 Hudi 的表类型为 Copy on Write（下文简称 COW）和 Merge on read（下文简称 MOR）。COW 和 MOR 之间的更多区别，请参见 [Apache Hudi 官网](https://hudi.apache.org/docs/table_types)。
+* 当前支持的 Hudi 查询类型有 Snapshot Queries 和 Read Optimized Queries（仅针对 MOR 表），暂不支持 Incremental Queries。有关 Hudi 查询类型的说明，请参见 [Table & Query Types](https://hudi.apache.org/docs/next/table_types/#query-types)。
 * 支持 Hudi 文件的压缩格式为 GZIP（默认值），ZSTD，LZ4 和 SNAPPY。
 * StarRocks 暂不支持同步 Hudi 表结构。如果 Hudi 表结构发生变化，您需要在 StarRocks 中删除相应的外部表并重新创建。
 
@@ -1023,20 +1024,21 @@ PROPERTIES (
 * 您可以按照业务需求选择 Hudi 表中的全部或部分列。
 * 创建外部表时，需根据 Hudi 表列类型指定 StarRocks 中外部表列类型，具体映射关系如下：
 
-| **Hudi**                     | **StarRocks**           |
-| ---------------------------- | ----------------------- |
-| BOOLEAN                      | BOOLEAN                 |
-| INT                          | TINYINT/SMALLINT/INT    |
-| DATE                         | DATE                    |
-| TimeMillis/TimeMicros        | TIME                    |
-| LONG                         | BIGINT                  |
-| FLOAT                        | FLOAT                   |
-| DOUBLE                       | DOUBLE                  |
-| STRING                       | CHAR/VARCHAR            |
-| ARRAY                        | ARRAY                   |
-| DECIMAL                      | DECIMAL                 |
+| **Hudi type**                    | **StarRocks type**     |
+| ----------------------------     | ----------------------- |
+| BOOLEAN                          | BOOLEAN                 |
+| INT                              | INT                     |
+| DATE                             | DATE                    |
+| TimeMillis/TimeMicros            | TIME                    |
+| TimestampMillis/TimestampMicros  | DATETIME                |
+| LONG                             | BIGINT                  |
+| FLOAT                            | FLOAT                   |
+| DOUBLE                           | DOUBLE                  |
+| STRING                           | CHAR/VARCHAR            |
+| ARRAY                            | ARRAY                   |
+| DECIMAL                          | DECIMAL                 |
 
-> 如果 Hudi 部分列的数据类型为 FIXED, ENUM, UNION, MAP, BYTES，则 StarRocks 暂不支持通过 Hudi 关联外表的方式访问此数据类型。
+> StarRocks 暂不支持查询Struct，Map数据类型，对于MOR表，暂不支持Array数据类型。
 
 #### 步骤四：查询 Hudi 外表
 
