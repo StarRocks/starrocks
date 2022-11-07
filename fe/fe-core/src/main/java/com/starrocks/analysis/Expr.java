@@ -28,6 +28,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -1319,7 +1320,7 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     }
 
     // only the first/last one can be lambda functions.
-    public boolean hasLambdaFunction() {
+    public boolean hasLambdaFunction(Expr expression) {
         int pos = -1, num = 0;
         for (int i = 0; i < children.size(); ++i) {
             if (children.get(i) instanceof LambdaFunctionExpr) {
@@ -1338,6 +1339,13 @@ abstract public class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
             throw new SemanticException(
                     "Lambda functions can only be the first or last argument of any high-order function, " +
                             "or lambda arguments should be in ().");
+        } else if (num == 0) {
+            if (expression instanceof FunctionCallExpr) {
+                String funcName = ((FunctionCallExpr) expression).getFnName().getFunction();
+                if (funcName.equals(FunctionSet.ARRAY_MAP) || funcName.equals(FunctionSet.TRANSFORM)) {
+                    throw new SemanticException(funcName + " should not without lambda function input.");
+                }
+            }
         }
         return false;
     }

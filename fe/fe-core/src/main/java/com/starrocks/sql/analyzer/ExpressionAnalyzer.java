@@ -105,7 +105,7 @@ public class ExpressionAnalyzer {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
                 return true;
-            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
                 ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
                 return true;
@@ -172,7 +172,7 @@ public class ExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        if (expression.hasLambdaFunction()) {
+        if (expression.hasLambdaFunction(expression)) {
             analyzeHighOrderFunction(visitor, expression, scope);
         } else {
             for (Expr expr : expression.getChildren()) {
