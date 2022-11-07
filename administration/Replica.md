@@ -37,7 +37,7 @@ TabletChecker 作为常驻的后台进程，会定期检查所有分片的状态
     * `UnhealthyTabletNum` 列显示了对应的 Database 中，有多少 Tablet 处于非健康状态。
     * `InconsistentTabletNum` 列显示了对应的 Database 中，有多少 Tablet 处于副本不一致的状态。
 
-    `Total` 行对整个集群进行了统计。正常情况下 `UnhealthyTabletNum` 和 `InconsistentTabletNum` 应为0。如果不为零，可以进一步查看具体有哪些 Tablet。如上图中，UM_TEST 数据库有 1 个 Tablet 状态不健康。
+    `Total` 行对整个集群进行了统计。正常情况下 `UnhealthyTabletNum` 和 `InconsistentTabletNum` 应为 0。如果不为零，可以进一步查看具体有哪些 Tablet。如上图中，UM_TEST 数据库有 1 个 Tablet 状态不健康。
 
     您可以通过一下命令查询状态不健康的 Tablet。
 
