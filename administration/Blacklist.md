@@ -11,7 +11,7 @@
 通过以下命令开启黑名单功能。
 
 ```sql
-ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true")；
+ADMIN SET FRONTEND CONFIG ("enable_sql_blacklist" = "true");
 ```
 
 ## 添加黑名单
