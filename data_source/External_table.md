@@ -1028,7 +1028,7 @@ PROPERTIES (
 | ARRAY                        | ARRAY                   |
 | DECIMAL                      | DECIMAL                 |
 
-> 如果 Hudi 部分列的数据类型为 FIXED, ENUM, UNION, MAP, BYTES，则 StarRocks 暂不支持通过 Hudi 关联外表的方式访问此数据类型。
+> 如果 Hudi 部分列的数据类型为 FIXED，ENUM，UNION，MAP，BYTES，则 StarRocks 暂不支持通过 Hudi 关联外表的方式访问此数据类型。
 
 #### 步骤四：查询 Hudi 外表
 
