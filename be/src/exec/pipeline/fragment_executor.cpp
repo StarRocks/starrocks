@@ -256,7 +256,6 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
     std::vector<TScanRangeParams> no_scan_ranges;
     plan->collect_scan_nodes(&scan_nodes);
 
-    int64_t sum_scan_limit = 0;
     MorselQueueMap& morsel_queues = _fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
         ScanNode* scan_node = down_cast<ScanNode*>(i);
@@ -265,19 +264,30 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const TExecPlanFr
         ASSIGN_OR_RETURN(MorselQueuePtr morsel_queue,
                          scan_node->convert_scan_range_to_morsel_queue(scan_ranges, scan_node->id(), request));
         morsel_queues.emplace(scan_node->id(), std::move(morsel_queue));
-        if (scan_node->limit() > 0) {
-            sum_scan_limit += scan_node->limit();
-        }
     }
 
     int dop = exec_env->calc_pipeline_dop(request.pipeline_dop);
+    int64_t logical_scan_limit = 0;
+    int64_t physical_scan_limit = 0;
+    for (auto& i : scan_nodes) {
+        auto* scan_node = down_cast<ScanNode*>(i);
+        if (scan_node->limit() > 0) {
+            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            logical_scan_limit += scan_node->limit();
+            physical_scan_limit += scan_node->limit() * dop * ScanOperator::MAX_IO_TASKS_PER_OP;
+        } else {
+            // Not sure how many rows will be scan.
+            logical_scan_limit = -1;
+            break;
+        }
+    }
+
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
-        // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
-        // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
-        if (sum_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            int parallelism = dop * ScanOperator::MAX_IO_TASKS_PER_OP;
-            int64_t parallel_scan_limit = sum_scan_limit * parallelism;
-            _query_ctx->set_scan_limit(parallel_scan_limit);
+        if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit() &&
+            physical_scan_limit > _wg->big_query_scan_rows_limit()) {
+            _query_ctx->set_scan_limit(physical_scan_limit);
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
