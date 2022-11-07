@@ -9,7 +9,7 @@ Bitmap 去重是指，当给定一个数组 A， 其取值范围为 [0, n)， �
 1. 空间优势：通过用 Bitmap 的一个 Bit 位表示对应下标是否存在，能节省大量存储空间；例如对 INT32 去重，使用普通 Bitmap 所需的存储空间只占传统去重的 1/32。StarRocks 采用 Roaring Bitmap 的优化实现，对于稀疏的 Bitmap，所占用的存储空间会进一步降低。
 2. 时间优势：Bitmap 的去重涉及的计算包括对给定下标的 Bit 置位，统计 Bitmap 的置位个数，分别为 O(1) 操作和 O(n) 操作， 并且后者可使用 CLZ，CTZ 等指令高效计算。 此外，Bitmap 去重在 MPP 执行引擎中还可以并行加速处理，每个计算节点各自计算本地子 Bitmap， 使用 BITOR 操作将这些子 Bitmap 合并成最终的 Bitmap。BITOR 操作比基于 sort 和基于 hash 的去重效率更高，且无条件依赖和数据依赖，可向量化执行。
 
-Roaring Bitmap 实现，细节可以参考：[具体论文和实现](https://github.com/RoaringBitmap/RoaringBitmap)
+Roaring Bitmap 实现，细节可以参考：[具体论文和实现](https://github.com/RoaringBitmap/RoaringBitmap)。
 
 ## 使用 Bitmap 去重
 
