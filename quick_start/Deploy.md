@@ -196,7 +196,7 @@ StarRocks 的 FE 节点支持 HA 模型部署，以保证集群的高可用。�
 
 ### 下载并解压安装包
 
-[下载](https://www.starrocks.com/zh-CN/download) StarRocks 并解压二进制安装包。
+[下载](https://www.starrocks.com/zh-CN/download/community) StarRocks 并解压二进制安装包。
 
 ```bash
 tar -xzvf StarRocks-x.x.x.tar.gz
