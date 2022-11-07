@@ -2,7 +2,7 @@
 
 本文介绍如何为 StarRocks 设置监控报警。
 
-StarRocks 提供两种监控报警的方案。企业版用户可以使用内置的 StarRocksManager，其自带的 Agent 从各个 Host 采集监控信息，上报至 Center Service，然后做可视化展示。StarRocksManager 提供邮件和 Webhook 的方式发送报警通知。如果您有二次开发需求，需要自行搭建部署监控服务，也可以使用开源 Prometheus+Grafana 方案，StarRocks 提供了兼容 Prometheus 的信息采集接口，可以通过直接链接 BE 或 FE 的 HTTP 端口来获取集群的监控信息。
+StarRocks 提供两种监控报警的方案。企业版用户可以使用内置的 StarRocksManager，其自带的 Agent 从各个 Host 采集监控信息，上报至 Center Service，然后做可视化展示。StarRocksManager 提供邮件和 Webhook 的方式发送报警通知。如果您有二次开发需求，需要自行搭建部署监控服务，也可以使用开源 Prometheus+Grafana 方案，StarRocks 提供了兼容 Prometheus 的信息采集接口，可以通过直接连接 BE 或 FE 的 HTTP 端口来获取集群的监控信息。
 
 ## 使用 StarRocksManager
 
