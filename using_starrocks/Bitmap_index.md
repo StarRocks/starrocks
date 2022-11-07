@@ -134,7 +134,7 @@ StarRocks 会为 `Gender` 和 `Income_level` 列分别构建一个字典，然�
 如果想要查找工资范围在 `level_1` 的女性员工，可执行如下语句。
 
 ```SQL
- SELECT xxx FROM employee 
+ SELECT * FROM employee 
  WHERE Gender = female AND Income_level = level_1;
 ```
 
