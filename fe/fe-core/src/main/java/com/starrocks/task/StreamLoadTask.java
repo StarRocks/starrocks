@@ -22,11 +22,8 @@
 package com.starrocks.task;
 
 import com.google.common.collect.Lists;
-import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.catalog.Database;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.CompressionUtils;
@@ -34,10 +31,12 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.SqlModeHelper;
+import com.starrocks.sql.ast.ColumnSeparator;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.ImportColumnsStmt;
 import com.starrocks.sql.ast.ImportWhereStmt;
 import com.starrocks.sql.ast.PartitionNames;
+import com.starrocks.sql.ast.RowDelimiter;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
@@ -205,10 +204,10 @@ public class StreamLoadTask {
             setWhereExpr(request.getWhere());
         }
         if (request.isSetColumnSeparator()) {
-            setColumnSeparator(request.getColumnSeparator());
+            columnSeparator = new ColumnSeparator(request.getColumnSeparator());
         }
         if (request.isSetRowDelimiter()) {
-            setRowDelimiter(request.getRowDelimiter());
+            rowDelimiter = new RowDelimiter(request.getRowDelimiter());
         }
         if (request.isSetPartitions()) {
             String[] partNames = request.getPartitions().trim().split("\\s*,\\s*");
@@ -336,16 +335,6 @@ public class StreamLoadTask {
             throw new UserException("parse columns header failed", e);
         }
         whereExpr = whereStmt.getExpr();
-    }
-
-    private void setColumnSeparator(String oriSeparator) throws AnalysisException {
-        columnSeparator = new ColumnSeparator(oriSeparator);
-        columnSeparator.analyze();
-    }
-
-    private void setRowDelimiter(String orgDelimiter) throws AnalysisException {
-        rowDelimiter = new RowDelimiter(orgDelimiter);
-        rowDelimiter.analyze();
     }
 
     public long getLoadMemLimit() {

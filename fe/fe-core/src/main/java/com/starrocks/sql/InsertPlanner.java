@@ -176,7 +176,7 @@ public class InsertPlanner {
             } else {
                 throw new SemanticException("Unknown table type " + insertStmt.getTargetTable().getType());
             }
-            
+
             if (isEnablePipeline && canUsePipeline && insertStmt.getTargetTable() instanceof OlapTable) {
                 PlanFragment sinkFragment = execPlan.getFragments().get(0);
                 if (shuffleServiceEnable) {
@@ -437,7 +437,7 @@ public class InsertPlanner {
         DistributionProperty property = new DistributionProperty(spec);
 
         shuffleServiceEnable = true;
-        
+
         return new PhysicalPropertySet(property);
     }
 }

@@ -6,10 +6,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.analysis.ColumnSeparator;
 import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.ParseNode;
-import com.starrocks.analysis.RowDelimiter;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
@@ -374,14 +372,12 @@ public class CreateRoutineLoadStmt extends DdlStmt {
                     throw new AnalysisException("repeat setting of column separator");
                 }
                 columnSeparator = (ColumnSeparator) parseNode;
-                columnSeparator.analyze(null);
             } else if (parseNode instanceof RowDelimiter) {
                 // check row delimiter
                 if (rowDelimiter != null) {
                     throw new AnalysisException("repeat setting of row delimiter");
                 }
                 rowDelimiter = (RowDelimiter) parseNode;
-                rowDelimiter.analyze(null);
             } else if (parseNode instanceof ImportColumnsStmt) {
                 // check columns info
                 if (importColumnsStmt != null) {

@@ -172,7 +172,7 @@ public class PrivilegeCheckerV2 {
         // ---------------------------------------- External Resource Statement---------------------------------------------
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
-            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "CREATE_RESOURCE");
             }
             return null;

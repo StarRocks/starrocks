@@ -112,11 +112,11 @@ public class LoadPlanner {
     TRoutineLoadTask routineLoadTask;
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
-            boolean strictMode, String timezone, long timeoutS,
-            long startTime, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
-            List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
+                       boolean strictMode, String timezone, long timeoutS,
+                       long startTime, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       BrokerDesc brokerDesc, List<BrokerFileGroup> brokerFileGroups,
+                       List<List<TBrokerFileStatus>> fileStatusesList, int filesAdded) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -150,10 +150,10 @@ public class LoadPlanner {
     }
 
     public LoadPlanner(long loadJobId, TUniqueId loadId, long txnId, long dbId, OlapTable destTable,
-            boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
-            Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
-            boolean routimeStreamLoadNegative,
-            List<ImportColumnDesc> columnDescs, StreamLoadTask streamLoadTask, TRoutineLoadTask routineLoadTask) {
+                       boolean strictMode, String timezone, boolean partialUpdate, ConnectContext context,
+                       Map<String, String> sessionVariables, long loadMemLimit, long execMemLimit,
+                       boolean routimeStreamLoadNegative,
+                       List<ImportColumnDesc> columnDescs, StreamLoadTask streamLoadTask, TRoutineLoadTask routineLoadTask) {
         this.loadJobId = loadJobId;
         this.loadId = loadId;
         this.txnId = txnId;
@@ -339,7 +339,7 @@ public class LoadPlanner {
 
             if (col.getType().isVarchar() && enableDictOptimize
                     && IDictManager.getInstance().hasGlobalDict(destTable.getId(),
-                            col.getName())) {
+                    col.getName())) {
                 Optional<ColumnDict> dict = IDictManager.getInstance().getGlobalDict(destTable.getId(), col.getName());
                 dict.ifPresent(columnDict -> globalDicts.add(new Pair<>(slotDesc.getId().asInt(), columnDict)));
             }
@@ -379,7 +379,7 @@ public class LoadPlanner {
     }
 
     private void prepareSinkFragment(PlanFragment sinkFragment, List<Long> partitionIds, boolean canUsePipeLine,
-            boolean completeTabletSink) throws UserException {
+                                     boolean completeTabletSink) throws UserException {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink

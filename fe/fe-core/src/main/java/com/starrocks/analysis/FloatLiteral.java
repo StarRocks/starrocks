@@ -115,7 +115,7 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     private void checkValue(Double value) throws AnalysisException {
-        if (value.isInfinite()||value.isNaN()) {
+        if (value.isInfinite() || value.isNaN()) {
             throw new AnalysisException("Invalid literal:" + value);
         }
     }

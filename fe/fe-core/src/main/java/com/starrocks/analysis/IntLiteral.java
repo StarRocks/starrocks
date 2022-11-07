@@ -208,7 +208,6 @@ public class IntLiteral extends LiteralExpr {
     }
 
 
-
     public static IntLiteral read(DataInput in) throws IOException {
         IntLiteral literal = new IntLiteral();
         literal.readFields(in);

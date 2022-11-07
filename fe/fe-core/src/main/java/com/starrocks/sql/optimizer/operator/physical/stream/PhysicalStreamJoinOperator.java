@@ -13,7 +13,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PhysicalStreamJoinOperator extends PhysicalJoinOperator {
     public PhysicalStreamJoinOperator(JoinOperator joinType, ScalarOperator onPredicate, String joinHint, long limit,
-            ScalarOperator predicate, Projection projection) {
+                                      ScalarOperator predicate, Projection projection) {
         super(OperatorType.PHYSICAL_STREAM_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
     }
 
