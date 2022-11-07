@@ -53,7 +53,7 @@ private:
     int _num_build_chunks() const;
     vectorized::Chunk* _move_build_chunk_index(int index);
     ChunkPtr _init_output_chunk(RuntimeState* state) const;
-    Status _probe(RuntimeState* state, ChunkPtr chunk);
+    Status _probe(RuntimeState* state, const ChunkPtr& chunk);
     void _advance_join_stage(JoinStage stage) const;
     bool _skip_probe() const;
     void _check_post_probe() const;
@@ -63,13 +63,8 @@ private:
     Status _permute_right_join(RuntimeState* state);
     void _permute_left_join(RuntimeState* state, const ChunkPtr& chunk, size_t probe_row_index, size_t probe_rows);
     bool _is_curr_probe_chunk_finished() const;
-    void iterate_enumerate_chunk(const ChunkPtr& chunk, std::function<void(bool, size_t, size_t)> call);
-
-    // Join type check
     bool _is_left_join() const;
     bool _is_right_join() const;
-    bool _is_left_semi_join() const;
-    bool _is_left_anti_join() const;
 
 private:
     const TJoinOp::type _join_op;
@@ -88,8 +83,8 @@ private:
     mutable ChunkAccumulator _output_accumulator;
 
     // Build states
+    int _curr_build_chunk_index = 0;
     vectorized::Chunk* _curr_build_chunk = nullptr;
-    size_t _curr_build_chunk_index = 0;
     size_t _prev_chunk_start = 0;
     size_t _prev_chunk_size = 0;
     mutable std::vector<uint8_t> _self_build_match_flag;

@@ -604,7 +604,7 @@ Status eager_prune_eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectori
 }
 
 Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorized::Chunk* chunk,
-                                vectorized::FilterPtr* filter_ptr, bool apply_filter) {
+                                vectorized::FilterPtr* filter_ptr) {
     // No need to do expression if none rows
     DCHECK(chunk != nullptr);
     if (chunk->num_rows() == 0) {
@@ -625,7 +625,6 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
         return eager_prune_eval_conjuncts(ctxs, chunk);
     }
 
-    apply_filter = apply_filter && filter_ptr;
     vectorized::FilterPtr filter(new vectorized::Column::Filter(chunk->num_rows(), 1));
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
@@ -641,29 +640,19 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
             continue;
         } else if (0 == true_count) {
             // all not hit, return
-            if (apply_filter) {
-                chunk->set_num_rows(0);
-            } else {
-                filter->assign(filter->size(), 0);
-            }
+            chunk->set_num_rows(0);
             return Status::OK();
         } else {
             bool all_zero = false;
             vectorized::ColumnHelper::merge_two_filters(column, raw_filter, &all_zero);
             if (all_zero) {
-                if (apply_filter) {
-                    chunk->set_num_rows(0);
-                } else {
-                    filter->assign(filter->size(), 0);
-                }
+                chunk->set_num_rows(0);
                 return Status::OK();
             }
         }
     }
 
-    if (apply_filter) {
-        chunk->filter(*raw_filter);
-    }
+    chunk->filter(*raw_filter);
     TRY_CATCH_ALLOC_SCOPE_END()
     return Status::OK();
 }
