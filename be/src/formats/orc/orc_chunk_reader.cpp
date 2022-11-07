@@ -1024,7 +1024,7 @@ static void fill_map_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& co
 
 static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
-    auto* orc_list = down_cast<orc::StructVectorBatch*>(cvb);
+    auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
     auto* col_struct = down_cast<StructColumn*>(col.get());
 
     Columns& field_columns = col_struct->fields_column();
@@ -1038,7 +1038,7 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
         const TypeDescriptor& field_type = type_desc.children[i];
         size_t column_id = mapping->get_column_id(i);
 
-        orc::ColumnVectorBatch* field_cvb = orc_list->fieldsColumnIdMap[column_id];
+        orc::ColumnVectorBatch* field_cvb = orc_struct->fieldsColumnIdMap[column_id];
         const FillColumnFunction& fn_fill_elements = find_fill_func(field_type.type, true);
         fn_fill_elements(field_cvb, field_columns[child_index], from, size, field_type, mapping->get_child_mapping(i),
                          ctx);
@@ -1050,11 +1050,11 @@ static void fill_struct_column(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int 
 
 static void fill_struct_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
                                          const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx) {
-    auto* orc_list = down_cast<orc::StructVectorBatch*>(cvb);
+    auto* orc_struct = down_cast<orc::StructVectorBatch*>(cvb);
     auto* col_nullable = down_cast<NullableColumn*>(col.get());
     auto* col_struct = down_cast<StructColumn*>(col_nullable->data_column().get());
 
-    if (!orc_list->hasNulls) {
+    if (!orc_struct->hasNulls) {
         fill_struct_column(cvb, col_nullable->data_column(), from, size, type_desc, mapping, ctx);
         col_nullable->null_column()->resize(col_struct->size());
     } else {
@@ -1064,21 +1064,21 @@ static void fill_struct_column_with_null(orc::ColumnVectorBatch* cvb, ColumnPtr&
         while (i < end) {
             int j = i;
             // Loop until NULL or end of batch.
-            while (j < end && orc_list->notNull[j]) {
+            while (j < end && orc_struct->notNull[j]) {
                 j++;
             }
             if (j > i) {
-                fill_struct_column(orc_list, col_nullable->data_column(), i, j - i, type_desc, mapping, ctx);
+                fill_struct_column(orc_struct, col_nullable->data_column(), i, j - i, type_desc, mapping, ctx);
                 col_nullable->null_column()->resize(col_struct->size());
             }
 
             if (j == end) {
                 break;
             }
-            DCHECK(!orc_list->notNull[j]);
+            DCHECK(!orc_struct->notNull[j]);
             i = j++;
             // Loop until not NULL or end of batch.
-            while (j < end && !orc_list->notNull[j]) {
+            while (j < end && !orc_struct->notNull[j]) {
                 j++;
             }
             col_nullable->append_nulls(j - i);

@@ -1067,22 +1067,22 @@ template <bool encoded, bool lazyLoad>
 void StructColumnReader::nextInternal(const std::vector<std::unique_ptr<ColumnReader>>& children,
                                       const std::vector<uint64_t>& fieldIndex, ColumnVectorBatch& rowBatch,
                                       uint64_t numValues, char* notNull) {
-    if (!lazyLoad) {
+    if constexpr (!lazyLoad) {
         ColumnReader::next(rowBatch, numValues, notNull);
     }
     uint64_t i = 0;
     notNull = rowBatch.hasNulls ? rowBatch.notNull.data() : nullptr;
     for (auto iter = children.begin(); iter != children.end(); ++iter, ++i) {
         uint64_t fi = fieldIndex[i];
-        if (lazyLoad) {
-            if (encoded) {
+        if constexpr (lazyLoad) {
+            if constexpr (encoded) {
                 (*iter)->lazyLoadNextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues,
                                              notNull);
             } else {
                 (*iter)->lazyLoadNext(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
             }
         } else {
-            if (encoded) {
+            if constexpr (encoded) {
                 (*iter)->nextEncoded(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
             } else {
                 (*iter)->next(*(dynamic_cast<StructVectorBatch&>(rowBatch).fields[fi]), numValues, notNull);
