@@ -161,7 +161,7 @@ StarRocks 支持多种 DDL 操作。
 
 ### 增加列
 
-例如，在以上创建的表中，与 `ispass` 列后新增一列 `uv`，类型为 BIGINT，默认值为 `0`。
+例如，在以上创建的表中，在 `ispass` 列后新增一列 `uv`，类型为 BIGINT，默认值为 `0`。
 
 ```sql
 ALTER TABLE detailDemo ADD COLUMN uv BIGINT DEFAULT '0' after ispass;
