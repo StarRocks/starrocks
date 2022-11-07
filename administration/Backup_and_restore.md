@@ -4,7 +4,7 @@
 
 StarRocks 支持将数据以文件的形式，通过 Broker 备份到远端存储系统中。备份的数据可以从远端存储系统恢复至任意 StarRocks 集群。通过这个功能，您可以定期为 StarRocks 集群中的数据进行快照备份，或者将数据在不同集群间迁移。
 
-Broker 是 StarRocks 集群中一种可选进程，主要用于读写 StarRocks 远端存储上的文件和目录。在使用备份与恢复功能前，您需要部署对应远端存储的 Broker。具体部署步骤，参考[部署 Broker](../quick_start/Deploy.md)
+Broker 是 StarRocks 集群中一种可选进程，主要用于读写 StarRocks 远端存储上的文件和目录。在使用备份与恢复功能前，您需要部署对应远端存储的 Broker。具体部署步骤，参考[部署 Broker](../quick_start/Deploy.md)。
 
 > 注意：
 >
