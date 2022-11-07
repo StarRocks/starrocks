@@ -14,9 +14,6 @@ Status CacheManager::populate(const std::string& key, const CacheValue& value) {
     auto* cache_value = new CacheValue(value);
     auto* handle = _cache.insert(key, cache_value, cache_value->size(), &delete_cache_entry, CachePriority::NORMAL);
     DeferOp defer([this, handle]() { _cache.release(handle); });
-    if (_cache.get_memory_usage() > _cache.get_capacity()) {
-        _cache.prune();
-    }
     return handle != nullptr ? Status::OK() : Status::InternalError("Insert failure");
 }
 
