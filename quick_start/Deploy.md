@@ -39,7 +39,7 @@ echo 1 | sudo tee /proc/sys/vm/overcommit_memory
 
 ## 部署 FE 节点
 
-本小节介绍如何配置部署 Frontend (FE) 节点。FE 是StarRocks的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。
+本小节介绍如何配置部署 Frontend (FE) 节点。FE 是 StarRocks 的前端节点，负责管理元数据，管理客户端连接，进行查询规划，查询调度等工作。
 
 ### 下载并解压安装包
 
@@ -192,7 +192,7 @@ StarRocks 的 FE 节点支持 HA 模型部署，以保证集群的高可用。�
 
 ## 部署 BE 节点
 
-本小节介绍如何配置部署 Backend (BE) 节点。BE 是StarRocks的后端节点，负责数据存储以及SQL执行等工作。以下例子仅部署一个 BE 节点。您可以通过重复以下步骤添加多个 BE 节点。
+本小节介绍如何配置部署 Backend (BE) 节点。BE 是 StarRocks 的后端节点，负责数据存储以及 SQL 执行等工作。以下例子仅部署一个 BE 节点。您可以通过重复以下步骤添加多个 BE 节点。
 
 ### 下载并解压安装包
 
