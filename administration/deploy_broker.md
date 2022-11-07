@@ -2,9 +2,9 @@
 
 本文介绍如何配置部署 Broker。
 
-通过 Broker，StarRocks 可读取对应数据源（如HDFS、S3）上的数据，利用自身的计算资源对数据进行预处理和导入。除此之外，Broker 也被应用于数据导出，备份恢复等功能。  
+通过 Broker，StarRocks 可读取对应数据源（如 HDFS、S3）上的数据，利用自身的计算资源对数据进行预处理和导入。除此之外，Broker 也被应用于数据导出，备份恢复等功能。  
 Broker 与 BE 之间使用网络传输数据，当 Broker 和 BE 部署在相同机器时会优先选择本地节点进行链接。  
-部署 Broker 节点的数量建议与 BE 节点数量相等，并将所有 Broker 添加到相同的 Broker name 下（ Broker 在处理任务时会自动调度数据传输压力）。
+部署 Broker 节点的数量建议与 BE 节点数量相等，并将所有 Broker 添加到相同的 Broker name 下（Broker 在处理任务时会自动调度数据传输压力）。
 
 ## 下载并解压安装包
 
