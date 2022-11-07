@@ -105,7 +105,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |spark_home_default_dir|StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"|Spark 客户端根目录。|
 |stream_load_default_timeout_second|600|StreamLoad 超时时间，单位为秒。|
 |max_stream_load_timeout_second|259200|Stream 导入的超时时间允许设置的最大值，单位为秒。|
-|insert_load_default_timeout_second|3600|Insert Into 语句的超时时间，，单位为秒。|
+|insert_load_default_timeout_second|3600|Insert Into 语句的超时时间，单位为秒。|
 |broker_load_default_timeout_second|14400|Broker Load 的超时时间，单位为秒。|
 |min_bytes_per_broker_scanner|67108864|单个实例处理的最小数据量，单位为 Byte。|
 |max_broker_concurrency|100|单个任务最大并发实例数。|
