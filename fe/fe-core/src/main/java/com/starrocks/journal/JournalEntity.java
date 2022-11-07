@@ -282,6 +282,10 @@ public class JournalEntity implements Writable {
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
                 isRead = true;
                 break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                data = ModifyTablePropertyOperationLog.read(in);
+                isRead = true;
+                break;
             case OperationType.OP_RENAME_MATERIALIZED_VIEW:
                 data = RenameMaterializedViewLog.read(in);
                 isRead = true;
