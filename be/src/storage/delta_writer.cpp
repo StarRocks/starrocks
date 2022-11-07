@@ -6,6 +6,7 @@
 
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
+#include "storage/compaction_manager.h"
 #include "storage/memtable.h"
 #include "storage/memtable_flush_executor.h"
 #include "storage/memtable_rowset_writer_sink.h"
@@ -125,6 +126,9 @@ Status DeltaWriter::_init() {
         }
     }
     if (_tablet->version_count() > config::tablet_max_versions) {
+        if (config::enable_event_based_compaction_framework) {
+            StorageEngine::instance()->compaction_manager()->update_tablet_async(_tablet);
+        }
         auto msg = fmt::format("Too many versions. tablet_id: {}, version_count: {}, limit: {}", _opt.tablet_id,
                                _tablet->version_count(), config::tablet_max_versions);
         LOG(ERROR) << msg;

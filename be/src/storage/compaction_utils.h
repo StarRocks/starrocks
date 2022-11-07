@@ -11,7 +11,6 @@
 namespace starrocks {
 
 class CompactionPolicy;
-class CompactionContext;
 class RowsetWriter;
 class Tablet;
 
@@ -52,8 +51,6 @@ public:
     // 2. if source_num is less than or equal to 1, or is more than MAX_SOURCES, use HORIZONTAL_COMPACTION.
     static CompactionAlgorithm choose_compaction_algorithm(size_t num_columns, int64_t max_columns_per_group,
                                                            size_t source_num);
-
-    static std::unique_ptr<CompactionPolicy> create_compaction_policy(CompactionContext* context);
 };
 
 } // namespace starrocks

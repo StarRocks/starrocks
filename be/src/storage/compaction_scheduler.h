@@ -36,13 +36,8 @@ private:
 
     std::shared_ptr<CompactionTask> _try_get_next_compaction_task() const;
 
-    static bool _can_do_compaction(const CompactionCandidate& candidate,
-                                   std::shared_ptr<CompactionTask>* compaction_task);
-
     // if check fails, should not reschedule the tablet
     static bool _check_precondition(const CompactionCandidate& candidate);
-
-    static bool _can_do_compaction_task(Tablet* tablet, CompactionTask* compaction_task);
 
 private:
     std::unique_ptr<ThreadPool> _compaction_pool;
