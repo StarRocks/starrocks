@@ -221,11 +221,34 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
 
     MorselQueueMap& morsel_queues = fragment_ctx->morsel_queues();
     for (auto& i : scan_nodes) {
+<<<<<<< HEAD
         ScanNode* scan_node = down_cast<ScanNode*>(i);
         const std::vector<TScanRangeParams>& scan_ranges =
                 FindWithDefault(params.per_node_scan_ranges, scan_node->id(), no_scan_ranges);
         Morsels morsels = convert_scan_range_to_morsel(scan_ranges, scan_node->id());
         morsel_queues.emplace(scan_node->id(), std::make_unique<MorselQueue>(std::move(morsels)));
+=======
+        auto* scan_node = down_cast<ScanNode*>(i);
+        if (scan_node->limit() > 0) {
+            // the upper bound of records we actually will scan is `limit * dop * io_parallelism`.
+            // For SQL like: select * from xxx limit 5, the underlying scan_limit should be 5 * parallelism
+            // Otherwise this SQL would exceed the bigquery_rows_limit due to underlying IO parallelization
+            logical_scan_limit += scan_node->limit();
+            physical_scan_limit += scan_node->limit() * dop * scan_node->io_tasks_per_scan_operator();
+        } else {
+            // Not sure how many rows will be scan.
+            logical_scan_limit = -1;
+            break;
+        }
+    }
+
+    if (_wg && _wg->big_query_scan_rows_limit() > 0) {
+        if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
+            _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
+        } else {
+            _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
+        }
+>>>>>>> ea477171a ([BugFix] simple limit sql may failed when scanrows is lower than bigquery_scan_rows_limit (#12900))
     }
 
     PipelineBuilderContext context(fragment_ctx.get(), degree_of_parallelism);
