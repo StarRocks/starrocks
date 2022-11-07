@@ -305,60 +305,60 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | 配置项                                                | 默认值      | 单位   | 描述                                                         |
 | ----------------------------------------------------- | ----------- | ------ | ------------------------------------------------------------ |
 | tc_use_memory_min                                     | 10737418240 | Byte   | Tcmalloc 最小预留内存，小于这个值，StarRocks 不会将空闲内存返还给操作系统。 |
-| tc_free_memory_rate                                   | 20          | %      | Tcmalloc向操作系统返还内存时，自身所保留的空闲内存占总使用内存的最大比例。如果当前空闲内存的占比小于这个值，那么不会向操作系统返还内存。 |
-| tc_gc_period                                          | 60          | second | Tcmalloc GC的周期，默认单位是秒。                            |
+| tc_free_memory_rate                                   | 20          | %      | Tcmalloc 向操作系统返还内存时，自身所保留的空闲内存占总使用内存的最大比例。如果当前空闲内存的占比小于这个值，那么不会向操作系统返还内存。 |
+| tc_gc_period                                          | 60          | second | Tcmalloc GC 的周期，默认单位是秒。                            |
 | report_task_interval_seconds                          | 10          | second | 汇报单个任务的间隔。建表，删除表，导入，schema change 都可以被认定是任务。 |
 | report_disk_state_interval_seconds                    | 60          | second | 汇报磁盘状态的间隔。汇报各个磁盘的状态，以及其中数据量等。   |
 | report_tablet_interval_seconds                        | 60          | second | 汇报 tablet 的间隔。汇报所有的 tablet 的最新版本。           |
-| report_workgroup_interval_seconds                     | 5           | second | 汇报workgroup的间隔。汇报所有workgroup的最新版本。           |
-| max_download_speed_kbps                               | 50000       | KB/s   | 单个HTTP请求的最大下载速率。这个值会影响BE之间同步数据副本的速度。 |
-| download_low_speed_limit_kbps                         | 50          | KB/s   | 单个HTTP请求的下载速率下限，如果在download_low_speed_time秒内下载速度一直低于download_low_speed_limit_kbps，那么请求会被终止。 |
-| download_low_speed_time                               | 300         | second | 见download_low_speed_limit_kbps                              |
+| report_workgroup_interval_seconds                     | 5           | second | 汇报 workgroup 的间隔。汇报所有 workgroup 的最新版本。           |
+| max_download_speed_kbps                               | 50000       | KB/s   | 单个 HTTP 请求的最大下载速率。这个值会影响 BE 之间同步数据副本的速度。 |
+| download_low_speed_limit_kbps                         | 50          | KB/s   | 单个 HTTP 请求的下载速率下限，如果在 download_low_speed_time 秒内下载速度一直低于download_low_speed_limit_kbps，那么请求会被终止。 |
+| download_low_speed_time                               | 300         | second | 见 download_low_speed_limit_kbps。                             |
 | status_report_interval                                | 5           | second | 查询汇报 profile 的间隔，用于 FE 收集查询统计信息。          |
 | scanner_thread_pool_thread_num                        | 48          | N/A    | 存储引擎并发扫描磁盘的线程数，统一管理在线程池中。           |
-| thrift_client_retry_interval_ms                       | 100         | ms     | Thrift client默认的重试时间间隔。                            |
+| thrift_client_retry_interval_ms                       | 100         | ms     | Thrift client 默认的重试时间间隔。                            |
 | scanner_thread_pool_queue_size                        | 102400      | N/A    | 存储引擎支持的扫描任务数。                                   |
 | scanner_row_num                                       | 16384       | N/A    | 每个扫描线程单次执行最多返回的数据行数。                     |
 | max_scan_key_num                                      | 1024        | N/A    | 查询最多拆分的 scan key 数目。                               |
 | max_pushdown_conditions_per_column                    | 1024        | N/A    | 单列上允许下推的最大谓词数量，如果超出数量限制，谓词不会下推到存储层。 |
-| exchg_node_buffer_size_bytes                          | 10485760    | Byte   | Exchange算子中，单个查询在接收端的buffer容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。 |
+| exchg_node_buffer_size_bytes                          | 10485760    | Byte   | Exchange 算子中，单个查询在接收端的 buffer 容量。这是一个软限制，如果数据的发送速度过快，接收端会触发反压来限制发送速度。 |
 | column_dictionary_key_ratio_threshold                 | 0           | %      | 字符串类型的取值比例，小于这个比例采用字典压缩算法。         |
 | memory_limitation_per_thread_for_schema_change        | 2           | GB     | 单个 schema change 任务允许占用的最大内存。                  |
-| update_cache_expire_sec                               | 360         | second | Update Cache的过期时间。                                     |
+| update_cache_expire_sec                               | 360         | second | Update Cache 的过期时间。                                     |
 | file_descriptor_cache_clean_interval                  | 3600        | second | 文件句柄缓存清理的间隔，用于清理长期不用的文件句柄。         |
 | disk_stat_monitor_interval                            | 5           | second | 磁盘健康状态检测的间隔。                                     |
 | unused_rowset_monitor_interval                        | 30          | second | 清理过期 Rowset 的时间间隔。                                 |
 | max_percentage_of_error_disk                          | 0           | %      | 磁盘错误达到一定比例，BE 退出。                              |
-| default_num_rows_per_column_file_block                | 1024        | N/A    | 每个row block最多存放的行数。                                |
+| default_num_rows_per_column_file_block                | 1024        | N/A    | 每个 row block 最多存放的行数。                                |
 | pending_data_expire_time_sec                          | 1800        | second | 存储引擎保留的未生效数据的最大时长。                         |
 | inc_rowset_expired_sec                                | 1800        | second | 导入生效的数据，存储引擎保留的时间，用于增量克隆。           |
-| tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效rowset的清理间隔。                                       |
+| tablet_rowset_stale_sweep_time_sec                    | 1800        | second | 失效 rowset 的清理间隔。                                       |
 | snapshot_expire_time_sec                              | 172800      | second | 快照文件清理的间隔，默认 48 个小时。                         |
 | trash_file_expire_time_sec                            | 259200      | second | 回收站清理的间隔，默认 72 个小时。                           |
 | base_compaction_check_interval_seconds                | 60          | second | BaseCompaction 线程轮询的间隔。                              |
-| min_base_compaction_num_singleton_deltas              | 5           | N/A    | 触发BaseCompaction的最小segment数                            |
-| max_base_compaction_num_singleton_deltas              | 100         | N/A    | 单次BaseCompaction合并的最大segment数                        |
+| min_base_compaction_num_singleton_deltas              | 5           | N/A    | 触发 BaseCompaction 的最小 segment 数。                            |
+| max_base_compaction_num_singleton_deltas              | 100         | N/A    | 单次 BaseCompaction 合并的最大 segment 数。                        |
 | base_compaction_interval_seconds_since_last_operation | 86400       | second | 上一轮 BaseCompaction 距今的间隔，是触发 BaseCompaction 条件之一。 |
 | cumulative_compaction_check_interval_seconds          | 1           | second | CumulativeCompaction 线程轮询的间隔。                        |
-| cumulative_compaction_skip_window_seconds             | 30          | second | 为了避免最近写入的版本因为被compact而无法提供查询，comulative compaction会保留最近一段时间窗口内的版本，不做compact。这个参数用来设置时间窗口的大小。 |
+| cumulative_compaction_skip_window_seconds             | 30          | second | 为了避免最近写入的版本因为被 compact 而无法提供查询，comulative compaction 会保留最近一段时间窗口内的版本，不做 compact。这个参数用来设置时间窗口的大小。 |
 | update_compaction_check_interval_seconds              | 60          | second | Primary key 模型 Update compaction 的检查间隔。              |
 | min_compaction_failure_interval_sec                   | 120         | second | Tablet Compaction 失败之后，再次被调度的间隔。               |
 | periodic_counter_update_period_ms                     | 500         | ms     | Counter 统计信息的间隔。                                     |
 | load_error_log_reserve_hours                          | 48          | hour   | 导入数据信息保留的时长。                                     |
 | streaming_load_max_mb                                 | 10240       | MB     | 流式导入单个文件大小的上限。                                 |
-| streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个JSON文件大小的上限。                             |
-| memory_maintenance_sleep_time_s                       | 10          | second | 触发Tcmalloc GC任务的时间间隔。Starrocks会周期运行GC任务，尝试将Tcmalloc的空闲内存返还给操作系统。 |
-| write_buffer_size                                     | 104857600   | Byte   | MemTable在内存中的buffer大小，超过这个限制会触发flush。      |
-| tablet_stat_cache_update_interval_second              | 300         | second | Tablet Stat Cache的更新间隔。                                |
-| result_buffer_cancelled_interval_time                 | 300         | second | BufferControlBlock释放数据的等待时间                         |
+| streaming_load_max_batch_size_mb                      | 100         | MB     | 流式导入单个 JSON 文件大小的上限。                             |
+| memory_maintenance_sleep_time_s                       | 10          | second | 触发 Tcmalloc GC 任务的时间间隔。Starrocks 会周期运行 GC 任务，尝试将 Tcmalloc 的空闲内存返还给操作系统。 |
+| write_buffer_size                                     | 104857600   | Byte   | MemTable 在内存中的 buffer 大小，超过这个限制会触发 flush。      |
+| tablet_stat_cache_update_interval_second              | 300         | second | Tablet Stat Cache 的更新间隔。                                |
+| result_buffer_cancelled_interval_time                 | 300         | second | BufferControlBlock 释放数据的等待时间。                         |
 | thrift_rpc_timeout_ms                                 | 5000        | ms     | Thrift 超时的时长，单位为 ms。                               |
 | txn_commit_rpc_timeout_ms                             | 20000       | ms     | Txn 超时的时长，单位为 ms。                                  |
-| max_consumer_num_per_group                            | 3           | N/A    | Routine load中，每个consumer group内最大的consumer数量。     |
-| max_memory_sink_batch_count                           | 20          | N/A    | Scan cache的最大缓存批次数量                                 |
-| scan_context_gc_interval_min                          | 5           | Minute | Scan context的清理间隔。                                     |
-| path_gc_check_step                                    | 1000        | N/A    | 单次连续scan最大的文件数量                                   |
-| path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续scan文件间隔时间                                     |
-| path_scan_interval_second                             | 86400       | second | gc线程清理过期数据的间隔时间                                 |
+| max_consumer_num_per_group                            | 3           | N/A    | Routine load 中，每个consumer group 内最大的 consumer 数量。     |
+| max_memory_sink_batch_count                           | 20          | N/A    | Scan cache 的最大缓存批次数量。                                 |
+| scan_context_gc_interval_min                          | 5           | Minute | Scan context 的清理间隔。                                     |
+| path_gc_check_step                                    | 1000        | N/A    | 单次连续 scan 最大的文件数量。                                   |
+| path_gc_check_step_interval_ms                        | 10          | ms     | 多次连续 scan 文件间隔时间。                                     |
+| path_scan_interval_second                             | 86400       | second | gc 线程清理过期数据的间隔时间。                                 |
 | storage_flood_stage_usage_percent                     | 95          | %      | 如果空间使用率超过该值，会拒绝 Load 和 Restore 作业。        |
 | storage_flood_stage_left_capacity_bytes               | 1073741824  | Byte   | 如果剩余空间小于该值，会拒绝 Load Restore 作业。 |
 | tablet_meta_checkpoint_min_new_rowsets_num            | 10          | N/A    | 自上次 TabletMeta Checkpoint 至今新创建的 rowset 数量。        |
