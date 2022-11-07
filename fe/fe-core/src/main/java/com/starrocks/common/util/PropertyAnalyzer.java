@@ -45,7 +45,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import static com.starrocks.catalog.TableProperty.NO_TTL;
+import static com.starrocks.catalog.TableProperty.INVALID;
+
 
 public class PropertyAnalyzer {
     private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
@@ -198,7 +199,7 @@ public class PropertyAnalyzer {
     }
 
     public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
-        int partitionTimeToLive = NO_TTL;
+        int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
                 partitionTimeToLive = Integer.parseInt(properties.get(PROPERTIES_PARTITION_TTL_NUMBER));
@@ -206,7 +207,7 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Partition TTL Number: " + e.getMessage());
             }
             if (partitionTimeToLive <= 0) {
-                partitionTimeToLive = NO_TTL;
+                partitionTimeToLive = INVALID;
             }
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
