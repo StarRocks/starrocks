@@ -294,7 +294,7 @@ CN 部署成功后， StarRocks Operator 自动调用 **cn.yaml** 文件中配�
 - 问题：如果 `reason` 显示 `unhealthy`，则表示 HTTP 健康检查失败。
   ![image](../assets/9.4.png)
 
-- 解决方式：参考[部署CN ](/部署 CN)，检查 **cn.yaml** 文件中的 FE 节点 IP 地址和 FE 的查询端口号。
+- 解决方式：参考[在 K8s 中部署 CN](#在-k8s-中部署-cn)，检查 **cn.yaml** 文件中的 FE 节点 IP 地址和 FE 的查询端口号。
 
   ![image](../assets/9.5.png)
 
