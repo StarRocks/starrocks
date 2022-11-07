@@ -1180,7 +1180,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.tableRenameClause() != null) {
             newMvName = ((Identifier) visit(context.tableRenameClause().identifier())).getValue();
         }
-        //process refresh
+        // process refresh
         RefreshSchemeDesc refreshSchemeDesc = null;
         if (context.refreshSchemeDesc() != null) {
             refreshSchemeDesc = ((RefreshSchemeDesc) visit(context.refreshSchemeDesc()));
@@ -1192,7 +1192,11 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                         "AlterMaterializedView UnitIdentifier only support 'SECOND','MINUTE','HOUR' or 'DAY'");
             }
         }
-        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc);
+        ModifyTablePropertiesClause modifyTablePropertiesClause = null;
+        if (context.modifyTablePropertiesClause() != null) {
+            modifyTablePropertiesClause = (ModifyTablePropertiesClause) visit(context.modifyTablePropertiesClause());
+        }
+        return new AlterMaterializedViewStmt(mvName, newMvName, refreshSchemeDesc, modifyTablePropertiesClause);
     }
 
     @Override

@@ -1,0 +1,28 @@
+name: markdownlint
+
+on: 
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+    paths:
+      - 'docs/**'
+
+jobs:
+  delivery:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Check out code
+      uses: actions/checkout@v3
+      with:
+        fetch-depth: 0
+
+    - name: git diff file list
+      id: diff
+      run : echo "files=$(git diff --name-only main | grep -E '(.md$)')" >> $GITHUB_OUTPUT
+      
+    - name: markdown lint
+      uses: nosborn/github-action-markdown-cli@v3.2.0
+      with:
+        files: ${{ steps.diff.outputs.files }}

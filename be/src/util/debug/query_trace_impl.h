@@ -32,6 +32,7 @@ struct QueryTraceEvent {
     int64_t instance_id;
     // driver pointer
     std::uintptr_t driver;
+    std::thread::id thread_id;
     std::vector<std::pair<std::string, std::string>> args;
 
     std::string to_string();
@@ -105,17 +106,19 @@ private:
 };
 
 struct QueryTraceContext {
+    static constexpr int64_t DEFAULT_EVENT_ID = 0;
+
     int64_t start_ts = -1;
     int64_t fragment_instance_id = -1;
     std::uintptr_t driver = 0;
-    int64_t id = -1; // used for async event
+    int64_t id = DEFAULT_EVENT_ID; // used for async event.
     EventBuffer* event_buffer = nullptr;
 
     void reset() {
         start_ts = -1;
         fragment_instance_id = -1;
         driver = 0;
-        id = -1;
+        id = DEFAULT_EVENT_ID;
         event_buffer = nullptr;
     }
 };
@@ -123,7 +126,7 @@ struct QueryTraceContext {
 inline thread_local QueryTraceContext tls_trace_ctx;
 
 #define INTERNAL_CREATE_EVENT_WITH_CTX(name, category, phase, ctx) \
-    starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, -1, phase, ctx)
+    starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, ctx.DEFAULT_EVENT_ID, phase, ctx)
 
 #define INTERNAL_CREATE_ASYNC_EVENT_WITH_CTX(name, category, id, phase, ctx) \
     starrocks::debug::QueryTraceEvent::create_with_ctx(name, category, id, phase, ctx)

@@ -492,7 +492,7 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
     ;
 
 refreshMaterializedViewStatement

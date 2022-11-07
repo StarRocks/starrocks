@@ -826,6 +826,12 @@ install(FILES
     ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
 
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
+install(FILES
+    ${BASE_DIR}/../conf/asan_suppressions.conf
+    DESTINATION ${OUTPUT_DIR}/conf)
+endif()
+
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/
     DESTINATION ${OUTPUT_DIR}/www)

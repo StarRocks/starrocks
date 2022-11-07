@@ -151,4 +151,35 @@ public class PrivilegeCheckerV2Test {
                 "revoke select on db1.tbl1 from test with grant option",
                 "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
     }
+
+    @Test
+    public void testResourceStmt() throws Exception {
+        String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
+                "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
+        verifyGrantRevoke(
+                createResourceStmt,
+                "grant create_resource on system to test",
+                "revoke create_resource on system from test",
+                "Access denied; you need (at least one of) the CREATE_RESOURCE privilege(s) for this operation");
+        starRocksAssert.withResource(createResourceStmt);
+
+        verifyGrantRevoke(
+                "alter RESOURCE hive0 SET PROPERTIES (\"hive.metastore.uris\" = \"thrift://10.10.44.91:9083\");",
+                "grant alter on resource 'hive0' to test",
+                "revoke alter on resource 'hive0' from test",
+                "Access denied; you need (at least one of) the ALTER privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "drop resource hive0;",
+                "grant drop on resource hive0 to test",
+                "revoke drop on resource hive0 from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+
+        // on all
+        verifyGrantRevoke(
+                "drop resource hive0;",
+                "grant drop on all resources to test",
+                "revoke drop on all resources from test",
+                "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+    }
 }

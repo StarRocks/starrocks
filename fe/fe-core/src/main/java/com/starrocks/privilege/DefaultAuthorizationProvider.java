@@ -5,6 +5,7 @@ package com.starrocks.privilege;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.server.GlobalStateMgr;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -93,6 +94,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case DATABASE:
                 return DbPEntryObject.generate(mgr, objectTokens);
 
+            case RESOURCE:
+                return ResourcePEntryObject.generate(mgr, objectTokens);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
@@ -122,15 +126,23 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case USER:
                 return UserPEntryObject.generate(allTypes, restrictType, restrictName);
 
+            case RESOURCE:
+                return ResourcePEntryObject.generate(allTypes, restrictType, restrictName);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
     }
 
+    private static final List<String> BAD_SYSTEM_ACTIONS = Arrays.asList("GRANT", "NODE");
     @Override
     public void validateGrant(String type, List<String> actions, List<PEntryObject> objects) throws PrivilegeException {
         if (type.equals("SYSTEM")) {
-            throw new PrivilegeException("cannot grant/revoke system privilege: " + actions);
+            for (String badAction : BAD_SYSTEM_ACTIONS) {
+                if (actions.contains(badAction)) {
+                    throw new PrivilegeException("cannot grant/revoke system privilege: " + badAction);
+                }
+            }
         }
     }
 
