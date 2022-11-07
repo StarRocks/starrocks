@@ -19,6 +19,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/literal.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -36,6 +37,8 @@ static bool _support_join_type(TJoinOp::type join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::LEFT_SEMI_JOIN:
+    case TJoinOp::LEFT_ANTI_JOIN:
         return true;
     default:
         return false;
