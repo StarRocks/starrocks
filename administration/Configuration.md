@@ -65,7 +65,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |statistic_collect_interval_sec|300|自动定期采集任务中，检测数据更新的间隔时间，默认为 5 分钟。单位：秒。|
 |statistic_sample_collect_rows|200000|最小采样行数。如果指定了采集类型为抽样采集（SAMPLE），需要设置该参数。如果参数取值超过了实际的表行数，默认进行全量采集。|
 |histogram_buckets_size|64|直方图默认分桶数。|
-|histogram_mcv_size|100|直方图默认most common value的数量。|
+|histogram_mcv_size|100|直方图默认 most common value 的数量。|
 |histogram_sample_ratio|0.1|直方图默认采样比例。|
 |histogram_max_sample_row_count|10000000|直方图最大采样行数。|
 |statistics_manager_sleep_time_sec|60|统计信息相关元数据调度间隔周期。单位：秒。系统根据这个间隔周期，来执行如下操作：创建统计信息表；删除已经被删除的表的统计信息；删除过期的统计信息历史记录。|
@@ -96,13 +96,13 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 |max_routine_load_job_num|100|最大的 routine load 作业数。|
 |max_routine_load_task_concurrent_num|5|每个 routine load 作业最大并发执行的 task 数。|
 |max_routine_load_task_num_per_be|5|每个 BE 最大并发执行的 routine load task 数，需要小于等于 BE 的配置项 routine_load_thread_pool_size 的值。|
-|max_routine_load_batch_size|4294967296|每个 routine load task 导入的最大数据量，单位为Byte。|
+|max_routine_load_batch_size|4294967296|每个 routine load task 导入的最大数据量，单位为 Byte。|
 |routine_load_task_consume_second|15|每个 routine load task 消费数据的最大时间，单位为秒。|
 |routine_load_task_timeout_second|60|每个 routine load task 超时时间，单位为秒。|
 |max_tolerable_backend_down_num|0|如果故障的 BE 节点数超过该阈值，则不能自动恢复 Routine Load 作业。|
 |period_of_auto_resume_min|5|自动恢复 Routine Load 的时间间隔，单位为分钟。|
 |spark_load_default_timeout_second|86400|Spark 导入的超时时间，单位为秒。|
-|spark_home_default_dir|StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"|Spark 客户端根目录|
+|spark_home_default_dir|StarRocksFE.STARROCKS_HOME_DIR + "/lib/spark2x"|Spark 客户端根目录。|
 |stream_load_default_timeout_second|600|StreamLoad 超时时间，单位为秒。|
 |max_stream_load_timeout_second|259200|Stream 导入的超时时间允许设置的最大值，单位为秒。|
 |insert_load_default_timeout_second|3600|Insert Into 语句的超时时间，，单位为秒。|
