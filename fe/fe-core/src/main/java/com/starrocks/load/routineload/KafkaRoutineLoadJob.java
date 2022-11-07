@@ -386,8 +386,17 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
         kafkaRoutineLoadJob.checkCustomPartition();
+        kafkaRoutineLoadJob.initKafkaProgress();
 
         return kafkaRoutineLoadJob;
+    }
+
+    private void initKafkaProgress() throws UserException {
+        if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
+            return;
+        }
+        currentKafkaPartitions = getAllKafkaPartitions();
+        updateNewPartitionProgress();
     }
 
     private void checkCustomPartition() throws UserException {
