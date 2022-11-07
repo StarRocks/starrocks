@@ -8,10 +8,10 @@ With this feature, you can divide the computing resources of each backend (BE) i
 
 Enhancement plan of Resource Group feature
 
-|  | Internal Table | External Table | Big Query Resources | Load Resources | Schema Change Resources |
-|---|---|---|---|---|---|
-| 2.2 | √ | × | × | × | × |
-| 2.3 | √ | √ | √ | × | × |
+|  | Internal Table | External Table | Big Query Resources | Short Query Resources | Load Resources | Schema Change Resources |
+|---|---|---|---|---|---|---|
+| 2.2 | √ | × | × | × | × | × |
+| 2.3 | √ | √ | √ | √ | × | × |
 
 ## Terms
 
@@ -55,6 +55,15 @@ On the basis of the above resource consumption restrictions, you can further res
 - `big_query_mem_limit`: This parameter specifies the upper limit of memory usage of a big query. The unit is byte.
 
 > Note: When a query running in a resource group exceeds the above big query limit, the query will be terminated with an error. You can also view error messages in the `ErrorCode` column of the FE node **fe.audit.log**.
+
+You can set the resource group `type` to `short_query` or `normal`.
+
+- When queries hit a `short_query` resource group, the BE node reserves the CPU resource specified in `short_query.cpu_core_limit`. The CPU resource reserved for queries that hit `normal` resource group is limited to `BE core - short_query.cpu_core_limit`.
+- When no query hits the `short_query` resource group, no limit is imposed to the resource of `normal` resource group.
+
+> **CAUTION**
+>
+> You can create at most ONE short query resource group in a StarRocks Cluster.
 
 ### classifier
 
