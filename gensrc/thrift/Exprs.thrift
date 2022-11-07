@@ -65,6 +65,7 @@ enum TExprNodeType {
   CLONE_EXPR,
   LAMBDA_FUNCTION_EXPR,
   SUBFIELD_EXPR,
+  RUNTIME_FILTER_MIN_MAX_EXPR,
 }
 
 //enum TAggregationOp {

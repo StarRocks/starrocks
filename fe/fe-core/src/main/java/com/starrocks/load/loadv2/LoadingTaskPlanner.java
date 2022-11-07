@@ -61,7 +61,6 @@ import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -190,10 +189,9 @@ public class LoadingTaskPlanner {
         descTable.computeMemLayout();
 
         // 2. Olap table sink
-        TWriteQuorumType writeQuorum = table.writeQuorum();
-
         List<Long> partitionIds = getAllPartitionIds();
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true, writeQuorum);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+                table.writeQuorum(), table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 
@@ -265,11 +263,9 @@ public class LoadingTaskPlanner {
         scanFragment.setOutputPartition(dataPartition);
 
         // 4. Olap table sink
-        TWriteQuorumType writeQuorum = table.writeQuorum();
-
         List<Long> partitionIds = getAllPartitionIds();
-
-        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true, writeQuorum);
+        OlapTableSink olapTableSink = new OlapTableSink(table, tupleDesc, partitionIds, true,
+                table.writeQuorum(), table.enableReplicatedStorage());
         olapTableSink.init(loadId, txnId, dbId, timeoutS);
         olapTableSink.complete();
 
@@ -307,6 +303,10 @@ public class LoadingTaskPlanner {
         }
 
         if (table.getDefaultReplicationNum() <= 1) {
+            return false;
+        }
+
+        if (table.enableReplicatedStorage()) {
             return false;
         }
 

@@ -51,7 +51,6 @@ import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -384,9 +383,8 @@ public class LoadPlanner {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
-            TWriteQuorumType writeQuorum = ((OlapTable) destTable).writeQuorum();
-
-            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine, writeQuorum);
+            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
+                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage());
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).complete();
@@ -483,6 +481,10 @@ public class LoadPlanner {
         }
 
         if (olapDestTable.getDefaultReplicationNum() <= 1) {
+            return false;
+        }
+
+        if (olapDestTable.enableReplicatedStorage()) {
             return false;
         }
 

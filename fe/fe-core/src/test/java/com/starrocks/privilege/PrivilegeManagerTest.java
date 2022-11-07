@@ -831,6 +831,13 @@ public class PrivilegeManagerTest {
                 manager.getAllPredecessorsUnlocked(roleIds[1]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
                 manager.getAllPredecessorsUnlocked(roleIds[2]));
+        // role descendants
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2])),
+                manager.getAllDescendantsUnlocked(roleIds[0]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])),
+                manager.getAllDescendantsUnlocked(roleIds[1]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[2])),
+                manager.getAllDescendantsUnlocked(roleIds[2]));
 
         // role0 -> role1 -> role2
         //    \       ^
@@ -854,6 +861,15 @@ public class PrivilegeManagerTest {
                 manager.getAllPredecessorsUnlocked(roleIds[2]));
         Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[3])),
                 manager.getAllPredecessorsUnlocked(roleIds[3]));
+        // role descendants
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[0], roleIds[1], roleIds[2], roleIds[3])),
+                manager.getAllDescendantsUnlocked(roleIds[0]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2])),
+                manager.getAllDescendantsUnlocked(roleIds[1]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[2])),
+                manager.getAllDescendantsUnlocked(roleIds[2]));
+        Assert.assertEquals(new HashSet<>(Arrays.asList(roleIds[1], roleIds[2], roleIds[3])),
+                manager.getAllDescendantsUnlocked(roleIds[3]));
 
         // role0 -> role1 -> role2 -> role4
         //    \       ^
@@ -935,15 +951,13 @@ public class PrivilegeManagerTest {
         boolean[] args = canSelectOnTbls;
         Assert.assertEquals(4, args.length);
         ctx.setCurrentUserIdentity(userIdentity);
-        PrivilegeManager manager = ctx.getGlobalStateMgr().getPrivilegeManager();
-        PrivilegeCollection collection = manager.mergePrivilegeCollection(ctx);
         for (int i = 0; i != 4; ++ i) {
             if (args[i]) {
-                Assert.assertTrue("cannot select tbl" + i, manager.checkTableAction(
-                        collection, DB_NAME, "tbl" + i, PrivilegeType.TableAction.SELECT));
+                Assert.assertTrue("cannot select tbl" + i,
+                        PrivilegeManager.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.TableAction.SELECT));
             } else {
-                Assert.assertFalse("can select tbl" + i, manager.checkTableAction(
-                        collection, DB_NAME, "tbl" + i, PrivilegeType.TableAction.SELECT));
+                Assert.assertFalse("can select tbl" + i,
+                        PrivilegeManager.checkTableAction(ctx, DB_NAME, "tbl" + i, PrivilegeType.TableAction.SELECT));
             }
         }
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -1191,11 +1205,12 @@ public class PrivilegeManagerTest {
         Assert.assertTrue(PrivilegeManager.checkAnyActionInDb(ctx, DB_NAME));
 
         // grant to imutable role
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                String.format("create role role_test_builtin_role"), ctx), ctx);
         List<String> modifyImutableRoleSqls = Arrays.asList(
                 "GRANT select on db.tbl0 TO ROLE root",
                 "REVOKE select on db.tbl0 FROM ROLE root",
-                "GRANT user_admin TO ROLE cluster_admin",
-                "REVOKE db_admin FROM ROLE user_admin"
+                "GRANT role_test_builtin_role TO ROLE cluster_admin"
         );
         for (String sql : modifyImutableRoleSqls) {
             try {
