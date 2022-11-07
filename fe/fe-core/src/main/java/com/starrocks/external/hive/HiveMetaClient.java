@@ -26,6 +26,7 @@ import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.hive.common.FileUtils;
 import org.apache.hadoop.hive.conf.HiveConf;
 import org.apache.hadoop.hive.metastore.HiveMetaHookLoader;
+import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
 import org.apache.hadoop.hive.metastore.RetryingMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
@@ -124,8 +125,11 @@ public class HiveMetaClient {
 
         private AutoCloseClient(HiveConf conf) throws MetaException {
             if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
+                // hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
+                //         HiveMetaStoreThriftClient.class.getName());
+                LOG.warn("use HiveMetaStoreClient");
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
-                        HiveMetaStoreThriftClient.class.getName());
+                           HiveMetaStoreClient.class.getName());
             } else {
                 hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
                         DLFProxyMetaStoreClient.class.getName());
