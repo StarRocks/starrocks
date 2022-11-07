@@ -59,6 +59,8 @@ public:
 
     void init_or_die();
 
+    void stop();
+
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);
@@ -187,7 +189,7 @@ void AgentServer::Impl::init_or_die() {
 #undef CREATE_AND_START_POOL
 }
 
-AgentServer::Impl::~Impl() {
+void AgentServer::Impl::stop() {
     _thread_pool_publish_version->shutdown();
 
 #ifndef BE_TEST
@@ -219,6 +221,8 @@ AgentServer::Impl::~Impl() {
     STOP_POOL(UPDATE_TABLET_META_INFO, _update_tablet_meta_info_workers);
 #undef STOP_POOL
 }
+
+AgentServer::Impl::~Impl() {}
 
 // TODO(lingbin): each task in the batch may have it own status or FE must check and
 // resend request when something is wrong(BE may need some logic to guarantee idempotence.
@@ -490,6 +494,10 @@ ThreadPool* AgentServer::get_thread_pool(int type) const {
 
 void AgentServer::init_or_die() {
     return _impl->init_or_die();
+}
+
+void AgentServer::stop() {
+    return _impl->stop();
 }
 
 } // namespace starrocks

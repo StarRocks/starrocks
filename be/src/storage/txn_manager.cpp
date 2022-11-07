@@ -50,12 +50,15 @@ TxnManager::TxnManager(int32_t txn_map_shard_size, int32_t txn_shard_size, int32
     _txn_map_locks = std::unique_ptr<std::shared_mutex[]>(new std::shared_mutex[_txn_map_shard_size]);
     _txn_tablet_maps = std::unique_ptr<txn_tablet_map_t[]>(new txn_tablet_map_t[_txn_map_shard_size]);
     _txn_partition_maps = std::unique_ptr<txn_partition_map_t[]>(new txn_partition_map_t[_txn_map_shard_size]);
-    auto st = ThreadPoolBuilder("meta-flush")
-                      .set_min_threads(1)
-                      .set_max_threads(store_num * 2)
-                      .set_idle_timeout(MonoDelta::FromSeconds(30))
-                      .build(&_flush_thread_pool);
-    CHECK(st.ok());
+    // we will get "store_num = 0" if it acts as cn, just ignore flush pool
+    if (store_num > 0) {
+        auto st = ThreadPoolBuilder("meta-flush")
+                          .set_min_threads(1)
+                          .set_max_threads(store_num * 2)
+                          .set_idle_timeout(MonoDelta::FromSeconds(30))
+                          .build(&_flush_thread_pool);
+        CHECK(st.ok());
+    }
 }
 
 Status TxnManager::prepare_txn(TPartitionId partition_id, const TabletSharedPtr& tablet, TTransactionId transaction_id,
@@ -269,7 +272,7 @@ Status TxnManager::persist_tablet_related_txns(const std::vector<TabletSharedPtr
     int i = 0;
     for (auto& tablet : to_flush_tablet) {
         auto dir = tablet->data_dir();
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = std::move(dir->get_meta()->flush()); });
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
         pair_vec[i].second = tablet->tablet_id();
         i++;
     }
@@ -296,7 +299,7 @@ void TxnManager::flush_dirs(std::unordered_set<DataDir*>& affected_dirs) {
     std::vector<std::pair<Status, std::string>> pair_vec(affected_dirs.size());
     auto token = _flush_thread_pool->new_token(ThreadPool::ExecutionMode::CONCURRENT);
     for (auto dir : affected_dirs) {
-        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = std::move(dir->get_meta()->flush()); });
+        token->submit_func([&pair_vec, dir, i]() { pair_vec[i].first = dir->get_meta()->flush(); });
         pair_vec[i].second = dir->path();
         i++;
     }

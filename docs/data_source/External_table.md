@@ -127,7 +127,8 @@ PROPERTIES (
     "user" = "root",
     "password" = "root",
     "index" = "tindex",
-    "type" = "doc"
+    "type" = "doc",
+    "es.net.ssl" = "true"
 );
 ~~~
 
@@ -143,6 +144,10 @@ Parameters
 
   * true: StarRocks only uses the addresses specified by `hosts` to access the Elasticsearch cluster and fetch data and does not sniff data nodes which shards of the Elasticsearch index reside in. If StarRocks cannot access the addresses of the data nodes inside the Elasticsearch cluster, you need to set this parameter to `true`.
   * false: default value. StarRocks uses the addresses specified by `host` to sniff data nodes on which the shards of the Elasticsearch cluster indexes are located. After StarRocks generates a query execution plan, the relevant BEs directly access the data nodes inside the Elasticsearch cluster to fetch data from the shards of indexes. If StarRocks can access the addresses of the data nodes inside the Elasticsearch cluster, we recommend that you retain the default value `false`.
+**es.net.ssl**: Whether the HTTPS protocol can be used to access your Elasticsearch cluster. Only StarRocks 2.4 and later versions suppprt configuring this parameter.
+
+  * `true`: The HTTPS protocol can be used to access your Elasticsearch cluster (Additionaly, the HTTP protocol is supported).
+  * `false`: The HTTPS protocol cannot be used to access your Elasticsearch cluster. Only the HTTP protocol is supported.
 
 ### Predicate pushdown
 
@@ -439,7 +444,7 @@ The mapping between the target database and StarRocks varies based on the type o
 
 * When you query JDBC external tables, StarRocks cannot push down functions to the tables.
 
-## Hive external table
+## Apache Hive external table
 
 ### Create a Hive resource
 
@@ -773,7 +778,7 @@ After an external table is created, you can query the data in Apache Iceberg by 
 select count(*) from iceberg_tbl;
 ~~~
 
-## Hudi external table
+## Apache Hudi external table
 
 StarRocks allows you to query data from Hudi data lakes by using Hudi external tables, thus facilitating blazing-fast data lake analytics. This topic describes how to create a Hudi external table in your StarRocks cluster and use the Hudi external table to query data from a Hudi data lake.
 
