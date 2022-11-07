@@ -311,8 +311,8 @@ SHOW ANALYZE STATUS [LIKE | WHERE predicate];
 | Database   | 数据库名。                                                   |
 | Table      | 表名。                                                       |
 | Columns    | 列名列表。                                                   |
-| Type       | 统计信息的类型，包括 FULL, SAMPLE, HISTOGRAM。               |
-| Schedule   | 调度的类型。`ONCE`表示手动，`SCHEDULE`表示自动。             |
+| Type       | 统计信息的类型，包括 FULL，SAMPLE，HISTOGRAM。               |
+| Schedule   | 调度的类型。`ONCE` 表示手动，`SCHEDULE` 表示自动。             |
 | Status     | 任务状态，包括 RUNNING（正在执行）、SUCCESS（执行成功）和 FAILED（执行失败）。 |
 | StartTime  | 任务开始执行的时间。                                         |
 | EndTime    | 任务结束执行的时间。                                         |
@@ -334,7 +334,7 @@ SHOW STATS META [WHERE predicate];
 | Database   | 数据库名。                                          |
 | Table      | 表名。                                              |
 | Columns    | 列名。                                              |
-| Type       | 统计信息的类型，`FULL`表示全量，`SAMPLE` 表示抽样。 |
+| Type       | 统计信息的类型，`FULL` 表示全量，`SAMPLE` 表示抽样。 |
 | UpdateTime | 当前表的最新统计信息更新时间。                      |
 | Properties | 自定义参数信息。                                    |
 | Healthy    | 统计信息健康度。                                    |
@@ -352,13 +352,13 @@ SHOW HISTOGRAM META [WHERE predicate];
 | Database   | 数据库名。                                |
 | Table      | 表名。                                    |
 | Column     | 列名。                                    |
-| Type       | 统计信息的类型，直方图固定为`HISTOGRAM`。 |
+| Type       | 统计信息的类型，直方图固定为 `HISTOGRAM`。 |
 | UpdateTime | 当前表的最新统计信息更新时间。            |
 | Properties | 自定义参数信息。                          |
 
 ## 删除统计信息
 
-StarRocks 支持手动删除统计信息。手动删除统计信息时，会删除统计信息数据和统计信息元数据，并且会删除过期内存中的统计信息缓存。需要注意的是，如果当前存在自动采集任务，可能会重新采集之前已删除的统计信息。您可以使用`SHOW ANALYZE STATUS`查看统计信息采集历史记录。
+StarRocks 支持手动删除统计信息。手动删除统计信息时，会删除统计信息数据和统计信息元数据，并且会删除过期内存中的统计信息缓存。需要注意的是，如果当前存在自动采集任务，可能会重新采集之前已删除的统计信息。您可以使用 `SHOW ANALYZE STATUS` 查看统计信息采集历史记录。
 
 ### 删除基础统计信息
 
