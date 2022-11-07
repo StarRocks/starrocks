@@ -101,7 +101,7 @@ CREATE INDEX index1 ON employee (Gender) USING BITMAP COMMENT 'index1';
 如果想要查找该公司的男性员工，可执行如下语句。
 
 ```SQL
-SELECT xxx FROM employee WHERE Gender = male;
+SELECT * FROM employee WHERE Gender = male;
 ```
 
 语句执行后，StarRocks 会先查找字典，得到 `male` 的编码值是 `1`，然后再去查找 bitmap，得到 `male`对应的 bitmap 是 `0001`，也就是说只有第 4 行数据符合查询条件。那么 StarRocks 就会跳过前 3 行，只读取第 4 行数据。
