@@ -63,6 +63,8 @@ public class FunctionAnalyzer {
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
             Preconditions.checkState(functionCallExpr.getChildren().size() > 1);
+            Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
+                    "lambda function can not be null");
             // the normalized high_order functions:
             // high-order function(lambda_func(lambda_expr, lambda_arguments), input_arrays),
             // which puts various arguments/inputs at the tail e.g.,
