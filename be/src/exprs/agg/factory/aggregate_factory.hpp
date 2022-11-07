@@ -115,7 +115,7 @@ public:
     static auto MakeSumAggregateFunction();
 
     template <PrimitiveType PT>
-    static AggregateFunctionPtr MakeDecimalSumAggregateFunction();
+    static auto MakeDecimalSumAggregateFunction();
 
     template <PrimitiveType PT, bool is_sample>
     static AggregateFunctionPtr MakeVarianceAggregateFunction();
@@ -124,11 +124,11 @@ public:
     static AggregateFunctionPtr MakeStddevAggregateFunction();
 
     template <PrimitiveType PT>
-    static AggregateFunctionPtr MakeSumDistinctAggregateFunction();
+    static auto MakeSumDistinctAggregateFunction();
     template <PrimitiveType PT>
-    static AggregateFunctionPtr MakeSumDistinctAggregateFunctionV2();
+    static auto MakeSumDistinctAggregateFunctionV2();
     template <PrimitiveType PT>
-    static AggregateFunctionPtr MakeDecimalSumDistinctAggregateFunction();
+    static auto MakeDecimalSumDistinctAggregateFunction();
 
     static AggregateFunctionPtr MakeDictMergeAggregateFunction();
     static AggregateFunctionPtr MakeRetentionAggregateFunction();
@@ -263,7 +263,7 @@ auto AggregateFactory::MakeSumAggregateFunction() {
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeDecimalSumAggregateFunction() {
+auto AggregateFactory::MakeDecimalSumAggregateFunction() {
     return std::make_shared<DecimalSumAggregateFunction<PT>>();
 }
 
@@ -278,17 +278,17 @@ AggregateFunctionPtr AggregateFactory::MakeStddevAggregateFunction() {
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunction() {
+auto AggregateFactory::MakeSumDistinctAggregateFunction() {
     return std::make_shared<DistinctAggregateFunction<PT, AggDistinctType::SUM>>();
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
+auto AggregateFactory::MakeSumDistinctAggregateFunctionV2() {
     return std::make_shared<DistinctAggregateFunctionV2<PT, AggDistinctType::SUM>>();
 }
 
 template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeDecimalSumDistinctAggregateFunction() {
+auto AggregateFactory::MakeDecimalSumDistinctAggregateFunction() {
     return std::make_shared<DecimalDistinctAggregateFunction<PT, AggDistinctType::SUM>>();
 }
 

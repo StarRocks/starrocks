@@ -281,7 +281,7 @@ Status RuntimeState::check_query_state(const std::string& msg) {
 
 Status RuntimeState::check_mem_limit(const std::string& msg) {
     DIAGNOSTIC_PUSH
-#if defined(__GNUC__)
+#if defined(__GNUC__) && !defined(__clang__)
     DIAGNOSTIC_IGNORE("-Wnonnull-compare")
 #endif
     RETURN_IF_LIMIT_EXCEEDED(this, msg);

@@ -814,7 +814,7 @@ TEST_F(ChunksSorterTest, stable_sort) {
     ASSERT_EQ(expect, result);
 }
 
-void pack_nullable(ChunkPtr chunk) {
+void pack_nullable(const ChunkPtr& chunk) {
     for (auto& col : chunk->columns()) {
         col = std::make_shared<NullableColumn>(col, std::make_shared<NullColumn>(col->size()));
     }
@@ -883,8 +883,8 @@ TEST_F(ChunksSorterTest, get_filter_test) {
     ASSERT_OK(st);
 
     size_t inc = 0;
-    for (int i = 0; i < filter_array[0].size(); ++i) {
-        inc += filter_array[0][i] == DataSegment::INCLUDE_IN_SEGMENT;
+    for (unsigned char i : filter_array[0]) {
+        inc += i == DataSegment::INCLUDE_IN_SEGMENT;
     }
 
     ASSERT_EQ(include_num, inc);

@@ -90,8 +90,8 @@ protected:
     }
 
     template <FieldType type, EncodingTypePB encoding, uint32_t version>
-    void test_nullable_data(const vectorized::Column& src, const std::string null_encoding = "0",
-                            const std::string null_ratio = "0") {
+    void test_nullable_data(const vectorized::Column& src, const std::string& null_encoding = "0",
+                            const std::string& null_ratio = "0") {
         config::set_config("null_encoding", null_encoding);
 
         using Type = typename TypeTraits<type>::CppType;
@@ -323,7 +323,7 @@ protected:
     }
 
     template <uint32_t version>
-    void test_int_array(std::string null_encoding = "0") {
+    void test_int_array(const std::string& null_encoding = "0") {
         config::set_config("null_encoding", null_encoding);
         auto fs = std::make_shared<MemoryFileSystem>();
         ASSERT_TRUE(fs->create_dir(TEST_DIR).ok());

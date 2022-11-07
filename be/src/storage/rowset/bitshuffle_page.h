@@ -98,9 +98,9 @@ public:
 
     bool is_page_full() override { return _count >= _max_count; }
 
-    size_t add(const uint8_t* vals, size_t count) override {
+    uint32_t add(const uint8_t* vals, uint32_t count) override {
         DCHECK(!_finished);
-        size_t to_add = std::min<size_t>(_max_count - _count, count);
+        uint32_t to_add = std::min<uint32_t>(_max_count - _count, count);
         size_t old_sz = _data.size();
         _data.resize(old_sz + to_add * SIZE_OF_TYPE);
         memcpy(&_data[old_sz], vals, to_add * SIZE_OF_TYPE);
@@ -151,7 +151,7 @@ public:
                 << "buffer must be naturally-aligned";
     }
 
-    size_t count() const override { return _count; }
+    uint32_t count() const override { return _count; }
 
     uint64_t size() const override { return _data.size(); }
 
@@ -295,7 +295,7 @@ public:
         return Status::OK();
     }
 
-    Status seek_to_position_in_page(size_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK(_parsed) << "Must call init()";
         if (PREDICT_FALSE(_num_elements == 0)) {
             DCHECK_EQ(0, pos);
@@ -358,9 +358,9 @@ public:
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
-    size_t count() const override { return _num_elements; }
+    uint32_t count() const override { return _num_elements; }
 
-    size_t current_index() const override { return _cur_index; }
+    uint32_t current_index() const override { return _cur_index; }
 
     EncodingTypePB encoding_type() const override { return BIT_SHUFFLE; }
 
@@ -379,7 +379,7 @@ private:
 
     Slice _data;
     PageDecoderOptions _options;
-    size_t _num_elements;
+    uint32_t _num_elements;
     size_t _compressed_size;
     size_t _num_element_after_padding;
 
@@ -391,7 +391,7 @@ private:
 template <FieldType Type>
 inline Status BitShufflePageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *count));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *count = current_index() - begin;

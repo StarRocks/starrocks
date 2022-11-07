@@ -10,8 +10,8 @@ namespace starrocks {
 
 class RateLimitTest : public testing::Test {
 public:
-    RateLimitTest() {}
-    virtual ~RateLimitTest() {}
+    RateLimitTest() = default;
+    ~RateLimitTest() override = default;
 };
 
 TEST_F(RateLimitTest, rate_limit) {

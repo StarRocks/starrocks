@@ -68,15 +68,15 @@ Status DataStreamRecvr::create_merger(RuntimeState* state, const SortExecExprs* 
         chunk_suppliers.emplace_back(std::move(f));
     }
     vectorized::ChunkProbeSuppliers chunk_probe_suppliers;
-    for (SenderQueue* q : _sender_queues) {
+    for ([[maybe_unused]] auto _ : _sender_queues) {
         // we willn't use chunk_probe_supplier in non-pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> bool { return false; };
+        auto f = [](vectorized::Chunk** chunk) -> bool { return false; };
         chunk_probe_suppliers.emplace_back(std::move(f));
     }
     vectorized::ChunkHasSuppliers chunk_has_suppliers;
-    for (SenderQueue* q : _sender_queues) {
+    for ([[maybe_unused]] auto _ : _sender_queues) {
         // we willn't use chunk_has_supplier in non-pipeline.
-        auto f = [q]() -> bool { return false; };
+        auto f = []() -> bool { return false; };
         chunk_has_suppliers.emplace_back(std::move(f));
     }
 
@@ -92,9 +92,9 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
     DCHECK(_is_merging);
     _chunks_merger = std::make_unique<vectorized::SortedChunksMerger>(state, _keep_order);
     vectorized::ChunkSuppliers chunk_suppliers;
-    for (SenderQueue* q : _sender_queues) {
+    for ([[maybe_unused]] auto _ : _sender_queues) {
         // we willn't use chunk_supplier in pipeline.
-        auto f = [q](vectorized::Chunk** chunk) -> Status { return Status::OK(); };
+        auto f = [](vectorized::Chunk** chunk) -> Status { return Status::OK(); };
         chunk_suppliers.emplace_back(std::move(f));
     }
     vectorized::ChunkProbeSuppliers chunk_probe_suppliers;

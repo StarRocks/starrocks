@@ -62,7 +62,6 @@ public:
 
 private:
     ObjectPool* _pool;
-    const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
     int _chunk_size;
 

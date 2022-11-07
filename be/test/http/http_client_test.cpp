@@ -76,8 +76,8 @@ static std::string hostname = "";
 
 class HttpClientTest : public testing::Test {
 public:
-    HttpClientTest() {}
-    ~HttpClientTest() override {}
+    HttpClientTest() = default;
+    ~HttpClientTest() override = default;
 
     static void SetUpTestCase() {
         s_server = new EvHttpServer(0);

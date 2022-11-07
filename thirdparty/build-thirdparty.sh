@@ -467,8 +467,10 @@ build_brpc() {
     check_if_source_exist $BRPC_SOURCE
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
+    CMAKE_GENERATOR="Unix Makefiles"
+    BUILD_SYSTEM='make'
     ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog
-    ${BUILD_SYSTEM} -j$PARALLEL
+    make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
     if [ -f $TP_INSTALL_DIR/lib/libbrpc.a ]; then
         mkdir -p $TP_INSTALL_DIR/lib64 
@@ -958,6 +960,8 @@ build_streamvbyte() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
 
+    CMAKE_GENERATOR="Unix Makefiles"
+    BUILD_SYSTEM='make'
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
 
     make -j$PARALLEL

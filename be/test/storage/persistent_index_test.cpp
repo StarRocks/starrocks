@@ -1287,7 +1287,7 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
     PersistentIndex index(kPersistentIndexDir);
     std::vector<uint8_t> bucket_packs_in_page;
     bucket_packs_in_page.reserve(16);
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
     for (int32_t i = 0; i < 16; ++i) {
         bucket_packs_in_page.emplace_back(rand() % 32);
     }
@@ -1300,8 +1300,8 @@ PARALLEL_TEST(PersistentIndexTest, test_get_move_buckets) {
         int32_t target = rand() % sum;
         auto ret = index.test_get_move_buckets(target, bucket_packs_in_page.data());
         int32_t find_target = 0;
-        for (int32_t i = 0; i < ret.size(); ++i) {
-            find_target += bucket_packs_in_page[ret[i]];
+        for (signed char i : ret) {
+            find_target += bucket_packs_in_page[i];
         }
         ASSERT_TRUE(find_target >= target);
     }

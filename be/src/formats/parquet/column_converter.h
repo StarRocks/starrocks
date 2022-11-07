@@ -11,15 +11,13 @@
 #include "runtime/types.h"
 #include "util/bit_util.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 class Column;
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized
 
 namespace starrocks::parquet {
 
-class ParquetField;
+struct ParquetField;
 
 class ColumnConverter {
 public:

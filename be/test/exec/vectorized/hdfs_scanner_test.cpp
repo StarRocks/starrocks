@@ -110,8 +110,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
 
 void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
-    for (int i = 0; i < tuple_desc->slots().size(); i++) {
-        SlotDescriptor* slot = tuple_desc->slots()[i];
+    for (auto slot : tuple_desc->slots()) {
         hive_column_names->emplace_back(slot->col_name());
     }
     params->hive_column_names = hive_column_names;
@@ -249,7 +248,7 @@ static TExprNode create_datetime_literal_node(TPrimitiveType::type value_type, c
 
 template <typename ValueType>
 static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpcode::type opcode,
-                                        SlotDescriptor* slot_desc, ValueType value_type, TExprNode lit_node) {
+                                        SlotDescriptor* slot_desc, ValueType value_type, const TExprNode& lit_node) {
     TExprNode eq_node;
     eq_node.__set_node_type(TExprNodeType::type::BINARY_PRED);
     eq_node.__set_child_type(value_type);

@@ -25,8 +25,7 @@ public:
             : Operator(factory, id, "assert_num_rows_sink", plan_node_id, driver_sequence),
               _desired_num_rows(desired_num_rows),
               _subquery_string(subquery_string),
-              _assertion(assertion),
-              _has_assert(false) {}
+              _assertion(assertion) {}
 
     ~AssertNumRowsOperator() override = default;
 
@@ -47,7 +46,6 @@ private:
     const int64_t& _desired_num_rows;
     const std::string& _subquery_string;
     const TAssertion::type _assertion;
-    bool _has_assert;
 
     int64_t _actual_num_rows = 0;
     vectorized::ChunkPtr _cur_chunk = nullptr;

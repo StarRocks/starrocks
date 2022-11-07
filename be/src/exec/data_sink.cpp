@@ -67,8 +67,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (!thrift_sink.__isset.stream_sink) {
             return Status::InternalError("Missing data stream sink.");
         }
-        *sink = std::move(create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
-                                                  params.destinations));
+        *sink = create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
+                                        params.destinations);
         break;
     }
     case TDataSinkType::RESULT_SINK:

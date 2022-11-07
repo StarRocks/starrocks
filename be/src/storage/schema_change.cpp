@@ -66,7 +66,6 @@ public:
     bool sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet);
 
 private:
-    ChunkAllocator* _chunk_allocator = nullptr;
     ChunkPtr _swap_chunk;
     size_t _max_allocated_rows{0};
 };
@@ -99,7 +98,7 @@ private:
     std::unique_ptr<ChunkAggregator> _aggregator;
 };
 
-ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) : _chunk_allocator(chunk_allocator), _swap_chunk(nullptr) {}
+ChunkSorter::ChunkSorter(ChunkAllocator* chunk_allocator) : _swap_chunk(nullptr) {}
 
 ChunkSorter::~ChunkSorter() = default;
 
@@ -135,7 +134,7 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
 }
 
 ChunkAllocator::ChunkAllocator(const TabletSchema& tablet_schema, size_t memory_limitation)
-        : _tablet_schema(tablet_schema), _memory_limitation(memory_limitation) {
+        : _memory_limitation(memory_limitation) {
     // Before the first chunk is readed, for the Varchar type, we can't get the actual size,
     // so we can only conservatively estimate a value for variable length type.
     // Then later, row_len will be adjusted according to the Chunk that has been read.

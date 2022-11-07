@@ -147,7 +147,7 @@ struct CastParamCppTypeTrait {
     using type = RunTimeCppType<Type>;
 };
 template <PrimitiveType Type>
-struct CastParamCppTypeTrait<Type, BinaryPTGuard<Type>> {
+struct CastParamCppTypeTrait<Type, StringPTGuard<Type>> {
     using type = std::string;
 };
 
@@ -167,7 +167,7 @@ CastParamCppType<ToType> cast_value(CastParamCppType<FromType> const& value, int
     ColumnPtr column = cast<FromType, ToType, CONST>(RunTimeCppType<FromType>(value), from_type, to_type, 0, 0);
     DCHECK(column->is_constant() && !column->only_null());
     RunTimeCppType<ToType> result = ColumnHelper::get_const_value<ToType>(column);
-    if constexpr (pt_is_binary<ToType>) {
+    if constexpr (pt_is_string<ToType>) {
         return result.to_string();
     } else if constexpr (pt_is_decimalv2<ToType>) {
         return result.value();
@@ -246,9 +246,9 @@ void test_cast_all(CastTestCaseArray const& test_cases) {
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_const_null<FromType, ToType>(tc, front_fill_size, rear_fill_size);
         test_cast_simple<FromType, ToType>(tc, front_fill_size, rear_fill_size);
@@ -264,9 +264,9 @@ void test_cast_all_fail(CastTestCaseArray const& test_cases) {
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_fail<FromType, ToType, ColumnPackedType::SIMPLE>(tc, front_fill_size, rear_fill_size);
         test_cast_fail<FromType, ToType, ColumnPackedType::CONST_NULL>(tc, front_fill_size, rear_fill_size);

@@ -161,7 +161,6 @@ private:
 
     jclass _udf_helper_class;
     jmethodID _create_boxed_array;
-    jmethodID _batch_update_single;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
     jmethodID _batch_update_state;

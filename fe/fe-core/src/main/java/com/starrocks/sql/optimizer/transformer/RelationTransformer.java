@@ -662,10 +662,14 @@ public class RelationTransformer extends AstVisitor<LogicalPlan, ExpressionMappi
         TableFunction tableFunction = node.getTableFunction();
 
         for (int i = 0; i < tableFunction.getTableFnReturnTypes().size(); ++i) {
-            outputColumns.add(columnRefFactory.create(
-                    tableFunction.getDefaultColumnNames().get(i),
-                    tableFunction.getTableFnReturnTypes().get(i),
-                    true));
+            String colName;
+            if (node.getColumnNames() == null) {
+                colName = tableFunction.getDefaultColumnNames().get(i);
+            } else {
+                colName = node.getColumnNames().get(i);
+            }
+
+            outputColumns.add(columnRefFactory.create(colName, tableFunction.getTableFnReturnTypes().get(i), true));
         }
 
         FunctionCallExpr expr = new FunctionCallExpr(tableFunction.getFunctionName(), node.getChildExpressions());

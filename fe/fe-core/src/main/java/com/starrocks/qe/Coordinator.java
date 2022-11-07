@@ -340,10 +340,6 @@ public class Coordinator {
                 this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
             }
         }
-        if (sessionVariables.containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
-            this.queryOptions.setEnable_replicated_storage(
-                    Boolean.parseBoolean(sessionVariables.get(SessionVariable.ENABLE_REPLICATED_STORAGE)));
-        }
         String nowString = DATE_FORMAT.format(Instant.ofEpochMilli(startTime).atZone(ZoneId.of(timezone)));
         this.queryGlobals.setNow_string(nowString);
         this.queryGlobals.setTimestamp_ms(startTime);
@@ -383,10 +379,6 @@ public class Coordinator {
                 if (loadCompressionType != null) {
                     this.queryOptions.setLoad_transmission_compression_type(loadCompressionType);
                 }
-            }
-            if (sessionVariables.containsKey(SessionVariable.ENABLE_REPLICATED_STORAGE)) {
-                this.queryOptions.setEnable_replicated_storage(
-                        Boolean.parseBoolean(sessionVariables.get(SessionVariable.ENABLE_REPLICATED_STORAGE)));
             }
         }
 
@@ -2302,6 +2294,8 @@ public class Coordinator {
                     scanNode instanceof HudiScanNode || scanNode instanceof DeltaLakeScanNode) {
                 if (connectContext != null) {
                     queryOptions.setUse_scan_block_cache(connectContext.getSessionVariable().getUseScanBlockCache());
+                    queryOptions.setEnable_populate_block_cache(
+                            connectContext.getSessionVariable().getEnablePopulateBlockCache());
                 }
                 HDFSBackendSelector selector =
                         new HDFSBackendSelector(scanNode, locations, assignment, addressToBackendID, usedBackendIDs,

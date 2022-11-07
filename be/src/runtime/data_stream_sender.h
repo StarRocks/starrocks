@@ -131,11 +131,7 @@ private:
 
     int _current_channel_idx; // index of current channel to send to if _random == true
 
-    // If true, this sender has been closed. Not valid to call Send() anymore.
-    bool _closed{};
-
     TPartitionType::type _part_type;
-    bool _ignore_not_found;
 
     // Only used when broadcast
     PTransmitChunkParams _chunk_request;

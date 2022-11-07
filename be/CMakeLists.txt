@@ -136,9 +136,9 @@ set(BOOST_ROOT ${THIRDPARTY_DIR})
 set(Boost_NO_WARN_NEW_VERSIONS ON)
 
 if (NOT APPLE)
-    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 REQUIRED COMPONENTS thread regex program_options)
 else()
-    find_package(Boost 1.75.0 COMPONENTS thread regex filesystem system date_time program_options)
+    find_package(Boost 1.75.0 COMPONENTS thread regex program_options)
 endif()
 include_directories(${Boost_INCLUDE_DIRS})
 message(STATUS ${Boost_LIBRARIES})
@@ -331,13 +331,13 @@ if ("${USE_STAROS}" STREQUAL "ON")
      find_package(gRPC CONFIG REQUIRED)
      message(STATUS "Using gRPC ${gRPC_VERSION}")
      get_target_property(gRPC_INCLUDE_DIR gRPC::grpc INTERFACE_INCLUDE_DIRECTORIES)
-     include_directories(${gRPC_INCLUDE_DIR})
+     include_directories(SYSTEM ${gRPC_INCLUDE_DIR})
 
      find_package(starlet CONFIG REQUIRED)
      message(STATUS "Using starlet ${starlet_VERSION}")
      message(STATUS "starlet inc dir: ${STARLET_INCLUDE_DIRS}")
      message(STATUS "starlet lib dir: ${STARLET_LIBS}")
-     include_directories(${STARLET_INCLUDE_DIRS})
+     include_directories(SYSTEM ${STARLET_INCLUDE_DIRS})
      add_library(starlet STATIC IMPORTED)
      set_target_properties(starlet PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet.a)
 
@@ -345,7 +345,7 @@ if ("${USE_STAROS}" STREQUAL "ON")
      get_target_property(prometheus-cpp_INCLUDE_DIR prometheus-cpp::core INTERFACE_INCLUDE_DIRECTORIES)
      message(STATUS "Using prometheus-cpp")
      message(STATUS "  include: ${prometheus-cpp_INCLUDE_DIR}")
-     include_directories(${prometheus-cpp_INCLUDE_DIR})
+     include_directories(SYSTEM ${prometheus-cpp_INCLUDE_DIR})
 
      add_library(starlet_fslib_all STATIC IMPORTED GLOBAL)
      set_target_properties(starlet_fslib_all PROPERTIES IMPORTED_LOCATION ${STARLET_LIBS}/libstarlet_fslib_all.a)
@@ -396,6 +396,9 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-reserved-identifier -Wno-suggest-destructor-override")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-documentation-unknown-command -Wno-old-style-cast")
     set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-c++20-designator -Wno-mismatched-tags")
+    if (CMAKE_CXX_COMPILER_VERSION VERSION_GREATER_EQUAL "14.0.0")
+        set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -Wno-bitwise-instead-of-logical")
+    endif()
 endif()
 
 set(CXX_COMMON_FLAGS "${CXX_COMMON_FLAGS} -DBOOST_DATE_TIME_POSIX_TIME_STD_CONFIG")
@@ -669,7 +672,11 @@ if ("${CMAKE_BUILD_TYPE}" STREQUAL "DEBUG" OR "${CMAKE_BUILD_TYPE}" STREQUAL "RE
         set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} tcmalloc)
     endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN")
-    set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+    if (CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libsan)
+    else()
+        set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-libasan)
+    endif()
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
     set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS} -static-liblsan)
 elseif ("${CMAKE_BUILD_TYPE}" STREQUAL "UBSAN")
@@ -818,6 +825,12 @@ install(FILES
     ${BASE_DIR}/../conf/hadoop_env.sh
     ${BASE_DIR}/../conf/log4j.properties
     DESTINATION ${OUTPUT_DIR}/conf)
+
+if ("${CMAKE_BUILD_TYPE}" STREQUAL "ASAN" OR "${CMAKE_BUILD_TYPE}" STREQUAL "LSAN")
+install(FILES
+    ${BASE_DIR}/../conf/asan_suppressions.conf
+    DESTINATION ${OUTPUT_DIR}/conf)
+endif()
 
 install(DIRECTORY
     ${BASE_DIR}/../webroot/be/

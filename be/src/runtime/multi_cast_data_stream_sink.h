@@ -19,7 +19,6 @@ public:
     Status send_chunk(RuntimeState* state, vectorized::Chunk* chunk) override;
 
 private:
-    RuntimeState* _state;
     std::vector<std::unique_ptr<DataStreamSender> > _sinks;
 };
 

@@ -1071,7 +1071,11 @@ public class StmtExecutor {
         if (execPlan == null) {
             explainString += "NOT AVAILABLE";
         } else {
-            explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+            if (parsedStmt.getExplainLevel().equals(StatementBase.ExplainLevel.OPTIMIZER)) {
+                explainString += PlannerProfile.printPlannerTimeCost(context.getPlannerProfile());
+            } else {
+                explainString += execPlan.getExplainString(parsedStmt.getExplainLevel());
+            }
         }
         return explainString;
     }

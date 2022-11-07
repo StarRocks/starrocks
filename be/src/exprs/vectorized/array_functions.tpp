@@ -21,7 +21,7 @@ public:
             return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -463,7 +463,7 @@ public:
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -569,7 +569,7 @@ public:
                 return phmap_mix_with_seed<sizeof(size_t), PhmapSeed1>()(hash_128(PhmapSeed1, cpp_type_value.value));
             } else if constexpr (pt_is_fixedlength<PT>) {
                 return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(cpp_type_value.value));
-            } else if constexpr (pt_is_binary<PT>) {
+            } else if constexpr (pt_is_string<PT>) {
                 return crc_hash_64(cpp_type_value.value.data, static_cast<int32_t>(cpp_type_value.value.size),
                                    CRC_HASH_SEED1);
             } else {
@@ -591,7 +591,7 @@ public:
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
         } else {
@@ -903,7 +903,7 @@ private:
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
         if constexpr (pt_is_fixedlength<PT>) {
             _reverse_fixed_column(column, offsets, chunk_size);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             _reverse_binary_column(column, offsets, chunk_size);
         } else {
             assert(false);

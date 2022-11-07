@@ -30,7 +30,6 @@ public class TaskRunStatus implements Writable {
     @SerializedName("state")
     private Constants.TaskRunState state = Constants.TaskRunState.PENDING;
 
-
     @SerializedName("progress")
     private int progress;
 

@@ -152,7 +152,7 @@ public:
 private:
     const IndexPageReader* _reader;
 
-    size_t _pos = 0;
+    uint32_t _pos = 0;
 };
 
 } // namespace starrocks

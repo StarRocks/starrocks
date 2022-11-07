@@ -16,13 +16,15 @@ import java.util.List;
 public class CreateTableEvent extends MetastoreTableEvent {
     public static final String CREATE_TABLE_EVENT_TYPE = "CREATE_TABLE";
 
-    public static List<MetastoreEvent> getEvents(NotificationEvent event, CacheUpdateProcessor metaCache) {
-        return Lists.newArrayList(new CreateTableEvent(event, metaCache));
+    public static List<MetastoreEvent> getEvents(NotificationEvent event,
+                                                 CacheUpdateProcessor cacheProcessor, String catalogName) {
+        return Lists.newArrayList(new CreateTableEvent(event, cacheProcessor, catalogName));
     }
 
-    private CreateTableEvent(NotificationEvent event, CacheUpdateProcessor metaCache)
+    private CreateTableEvent(NotificationEvent event,
+                             CacheUpdateProcessor cacheProcessor, String catalogName)
             throws MetastoreNotificationException {
-        super(event, metaCache);
+        super(event, cacheProcessor, catalogName);
         Preconditions.checkArgument(MetastoreEventType.CREATE_TABLE.equals(getEventType()));
         Preconditions.checkNotNull(MetastoreEventType.CREATE_TABLE, debugString("Event message is null"));
         CreateTableMessage createTableMessage =

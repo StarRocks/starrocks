@@ -51,7 +51,7 @@ public:
     //
     // It is an error to call this with a value larger than Count().
     // Doing so has undefined results.
-    virtual Status seek_to_position_in_page(size_t pos) = 0;
+    virtual Status seek_to_position_in_page(uint32_t pos) = 0;
 
     // Seek the decoder to the given value in the page, or the
     // lowest value which is greater than the given value.
@@ -75,8 +75,8 @@ public:
     // of the page. This is primarily used to skip over data.
     //
     // Return the step skipped.
-    virtual size_t seek_forward(size_t n) {
-        size_t step = std::min(n, count() - current_index());
+    virtual size_t seek_forward(uint32_t n) {
+        uint32_t step = std::min(n, count() - current_index());
         DCHECK_GE(step, 0);
         seek_to_position_in_page(current_index() + step);
         return step;
@@ -101,11 +101,11 @@ public:
     }
 
     // Return the number of elements in this page.
-    virtual size_t count() const = 0;
+    virtual uint32_t count() const = 0;
 
     // Return the position within the page of the currently seeked
     // entry (ie the entry that will next be returned by next_vector())
-    virtual size_t current_index() const = 0;
+    virtual uint32_t current_index() const = 0;
 
     // Return the the encoding type of current page.
     // normally, the encoding type is fixed for all data pages of a single column, but

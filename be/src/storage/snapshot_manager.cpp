@@ -86,7 +86,9 @@ Status SnapshotManager::make_snapshot(const TSnapshotRequest& request, string* s
     int64_t timeout_s = request.__isset.timeout ? request.timeout : config::snapshot_expire_time_sec;
 
     StatusOr<std::string> res;
+    std::shared_lock rdlock(tablet->get_header_lock());
     int64_t cur_tablet_version = tablet->max_version().second;
+    rdlock.unlock();
     if (request.__isset.missing_version) {
         LOG(INFO) << "make incremental snapshot tablet:" << request.tablet_id << " cur_version:" << cur_tablet_version
                   << " req_version:" << JoinInts(request.missing_version, ",") << " timeout:" << timeout_s;

@@ -154,7 +154,7 @@ struct ColumnToArrowConverter<PT, AT, is_nullable, ConvBinaryGuard<PT, AT>> {
 
     static inline std::string convert_datum(const StarRocksCppType& datum, [[maybe_unused]] int precision,
                                             [[maybe_unused]] int scale) {
-        if constexpr (pt_is_binary<PT> || pt_is_decimalv2<PT> || pt_is_date_or_datetime<PT>) {
+        if constexpr (pt_is_string<PT> || pt_is_decimalv2<PT> || pt_is_date_or_datetime<PT>) {
             return datum.to_string();
         } else if constexpr (pt_is_hll<PT>) {
             std::string s;

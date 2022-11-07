@@ -2,81 +2,16 @@
 
 package com.starrocks.sql.plan;
 
-import com.google.common.collect.ImmutableMap;
-import com.starrocks.common.FeConstants;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.jupiter.api.AfterAll;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Assertions;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.Arrays;
-import java.util.Map;
 import java.util.stream.Stream;
 
-public class TPCDSPushAggTest extends TPCDSPlanTestBase {
-    private static final Map<String, Long> ROW_COUNT_MAP = ImmutableMap.<String, Long>builder()
-            .put("call_center", 42L)
-            .put("catalog_page", 30000L)
-            .put("catalog_returns", 143996756L)
-            .put("catalog_sales", 1439980416L)
-            .put("customer", 12000000L)
-            .put("customer_address", 6000000L)
-            .put("customer_demographics", 1920800L)
-            .put("date_dim", 73049L)
-            .put("date_dim_varchar", 73049L)
-            .put("household_demographics", 7200L)
-            .put("income_band", 20L)
-            .put("inventory", 783000000L)
-            .put("item", 300000L)
-            .put("promotion", 1500L)
-            .put("reason", 65L)
-            .put("ship_mode", 20L)
-            .put("store", 1002L)
-            .put("store_returns", 287999764L)
-            .put("store_sales", 2879987999L)
-            .put("time_dim", 86400L)
-            .put("warehouse", 20L)
-            .put("web_page", 3000L)
-            .put("web_returns", 71997522L)
-            .put("web_sales", 720000376L)
-            .put("web_site", 54L)
-            .build();
-
-    private StatisticStorage origin;
-
-    @BeforeAll
-    public static void beforeClass() throws Exception {
-        TPCDSPlanTestBase.beforeClass();
-        connectContext.getSessionVariable().setCboCteReuse(true);
-        connectContext.getSessionVariable().setEnablePipelineEngine(true);
-    }
-
-    @AfterAll
-    public static void afterClass() {
-        TPCDSPlanTestBase.afterClass();
-    }
-
-    @BeforeEach
-    public void setUp() throws Exception {
-        origin = GlobalStateMgr.getCurrentStatisticStorage();
-        connectContext.getGlobalStateMgr().setStatisticStorage(new MockTPCDSStatisticStorage());
-        setTPCDSTableStats(ROW_COUNT_MAP);
-        FeConstants.runningUnitTest = true;
-    }
-
-    @AfterEach
-    public void tearDown() throws Exception {
-        FeConstants.runningUnitTest = false;
-        connectContext.getGlobalStateMgr().setStatisticStorage(origin);
-    }
-
+public class TPCDSPushAggTest extends TPCDS1TTestBase {
     private void check(int mode, String sql, int aggNum) throws Exception {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(mode);
         sql = getTPCDS(sql);
@@ -96,8 +31,8 @@ public class TPCDSPushAggTest extends TPCDSPlanTestBase {
         check(3, sql, high);
     }
 
-    //    @ParameterizedTest(name = "{0}")
-    //    @MethodSource("testCastProvider")
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("testCastProvider")
     public void debugTPCDSPushDownAgg(String sql, int orig, int auto, int force, int mid, int high) throws Exception {
         orig = getAggNum(-1, sql);
         auto = getAggNum(0, sql);
@@ -130,8 +65,8 @@ public class TPCDSPushAggTest extends TPCDSPlanTestBase {
                 Arguments.of("Q11", 4, 8, 8, 8, 8),
                 Arguments.of("Q12", 2, 4, 4, 4, 4),
                 Arguments.of("Q13", 2, 2, 2, 2, 2),
-                Arguments.of("Q14_1", 10, 10, 10, 10, 10),
-                Arguments.of("Q14_2", 6, 6, 6, 6, 6),
+                Arguments.of("Q14_1", 16, 16, 16, 16, 16),
+                Arguments.of("Q14_2", 12, 12, 12, 12, 12),
                 Arguments.of("Q15", 2, 2, 4, 4, 4),
                 Arguments.of("Q16", 4, 4, 4, 4, 4),
                 Arguments.of("Q17", 2, 2, 2, 2, 2),

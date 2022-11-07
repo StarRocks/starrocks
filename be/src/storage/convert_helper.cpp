@@ -31,7 +31,6 @@ using strings::Substitute;
 
 template <typename SrcType, typename DstType>
 struct ConvFunction {};
-static inline constexpr int128_t TEN_POWER_9 = get_scale_factor<int128_t>(9);
 template <>
 struct ConvFunction<decimal12_t, int128_t> {
     static inline void apply(const decimal12_t* src, int128_t* dst) {

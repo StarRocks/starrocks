@@ -51,8 +51,7 @@ class OlapMetaScanContextFactory {
 public:
     OlapMetaScanContextFactory(vectorized::OlapMetaScanNode* const scan_node, int32_t dop, bool shared_morsel_queue,
                                ChunkBufferLimiterPtr chunk_buffer_limiter)
-            : _meta_scan_node(scan_node),
-              _dop(dop),
+            : _dop(dop),
               _shared_morsel_queue(shared_morsel_queue),
               _chunk_buffer(BalanceStrategy::kDirect, dop, std::move(chunk_buffer_limiter)),
               _contexts(shared_morsel_queue ? 1 : dop) {}
@@ -68,7 +67,6 @@ public:
     }
 
 private:
-    vectorized::OlapMetaScanNode* const _meta_scan_node;
     const int32_t _dop;
     const bool _shared_morsel_queue;
     BalancedChunkBuffer _chunk_buffer;

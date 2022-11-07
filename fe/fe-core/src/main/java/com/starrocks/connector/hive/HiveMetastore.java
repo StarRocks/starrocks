@@ -6,11 +6,16 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.ColumnStatisticsObj;
 import org.apache.hadoop.hive.metastore.api.FieldSchema;
+import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.api.StorageDescriptor;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
@@ -22,6 +27,8 @@ import static com.google.common.collect.ImmutableMap.toImmutableMap;
 import static com.starrocks.connector.hive.HiveMetastoreApiConverter.toHiveCommonStats;
 
 public class HiveMetastore implements IHiveMetastore {
+
+    private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
     private final HiveMetaClient client;
     private final String catalogName;
 
@@ -145,5 +152,31 @@ public class HiveMetastore implements IHiveMetastore {
         }
 
         return resultBuilder.build();
+    }
+
+    public long getCurrentEventId() {
+        return client.getCurrentNotificationEventId().getEventId();
+    }
+
+    public NotificationEventResponse getNextEventResponse(long lastSyncedEventId, String catalogName,
+                                                          final boolean getAllEvents)
+            throws MetastoreNotificationFetchException {
+        try {
+            int batchSize = getAllEvents ? -1 : Config.hms_events_batch_size_per_rpc;
+            NotificationEventResponse response = client.getNextNotification(lastSyncedEventId, batchSize, null);
+            if (response.getEvents().size() == 0) {
+                LOG.info("Event size is 0 when pulling events on catalog [{}]", catalogName);
+                return null;
+            }
+            LOG.info(String.format("Received %d events. Start event id : %d. Last synced id : %d on catalog : %s",
+                    response.getEvents().size(), response.getEvents().get(0).getEventId(),
+                    lastSyncedEventId, catalogName));
+
+            return response;
+        } catch (MetastoreNotificationFetchException e) {
+            LOG.error("Unable to fetch notifications from metastore. Last synced event id is {}", lastSyncedEventId, e);
+            throw new MetastoreNotificationFetchException("Unable to fetch notifications from metastore. " +
+                    "Last synced event id is " + lastSyncedEventId, e);
+        }
     }
 }

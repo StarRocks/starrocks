@@ -21,7 +21,7 @@ const Buffer<typename JoinBuildFunc<PT>::CppType>& JoinBuildFunc<PT>::get_key_da
         data_column = table_items.key_columns[0];
     }
 
-    if constexpr (pt_is_binary<PT>) {
+    if constexpr (pt_is_string<PT>) {
         if (UNLIKELY(data_column->is_large_binary())) {
             return ColumnHelper::as_raw_column<LargeBinaryColumn>(data_column)->get_data();
         } else {

@@ -58,19 +58,19 @@ TEST(TestParseMemSpec, Normal) {
 
 TEST(TestParseMemSpec, Bad) {
     std::vector<std::string> bad_values;
-    bad_values.push_back("1gib");
-    bad_values.push_back("1%b");
-    bad_values.push_back("1b%");
-    bad_values.push_back("gb");
-    bad_values.push_back("1GMb");
-    bad_values.push_back("1b1Mb");
-    bad_values.push_back("1kib");
-    bad_values.push_back("1Bb");
-    bad_values.push_back("1%%");
-    bad_values.push_back("1.1");
-    bad_values.push_back("1pb");
-    bad_values.push_back("1eb");
-    bad_values.push_back("%");
+    bad_values.emplace_back("1gib");
+    bad_values.emplace_back("1%b");
+    bad_values.emplace_back("1b%");
+    bad_values.emplace_back("gb");
+    bad_values.emplace_back("1GMb");
+    bad_values.emplace_back("1b1Mb");
+    bad_values.emplace_back("1kib");
+    bad_values.emplace_back("1Bb");
+    bad_values.emplace_back("1%%");
+    bad_values.emplace_back("1.1");
+    bad_values.emplace_back("1pb");
+    bad_values.emplace_back("1eb");
+    bad_values.emplace_back("%");
     for (const auto& value : bad_values) {
         int64_t bytes = ParseUtil::parse_mem_spec(value, test_memory_limit);
         ASSERT_EQ(-1, bytes);

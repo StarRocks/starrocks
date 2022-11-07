@@ -178,7 +178,7 @@ public class PrivilegeStmtAnalyzerV2 {
                     stmt.setObjectList(null);
                 }
                 privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
-                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getPrivType(), stmt.getTypeId(), stmt.getPrivList()));
+                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getTypeId(), stmt.getPrivList()));
             } catch (PrivilegeException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);

@@ -32,8 +32,18 @@ public:
     void set_finished(int buffer_index);
 
     ChunkBufferLimiter* limiter() { return _limiter.get(); }
+    void update_limiter(vectorized::Chunk* chunk);
 
 private:
+    struct LimiterContext {
+        // ========================
+        // Local counters for row-size estimation, will be reset after a batch
+        size_t local_sum_row_bytes = 0;
+        size_t local_num_rows = 0;
+        size_t local_sum_chunks = 0;
+        size_t local_max_chunk_rows = 0;
+    };
+
     using ChunkWithToken = std::pair<vectorized::ChunkPtr, ChunkBufferTokenPtr>;
     using QueueT = UnboundedBlockingQueue<ChunkWithToken>;
     using SubBuffer = std::unique_ptr<QueueT>;
@@ -47,6 +57,7 @@ private:
     std::atomic_int64_t _output_index = 0;
 
     ChunkBufferLimiterPtr _limiter;
+    LimiterContext _limiter_context;
 };
 
 } // namespace starrocks::pipeline

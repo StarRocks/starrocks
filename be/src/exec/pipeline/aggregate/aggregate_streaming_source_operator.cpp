@@ -2,6 +2,8 @@
 
 #include "aggregate_streaming_source_operator.h"
 
+#include <variant>
+
 namespace starrocks::pipeline {
 
 bool AggregateStreamingSourceOperator::has_output() const {
@@ -45,7 +47,7 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
     // It is no need to distinguish whether streaming or aggregation mode
     // We just first read chunk from buffer and finally read chunk from hash table
     if (!_aggregator->is_chunk_buffer_empty()) {
-        return std::move(_aggregator->poll_chunk_buffer());
+        return _aggregator->poll_chunk_buffer();
     }
 
     // Even if it is streaming mode, the purpose of reading from hash table is to
@@ -59,30 +61,14 @@ StatusOr<vectorized::ChunkPtr> AggregateStreamingSourceOperator::pull_chunk(Runt
 
 void AggregateStreamingSourceOperator::_output_chunk_from_hash_map(vectorized::ChunkPtr* chunk, RuntimeState* state) {
     if (!_aggregator->it_hash().has_value()) {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                   \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME) \
-            _aggregator->it_hash() = _aggregator->_state_allocator.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-        else {
-            DCHECK(false);
-        }
+        _aggregator->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
         COUNTER_SET(_aggregator->hash_table_size(), (int64_t)_aggregator->hash_map_variant().size());
     }
 
-    if (false) {
-    }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == vectorized::AggHashMapVariant::Type::NAME)                   \
-            _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, state->chunk_size(), chunk);
-    APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-    else {
-        DCHECK(false);
-    }
+    _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+        _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, state->chunk_size(), chunk);
+    });
 }
 
 } // namespace starrocks::pipeline

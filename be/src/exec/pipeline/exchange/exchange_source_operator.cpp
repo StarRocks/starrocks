@@ -57,7 +57,7 @@ void ExchangeSourceOperatorFactory::close_stream_recvr() {
     }
 }
 
-bool ExchangeSourceOperatorFactory::need_local_shuffle() const {
+bool ExchangeSourceOperatorFactory::could_local_shuffle() const {
     DCHECK(_texchange_node.__isset.partition_type);
     // There are two ways of shuffle
     // 1. If previous op is ExchangeSourceOperator and its partition type is HASH_PARTITIONED or BUCKET_SHUFFLE_HASH_PARTITIONED

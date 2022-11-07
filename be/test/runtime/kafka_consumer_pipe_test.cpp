@@ -27,8 +27,8 @@ namespace starrocks {
 
 class KafkaConsumerPipeTest : public testing::Test {
 public:
-    KafkaConsumerPipeTest() {}
-    virtual ~KafkaConsumerPipeTest() {}
+    KafkaConsumerPipeTest() = default;
+    ~KafkaConsumerPipeTest() override = default;
 
     void SetUp() override {}
 

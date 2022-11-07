@@ -23,8 +23,8 @@ namespace starrocks {
 
 class BrpcStubCacheTest : public testing::Test {
 public:
-    BrpcStubCacheTest() {}
-    virtual ~BrpcStubCacheTest() {}
+    BrpcStubCacheTest() = default;
+    ~BrpcStubCacheTest() override = default;
 };
 
 TEST_F(BrpcStubCacheTest, normal) {

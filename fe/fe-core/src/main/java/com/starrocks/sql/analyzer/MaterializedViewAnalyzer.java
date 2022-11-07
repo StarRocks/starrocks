@@ -29,12 +29,14 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -48,6 +50,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.HashDistributionDesc;
 import com.starrocks.sql.ast.IntervalLiteral;
+import com.starrocks.sql.ast.PartitionRangeDesc;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
@@ -56,10 +59,24 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
+import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.transformer.LogicalPlan;
+import com.starrocks.sql.optimizer.transformer.OptExprBuilder;
+import com.starrocks.sql.optimizer.transformer.RelationTransformer;
+import com.starrocks.sql.plan.ExecPlan;
 import org.apache.iceberg.PartitionSpec;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -126,6 +143,7 @@ public class MaterializedViewAnalyzer {
             }
             // analyze query statement, can check whether tables and columns exist in catalog
             Analyzer.analyze(queryStatement, context);
+
             // convert queryStatement to sql and set
             statement.setInlineViewDef(ViewDefBuilder.build(queryStatement));
             statement.setSimpleViewDef(ViewDefBuilder.buildSimple(queryStatement));
@@ -162,6 +180,8 @@ public class MaterializedViewAnalyzer {
             Map<Column, Expr> columnExprMap = Maps.newHashMap();
             Map<TableName, Table> aliasTableMap = AnalyzerUtils.collectAllTableAndViewWithAlias(queryStatement);
 
+            planMVQuery(statement, queryStatement, context);
+
             // get outputExpressions and convert it to columns which in selectRelation
             // set the columns into createMaterializedViewStatement
             // record the relationship between columns and outputExpressions for next check
@@ -179,6 +199,52 @@ public class MaterializedViewAnalyzer {
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
             return null;
+        }
+
+        // TODO(murphy) implement
+        // Plan the query statement and store in memory
+        private void planMVQuery(CreateMaterializedViewStatement createStmt, QueryStatement query, ConnectContext ctx) {
+            if (!ctx.getSessionVariable().isEnableRealtimeRefreshMV()) {
+                return;
+            }
+            if (!createStmt.getRefreshSchemeDesc().getType().equals(MaterializedView.RefreshType.INCREMENTAL)) {
+                return;
+            }
+            QueryRelation queryRelation = query.getQueryRelation();
+
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            LogicalPlan logicalPlan = new RelationTransformer(columnRefFactory, ctx).transform(queryRelation);
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap = new HashMap<>();
+            List<ColumnRefOperator> outputColumns = new ArrayList<>();
+            for (int colIdx = 0; colIdx < logicalPlan.getOutputColumn().size(); colIdx++) {
+                ColumnRefOperator ref = logicalPlan.getOutputColumn().get(colIdx);
+                outputColumns.add(ref);
+                columnRefMap.put(ref, ref);
+            }
+
+            // Build logical plan for view query
+            OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
+            logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
+            Optimizer optimizer = new Optimizer();
+            PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
+            ExecPlan execPlan;
+            try {
+                ctx.getSessionVariable().setMVPlanner(true);
+                OptExpression optimizedPlan = optimizer.optimize(
+                        ctx,
+                        logicalPlan.getRoot(),
+                        requiredPropertySet,
+                        new ColumnRefSet(logicalPlan.getOutputColumn()),
+                        columnRefFactory);
+
+                // TODO: refine rules for mv plan
+                // TODO: infer key property
+                // TODO: infer retraction op
+                // TODO: infer state
+                // TODO: store the plan in create-mv statement and persist it at executor
+            } finally {
+                ctx.getSessionVariable().setMVPlanner(false);
+            }
         }
 
         private void checkNondeterministicFunction(Expr expr) {
@@ -200,7 +266,8 @@ public class MaterializedViewAnalyzer {
             List<String> columnOutputNames = queryRelation.getColumnOutputNames();
             List<Expr> outputExpression = queryRelation.getOutputExpression();
             for (int i = 0; i < outputExpression.size(); ++i) {
-                Column column = new Column(columnOutputNames.get(i), outputExpression.get(i).getType(),
+                Type type = AnalyzerUtils.transformType(outputExpression.get(i).getType());
+                Column column = new Column(columnOutputNames.get(i), type,
                         outputExpression.get(i).isNullable());
                 // set default aggregate type, look comments in class Column
                 column.setAggregationType(AggregateType.NONE, false);
@@ -517,7 +584,7 @@ public class MaterializedViewAnalyzer {
             if (db == null) {
                 throw new SemanticException("Can not find database:" + mvName.getDb());
             }
-            Table table = db.getTable(mvName.getTbl());
+            OlapTable table = (OlapTable) db.getTable(mvName.getTbl());
             if (table == null) {
                 throw new SemanticException("Can not find materialized view:" + mvName.getTbl());
             }
@@ -527,7 +594,62 @@ public class MaterializedViewAnalyzer {
                 throw new SemanticException(
                         "Refresh materialized view failed because " + mv.getName() + " is not active.");
             }
+            if (statement.getPartitionRangeDesc() == null) {
+                return null;
+            }
+            if (!(table.getPartitionInfo() instanceof RangePartitionInfo)) {
+                throw new SemanticException("Not support refresh by partition for single partition mv.");
+            }
+            Column partitionColumn =
+                    ((RangePartitionInfo) table.getPartitionInfo()).getPartitionColumns().get(0);
+            if (partitionColumn.getType().isDateType()) {
+                validateDateTypePartition(statement.getPartitionRangeDesc());
+            } else if (partitionColumn.getType().isIntegerType()) {
+                validateNumberTypePartition(statement.getPartitionRangeDesc());
+            } else {
+                throw new SemanticException("Unsupported batch partition build type:" + partitionColumn.getType() + ".");
+            }
             return null;
+        }
+
+        private void validateNumberTypePartition(PartitionRangeDesc partitionRangeDesc)
+                throws SemanticException {
+            String start = partitionRangeDesc.getPartitionStart();
+            String end = partitionRangeDesc.getPartitionEnd();
+            long startNum;
+            long endNum;
+            try {
+                startNum = Long.parseLong(start);
+                endNum = Long.parseLong(end);
+            } catch (NumberFormatException ex) {
+                throw new SemanticException("Batch build partition EVERY is number type " +
+                        "but START or END does not type match.");
+            }
+            if (startNum >= endNum) {
+                throw new SemanticException("Batch build partition start value should less then end value.");
+            }
+        }
+
+        private void validateDateTypePartition(PartitionRangeDesc partitionRangeDesc)
+                throws SemanticException {
+            String start = partitionRangeDesc.getPartitionStart();
+            String end = partitionRangeDesc.getPartitionEnd();
+            LocalDateTime startTime;
+            LocalDateTime endTime;
+            DateTimeFormatter startDateTimeFormat;
+            DateTimeFormatter endDateTimeFormat;
+            try {
+                startDateTimeFormat = DateUtils.probeFormat(start);
+                endDateTimeFormat = DateUtils.probeFormat(end);
+                startTime = DateUtils.parseStringWithDefaultHSM(start, startDateTimeFormat);
+                endTime = DateUtils.parseStringWithDefaultHSM(end, endDateTimeFormat);
+            } catch (Exception ex) {
+                throw new SemanticException("Batch build partition EVERY is date type " +
+                        "but START or END does not type match.");
+            }
+            if (!startTime.isBefore(endTime)) {
+                throw new SemanticException("Batch build partition start date should less than end date.");
+            }
         }
 
         @Override

@@ -1,8 +1,8 @@
 # bitmap_union
 
-## description
+## Description
 
-Aggregation function, used to calculate the bitmap union after grouping. Common usage scenarios: calculating PV and UV.
+Calculates the bitmap union of a set of values after grouping. Common usage scenarios include calculating PV and UV.
 
 ### Syntax
 
@@ -10,9 +10,7 @@ Aggregation function, used to calculate the bitmap union after grouping. Common 
 BITMAP BITMAP_UNION(BITMAP value)
 ```
 
-Enter a set of bitmap values, calculate the union of this set of bitmap values, and return the result.
-
-## example
+## Examples
 
 ```sql
 select page_id, bitmap_union(user_id)
@@ -20,7 +18,7 @@ from table
 group by page_id;
 ```
 
-Use with bitmap_count function to obtain the PV data of the web page:
+Use this function with bitmap_count() to obtain the UV of a web page.
 
 ```sql
 select page_id, bitmap_count(bitmap_union(user_id))
@@ -28,7 +26,7 @@ from table
 group by page_id;
 ```
 
-When the user_id field is int, the above query semantics is equivalent to:
+If `user_id` is an integer, the above query statement is equivalent to the following:
 
 ```sql
 select page_id, count(distinct user_id)

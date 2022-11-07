@@ -10,12 +10,11 @@
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(
-        const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
-        std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys, int64_t offset,
-        int64_t partition_limit, const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
-        TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
-        const RowDescriptor& parent_node_child_row_desc)
+LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs,
+                                                     const std::vector<ExprContext*>& sort_exprs,
+                                                     std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+                                                     std::string sort_keys, int64_t offset, int64_t partition_limit,
+                                                     const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
           _sort_exprs(sort_exprs),
           _is_asc_order(std::move(is_asc_order)),
@@ -23,11 +22,7 @@ LocalPartitionTopnContext::LocalPartitionTopnContext(
           _sort_keys(std::move(sort_keys)),
           _offset(offset),
           _partition_limit(partition_limit),
-          _topn_type(topn_type),
-          _order_by_types(order_by_types),
-          _materialized_tuple_desc(materialized_tuple_desc),
-          _parent_node_row_desc(parent_node_row_desc),
-          _parent_node_child_row_desc(parent_node_child_row_desc) {}
+          _topn_type(topn_type) {}
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs));
@@ -143,20 +138,15 @@ LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
           _sort_keys(std::move(sort_keys)),
           _offset(offset),
           _partition_limit(partition_limit),
-          _topn_type(topn_type),
-          _order_by_types(order_by_types),
-          _materialized_tuple_desc(materialized_tuple_desc),
-          _parent_node_row_desc(parent_node_row_desc),
-          _parent_node_child_row_desc(parent_node_child_row_desc) {}
+          _topn_type(topn_type) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _ctxs.size());
 
     if (_ctxs[driver_sequence] == nullptr) {
-        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(
-                _t_partition_exprs, _sort_exprs, _is_asc_order, _is_null_first, _sort_keys, _offset, _partition_limit,
-                _topn_type, _order_by_types, _materialized_tuple_desc, _parent_node_row_desc,
-                _parent_node_child_row_desc);
+        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs,
+                                                                             _is_asc_order, _is_null_first, _sort_keys,
+                                                                             _offset, _partition_limit, _topn_type);
     }
 
     return _ctxs[driver_sequence].get();

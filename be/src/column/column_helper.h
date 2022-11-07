@@ -2,6 +2,7 @@
 
 #pragma once
 
+#include <utility>
 #ifdef __x86_64__
 #include <immintrin.h>
 #endif
@@ -383,6 +384,22 @@ public:
     template <typename T>
     static size_t filter(const Column::Filter& filter, T* data) {
         return filter_range(filter, data, 0, filter.size());
+    }
+
+    template <class FastPath, class SlowPath>
+    static auto call_nullable_func(const Column* column, FastPath&& fast_path, SlowPath&& slow_path) {
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& null_data = nullable_column->immutable_null_column_data();
+            const Column* data_column = nullable_column->data_column().get();
+            if (column->has_null()) {
+                return std::forward<SlowPath>(slow_path)(null_data, data_column);
+            } else {
+                return std::forward<FastPath>(fast_path)(data_column);
+            }
+        } else {
+            return std::forward<FastPath>(fast_path)(column);
+        }
     }
 
     static ColumnPtr create_const_null_column(size_t chunk_size);

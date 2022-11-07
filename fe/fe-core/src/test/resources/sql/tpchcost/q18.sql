@@ -67,25 +67,11 @@ UNPARTITIONED
 |  <slot 24> : 24: L_QUANTITY
 |
 13:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  colocate: false, reason:
-|  equal join conjunct: 11: O_CUSTKEY = 1: C_CUSTKEY
-|
-|----12:EXCHANGE
-|
-10:Project
-|  <slot 10> : 10: O_ORDERKEY
-|  <slot 11> : 11: O_CUSTKEY
-|  <slot 13> : 13: O_TOTALPRICE
-|  <slot 14> : 14: O_ORDERDATE
-|  <slot 24> : 24: L_QUANTITY
-|
-9:HASH JOIN
 |  join op: INNER JOIN (BUCKET_SHUFFLE)
 |  colocate: false, reason:
 |  equal join conjunct: 20: L_ORDERKEY = 10: O_ORDERKEY
 |
-|----8:EXCHANGE
+|----12:EXCHANGE
 |
 0:OlapScanNode
 TABLE: lineitem
@@ -103,26 +89,22 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 12
-UNPARTITIONED
-
-11:OlapScanNode
-TABLE: customer
-PREAGGREGATION: ON
-partitions=1/1
-rollup: customer
-tabletRatio=10/10
-cardinality=15000000
-avgRowSize=33.0
-numNodes=0
-
-PLAN FRAGMENT 3
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 08
 BUCKET_SHUFFLE_HASH_PARTITIONED: 10: O_ORDERKEY
 
+11:Project
+|  <slot 1> : 1: C_CUSTKEY
+|  <slot 2> : 2: C_NAME
+|  <slot 10> : 10: O_ORDERKEY
+|  <slot 13> : 13: O_TOTALPRICE
+|  <slot 14> : 14: O_ORDERDATE
+|
+10:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 11: O_CUSTKEY = 1: C_CUSTKEY
+|
+|----9:EXCHANGE
+|
 7:Project
 |  <slot 10> : 10: O_ORDERKEY
 |  <slot 11> : 11: O_CUSTKEY
@@ -144,6 +126,24 @@ rollup: orders
 tabletRatio=10/10
 cardinality=150000000
 avgRowSize=28.0
+numNodes=0
+
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 09
+UNPARTITIONED
+
+8:OlapScanNode
+TABLE: customer
+PREAGGREGATION: ON
+partitions=1/1
+rollup: customer
+tabletRatio=10/10
+cardinality=15000000
+avgRowSize=33.0
 numNodes=0
 
 PLAN FRAGMENT 4

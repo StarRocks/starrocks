@@ -253,7 +253,7 @@ struct MockConstExprBuilder {
 
             using CppType = RunTimeCppType<ptype>;
             CppType literal_value;
-            if constexpr (pt_is_binary<ptype>) {
+            if constexpr (pt_is_string<ptype>) {
                 literal_value = "123";
             } else if constexpr (pt_is_integer<ptype>) {
                 literal_value = 123;

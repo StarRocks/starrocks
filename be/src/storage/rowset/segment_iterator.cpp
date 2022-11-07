@@ -54,7 +54,7 @@ static int compare(const SeekTuple& tuple, const Chunk& chunk) {
     DCHECK_LE(tuple.columns(), chunk.num_columns());
     const auto& schema = tuple.schema();
     const size_t n = tuple.columns();
-    for (size_t i = 0; i < n; i++) {
+    for (uint32_t i = 0; i < n; i++) {
         const Datum& v1 = tuple.get(i);
         const ColumnPtr& c = chunk.get_column_by_index(i);
         DCHECK_GE(c->size(), 1u);

@@ -178,12 +178,12 @@ void offsets_copy(const T* arrow_offsets_data, T arrow_base_offset, size_t num_e
     }
 }
 
-template <PrimitiveType PT, typename = BinaryPTGuard<PT>>
+template <PrimitiveType PT, typename = StringPTGuard<PT>>
 static inline constexpr uint32_t binary_max_length = (PT == TYPE_VARCHAR) ? TypeDescriptor::MAX_VARCHAR_LENGTH
                                                                           : TypeDescriptor::MAX_CHAR_LENGTH;
 
 template <ArrowTypeId AT, PrimitiveType PT, bool is_nullable, bool is_strict>
-struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, BinaryPTGuard<PT>> {
+struct ArrowConverter<AT, PT, is_nullable, is_strict, BinaryATGuard<AT>, StringPTGuard<PT>> {
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
     using ArrowCppType = ArrowTypeIdToCppType<AT>;
     using CppType = RunTimeCppType<PT>;

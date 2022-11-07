@@ -8,7 +8,7 @@ public:
     TableFunctionNodeTest() : _runtime_state(TQueryGlobals()) {}
 
 protected:
-    virtual void SetUp() override;
+    void SetUp() override;
 
 private:
     RuntimeState _runtime_state;

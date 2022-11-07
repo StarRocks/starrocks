@@ -147,11 +147,11 @@ public class HudiMetadata implements ConnectorMetadata {
         return statistics;
     }
 
-    public void refreshTable(String dbName, String tableName, Table table, List<String> partitionNames) {
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames) {
         if (partitionNames != null && partitionNames.size() > 1) {
             cacheUpdateProcessor.ifPresent(processor -> processor.refreshPartition(table, partitionNames));
         } else {
-            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(dbName, tableName, table));
+            cacheUpdateProcessor.ifPresent(processor -> processor.refreshTable(srDbName, table));
         }
     }
 

@@ -58,7 +58,7 @@ bool BinaryDictPageBuilder::is_page_full() {
     return _encoding_type == DICT_ENCODING && _dict_builder->is_page_full();
 }
 
-size_t BinaryDictPageBuilder::add(const uint8_t* vals, size_t count) {
+uint32_t BinaryDictPageBuilder::add(const uint8_t* vals, uint32_t count) {
     if (_encoding_type == DICT_ENCODING) {
         DCHECK(!_finished);
         DCHECK_GT(count, 0);
@@ -115,7 +115,7 @@ void BinaryDictPageBuilder::reset() {
     _finished = false;
 }
 
-size_t BinaryDictPageBuilder::count() const {
+uint32_t BinaryDictPageBuilder::count() const {
     return _data_page_builder->count();
 }
 
@@ -201,7 +201,7 @@ Status BinaryDictPageDecoder<Type>::init() {
 }
 
 template <FieldType Type>
-Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
+Status BinaryDictPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     return _data_page_decoder->seek_to_position_in_page(pos);
 }
 
@@ -249,7 +249,7 @@ Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, ColumnBlockView* dst) 
 template <FieldType Type>
 Status BinaryDictPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin;

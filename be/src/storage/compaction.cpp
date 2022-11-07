@@ -47,12 +47,10 @@ Status Compaction::do_compaction_impl() {
     OlapStopWatch watch;
 
     int64_t segments_num = 0;
-    int64_t total_row_size = 0;
     for (auto& rowset : _input_rowsets) {
         _input_rowsets_size += rowset->data_disk_size();
         _input_row_num += rowset->num_rows();
         segments_num += rowset->num_segments();
-        total_row_size += rowset->total_row_size();
     }
 
     TRACE_COUNTER_INCREMENT("input_rowsets_data_size", _input_rowsets_size);

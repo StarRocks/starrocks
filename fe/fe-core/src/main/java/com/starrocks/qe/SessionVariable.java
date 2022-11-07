@@ -152,6 +152,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
+    public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
+    public static final String ENABLE_REALTIME_REFRESH_MV = "enable_realtime_mv";
+
     /**
      * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
      * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
@@ -241,7 +244,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
     public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
-    public static final String ENABLE_REPLICATED_STORAGE = "enable_replicated_storage";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -287,6 +289,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
 
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
 
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
@@ -294,6 +297,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+    public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -314,6 +318,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VarAttr(name = ENABLE_MV_PLANNER)
+    private boolean enableMVPlanner = false;
+    @VarAttr(name = ENABLE_REALTIME_REFRESH_MV)
+    private boolean enableRealtimeRefreshMV = false;
 
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
@@ -617,9 +626,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
 
-    @VariableMgr.VarAttr(name = ENABLE_REPLICATED_STORAGE)
-    private boolean enableReplicatedStorage = false;
-
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
 
@@ -709,6 +715,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
 
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateBlockCache = true;
+
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
     }
@@ -724,6 +733,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
+
+    @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
+    private int nestedMvRewriteMaxLevel = 3;
+    
+    public boolean getEnablePopulateBlockCache() {
+        return enablePopulateBlockCache;
+    }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -1098,6 +1114,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableDeliverBatchFragments;
     }
 
+    public boolean isMVPlanner() {
+        return enableMVPlanner;
+    }
+
+    public void setMVPlanner(boolean enable) {
+        this.enableMVPlanner = enable;
+    }
+
+    public boolean isEnableRealtimeRefreshMV() {
+        return enableRealtimeRefreshMV;
+    }
+
+    public void setEnableRealtimeRefreshMv(boolean enable) {
+        this.enableRealtimeRefreshMV = enable;
+    }
+
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
     }
@@ -1317,10 +1349,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.parseTokensLimit = parseTokensLimit;
     }
 
-    public boolean getEnableReplicatedStorage() {
-        return enableReplicatedStorage;
-    }
-
     public boolean isEnableQueryCache() {
         return isEnablePipelineEngine() && enableQueryCache;
     }
@@ -1339,6 +1367,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
+    }
+
+    public int getNestedMvRewriteMaxLevel() {
+        return nestedMvRewriteMaxLevel;
+    }
+
+    // 1 means the mvs directly based on base table
+    public void setNestedMvRewriteMaxLevel(int nestedMvRewriteMaxLevel) {
+        if (nestedMvRewriteMaxLevel <= 0) {
+            nestedMvRewriteMaxLevel = 1;
+        }
+        this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
     }
 
     // Serialize to thrift object
@@ -1383,8 +1423,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (loadCompressionType != null) {
             tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
-
-        tResult.setEnable_replicated_storage(enableReplicatedStorage);
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
         final int global_runtime_filter_wait_timeout = 20;

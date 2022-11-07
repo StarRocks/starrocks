@@ -36,6 +36,7 @@ import com.google.gson.JsonParser;
 import com.starrocks.analysis.DescriptorTable.ReferencedPartitionInfo;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.connector.RemoteFileInfo;
@@ -61,6 +62,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
+import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 
 /**
  * External hive table
@@ -371,10 +373,18 @@ public class HiveTable extends Table implements HiveMetaStoreTable {
 
     @Override
     public void onCreate() {
+        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().registerTableFromResource(
+                    String.join(".", getCatalogName(), hiveDbName, hiveTableName));
+        }
     }
 
     @Override
     public void onDrop(Database db, boolean force, boolean replay) {
+        if (Config.enable_hms_events_incremental_sync && isResourceMappingCatalog(getCatalogName())) {
+            GlobalStateMgr.getCurrentState().getMetastoreEventsProcessor().unRegisterTableFromResource(
+                    String.join(".", getCatalogName(), hiveDbName, hiveTableName));
+        }
     }
 
     @Override

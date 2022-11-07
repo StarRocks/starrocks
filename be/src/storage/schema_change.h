@@ -54,7 +54,6 @@ public:
     void set_row_len(size_t row_len) { _row_len = row_len; }
 
 private:
-    const TabletSchema& _tablet_schema;
     size_t _memory_allocated = 0;
     size_t _row_len;
     size_t _memory_limitation;

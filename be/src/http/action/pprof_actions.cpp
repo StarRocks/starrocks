@@ -63,9 +63,13 @@ void HeapAction::handle(HttpRequest* req) {
     std::string str;
     std::stringstream tmp_prof_file_name;
     tmp_prof_file_name << config::pprof_profile_dir << "/heap_profile." << getpid() << "." << rand();
-    const char* file_name = tmp_prof_file_name.str().c_str();
-    if (je_mallctl("prof.dump", nullptr, nullptr, &file_name, sizeof(const char*)) == 0) {
-        std::ifstream f(file_name);
+
+    // NOTE: Use fname to make the content which fname_cstr references to is still valid
+    // when je_mallctl is executing
+    auto fname = tmp_prof_file_name.str();
+    const char* fname_cstr = fname.c_str();
+    if (je_mallctl("prof.dump", nullptr, nullptr, &fname_cstr, sizeof(const char*)) == 0) {
+        std::ifstream f(fname_cstr);
         str = std::string(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
     } else {
         std::string str = "dump jemalloc prof file failed";

@@ -8,8 +8,8 @@ namespace starrocks::vectorized {
 
 class SchemaTest : public testing::Test {
 public:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 
     Fields make_fields(size_t size) {
         Fields fields;
@@ -30,7 +30,7 @@ public:
         return new Schema(fields);
     }
 
-    void check_field(const FieldPtr field, size_t i) {
+    void check_field(const FieldPtr& field, size_t i) {
         ASSERT_EQ(make_string(i), field->name());
         ASSERT_EQ(i, field->id());
         ASSERT_FALSE(field->is_nullable());
@@ -47,12 +47,12 @@ public:
 
 TEST_F(SchemaTest, test_construct) {
     Fields fields1 = make_fields(2);
-    Schema* schema1 = new Schema(fields1);
+    auto* schema1 = new Schema(fields1);
     check_schema(schema1, 2);
     delete schema1;
 
     Fields fields2 = make_fields(2);
-    Schema* schema2 = new Schema(std::move(fields2));
+    auto* schema2 = new Schema(std::move(fields2));
     check_schema(schema2, 2);
     delete schema2;
 }

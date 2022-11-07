@@ -228,7 +228,7 @@ TEST_F(AsyncDeltaWriterTest, test_write) {
     opts.stats = &statistics;
     opts.chunk_size = 1024;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
@@ -322,7 +322,7 @@ TEST_F(AsyncDeltaWriterTest, test_write_concurrently) {
     opts.stats = &statistics;
     opts.chunk_size = kNumThreads * kChunksPerThread * kChunkSize;
 
-    auto check_segment = [&](SegmentSharedPtr segment) {
+    auto check_segment = [&](const SegmentSharedPtr& segment) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, opts.chunk_size);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));

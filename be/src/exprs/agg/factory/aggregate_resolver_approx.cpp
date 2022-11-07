@@ -12,12 +12,12 @@ namespace starrocks::vectorized {
 struct HLLUnionBuilder {
     template <PrimitiveType pt>
     void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (pt_is_fixedlength<pt> || pt_is_binary<pt>) {
+        if constexpr (pt_is_fixedlength<pt> || pt_is_string<pt>) {
             resolver->add_aggregate_mapping<pt, TYPE_HLL, HyperLogLog>(
                     "hll_raw", false, AggregateFactory::MakeHllRawAggregateFunction<pt>());
 
             using IntersectCountState = BitmapIntersectAggregateState<BitmapRuntimeCppType<pt>>;
-            resolver->add_aggregate_mapping<pt, TYPE_BIGINT, IntersectCountState>(
+            resolver->add_aggregate_mapping_variadic<pt, TYPE_BIGINT, IntersectCountState>(
                     "intersect_count", false, AggregateFactory::MakeIntersectCountAggregateFunction<pt>());
 
             resolver->add_aggregate_mapping<pt, TYPE_BIGINT, HyperLogLog>(

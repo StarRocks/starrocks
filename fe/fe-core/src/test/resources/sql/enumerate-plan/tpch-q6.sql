@@ -8,6 +8,8 @@ where
   and l_shipdate < date '1996-01-01'
   and l_discount between 0.02 and 0.04
   and l_quantity < 24
+[planCount]
+2
 [plan-1]
 AGGREGATE ([GLOBAL] aggregate [{19: sum=sum(18: expr)}] group by [[]] having [null]
     EXCHANGE GATHER

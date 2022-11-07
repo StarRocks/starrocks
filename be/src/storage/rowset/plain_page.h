@@ -49,12 +49,12 @@ public:
 
     bool is_page_full() override { return _buffer.size() > _options.data_page_size; }
 
-    size_t add(const uint8_t* vals, size_t count) override {
+    uint32_t add(const uint8_t* vals, uint32_t count) override {
         if (is_page_full()) {
             return 0;
         }
         size_t old_size = _buffer.size();
-        size_t to_add = std::min(_max_count - _count, count);
+        uint32_t to_add = std::min(_max_count - _count, count);
         _buffer.resize(old_size + to_add * SIZE_OF_TYPE);
         memcpy(&_buffer[old_size], vals, to_add * SIZE_OF_TYPE);
         _count += to_add;
@@ -77,7 +77,7 @@ public:
         _buffer.resize(PLAIN_PAGE_HEADER_SIZE);
     }
 
-    size_t count() const override { return _count; }
+    uint32_t count() const override { return _count; }
 
     uint64_t size() const override { return _buffer.size(); }
 
@@ -100,8 +100,8 @@ public:
 private:
     faststring _buffer;
     PageBuilderOptions _options;
-    size_t _count;
-    size_t _max_count;
+    uint32_t _count;
+    uint32_t _max_count;
     typedef typename TypeTraits<Type>::CppType CppType;
     enum { SIZE_OF_TYPE = TypeTraits<Type>::size };
     faststring _first_value;
@@ -139,7 +139,7 @@ public:
         return Status::OK();
     }
 
-    Status seek_to_position_in_page(size_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         CHECK(_parsed) << "Must call init()";
 
         if (PREDICT_FALSE(_num_elems == 0)) {
@@ -208,7 +208,7 @@ public:
 
     Status next_batch(size_t* count, vectorized::Column* dst) override {
         vectorized::SparseRange read_range;
-        size_t begin = current_index();
+        uint32_t begin = current_index();
         read_range.add(vectorized::Range(begin, begin + *count));
         RETURN_IF_ERROR(next_batch(read_range, dst));
         *count = current_index() - begin;
@@ -227,7 +227,7 @@ public:
         while (iter.has_more() && _cur_idx < _num_elems) {
             _cur_idx = iter.begin();
             vectorized::Range r = iter.next(to_read);
-            size_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
+            uint32_t max_fetch = std::min(r.span_size(), _num_elems - _cur_idx);
             int n = dst->append_numbers(&_data[PLAIN_PAGE_HEADER_SIZE + _cur_idx * SIZE_OF_TYPE],
                                         max_fetch * SIZE_OF_TYPE);
             DCHECK_EQ(max_fetch, n);
@@ -236,12 +236,12 @@ public:
         return Status::OK();
     }
 
-    size_t count() const override {
+    uint32_t count() const override {
         DCHECK(_parsed);
         return _num_elems;
     }
 
-    size_t current_index() const override {
+    uint32_t current_index() const override {
         DCHECK(_parsed);
         return _cur_idx;
     }

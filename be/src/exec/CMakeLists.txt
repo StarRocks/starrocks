@@ -46,10 +46,10 @@ set(EXEC_FILES
     es/es_scroll_parser.cpp
     local_file_writer.cpp
     broker_writer.cpp
-    parquet_builder.cpp
     plain_text_builder.cpp
     vectorized/aggregator.cpp
     vectorized/sorted_streaming_aggregator.cpp
+    vectorized/aggregate/agg_hash_variant.cpp
     vectorized/aggregate/aggregate_base_node.cpp
     vectorized/aggregate/aggregate_blocking_node.cpp
     vectorized/aggregate/distinct_blocking_node.cpp
@@ -216,7 +216,8 @@ set(EXEC_FILES
     query_cache/cache_operator.cpp
     query_cache/cache_manager.cpp
     query_cache/lane_arbiter.cpp
-    query_cache/conjugate_operator.cpp)
+    query_cache/conjugate_operator.cpp
+    query_cache/ticket_checker.cpp)
 
 # simdjson Runtime Implement Dispatch: https://github.com/simdjson/simdjson/blob/master/doc/implementation-selection.md#runtime-cpu-detection
 # Unset architecture-specific flags to avoid breaking implement runtime dispatch.

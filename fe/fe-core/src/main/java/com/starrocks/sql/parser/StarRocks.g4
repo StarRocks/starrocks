@@ -496,7 +496,7 @@ alterMaterializedViewStatement
     ;
 
 refreshMaterializedViewStatement
-    : REFRESH MATERIALIZED VIEW mvName=qualifiedName
+    : REFRESH MATERIALIZED VIEW mvName=qualifiedName (PARTITION partitionRangeDesc)? FORCE?
     ;
 
 cancelRefreshMaterializedViewStatement
@@ -1432,7 +1432,7 @@ unsupportedStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryRelation outfile?;
+    : (explainDesc | optimizerTrace) ? queryRelation outfile?;
 
 queryRelation
     : withClause? queryNoWith
@@ -1811,6 +1811,10 @@ explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
     ;
 
+optimizerTrace
+    : TRACE OPTIMIZER
+    ;
+
 partitionDesc
     : PARTITION BY RANGE identifierList '(' (rangePartitionDesc (',' rangePartitionDesc)*)? ')'
     | PARTITION BY LIST identifierList '(' (listPartitionDesc (',' listPartitionDesc)*)? ')'
@@ -1847,6 +1851,10 @@ multiRangePartition
     | START '(' string ')' END '(' string ')' EVERY '(' INTEGER_VALUE ')'
     ;
 
+partitionRangeDesc
+    : START '(' string ')' END '(' string ')'
+    ;
+
 partitionKeyDesc
     : LESS THAN (MAXVALUE | partitionValueList)
     | '[' partitionValueList ',' partitionValueList ')'
@@ -1873,6 +1881,7 @@ distributionDesc
 refreshSchemeDesc
     : REFRESH (ASYNC
     | ASYNC (START '(' string ')')? EVERY '(' interval ')'
+    | INCREMENTAL
     | MANUAL)
     ;
 

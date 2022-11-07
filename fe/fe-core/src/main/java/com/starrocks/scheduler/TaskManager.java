@@ -23,6 +23,7 @@ import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SubmitTaskStmt;
+import com.starrocks.sql.common.DmlException;
 import com.starrocks.sql.optimizer.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -39,12 +40,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
+
+import static com.starrocks.scheduler.SubmitResult.SubmitStatus.SUBMITTED;
 
 public class TaskManager {
 
@@ -262,6 +266,24 @@ public class TaskManager {
         return taskRunManager.killTaskRun(task.getId());
     }
 
+    public Constants.TaskRunState executeTaskSync(String taskName) throws ExecutionException, InterruptedException {
+        return executeTaskSync(taskName, new ExecuteOption());
+    }
+
+    public Constants.TaskRunState executeTaskSync(String taskName, ExecuteOption option)
+            throws ExecutionException, InterruptedException {
+        Task task = nameToTaskMap.get(taskName);
+        if (task == null) {
+            throw new DmlException("execute task:" + taskName + " failed");
+        }
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
+        SubmitResult submitResult = taskRunManager.submitTaskRun(taskRun, option);
+        if (submitResult.getStatus() != SUBMITTED) {
+            throw new DmlException("execute task:" + taskName + " failed");
+        }
+        return taskRun.getFuture().get();
+    }
+
     public SubmitResult executeTask(String taskName) {
         return executeTask(taskName, new ExecuteOption());
     }
@@ -271,7 +293,9 @@ public class TaskManager {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        return taskRunManager.submitTaskRun(TaskRunBuilder.newBuilder(task).build(), option);
+        return taskRunManager
+                .submitTaskRun(TaskRunBuilder.newBuilder(task).properties(option.getTaskRunProperties()).build(),
+                        option);
     }
 
     public void dropTasks(List<Long> taskIdList, boolean isReplay) {
@@ -566,6 +590,17 @@ public class TaskManager {
         }
         taskRunManager.getTaskRunHistory().getAllHistory()
                 .removeIf(runStatus -> index.containsKey(runStatus.getQueryId()));
+    }
+
+    public void replayAlterRunningTaskRunProgress(Map<Long, Integer> taskRunProgresMap) {
+        Map<Long, TaskRun> runningTaskRunMap = taskRunManager.getRunningTaskRunMap();
+        for (Map.Entry<Long, Integer> entry : taskRunProgresMap.entrySet()) {
+            // When replaying the log, the task run may have ended
+            // and the status has changed to success or failed
+            if (runningTaskRunMap.containsKey(entry.getKey())) {
+                runningTaskRunMap.get(entry.getKey()).getStatus().setProgress(entry.getValue());
+            }
+        }
     }
 
     public void removeExpiredTasks() {

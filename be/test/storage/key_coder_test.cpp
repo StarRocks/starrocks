@@ -22,8 +22,8 @@
 #include "storage/key_coder.h"
 
 #include <gtest/gtest.h>
-#include <string.h>
 
+#include <cstring>
 #include <limits>
 
 #include "runtime/mem_pool.h"
@@ -33,8 +33,8 @@ namespace starrocks {
 
 class KeyCoderTest : public testing::Test {
 public:
-    KeyCoderTest() {}
-    virtual ~KeyCoderTest() {}
+    KeyCoderTest() = default;
+    ~KeyCoderTest() override = default;
 
 private:
     MemPool _pool;

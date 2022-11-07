@@ -57,7 +57,7 @@ private:
 
     Status _create_hard_link_recursive(const std::string& src, const std::string& dst);
 
-    ExecEnv* _exec_env;
+    [[maybe_unused]] ExecEnv* _exec_env;
     std::mutex _tablet_restore_lock;
     // store all current restoring tablet_id + schema_hash
     // key: tablet_id + schema_hash

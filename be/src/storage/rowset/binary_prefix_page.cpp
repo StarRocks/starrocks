@@ -38,7 +38,7 @@ namespace starrocks {
 
 using strings::Substitute;
 
-size_t BinaryPrefixPageBuilder::add(const uint8_t* vals, size_t add_count) {
+uint32_t BinaryPrefixPageBuilder::add(const uint8_t* vals, uint32_t add_count) {
     DCHECK(!_finished);
     if (add_count == 0) {
         return 0;
@@ -133,7 +133,7 @@ Status BinaryPrefixPageDecoder<Type>::_read_next_value() {
 }
 
 template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::_seek_to_restart_point(size_t restart_point_index) {
+Status BinaryPrefixPageDecoder<Type>::_seek_to_restart_point(uint32_t restart_point_index) {
     _cur_pos = restart_point_index * _restart_point_internal;
     _next_ptr = _get_restart_point(restart_point_index);
     return _read_next_value();
@@ -155,7 +155,7 @@ Status BinaryPrefixPageDecoder<Type>::init() {
 }
 
 template <FieldType Type>
-Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
+Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(uint32_t pos) {
     DCHECK(_parsed);
     DCHECK_LE(pos, _num_values);
 
@@ -165,7 +165,7 @@ Status BinaryPrefixPageDecoder<Type>::seek_to_position_in_page(size_t pos) {
         return Status::OK();
     }
 
-    size_t restart_point_index = pos / _restart_point_internal;
+    uint32_t restart_point_index = pos / _restart_point_internal;
     RETURN_IF_ERROR(_seek_to_restart_point(restart_point_index));
     while (_cur_pos < pos) {
         _cur_pos++;
@@ -304,7 +304,7 @@ Status BinaryPrefixPageDecoder<Type>::_next_value(faststring* value) {
 template <FieldType Type>
 Status BinaryPrefixPageDecoder<Type>::next_batch(size_t* n, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *n));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *n = current_index() - begin + 1;

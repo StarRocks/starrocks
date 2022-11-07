@@ -22,6 +22,10 @@ namespace starrocks::vectorized {
     virtual Expr* clone(ObjectPool* pool) const override { return pool->add(new CLASS_NAME(*this)); }
 
 static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const Expr* e) {
+    DIAGNOSTIC_PUSH
+#if defined(__GNUC__) && !defined(__clang__)
+    DIAGNOSTIC_IGNORE("-Wmaybe-uninitialized")
+#endif
     if (!e->is_cast_expr()) {
         return {};
     }
@@ -33,6 +37,7 @@ static std::optional<PrimitiveType> eliminate_trivial_cast_for_decimal_mul(const
     } else {
         return {};
     }
+    DIAGNOSTIC_POP
 }
 
 template <PrimitiveType Type, typename OP>

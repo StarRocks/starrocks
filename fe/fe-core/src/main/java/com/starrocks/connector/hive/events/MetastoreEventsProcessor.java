@@ -2,23 +2,13 @@
 
 package com.starrocks.connector.hive.events;
 
-import com.google.common.collect.HashBasedTable;
-import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Table;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LeaderDaemon;
-import com.starrocks.connector.hive.CachingHiveMetastore;
-import com.starrocks.connector.hive.HiveMetaClient;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.server.CatalogMgr;
 import org.apache.hadoop.hive.metastore.IMetaStoreClient;
-import org.apache.hadoop.hive.metastore.api.CurrentNotificationEventId;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
 import org.apache.hadoop.hive.metastore.messaging.MessageDeserializer;
@@ -27,23 +17,17 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 import javax.annotation.Nullable;
 
 /**
  * A metastore event is a instance of the class
- * {@link org.apache.hadoop.hive.metastore.api.NotificationEvent}. Metastore can be
+ * {@link NotificationEvent}. Metastore can be
  * configured, to work with Listeners which are called on various DDL operations like
  * create/alter/drop operations on database, table, partition etc. Each event has a unique
  * incremental id and the generated events are be fetched from Metastore to get
@@ -52,7 +36,7 @@ import javax.annotation.Nullable;
  * Metastore clients like Apache Hive or Apache Spark configured to talk with the same metastore.
  * <p>
  * This class is used to poll metastore for such events at a given frequency. By observing
- * such events, we can take appropriate action on the {@link CachingHiveMetastore}
+ * such events, we can take appropriate action on the {@link com.starrocks.connector.hive.CachingHiveMetastore}
  * (refresh/invalidate/add/remove) so that represents the latest information
  * available in metastore. We keep track of the last synced event id in each polling
  * iteration so the next batch can be requested appropriately. The current batch size is
@@ -63,13 +47,6 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     public static final String HMS_ADD_THRIFT_OBJECTS_IN_EVENTS_CONFIG_KEY =
             "hive.metastore.notifications.add.thrift.objects";
 
-    private final ReadWriteLock tablesLock = new ReentrantReadWriteLock();
-
-    // Locking is required during event processing that avoiding data inconsistency
-    // when manually executing refresh operation. This lock needs to be acquired
-    // when executing refresh table or refresh partition in HiveMetaCache
-    private final ReadWriteLock eventProcessorLock = new ReentrantReadWriteLock();
-
     // for deserializing from JSON strings from metastore event
     private static final MessageDeserializer MESSAGE_DESERIALIZER = new JSONMessageDeserializer();
 
@@ -78,115 +55,44 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
             ThreadPoolManager.newDaemonFixedThreadPool(Config.hms_process_events_parallel_num,
                     Integer.MAX_VALUE, "hms-event-processor-executor", true);
 
-    // scheduler daemon thread executor for updating {HiveMetaCache#tableColumnStatsCache}
-    private final ScheduledExecutorService scheduler = Executors
-            .newSingleThreadScheduledExecutor(new ThreadFactoryBuilder().setDaemon(true)
-                    .setNameFormat("refresh-table-columns-statistic-executor").build());
-
     // event factory which is used to get or create MetastoreEvents
     private final MetastoreEventFactory metastoreEventFactory;
 
-    // resource => syncedEventId
-    private final Map<String, Long> lastSyncedEventIds = Maps.newHashMap();
+    private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
 
-    // resource / TableName / hive table
-    private final Table<String, TableName, HiveTable> tables = HashBasedTable.create();
-
-    // resource => set<TableName>
-    private final Multimap<String, TableName> refreshColumnsTables = HashMultimap.create();
-
-    // External catalog's resource
-    private final List<String> externalCatalogResources = Lists.newArrayList();
+    // [catalogName.dbName.tableName] for hive table with resource
+    private final List<String> externalTables = Lists.newArrayList();
 
     public MetastoreEventsProcessor() {
         super(MetastoreEventsProcessor.class.getName(), Config.hms_events_polling_interval_ms);
-        this.metastoreEventFactory = new MetastoreEventFactory();
+        this.metastoreEventFactory = new MetastoreEventFactory(externalTables);
     }
 
-    public void init() {
-        // register hive tables
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        globalStateMgr.getDbIds().stream()
-                .map(globalStateMgr::getDb)
-                .filter(Objects::nonNull)
-                .filter(db -> !db.isInfoSchemaDb())
-                .forEach(db -> {
-                    db.readLock();
-                    try {
-                        db.getTables().stream()
-                                .filter(tbl -> tbl.getType() == com.starrocks.catalog.Table.TableType.HIVE)
-                                .map(tbl -> (HiveTable) tbl)
-                                .filter(tbl -> tbl.getResourceName() != null)
-                                .forEach(this::registerTable);
-                    } finally {
-                        db.readUnlock();
-                    }
-                });
-
-        startScheduler();
+    public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
+        LOG.info("Start to synchronize hive metadata cache on catalog {}", catalogName);
+        cacheUpdateProcessors.put(catalogName, cache);
     }
 
-    /**
-     * When the partition cache in fe is updated according event, values in the {HiveMetaCache#tableColumnStatsCache},
-     * such as the average value of the table, cannot be updated correctly.
-     * So we need to get the latest value by accessing hms through rpc every time.
-     * Since this interface is heavy, and the value in the {HiveMetaCache#tableColumnStatsCache} only affects
-     * the cbo query planning, it will not affect the correctness.
-     * So we regularly update this cache. The current processing interval defaults to 5 minutes.
-     */
-    private void startScheduler() {
-        LOG.info("Starting refresh table columns statistic with interval {} seconds.",
-                Config.hms_refresh_columns_statistic_interval_s);
-        scheduler.scheduleWithFixedDelay(this::refreshTableColumns, Config.hms_refresh_columns_statistic_interval_s,
-                Config.hms_refresh_columns_statistic_interval_s, TimeUnit.SECONDS);
+    public void unRegisterCacheUpdateProcessor(String catalogName) {
+        LOG.info("Stop to synchronize hive metadata cache on catalog {}", catalogName);
+        cacheUpdateProcessors.remove(catalogName);
     }
 
-    public void registerExternalCatalogResource(String resource) {
-        if (!externalCatalogResources.contains(resource)) {
-            externalCatalogResources.add(resource);
-        }
+    public void registerTableFromResource(String catalogTableName) {
+        externalTables.add(catalogTableName);
+        LOG.info("Succeed to register {} to Metastore event processor", catalogTableName);
     }
 
-    public void unregisterExternalCatalogResource(String resource) {
-        externalCatalogResources.remove(resource);
-    }
-
-    public void registerTable(HiveTable tbl) {
-        tablesLock.writeLock().lock();
-        try {
-            tables.put(tbl.getResourceName(), new TableName(tbl.getDbName(), tbl.getTableName()), tbl);
-            LOG.info("Succeed to register {}.{}.{} to Metastore event processor",
-                    tbl.getResourceName(), tbl.getDbName(), tbl.getTableName());
-        } finally {
-            tablesLock.writeLock().unlock();
-        }
-    }
-
-    public void unregisterTable(HiveTable tbl) {
-        tablesLock.writeLock().lock();
-        try {
-            tables.remove(tbl.getResourceName(), new TableName(tbl.getDbName(), tbl.getTableName()));
-            LOG.info("Succeed to remove {}.{}.{} from Metastore event processor",
-                    tbl.getResourceName(), tbl.getDbName(), tbl.getTableName());
-        } finally {
-            tablesLock.writeLock().unlock();
-        }
-    }
-
-    public HiveTable getHiveTable(String resourceName, String dbName, String tblName) {
-        tablesLock.readLock().lock();
-        try {
-            return tables.get(resourceName, new TableName(dbName, tblName));
-        } finally {
-            tablesLock.readLock().unlock();
-        }
+    public void unRegisterTableFromResource(String catalogTableName) {
+        externalTables.remove(catalogTableName);
+        LOG.info("Succeed to remove {} from Metastore event processor", catalogTableName);
     }
 
     /**
      * Gets metastore notification events from the given eventId. The returned list of
      * NotificationEvents are filtered using the NotificationFilter provided if it is not null.
      *
-     * @param resourceName The resource name of current hive metastore instance.
+     * @param catalogName The catalog name of current hive metastore instance.
      * @param getAllEvents If this is true all the events since eventId are returned.
      *                     Note that Hive MetaStore can limit the response to a specific
      *                     maximum number of limit based on the value of configuration
@@ -199,71 +105,42 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
      * @return List of NotificationEvents from metastore since eventId.
      * @throws MetastoreNotificationFetchException In case of exceptions from HMS.
      */
-    private List<NotificationEvent> getNextHMSEvents(String resourceName,
+    private List<NotificationEvent> getNextHMSEvents(String catalogName,
                                                      final boolean getAllEvents,
-                                                     @Nullable final IMetaStoreClient.NotificationFilter filter)
-            throws MetastoreNotificationFetchException {
-        Long lastSyncedEventId = null;
-        try {
-            LOG.info("Start to pull events on resource [{}]", resourceName);
-            // TODO(stephen): refactor auto sync hive metadata cache
-            HiveMetaClient client = null;
-            if (client == null) {
-                LOG.warn("Client is null when pulling events on resource [{}]", resourceName);
-                return Collections.emptyList();
-            }
-
-            lastSyncedEventId = lastSyncedEventIds.get(resourceName);
-            // restart fe or just created hive table.
-            if (lastSyncedEventId == null) {
-                lastSyncedEventIds.put(resourceName, client.getBaseHmsEventId());
-                LOG.info("Last synced event id is null when pulling events on resource [{}]", resourceName);
-                return Collections.emptyList();
-            }
-
-            CurrentNotificationEventId currentNotificationEventId = client.getCurrentNotificationEventId();
-            long currentEventId = currentNotificationEventId.getEventId();
-            if (currentEventId == lastSyncedEventId) {
-                LOG.info("Event id not updated when pulling events on resource [{}]", resourceName);
-                return Collections.emptyList();
-            }
-
-            int batchSize = getAllEvents ? -1 : Config.hms_events_batch_size_per_rpc;
-            NotificationEventResponse response = client.getNextNotification(lastSyncedEventId, batchSize, null);
-            if (response.getEvents().size() == 0) {
-                LOG.info("Event size is 0 when pulling events on resource [{}]", resourceName);
-                return Collections.emptyList();
-            }
-            LOG.info(String.format("Received %d events. Start event id : %d. Last synced id : %d on resource : %s",
-                    response.getEvents().size(), response.getEvents().get(0).getEventId(),
-                    lastSyncedEventId, resourceName));
-
-            if (filter == null) {
-                return response.getEvents();
-            }
-
-            List<NotificationEvent> filteredEvents = new ArrayList<>();
-            for (NotificationEvent event : response.getEvents()) {
-                if (filter.accept(event)) {
-                    filteredEvents.add(event);
-                }
-            }
-
-            return filteredEvents;
-        } catch (DdlException e) {
-            throw new MetastoreNotificationFetchException(
-                    "Unable to fetch notifications from metastore. Last synced event id is "
-                            + lastSyncedEventId, e);
+                                                     @Nullable final IMetaStoreClient.NotificationFilter filter) {
+        LOG.info("Start to pull events on catalog [{}]", catalogName);
+        CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
+        if (updateProcessor == null) {
+            LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
+            return Collections.emptyList();
         }
+
+        NotificationEventResponse response = updateProcessor.getNextEventResponse(catalogName, getAllEvents);
+        if (response == null) {
+            return Collections.emptyList();
+        }
+
+        if (filter == null) {
+            return response.getEvents();
+        }
+
+        List<NotificationEvent> filteredEvents = new ArrayList<>();
+        for (NotificationEvent event : response.getEvents()) {
+            if (filter.accept(event)) {
+                filteredEvents.add(event);
+            }
+        }
+
+        return filteredEvents;
     }
 
     /**
      * Fetch the next batch of NotificationEvents from metastore. The default batch size is
      * <code>{@link Config#hms_events_batch_size_per_rpc}</code>
      */
-    private List<NotificationEvent> getNextHMSEvents(String resourceName)
+    private List<NotificationEvent> getNextHMSEvents(String catalogName)
             throws MetastoreNotificationFetchException {
-        return getNextHMSEvents(resourceName, false, null);
+        return getNextHMSEvents(catalogName, false, null);
     }
 
     private void doExecuteWithPartialProgress(List<MetastoreEvent> events) {
@@ -281,55 +158,17 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
         }
     }
 
-    private void doExecute(List<MetastoreEvent> events, String resourceName) {
+    private void doExecute(List<MetastoreEvent> events, CacheUpdateProcessor cacheProcessor) {
         for (MetastoreEvent event : events) {
             try {
                 event.process();
             } catch (Exception e) {
                 if (event instanceof BatchEvent) {
-                    lastSyncedEventIds.put(resourceName, ((BatchEvent<?>) event).getFirstEventId() - 1);
+                    cacheProcessor.setLastSyncedEventId(((BatchEvent<?>) event).getFirstEventId() - 1);
                 } else {
-                    lastSyncedEventIds.put(resourceName, event.getEventId() - 1);
+                    cacheProcessor.setLastSyncedEventId(event.getEventId() - 1);
                 }
                 throw e;
-            }
-        }
-    }
-
-    private void prepareRefreshHiveColumnStats(String resource, NotificationEvent event) {
-        String dbName = event.getDbName();
-        String tblName = event.getTableName();
-        HiveTable table = tables.get(resource, new TableName(dbName, tblName));
-        if (table == null) {
-            return;
-        }
-        refreshColumnsTables.put(resource, new TableName(dbName, tblName));
-    }
-
-    public void refreshTableColumns() {
-        if (refreshColumnsTables.isEmpty()) {
-            return;
-        }
-
-        for (Map.Entry<String, Collection<TableName>> entry : refreshColumnsTables.asMap().entrySet()) {
-            String resource = entry.getKey();
-            Collection<TableName> tableNames = entry.getValue();
-            for (TableName tableName : tableNames) {
-                String dbName = tableName.getDbName();
-                String tblName = tableName.getTblName();
-                HiveTable table = getHiveTable(resource, dbName, tblName);
-                if (table == null) {
-                    continue;
-                }
-                try {
-                    // TODO(stephen): refactor auto sync hive metadata cache
-                    // table.refreshTableColumnStats();
-                } catch (Exception e) {
-                    LOG.warn("Failed to refresh table column statistic on [resource: {}, db: {}, table: {}].",
-                            resource, dbName, table, e);
-                } finally {
-                    refreshColumnsTables.remove(resource, tableName);
-                }
             }
         }
     }
@@ -337,96 +176,53 @@ public class MetastoreEventsProcessor extends LeaderDaemon {
     /**
      * Process the given list of notification events. Useful for tests which provide a list of events
      */
-    private void processEvents(List<NotificationEvent> events, String resourceName) {
-        List<MetastoreEvent> filteredEvents = metastoreEventFactory.getFilteredEvents(events, resourceName);
+    private void processEvents(List<NotificationEvent> events, String catalogName) {
+        CacheUpdateProcessor cacheProcessor = cacheUpdateProcessors.get(catalogName);
+        List<MetastoreEvent> filteredEvents = metastoreEventFactory.getFilteredEvents(events, cacheProcessor, catalogName);
 
         if (filteredEvents.isEmpty()) {
-            lastSyncedEventIds.put(resourceName, events.get(events.size() - 1).getEventId());
+            cacheProcessor.setLastSyncedEventId(events.get(events.size() - 1).getEventId());
             return;
         }
 
-        LOG.info("Notification events {} to be processed on resource [{}]", events, resourceName);
+        LOG.info("Notification events {} to be processed on catalog [{}]", events, catalogName);
 
         if (Config.enable_hms_parallel_process_evens) {
             doExecuteWithPartialProgress(filteredEvents);
         } else {
-            doExecute(filteredEvents, resourceName);
+            doExecute(filteredEvents, cacheProcessor);
         }
-
-        events.forEach(event -> prepareRefreshHiveColumnStats(resourceName, event));
-        lastSyncedEventIds.put(resourceName, filteredEvents.get(filteredEvents.size() - 1).getEventId());
+        cacheProcessor.setLastSyncedEventId(filteredEvents.get(filteredEvents.size() - 1).getEventId());
     }
 
     @Override
     protected void runAfterCatalogReady() {
-        List<String> resources = Lists.newArrayList(tables.rowKeySet());
-        resources.addAll(externalCatalogResources);
-        LOG.info("Start to pull [{}] events", resources);
-        for (String resourceName : resources) {
-            eventProcessorLock.writeLock().lock();
+        List<String> catalogs = Lists.newArrayList(cacheUpdateProcessors.keySet());
+        int resourceCatalogNum = (int) cacheUpdateProcessors.keySet().stream()
+                .filter(CatalogMgr.ResourceMappingCatalog::isResourceMappingCatalog).count();
+        int catalogNum = cacheUpdateProcessors.size() - resourceCatalogNum;
+        LOG.info("Start to pull [{}] events. resource mapping catalog size [{}], normal catalog log size [{}]",
+                catalogs, resourceCatalogNum, catalogNum);
+
+        for (String catalogName : catalogs) {
             List<NotificationEvent> events = Collections.emptyList();
             try {
-                events = getNextHMSEvents(resourceName);
+                events = getNextHMSEvents(catalogName);
                 if (!events.isEmpty()) {
-                    LOG.info("Events size are {} on resource [{}]", events.size(), resourceName);
-                    processEvents(events, resourceName);
+                    LOG.info("Events size are {} on catalog [{}]", events.size(), catalogName);
+                    processEvents(events, catalogName);
                 }
             } catch (MetastoreNotificationFetchException e) {
-                LOG.error("Failed to fetch hms events on {}. msg: ", resourceName, e);
+                LOG.error("Failed to fetch hms events on {}. msg: ", catalogName, e);
             } catch (Exception ex) {
                 LOG.error("Failed to process hive metastore [{}] events " +
-                                "in the range of event id from {} to {}.", resourceName,
+                                "in the range of event id from {} to {}.", catalogName,
                         events.get(0).getEventId(), events.get(events.size() - 1).getEventId(), ex);
-            } finally {
-                eventProcessorLock.writeLock().unlock();
             }
         }
-    }
-
-    public static class TableName {
-        private final String dbName;
-        private final String tblName;
-
-        public TableName(String dbName, String tblName) {
-            this.dbName = dbName;
-            this.tblName = tblName;
-        }
-
-        public String getDbName() {
-            return dbName;
-        }
-
-        public String getTblName() {
-            return tblName;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (o == null || getClass() != o.getClass()) {
-                return false;
-            }
-            TableName tableName = (TableName) o;
-            return Objects.equals(dbName, tableName.dbName) && Objects.equals(tblName, tableName.tblName);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(dbName, tblName);
-        }
-    }
-
-    public MetastoreEventFactory getEventsFactory() {
-        return metastoreEventFactory;
     }
 
     public static MessageDeserializer getMessageDeserializer() {
         return MESSAGE_DESERIALIZER;
-    }
-
-    public ReadWriteLock getEventProcessorLock() {
-        return eventProcessorLock;
     }
 }

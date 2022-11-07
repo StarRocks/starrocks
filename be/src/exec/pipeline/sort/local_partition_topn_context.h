@@ -30,10 +30,7 @@ class LocalPartitionTopnContext {
 public:
     LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, const std::vector<ExprContext*>& sort_exprs,
                               std::vector<bool> is_asc_order, std::vector<bool> is_null_first, std::string sort_keys,
-                              int64_t offset, int64_t partition_limit, const TTopNType::type topn_type,
-                              const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
-                              const RowDescriptor& parent_node_row_desc,
-                              const RowDescriptor& parent_node_child_row_desc);
+                              int64_t offset, int64_t partition_limit, const TTopNType::type topn_type);
 
     Status prepare(RuntimeState* state);
 
@@ -80,10 +77,6 @@ private:
     int64_t _offset;
     int64_t _partition_limit;
     const TTopNType::type _topn_type;
-    const std::vector<OrderByType>& _order_by_types;
-    TupleDescriptor* _materialized_tuple_desc;
-    const RowDescriptor& _parent_node_row_desc;
-    const RowDescriptor& _parent_node_child_row_desc;
 
     int32_t _sorter_index = 0;
 };
@@ -117,9 +110,5 @@ private:
     int64_t _offset;
     int64_t _partition_limit;
     const TTopNType::type _topn_type;
-    const std::vector<OrderByType>& _order_by_types;
-    TupleDescriptor* _materialized_tuple_desc;
-    const RowDescriptor& _parent_node_row_desc;
-    const RowDescriptor& _parent_node_child_row_desc;
 };
 } // namespace starrocks::pipeline

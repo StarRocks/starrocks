@@ -103,8 +103,8 @@ public:
             : _capacity(default_capacity),
               _max_capacity(max_capacity),
               _default_capacity(default_capacity),
-              _mem_limit(mem_limit),
-              _chunk_size(chunk_size) {}
+              _mem_limit(mem_limit) {}
+
     ~DynamicChunkBufferLimiter() override = default;
 
     void update_avg_row_bytes(size_t added_sum_row_bytes, size_t added_num_rows, size_t max_chunk_rows) override;
@@ -129,7 +129,6 @@ private:
     const size_t _default_capacity;
 
     const int64_t _mem_limit;
-    const int _chunk_size;
 
     std::atomic<int> _pinned_chunks_counter = 0;
 };

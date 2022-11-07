@@ -7,7 +7,7 @@ namespace starrocks {
 template <FieldType Type>
 Status BinaryPlainPageDecoder<Type>::next_batch(size_t* count, vectorized::Column* dst) {
     vectorized::SparseRange read_range;
-    size_t begin = current_index();
+    uint32_t begin = current_index();
     read_range.add(vectorized::Range(begin, begin + *count));
     RETURN_IF_ERROR(next_batch(read_range, dst));
     *count = current_index() - begin;

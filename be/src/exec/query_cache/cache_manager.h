@@ -51,7 +51,9 @@ struct CacheValue {
     ~CacheValue() { result.clear(); }
 
     size_t size() {
-        size_t value_size = 0;
+        // zero-charge cache entry can not be purged in LRU cache, so size of CacheValue must be at least
+        // greater than zero, so add sizeof(CacheValue) to size.
+        size_t value_size = sizeof(CacheValue);
         for (auto& chk : result) {
             value_size += chk->memory_usage();
         }

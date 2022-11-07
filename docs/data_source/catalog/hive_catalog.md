@@ -1,6 +1,6 @@
 # Hive catalog
 
-This topic describes how to create a Hive catalog, and how to configure your StarRock cluster for querying data from Apache Hive™.
+This topic describes how to create a Hive catalog, and how to configure your StarRocks cluster for querying data from Apache Hive™.
 
 A Hive catalog is an external catalog, which enables you to query data from Hive without loading data into StarRocks or creating external tables. StarRocks interacts with the following two components of Hive when you query Hive data:
 
@@ -132,7 +132,7 @@ StarRocks develops a query execution plan based on the metadata of Hive tables. 
 
 #### How it works
 
-If a query hits a partition of a Hive table, StarRocks asynchronously caches the metadata of the partition. If another query hits the partition again and the time interval from the last update exceeds the default time interval, StarRock asynchronously updates the metadata cached in StarRocks. Otherwise, the cached metadata will not be updated. This process of update is called lazy update.
+If a query hits a partition of a Hive table, StarRocks asynchronously caches the metadata of the partition. If another query hits the partition again and the time interval from the last update exceeds the default time interval, StarRocks asynchronously updates the metadata cached in StarRocks. Otherwise, the cached metadata will not be updated. This process of update is called lazy update.
 
 You can set the default time interval by the `hive_meta_cache_refresh_interval_s` parameter. The parameter value defaults to `7200`. Unit: seconds. You can set this parameter in the **fe.conf** file of each FE, and then restart each FE to make the parameter value take effect.
 
@@ -142,8 +142,8 @@ If a query hits a partition and the time interval from the last update exceeds t
 
 For example, there is a Hive table named `table1`, which has four partitions: `p1`, `p2`, `p3`, and `p4`. A query hit `p1`, and StarRocks cached the metadata of `p1`. If the default time interval to update the metadata cached in StarRocks is 1 hour, there are the following two situations for subsequent updates:
 
-- If another query hits `p1` again and the current time from the last update is more than 1 hour, StarRock asynchronously updates the cached metadata of `p1`.
-- If another query hits `p1` again and the current time from the last update is less than 1 hour, StarRock does not asynchronously update the cached metadata of `p1`.
+- If another query hits `p1` again and the current time from the last update is more than 1 hour, StarRocks asynchronously updates the cached metadata of `p1`.
+- If another query hits `p1` again and the current time from the last update is less than 1 hour, StarRocks does not asynchronously update the cached metadata of `p1`.
 
 #### Manual update
 

@@ -27,7 +27,7 @@ namespace starrocks {
 
 class TestHll : public testing::Test {
 public:
-    virtual ~TestHll() {}
+    ~TestHll() override = default;
 };
 
 static uint64_t hash(uint64_t value) {

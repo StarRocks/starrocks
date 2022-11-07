@@ -1,0 +1,36 @@
+// This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+package com.starrocks.persist;
+
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
+
+import java.io.DataInput;
+import java.io.DataOutput;
+import java.io.IOException;
+import java.util.Map;
+
+public class AuthUpgradeInfo implements Writable {
+    @SerializedName(value = "m")
+    private Map<String, Long> roleNameToId;
+
+    public AuthUpgradeInfo(Map<String, Long> roleNameToId) {
+        this.roleNameToId = roleNameToId;
+    }
+
+    public Map<String, Long> getRoleNameToId() {
+        return roleNameToId;
+    }
+
+    @Override
+    public void write(DataOutput out) throws IOException {
+        Text.writeString(out, GsonUtils.GSON.toJson(this));
+    }
+
+    public static AuthUpgradeInfo read(DataInput in) throws IOException {
+        String json = Text.readString(in);
+        return GsonUtils.GSON.fromJson(json, AuthUpgradeInfo.class);
+    }
+}

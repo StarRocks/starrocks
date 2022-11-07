@@ -9,8 +9,8 @@
 namespace starrocks {
 class Int96Test : public testing::Test {
 public:
-    Int96Test() {}
-    ~Int96Test() override {}
+    Int96Test() = default;
+    ~Int96Test() override = default;
 };
 
 TEST_F(Int96Test, Normal) {

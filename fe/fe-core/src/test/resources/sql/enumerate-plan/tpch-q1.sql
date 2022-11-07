@@ -20,6 +20,8 @@ group by
 order by
     l_returnflag,
     l_linestatus ;
+[planCount]
+1
 [plan-1]
 TOP-N (order by [[9: L_RETURNFLAG ASC NULLS FIRST, 10: L_LINESTATUS ASC NULLS FIRST]])
     TOP-N (order by [[9: L_RETURNFLAG ASC NULLS FIRST, 10: L_LINESTATUS ASC NULLS FIRST]])

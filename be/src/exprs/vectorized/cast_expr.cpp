@@ -144,7 +144,7 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
             value = JsonValue::from_double(viewer.value(row));
         } else if constexpr (pt_is_boolean<FromType>) {
             value = JsonValue::from_bool(viewer.value(row));
-        } else if constexpr (pt_is_binary<FromType>) {
+        } else if constexpr (pt_is_string<FromType>) {
             auto maybe = JsonValue::parse_json_or_string(viewer.value(row));
             if (maybe.ok()) {
                 value = maybe.value();
@@ -219,7 +219,7 @@ static ColumnPtr cast_from_json_fn(ColumnPtr& column) {
                 }
                 builder.append_null();
             }
-        } else if constexpr (pt_is_binary<ToType>) {
+        } else if constexpr (pt_is_string<ToType>) {
             // if the json already a string value, get the string directly
             // else cast it to string representation
             if (json->get_type() == JsonType::JSON_STRING) {
@@ -552,7 +552,14 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_INT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_INT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_INT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_INT, DateToNumber);
@@ -568,8 +575,15 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_BIGINT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_BIGINT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_BIGINT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_BIGINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_BIGINT, TimestampToNumber);
@@ -584,8 +598,15 @@ UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_LARGEINT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_LARGEINT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_LARGEINT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_LARGEINT, DateToNumber);
 UNARY_FN_CAST(TYPE_DATETIME, TYPE_LARGEINT, TimestampToNumber);
@@ -598,9 +619,16 @@ SELF_CAST(TYPE_FLOAT);
 UNARY_FN_CAST(TYPE_BOOLEAN, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_FLOAT, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_FLOAT, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_DOUBLE, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_FLOAT, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_FLOAT, DateToNumber);
@@ -615,8 +643,15 @@ UNARY_FN_CAST(TYPE_BOOLEAN, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_TINYINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_SMALLINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_INT, TYPE_DOUBLE, ImplicitToNumber);
+
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wimplicit-const-int-float-conversion")
+#endif
 UNARY_FN_CAST_VALID(TYPE_BIGINT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST_VALID(TYPE_LARGEINT, TYPE_DOUBLE, ImplicitToNumber);
+DIAGNOSTIC_POP
+
 UNARY_FN_CAST_VALID(TYPE_FLOAT, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DECIMALV2, TYPE_DOUBLE, ImplicitToNumber);
 UNARY_FN_CAST(TYPE_DATE, TYPE_DOUBLE, DateToNumber);
@@ -1099,7 +1134,7 @@ DEFINE_BINARY_FUNCTION_WITH_IMPL(timeToDatetime, date, time) {
             return VectorizedStrictBinaryFunction<IMPL>::evaluate<TYPE_DATE, TYPE_TIME, TO_TYPE>(_now, column); \
         };                                                                                                      \
                                                                                                                 \
-        std::string debug_string() const {                                                                      \
+        std::string debug_string() const override {                                                             \
             std::stringstream out;                                                                              \
             auto expr_debug_string = Expr::debug_string();                                                      \
             out << "VectorizedCastExpr ("                                                                       \

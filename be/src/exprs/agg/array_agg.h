@@ -23,7 +23,7 @@ struct ArrayAggAggregateState<PT, FixedLengthPTGuard<PT>> {
 };
 
 template <PrimitiveType PT>
-struct ArrayAggAggregateState<PT, BinaryPTGuard<PT>> {
+struct ArrayAggAggregateState<PT, StringPTGuard<PT>> {
     using CppType = RunTimeCppType<PT>;
 
     void update(MemPool* mem_pool, Slice key) {

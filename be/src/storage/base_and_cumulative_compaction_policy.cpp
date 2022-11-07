@@ -138,8 +138,6 @@ std::shared_ptr<CompactionTask> BaseAndCumulativeCompactionPolicy::_create_cumul
 }
 
 void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSharedPtr>* rowsets) {
-    uint32_t input_rows_num = 0;
-    size_t input_size = 0;
     size_t rowsets_compaction_score = 0;
     // add the base rowset to input_rowsets
     Rowset* base_rowset = *_compaction_context->rowset_levels[2].begin();
@@ -148,8 +146,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
     }
     rowsets->push_back(base_rowset->shared_from_this());
     rowsets_compaction_score += base_rowset->rowset_meta()->get_compaction_score();
-    input_rows_num += base_rowset->num_rows();
-    input_size += base_rowset->data_disk_size();
     // add level-1 rowsets
     for (auto rowset : _compaction_context->rowset_levels[1]) {
         rowsets_compaction_score += rowset->rowset_meta()->get_compaction_score();
@@ -162,8 +158,6 @@ void BaseAndCumulativeCompactionPolicy::_pick_base_rowsets(std::vector<RowsetSha
         }
 
         rowsets->push_back(rowset->shared_from_this());
-        input_rows_num += rowset->num_rows();
-        input_size += rowset->data_disk_size();
     }
 }
 

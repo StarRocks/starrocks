@@ -364,9 +364,9 @@ Status ScalarColumnIterator::fetch_all_dict_words(std::vector<Slice>* words) con
 template <FieldType Type>
 Status ScalarColumnIterator::_fetch_all_dict_words(std::vector<Slice>* words) const {
     auto dict = down_cast<BinaryPlainPageDecoder<Type>*>(_dict_decoder.get());
-    size_t words_count = dict->count();
+    uint32_t words_count = dict->count();
     words->reserve(words_count);
-    for (size_t i = 0; i < words_count; i++) {
+    for (uint32_t i = 0; i < words_count; i++) {
         if constexpr (Type != OLAP_FIELD_TYPE_CHAR) {
             words->emplace_back(dict->string_at_index(i));
         } else {

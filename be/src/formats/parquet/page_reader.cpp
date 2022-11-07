@@ -12,7 +12,7 @@ namespace starrocks::parquet {
 static constexpr size_t kHeaderInitSize = 1024;
 
 PageReader::PageReader(IBufferedInputStream* stream, uint64_t start_offset, uint64_t length)
-        : _stream(stream), _start_offset(start_offset), _finish_offset(start_offset + length) {}
+        : _stream(stream), _finish_offset(start_offset + length) {}
 
 Status PageReader::next_header() {
     if (_offset != _next_header_pos) {

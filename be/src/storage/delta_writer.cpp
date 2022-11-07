@@ -379,7 +379,7 @@ Status DeltaWriter::_flush_memtable() {
 
 void DeltaWriter::_reset_mem_table() {
     if (!_schema_initialized) {
-        _vectorized_schema = std::move(MemTable::convert_schema(_tablet_schema, _opt.slots));
+        _vectorized_schema = MemTable::convert_schema(_tablet_schema, _opt.slots);
         _schema_initialized = true;
     }
     _mem_table = std::make_unique<MemTable>(_tablet->tablet_id(), &_vectorized_schema, _opt.slots,

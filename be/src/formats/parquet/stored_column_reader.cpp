@@ -142,7 +142,6 @@ public:
     }
 
 private:
-    RandomAccessFile* _file = nullptr;
     // TODO(zc): No need copy
     const tparquet::ColumnChunk _chunk_metadata;
     const ParquetField* _field = nullptr;
@@ -330,10 +329,8 @@ Status OptionalStoredColumnReader::_read_records_and_levels(size_t* num_records,
             // TODO(zc): make it better
             _is_nulls.resize(records_to_read);
             // decode def levels
-            bool has_null = false;
             for (size_t i = 0; i < records_to_read; ++i) {
                 _is_nulls[i] = _def_levels[_levels_parsed + i] < _field->max_def_level();
-                has_null |= _is_nulls[i];
             }
             SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
             RETURN_IF_ERROR(_reader->decode_values(records_to_read, &_is_nulls[0], content_type, dst));

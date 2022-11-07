@@ -2,7 +2,6 @@
 
 package com.starrocks.connector.hive.events;
 
-import com.starrocks.catalog.HiveTable;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 
@@ -17,12 +16,11 @@ public interface EventFactory {
      * Generates a {@link MetastoreEvent} representing {@link NotificationEvent}
      *
      * @param hmsEvent  the event as received from Hive Metastore.
-     * @param metaCache the cached instance of this event that needs to be updated.
-     * @param table     the table of this event to process.
+     * @param cacheProcessor the cache update process instance to update catalog level cache.
      * @return {@link MetastoreEvent} representing hmsEvent.
      * @throws MetastoreNotificationException If the hmsEvent information cannot be parsed.
      */
     List<MetastoreEvent> get(NotificationEvent hmsEvent,
-                             CacheUpdateProcessor metaCache,
-                             HiveTable table) throws MetastoreNotificationException;
+                             CacheUpdateProcessor cacheProcessor,
+                             String catalogName) throws MetastoreNotificationException;
 }

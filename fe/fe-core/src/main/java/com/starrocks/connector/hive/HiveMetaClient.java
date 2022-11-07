@@ -4,8 +4,8 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import com.starrocks.connector.hive.glue.AWSCatalogMetastoreClient;
 import com.starrocks.sql.PlannerProfile;
 import org.apache.hadoop.hive.conf.HiveConf;
@@ -47,21 +47,11 @@ public class HiveMetaClient {
 
     private final HiveConf conf;
 
-    private long baseHmsEventId;
-
     // Required for creating an instance of RetryingMetaStoreClient.
     private static final HiveMetaHookLoader DUMMY_HOOK_LOADER = tbl -> null;
 
     public HiveMetaClient(HiveConf conf) {
         this.conf = conf;
-        if (Config.enable_hms_events_incremental_sync) {
-            init();
-        }
-    }
-
-    private void init() {
-        CurrentNotificationEventId currentNotificationEventId = getCurrentNotificationEventId();
-        this.baseHmsEventId = currentNotificationEventId.getEventId();
     }
 
     public static HiveMetaClient createHiveMetaClient(Map<String, String> properties) {
@@ -297,22 +287,20 @@ public class HiveMetaClient {
             return client.hiveClient.getCurrentNotificationEventId();
         } catch (Exception e) {
             LOG.error("Failed to fetch current notification event id", e);
-            throw new StarRocksConnectorException("Failed to get current notification event id. msg: " + e.getMessage());
+            throw new MetastoreNotificationFetchException("Failed to get current notification event id. msg: " + e.getMessage());
         }
     }
 
     public NotificationEventResponse getNextNotification(long lastEventId,
                                                          int maxEvents,
                                                          IMetaStoreClient.NotificationFilter filter)
-            throws DdlException {
+            throws MetastoreNotificationFetchException {
         try (AutoCloseClient client = getClient()) {
             return client.hiveClient.getNextNotification(lastEventId, maxEvents, filter);
         } catch (Exception e) {
-            throw new DdlException("Failed to get next notification. msg: " + e.getMessage());
+            LOG.error("Failed to get next notification based on last event id {}", lastEventId, e);
+            throw new MetastoreNotificationFetchException("Failed to get next notification based on last event id: " +
+                    lastEventId + ". msg: " + e.getMessage());
         }
-    }
-
-    public long getBaseHmsEventId() {
-        return baseHmsEventId;
     }
 }

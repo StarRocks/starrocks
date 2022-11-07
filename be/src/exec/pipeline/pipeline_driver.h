@@ -17,6 +17,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "fmt/printf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -158,12 +159,13 @@ public:
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
         }
+        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
     }
 
     PipelineDriver(const PipelineDriver& driver)
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
 
-    ~PipelineDriver();
+    ~PipelineDriver() noexcept;
 
     QueryContext* query_ctx() { return _query_ctx; }
     const QueryContext* query_ctx() const { return _query_ctx; }
@@ -403,6 +405,7 @@ private:
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
+    std::string _driver_name;
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;

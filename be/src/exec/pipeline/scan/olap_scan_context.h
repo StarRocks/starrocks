@@ -31,7 +31,7 @@ class OlapScanContext final : public ContextWithDependency {
 public:
     explicit OlapScanContext(vectorized::OlapScanNode* scan_node, int32_t dop, bool shared_scan,
                              BalancedChunkBuffer& chunk_buffer)
-            : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan), _scan_dop(dop) {}
+            : _scan_node(scan_node), _chunk_buffer(chunk_buffer), _shared_scan(shared_scan) {}
 
     Status prepare(RuntimeState* state);
     void close(RuntimeState* state) override;
@@ -75,7 +75,6 @@ private:
     BalancedChunkBuffer& _chunk_buffer; // Shared Chunk buffer for all scan operators, owned by OlapScanContextFactory.
     ActiveInputSet _active_inputs;      // Maintain the active chunksource
     bool _shared_scan;                  // Enable shared_scan
-    int32_t _scan_dop;                  // DOP of scan operator
 
     std::atomic<bool> _is_prepare_finished{false};
 };
