@@ -333,6 +333,13 @@ public class ScalarType extends Type implements Cloneable {
         }
     }
 
+    // Use for Hive string now.
+    public static ScalarType createDefaultExternalTableString() {
+        ScalarType stringType = ScalarType.createVarcharType(ScalarType.MAX_VARCHAR_LENGTH);
+        stringType.setAssignedStrLenInColDefinition();
+        return stringType;
+    }
+
     public static ScalarType createVarcharType(int len) {
         // length checked in analysis
         ScalarType type = new ScalarType(PrimitiveType.VARCHAR);
