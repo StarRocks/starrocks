@@ -180,7 +180,7 @@ SHOW RESTORE;
 * SnapshotFinishedTime：本地快照完成时间。
 * DownloadFinishedTime：远端快照下载完成时间。
 * FinishedTime：本次作业完成时间。
-* UnfinishedTasks：在 SNAPSHOTTING，DOWNLOADING, COMMITTING 等阶段，会有多个子任务在同时进行，这里展示的当前阶段，未完成的子任务的 Task ID。
+* UnfinishedTasks：在 SNAPSHOTTING，DOWNLOADING，COMMITTING 等阶段，会有多个子任务在同时进行，这里展示的当前阶段，未完成的子任务的 Task ID。
 * TaskErrMsg：如果有子任务执行出错，这里会显示对应子任务的错误信息。
 * Status：用于记录在整个作业过程中，可能出现的一些状态信息。
 * Timeout：作业的超时时间，单位是秒。
