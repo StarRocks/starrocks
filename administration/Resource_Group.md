@@ -172,7 +172,7 @@ SHOW RESOURCE GROUPS;
 查询指定的资源组和分类器。
 
 ```SQL
-SHOW RESOURCE GROUP group_name；
+SHOW RESOURCE GROUP group_name;
 ```
 
 示例：
