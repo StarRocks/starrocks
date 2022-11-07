@@ -485,8 +485,14 @@ public final class SqlToScalarOperatorTranslator {
                         "Unsupported correlated in predicate subquery with grouping or aggregation");
             }
 
-            ScalarOperator leftColRef = SqlToScalarOperatorTranslator
-                    .translate(node.getChild(0), builder.getExpressionMapping(), columnRefFactory);
+            List<ColumnRefOperator> leftCorrelationColumns = Lists.newArrayList();
+            ScalarOperator leftColRef = SqlToScalarOperatorTranslator.translate(node.getChild(0),
+                    builder.getExpressionMapping(), leftCorrelationColumns, columnRefFactory);
+
+            if (leftCorrelationColumns.size() > 0) {
+                throw new SemanticException("Unsupported complex nested in-subquery");
+            }
+
             List<ColumnRefOperator> rightColRefs = subqueryPlan.getOutputColumn();
             if (rightColRefs.size() > 1) {
                 throw new SemanticException("subquery must return a single column when used in InPredicate");
