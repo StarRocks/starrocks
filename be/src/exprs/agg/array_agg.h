@@ -6,34 +6,27 @@
 #include "column/type_traits.h"
 #include "exprs/agg/aggregate.h"
 #include "runtime/mem_pool.h"
+#include "runtime/primitive_type.h"
 #include "udf/udf_internal.h"
 
 namespace starrocks::vectorized {
-template <PrimitiveType PT, typename = guard::Guard>
-struct ArrayAggAggregateState {};
 
 template <PrimitiveType PT>
-struct ArrayAggAggregateState<PT, FixedLengthPTGuard<PT>> {
+struct ArrayAggAggregateState {
     using CppType = RunTimeCppType<PT>;
+    using ColumnType = RunTimeColumnType<PT>;
 
-    void update(MemPool* mem_pool, CppType key) { items.emplace_back(key); }
-
-    std::vector<CppType> items;
-    size_t null_count = 0;
-};
-
-template <PrimitiveType PT>
-struct ArrayAggAggregateState<PT, StringPTGuard<PT>> {
-    using CppType = RunTimeCppType<PT>;
-
-    void update(MemPool* mem_pool, Slice key) {
-        uint8_t* pos = mem_pool->allocate(key.size);
-        memcpy(pos, key.data, key.size);
-        items.emplace_back(Slice(pos, key.size));
+    ArrayAggAggregateState() {
+        data_column = ColumnType::create();
+        null_count = 0;
     }
 
-    std::vector<CppType> items;
-    size_t null_count = 0;
+    void update(const ColumnType& column, size_t offset, size_t count) { data_column->append(column, offset, count); }
+
+    void append_null() { null_count++; }
+
+    typename ColumnType::Ptr data_column;
+    size_t null_count;
 };
 
 template <PrimitiveType PT>
@@ -46,45 +39,27 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         const auto& column = down_cast<const InputColumnType&>(*columns[0]);
-        if constexpr (IsSlice<InputCppType>) {
-            this->data(state).update(ctx->impl()->mem_pool(), column.get_slice(row_num));
-        } else {
-            this->data(state).update(ctx->impl()->mem_pool(), column.get_data()[row_num]);
-        }
+        this->data(state).update(column, row_num, 1);
     }
 
     void process_null(FunctionContext* ctx, AggDataPtr __restrict state) const override {
-        this->data(state).null_count++;
+        this->data(state).append_null();
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         const auto* input_column = down_cast<const ArrayColumn*>(column);
         auto datum_array = input_column->get(row_num).get_array();
+        auto& element_column = down_cast<const InputColumnType&>(input_column->elements());
+        auto offset_size = input_column->get_element_offset_size(row_num);
 
-        for (size_t i = 0; i < datum_array.size(); i++) {
-            if (datum_array[i].is_null()) {
-                this->data(state).null_count++;
-            } else {
-                this->data(state).update(ctx->impl()->mem_pool(), datum_array[i].get<InputCppType>());
-            }
-        }
+        this->data(state).update(element_column, offset_size.first, offset_size.second);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        const auto& data = this->data(state).items;
-        const size_t null_count = this->data(state).null_count;
-
+        auto& state_impl = this->data(state);
+        const auto& data = state_impl.data_column;
         auto* column = down_cast<ArrayColumn*>(to);
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
-
-        if (null_count > 0) {
-            elements_column->append_nulls(null_count);
-        }
-        for (size_t i = 0; i < data.size(); i++) {
-            elements_column->append_datum(data[i]);
-        }
-        offsets.emplace_back(offsets.back() + data.size() + null_count);
+        column->append_array_element(*data, state_impl.null_count);
     }
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -94,13 +69,7 @@ public:
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         auto* column = down_cast<ArrayColumn*>(dst->get());
-        auto& offsets = column->offsets_column()->get_data();
-        auto& elements_column = column->elements_column();
-
-        for (size_t i = 0; i < chunk_size; i++) {
-            elements_column->append_datum(src[0]->get(i));
-            offsets.emplace_back(offsets.back() + 1);
-        }
+        column->append(*src[0], 0, chunk_size);
     }
 
     std::string get_name() const override { return "array_agg"; }
