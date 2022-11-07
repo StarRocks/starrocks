@@ -28,7 +28,6 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
@@ -43,9 +42,8 @@ import org.junit.Test;
 
 import java.util.List;
 
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
-
 public class SetExecutorTest {
+
     private ConnectContext ctx;
 
     @Mocked
@@ -123,37 +121,35 @@ public class SetExecutorTest {
 
     @Test
     public void testUserDefineVariable() throws Exception {
-        AnalyzeTestUtil.init();
-        ConnectContext context = AnalyzeTestUtil.getConnectContext();
         String sql = "set @var = cast('2020-01-01' as date)";
-        SetStmt stmt = (SetStmt) analyzeSuccess(sql);
-        SetExecutor executor = new SetExecutor(context, stmt);
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        UserVariable userVariable = context.getUserVariables("var");
+        UserVariable userVariable = ctx.getUserVariables("var");
         Assert.assertTrue(userVariable.getResolvedExpression().getType().isDate());
         Assert.assertEquals("2020-01-01", userVariable.getResolvedExpression().getStringValue());
 
         sql = "set @var = cast('2020-01-01' as datetime)";
-        stmt = (SetStmt) analyzeSuccess(sql);
-        executor = new SetExecutor(context, stmt);
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = context.getUserVariables("var");
+        userVariable = ctx.getUserVariables("var");
         Assert.assertTrue(userVariable.getResolvedExpression().getType().isDatetime());
         Assert.assertEquals("2020-01-01 00:00:00", userVariable.getResolvedExpression().getStringValue());
 
         sql = "set @var = cast(10 as largeint)";
-        stmt = (SetStmt) analyzeSuccess(sql);
-        executor = new SetExecutor(context, stmt);
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = context.getUserVariables("var");
+        userVariable = ctx.getUserVariables("var");
         Assert.assertTrue(userVariable.getResolvedExpression().getType().isLargeint());
         Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
 
         sql = "set @var = cast(10 as decimal)";
-        stmt = (SetStmt) analyzeSuccess(sql);
-        executor = new SetExecutor(context, stmt);
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
         executor.execute();
-        userVariable = context.getUserVariables("var");
+        userVariable = ctx.getUserVariables("var");
         Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
         Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
     }

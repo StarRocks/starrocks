@@ -118,6 +118,32 @@ public class QueryAnalyzer {
             for (CTERelation withQuery : stmt.getCteRelations()) {
                 QueryRelation query = withQuery.getCteQueryStatement().getQueryRelation();
                 process(withQuery.getCteQueryStatement(), cteScope);
+                String cteName = withQuery.getName();
+                if (cteScope.containsCTE(cteName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_NONUNIQ_TABLE, cteName);
+                }
+
+                if (withQuery.getColumnOutputNames() == null) {
+                    withQuery.setColumnOutputNames(new ArrayList<>(query.getColumnOutputNames()));
+                } else {
+                    if (withQuery.getColumnOutputNames().size() != query.getColumnOutputNames().size()) {
+                        ErrorReport.reportSemanticException(ErrorCode.ERR_VIEW_WRONG_LIST);
+                    }
+                }
+
+                /*
+                 * use cte column name as output scope of subquery relation fields
+                 */
+                ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+                for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
+                    Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
+
+                    String database = originField.getRelationAlias() == null ? session.getDatabase() :
+                            originField.getRelationAlias().getDb();
+                    TableName tableName = new TableName(database, cteName);
+                    outputFields.add(new Field(withQuery.getColumnOutputNames().get(fieldIdx), originField.getType(), tableName,
+                            originField.getOriginExpression()));
+                }
 
                 /*
                  *  Because the analysis of CTE is sensitive to order
@@ -125,30 +151,8 @@ public class QueryAnalyzer {
                  *  and the previous CTE can rewrite the existing table name.
                  *  So here will save an increasing AnalyzeState to add cte scope
                  */
-
-                /*
-                 * use cte column name as output scope of subquery relation fields
-                 */
-                ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
-                ImmutableList.Builder<String> columnOutputNames = ImmutableList.builder();
-                for (int fieldIdx = 0; fieldIdx < query.getRelationFields().getAllFields().size(); ++fieldIdx) {
-                    Field originField = query.getRelationFields().getFieldByIndex(fieldIdx);
-
-                    String database = originField.getRelationAlias() == null ? session.getDatabase() :
-                            originField.getRelationAlias().getDb();
-                    TableName tableName = new TableName(database, withQuery.getName());
-                    outputFields.add(new Field(
-                            withQuery.getColumnOutputNames() == null ? originField.getName() :
-                                    withQuery.getColumnOutputNames().get(fieldIdx),
-                            originField.getType(),
-                            tableName,
-                            originField.getOriginExpression()));
-                    columnOutputNames.add(withQuery.getColumnOutputNames() == null ? originField.getName() :
-                            withQuery.getColumnOutputNames().get(fieldIdx));
-                }
-                withQuery.setColumnOutputNames(columnOutputNames.build());
                 withQuery.setScope(new Scope(RelationId.of(withQuery), new RelationFields(outputFields.build())));
-                cteScope.addCteQueries(withQuery.getName(), withQuery);
+                cteScope.addCteQueries(cteName, withQuery);
             }
 
             return cteScope;
