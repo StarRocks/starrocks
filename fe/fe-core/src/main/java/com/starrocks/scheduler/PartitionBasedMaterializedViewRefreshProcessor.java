@@ -442,33 +442,35 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         mvContext.setMvToBaseNameRef(mvToBaseNameRef);
     }
 
-    private boolean needToRefreshTable(OlapTable olapTable) {
-        return !materializedView.getUpdatedPartitionNamesOfTable(olapTable).isEmpty();
+    private boolean needToRefreshTable(Table table) {
+        return !materializedView.getUpdatedPartitionNamesOfTable(table).isEmpty();
     }
 
     private boolean needToRefreshNonPartitionTable(Table partitionTable) {
-        if (snapshotBaseTables.values().stream().anyMatch(tablePair -> !tablePair.second.isOlapTable())) {
-            return true;
-        }
         for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
-            OlapTable olapTable = (OlapTable) tablePair.second;
-            if (olapTable.getId() == partitionTable.getId()) {
+            Table snapshotTable = tablePair.second;
+            if (snapshotTable.getId() == partitionTable.getId()) {
                 continue;
             }
-            if (needToRefreshTable(olapTable)) {
+            // External table don't need to check here
+            if (!snapshotTable.isOlapTable()) {
+                continue;
+            }
+            if (needToRefreshTable(snapshotTable)) {
                 return true;
             }
         }
         return false;
     }
 
-    private boolean needToRefreshNonPartitionTable() {
-        if (snapshotBaseTables.values().stream().anyMatch(tablePair -> !tablePair.second.isOlapTable())) {
-            return true;
-        }
+    private boolean unPartitionedMVNeedToRefresh() {
         for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
-            OlapTable olapTable = (OlapTable) tablePair.second;
-            if (needToRefreshTable(olapTable)) {
+            Table snapshotTable = tablePair.second;
+            // External table need to refresh, we can't get updated info of external table now.
+            if (!snapshotTable.isOlapTable()) {
+                return true;
+            }
+            if (needToRefreshTable(snapshotTable)) {
                 return true;
             }
         }
@@ -487,7 +489,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         PartitionInfo partitionInfo = materializedView.getPartitionInfo();
         if (partitionInfo instanceof SinglePartitionInfo) {
             // for non-partitioned materialized view
-            if (force || needToRefreshNonPartitionTable()) {
+            if (force || unPartitionedMVNeedToRefresh()) {
                 return Sets.newHashSet(materializedView.getPartitionNames());
             }
         } else if (partitionInfo instanceof ExpressionRangePartitionInfo) {
@@ -502,9 +504,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             }
             // check partition table
             if (partitionExpr instanceof SlotRef) {
-                return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(mvRangePartitionNames, force);
+                return getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(partitionTable, mvRangePartitionNames, force);
             } else if (partitionExpr instanceof FunctionCallExpr) {
-                needRefreshMvPartitionNames = getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+                needRefreshMvPartitionNames = getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(partitionTable,
                         mvRangePartitionNames, force);
                 Set<String> baseChangedPartitionNames = getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
                 // because the relation of partitions between materialized view and base partition table is n : m,
@@ -522,9 +524,9 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
         return needRefreshMvPartitionNames;
     }
 
-    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(
+    private Set<String> getMVPartitionNamesToRefreshByRangePartitionNamesAndForce(Table partitionTable,
             Set<String> mvRangePartitionNames, boolean force) {
-        if (force) {
+        if (force || !partitionTable.isOlapTable()) {
             return Sets.newHashSet(mvRangePartitionNames);
         }
         // check if there is a load in the base table and add it to the refresh candidate
