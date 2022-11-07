@@ -625,7 +625,9 @@ Status ExecNode::eval_conjuncts(const std::vector<ExprContext*>& ctxs, vectorize
         return eager_prune_eval_conjuncts(ctxs, chunk);
     }
 
-    apply_filter = apply_filter && filter_ptr;
+    if (!apply_filter) {
+        DCHECK(filter_ptr) << "Must provide a filter if not apply it directly";
+    }
     vectorized::FilterPtr filter(new vectorized::Column::Filter(chunk->num_rows(), 1));
     if (filter_ptr != nullptr) {
         *filter_ptr = filter;
