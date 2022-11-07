@@ -538,7 +538,7 @@ private:
 
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version);
 
-    Status _check_and_flush_l0(PersistentIndexMetaPB* index_meta);
+    Status _check_and_flush_l0();
 
     Status _flush_l0();
 
