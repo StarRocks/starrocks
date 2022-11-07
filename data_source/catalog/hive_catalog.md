@@ -15,7 +15,7 @@ Hive catalog 是一个外部数据目录 (external catalog)。在 StarRocks 中�
 
 ## 前提条件
 
-在创建 Hive catalog 前，您需要 StarRocks 中进行相应的配置，以便能够访问 Hive 的存储系统和元数据服务。StarRocks 当前支持的 Hive 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hive 元数据服务为 Hive metastore。
+在创建 Hive catalog 前，您需要在 StarRocks 中进行相应的配置，以便能够访问 Hive 的存储系统和元数据服务。StarRocks 当前支持的 Hive 存储系统包括：HDFS、Amazon S3、阿里云对象存储 OSS 和腾讯云对象存储 COS；支持的 Hive 元数据服务为 Hive metastore。
 
 ### HDFS
 
