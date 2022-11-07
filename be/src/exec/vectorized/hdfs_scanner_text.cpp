@@ -37,7 +37,7 @@ public:
     // |file| must outlive HdfsScannerCSVReader
     HdfsScannerCSVReader(RandomAccessFile* file, const string& row_delimiter, const string& column_separator,
                          size_t file_length, bool trim_space)
-            : CSVReader(row_delimiter, column_separator, trim_space) {
+            : CSVReader(row_delimiter, column_separator, trim_space, '\\', '"') {
         _file = file;
         _offset = 0;
         _remain_length = file_length;

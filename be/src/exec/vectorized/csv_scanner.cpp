@@ -80,6 +80,16 @@ CSVScanner::CSVScanner(RuntimeState* state, RuntimeProfile* profile, const TBrok
     } else {
         _trim_space = false;
     }
+    if (scan_range.params.__isset.enclose) {
+        _enclose = scan_range.params.enclose;
+    } else {
+        _enclose = '"';
+    }
+    if (scan_range.params.__isset.escape) {
+        _escape = scan_range.params.escape;
+    } else {
+        _escape = '\\';
+    }
 }
 
 void CSVScanner::close() {
@@ -161,7 +171,7 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
             }
 
             // TODO(yangzaorang): 需要引入ESCAPE，ENCLOSE
-            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space);
+            _curr_reader = std::make_unique<ScannerCSVReader>(file, _record_delimiter, _field_delimiter, _trim_space, _escape, _enclose);
             _curr_reader->set_counter(_counter);
             if (_scan_range.ranges[_curr_file_index].size > 0 &&
                 _scan_range.ranges[_curr_file_index].format_type == TFileFormatType::FORMAT_CSV_PLAIN) {
@@ -196,7 +206,8 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
         // src_chunk是每次parse csv文件的容器，可以重复使用，我们可以忽略之。
         // 所以关键点是_parse_csv这个函数
         src_chunk->set_num_rows(0);
-        Status status = _parse_csv(src_chunk.get());
+        // Status status = _parse_csv(src_chunk.get());
+        Status status = _parse_csv_v2(src_chunk.get());
 
         if (!status.ok()) {
             if (status.is_end_of_file()) {
@@ -218,6 +229,82 @@ StatusOr<ChunkPtr> CSVScanner::get_next() {
         ASSIGN_OR_RETURN(chunk, materialize(nullptr, src_chunk));
     } while ((chunk)->num_rows() == 0);
     return std::move(chunk);
+}
+
+Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
+    const int capacity = _state->chunk_size();
+    DCHECK_EQ(0, chunk->num_rows());
+    Status status;
+    CSVReader::Record record;
+    CSVReader::Fields fields;
+
+    int num_columns = chunk->num_columns();
+    _column_raw_ptrs.resize(num_columns);
+    for (int i = 0; i < num_columns; i++) {
+        _column_raw_ptrs[i] = chunk->get_column_by_index(i).get();
+    }
+
+    csv::Converter::Options options{.invalid_field_as_null = !_strict_mode};
+
+    // 这里的循环表示我们获取到capacity条记录，则停止循环
+    for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
+        status = _curr_reader->next_record(&fields);
+        if (status.is_end_of_file()) {
+            break;
+        } else if (!status.ok()) {
+            return status;
+        }
+
+        if (fields.size() != _num_fields_in_csv) {
+            if (_counter->num_rows_filtered++ < 50) {
+                std::stringstream error_msg;
+                error_msg << "Value count does not match column count. "
+                          << "Expect " << _num_fields_in_csv << ", but got " << fields.size();
+                
+                // _report_error(record.to_string(), error_msg.str());
+                _report_error("MMMMM!!!!mark1", error_msg.str());
+            }
+            continue;
+        }
+        // TODO: what's meaning?
+        // if (!validate_utf8(record.data, record.size)) {
+        //     if (_counter->num_rows_filtered++ < 50) {
+        //         _report_error(record.to_string(), "Invalid UTF-8 row");
+        //     }
+        //     continue;
+        // }
+        // ---------------------------------------------------------
+
+
+
+        SCOPED_RAW_TIMER(&_counter->fill_ns);
+        bool has_error = false;
+        // 遍历获取到的fields，所以这块还是可以复用
+        for (int j = 0, k = 0; j < _num_fields_in_csv; j++) {
+            auto slot = _src_slot_descriptors[j];
+            if (slot == nullptr) {
+                continue;
+            }
+            const Slice& field = fields[j];
+            options.type_desc = &(slot->type());
+            // 此时，field引用的还是buff中的共享内存，直到这一步将数据复制走。所以每读到一条record，我们就可以compact buff了。
+            if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {
+                chunk->set_num_rows(num_rows);
+                if (_counter->num_rows_filtered++ < 50) {
+                    std::stringstream error_msg;
+                    error_msg << "Value '" << field.to_string() << "' is out of range. "
+                              << "The type of '" << slot->col_name() << "' is " << slot->type().debug_string();
+                    _report_error("MMMMM!!!!mark2", error_msg.str());
+                    // _report_error(record.to_string(), error_msg.str());
+                }
+                has_error = true;
+                break;
+            }
+            k++;
+        }
+        num_rows += !has_error;
+    }
+    return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }
 
 Status CSVScanner::_parse_csv(Chunk* chunk) {

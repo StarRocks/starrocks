@@ -99,10 +99,12 @@ public:
     using Field = Slice;
     using Fields = std::vector<Field>;
 
-    CSVReader(const string& row_delimiter, const string& column_separator, bool trim_space)
+    CSVReader(const string& row_delimiter, const string& column_separator, bool trim_space, char escape, char enclose)
             : _row_delimiter(row_delimiter),
               _column_separator(column_separator),
               _trim_space(trim_space),
+              _escape(escape),
+              _enclose(enclose),
               _storage(kMinBufferSize),
               _buff(_storage.data(), _storage.size()) {
         _row_delimiter_length = row_delimiter.size();
@@ -119,19 +121,21 @@ public:
 
     void split_record(const Record& record, Fields* fields) const;
 
-    bool isDelimiter();
+    bool isRowDelimiter(CSVBuffer& buff);
 
-    bool isNewline();
+    bool isColumnSeparator(CSVBuffer& buff);
+
+    Status readMore(CSVBuffer& buff);
 
 protected:
     std::string _row_delimiter;
     std::string _column_separator;
     size_t _row_delimiter_length;
     size_t _column_separator_length;
+    bool _trim_space;
     // TODO(yangzaorang): 需要加一个bool类型方便处理吗
     char _escape;
     char _enclose;
-    bool _trim_space;
     raw::RawVector<char> _storage;
     // _buff其实就是一个连续的内存，作为存放读到的数据的容器
     CSVBuffer _buff;

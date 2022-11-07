@@ -33,26 +33,80 @@ static Field trim(const char* value, int len) {
     return Field(value + begin, end - begin + 1);
 }
 
-bool CSVReader::isDelimiter() {
-    // 1. 如果是delimiter，那么一切很好
-    // 2. 如果不是delimiter，那么要将指针回退
-    // 3. 如果比较的时候buff长度不够，怎么处理
+
+bool CSVReader::isColumnSeparator(CSVBuffer& buff) {
+    if (_column_separator_length == 1) {
+        if (*(buff.position()) == _column_separator[0]) {
+            buff.skip(1);
+            return true;
+        }
+    } else {
+        int i = 0;
+        char* p = _buff.position();
+        while (i < _column_separator_length && p < _buff.limit() && *p == _column_separator[i]) {
+            i++;
+            p++;
+            if (_buff.limit() - p < 1) {
+                if (_buff.free_space() == 0) {
+                    if (!_expand_buffer().ok()) {
+                        return false;
+                    }
+                }
+                if (!_fill_buffer().ok()) {
+                    return false;
+                }
+            }
+        }
+        if (i == _column_separator_length) {
+            _buff.skip(_column_separator_length);
+            return true;
+        }
+    }
+    return false; 
 }
 
-bool CSVReader::isNewline() {
-
+bool CSVReader::isRowDelimiter(CSVBuffer& buff) {
+    if (_row_delimiter_length == 1) {
+        if (*(buff.position()) == _row_delimiter[0]) {
+            buff.skip(1);
+            return true;
+        }
+    } else {
+        // 我们要判断接下来的一段字节流是否是row delimiter
+        int i = 0;
+        char* p = _buff.position();
+        while (i < _row_delimiter_length && p < _buff.limit() && *p == _row_delimiter[i]) {
+            i++;
+            p++;
+            if (_buff.limit() - p < 1) {
+                if (_buff.free_space() == 0) {
+                    if (!_expand_buffer().ok()) {
+                        return false;
+                    }
+                }
+                if (!_fill_buffer().ok()) {
+                    return false;
+                }
+            }
+        }
+        if (i == _row_delimiter_length) {
+            _buff.skip(_row_delimiter_length);
+            return true;
+        }
+    }
+    return false;
 }
 
-bool CSVReader::isEscape() {
-
+// 当剩余的可读取的字节为0时，读取更多数据。
+Status CSVReader::readMore(CSVBuffer& buff) {
+    if(buff.available() < 1) {
+        if (buff.free_space() == 0) {
+            return _expand_buffer();
+        }
+        return _fill_buffer();
+    }
+    return Status::OK();
 }
-
-// 新的问题：
-// 1. 比较最后一个字符往前回溯的方式看来行不通。那么如何处理多字节DELIMITER和NEWLINE
-//  ordinary状态下需要
-// 
-
-
 
 // 这个函数我们要从状态START开始，读取下一条记录。
 // 重载。
@@ -66,97 +120,98 @@ Status CSVReader::next_record(Fields* fields) {
     ParseState curState = START;
     ParseState preState = curState;
     while (true) {
-        if(_buff.available() < 1) {
-            if (_buff.free_space() == 0) {
-                RETURN_IF_ERROR(_expand_buffer());
-            }
-            RETURN_IF_ERROR(_fill_buffer());
+        // 到了一行的行尾,或者字段尾部，此次不再读新的数据
+        if (curState != NEWLINE && curState != DELIMITER) {
+            RETURN_IF_ERROR(readMore(_buff));
         }
         char* filed_start = nullptr;
-        // 每一次根据当前的状态+当前的字符，来推进到下一个状态
+        // 每一次根据当前的状态+当前的字符流，来推进到下一个状态
         switch (curState)
         {
         case START:
+            // 开启了trim space，START状态下跳过leading space
+            if (_trim_space) {
+                while (*(_buff.position()) == ' ') {
+                    _buff.skip(1);
+                    if(!readMore(_buff).ok()) {
+                        break;
+                    }
+                }
+            }
             // 我们记录字段开始的位置
             filed_start = _buff.position();
+
             // newline
-            if (_row_delimiter_length == 1) {
-                if (*(_buff.position()) == _row_delimiter[0]) {
-                    curState = NEWLINE;
-                    _buff.skip(1);
-                    break;
-                }
-            } else {
-                // 当行分隔符的长度大于1时，我们需要比较已经读到的字节和该分隔符是否一致。
-                if (*(_buff.position()) == _row_delimiter.back() && _buff.have_read() >= _row_delimiter_length) {
-                    bool equal = true;
-                    char* pos = _buff.position();
-                    for (auto it = _row_delimiter.rbegin(); it != _row_delimiter.rend(); ++it) {
-                        if (*pos != *it) {
-                            equal = false;
-                            break;
-                        }
-                        pos--;
-                    }
-                    if (equal) {
-                        curState = NEWLINE;
-                        _buff.skip(1);
-                        break;
-                    }
-                }
+            if (isRowDelimiter(_buff)) {
+                curState = NEWLINE;
+                break;
             }
+
             // delimiter
-            if (_column_separator_length == 1) {
-                if (*(_buff.position()) == _column_separator[0]) {
-                    curState = DELIMITER;
-                    _buff.skip(1);
-                    break;
-                }
-            } else {
-                if (*(_buff.position()) == _column_separator.back() && _buff.have_read() >= _column_separator_length) {
-                    bool equal = true;
-                    char* pos = _buff.position();
-                    for (auto it = _column_separator.rbegin(); it != _column_separator.rend(); ++it) {
-                        if (*pos != *it) {
-                            equal = false;
-                            break;
-                        }
-                        pos--;
-                    }
-                    if (equal) {
-                        curState = DELIMITER;
-                        _buff.skip(1);
-                        break;
-                    }
-                }
+            if (isColumnSeparator(_buff)) {
+                curState = DELIMITER;
+                break;
             }
+
             // escape
             if (*(_buff.position()) == _escape) {
+                // trick here.
+                preState = ORDINARY;
                 curState = ESCAPE;
                 _buff.skip(1);
+                filed_start = _buff.position();
                 break;
             }
+
             // enclose
             if (*(_buff.position()) == _enclose) {
-                curState = ENCLOSE;
                 _buff.skip(1);
-                break;
+                // TODO: 这里还需要调整
+                RETURN_IF_ERROR(readMore(_buff));
+                filed_start = _buff.position();
+                if (*(_buff.position()) != _enclose) {
+                    curState = ENCLOSE;
+                    break;
+                } else {
+                    // ""something
+                    // 空字段还是转义？
+                    _buff.skip(1);
+                    RETURN_IF_ERROR(readMore(_buff));
+                    // ""rowseperator
+                    if (isRowDelimiter(_buff)) {
+                        curState = NEWLINE;
+                        break;
+                    }
+                    
+                    // delimiter
+                    if (isColumnSeparator(_buff)) {
+                        curState = DELIMITER;
+                        break;
+                    }
+
+                    // ""普通字符,此时第一个enclose为转义字符
+                    curState = ORDINARY;
+                    break;
+                }
             }
             curState = ORDINARY;
             _buff.skip(1);
             break;
 
+        // 只有在START状态下才能进入ENCLOSE状态
+        // START状态如何转换到ENCLOSE状态：
+        // 1. 没有开启trimspace
+        //    a. "some
+        //    b. ""aaa, enclose只是用于转义，不能进入enclose状态
+        //    c. ""空字段，空字段接下来读到的一定是字段分隔符或者换行符
+        // 2. 开启了trimspace
+        //    去除空格后再判断
         case ENCLOSE:
+            // ENCLOSE状态下再次遇到enclose, enclose状态结束
             if (*(_buff.position()) == _enclose) {
-                if (*(_buff.position() - 1) == _enclose) {
-                    // TODO：两个连续ENCLOSE符号是转义状态，那么如何处理
-                    _buff.skip(1);
-                    break;
-                } else {                    
-                    curState = ORDINARY;
-                    _buff.skip(1);
-                    break;
-                }
+                curState = ORDINARY;
+                _buff.skip(1);
+                break;
             }
             // escape
             if (*(_buff.position()) == _escape) {
@@ -169,16 +224,68 @@ Status CSVReader::next_record(Fields* fields) {
             _buff.skip(1);
             break;
 
+        // TODO: review ESCAPE
         case ESCAPE:
+            // 转义enclose
+            if (*(_buff.position()) == _enclose) {
+                curState = preState;
+                _buff.skip(1);
+                break;
+            }
+            // 转义 escape自身
+            if (*(_buff.position()) == _escape) {
+                // TODO: 需要处理新的数据
+                curState = preState;
+                _buff.skip(1);
+                break;
+            }
+            // 转义 row DELIMITER
+            if (isRowDelimiter(_buff)) {
+                curState = preState;
+                break;
+            }
+            // 转义column separator
+            if (isColumnSeparator(_buff)) {
+                curState = preState;
+                break;
+            }
 
-
-
-
-
-
+        case ORDINARY:
+            // newline
+            if (isRowDelimiter(_buff)) {
+                curState = NEWLINE;
+                break;
+            }
+            
+            // delimiter
+            if (isColumnSeparator(_buff)) {
+                curState = DELIMITER;
+                break;
+            }
         
-        default:
+            // escape
+            if (*(_buff.position()) == _escape) {
+                preState = curState;
+                curState = ESCAPE;
+                _buff.skip(1);
+                break;
+            }
+            _buff.skip(1);
+            curState = ORDINARY;
             break;
+
+        case DELIMITER:
+            // push field
+            fields->emplace_back(filed_start, _buff.position() - _column_separator_length - filed_start);
+            curState = START;
+            break;
+        case NEWLINE:
+            // push line
+            fields->emplace_back(filed_start, _buff.position() - _row_delimiter_length - filed_start);
+            curState = START;
+            return Status::OK();
+        default:
+            return Status::NotSupported("Not supported state when csv parsing");
         }
         // 每一次switch之后去判断是否要读新的数据
         // 这块确认好了，再往下演进：
@@ -193,9 +300,7 @@ Status CSVReader::next_record(Fields* fields) {
         // a. 拿到了一行完整记录. b. 超过缓冲区大小，但是还没有找到相关记录
         // 5. 如何处理空行
         // 6. 如何处理end of file
-
     }
-
 }
 
 Status CSVReader::next_record(Record* record) {

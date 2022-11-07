@@ -45,8 +45,8 @@ private:
     class ScannerCSVReader : public CSVReader {
     public:
         ScannerCSVReader(std::shared_ptr<SequentialFile> file, const string& record_delimiter,
-                         const string& field_delimiter, bool trim_space)
-                : CSVReader(record_delimiter, field_delimiter, trim_space) {
+                         const string& field_delimiter, bool trim_space, char escape, char enclose)
+                : CSVReader(record_delimiter, field_delimiter, trim_space, escape, enclose) {
             _file = std::move(file);
         }
 
@@ -62,6 +62,8 @@ private:
     ChunkPtr _create_chunk(const std::vector<SlotDescriptor*>& slots);
 
     Status _parse_csv(Chunk* chunk);
+    Status _parse_csv_v2(Chunk* chunk);
+
     StatusOr<ChunkPtr> _materialize(ChunkPtr& src_chunk);
     void _report_error(const std::string& line, const std::string& err_msg);
 
@@ -78,6 +80,8 @@ private:
     std::vector<ConverterPtr> _converters;
     int64_t _skip_header;
     bool _trim_space;
+    char _enclose;
+    char _escape;
 };
 
 } // namespace starrocks::vectorized
