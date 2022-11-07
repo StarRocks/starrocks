@@ -15,7 +15,7 @@ StarRocks FE 节点分为 Follower 节点和 Observer 节点。Follower 节点�
 
 ### 扩容 FE 集群
 
-部署并启动新增 FE 节点。详细部署方式参考 [部署 StarRocks](../quick_start/Deploy.md)
+部署并启动新增 FE 节点。详细部署方式参考 [部署 StarRocks](../quick_start/Deploy.md)。
 
 ```bash
 bin/start_fe.sh --helper "fe_master_host:edit_log_port" --daemon
