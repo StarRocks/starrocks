@@ -103,7 +103,7 @@ VALUES
 | 参数       | 说明                                                         |
 | ---------- | ------------------------------------------------------------ |
 | table_name | 导入数据的目标表。可以使用 `db_name.table_name` 形式。       |
-| label      | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label"` 查看作业结果。 |
+| label      | 导入作业的标识，数据库内唯一。如果未指定，StarRocks 会自动为作业生成一个 Label。建议您指定 Label。否则，如果当前导入作业因网络错误无法返回结果，您将无法得知该导入操作是否成功。如果指定了 Label，可以通过 SQL 命令 `SHOW LOAD WHERE label="label";` 查看作业结果。 |
 | values     | 通过 VALUES 语法插入一条或者多条数据，多条数据用逗号（,）分隔。 |
 
 ## 通过 INSERT INTO SELECT 语句导入数据
