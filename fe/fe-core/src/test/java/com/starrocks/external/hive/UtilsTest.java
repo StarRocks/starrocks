@@ -161,7 +161,7 @@ public class UtilsTest {
         Type resType = Utils.convertToArrayType(typeStr);
         Assert.assertEquals(arrayType, resType);
 
-        itemType = ScalarType.createDefaultString();
+        itemType = ScalarType.createDefaultExternalTableString();
         arrayType = new ArrayType(itemType);
         typeStr = "Array<string>";
         resType = Utils.convertToArrayType(typeStr);
@@ -216,7 +216,7 @@ public class UtilsTest {
         resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertEquals(resType, varcharType);
 
-        Type stringType = ScalarType.createDefaultString();
+        Type stringType = ScalarType.createDefaultExternalTableString();
         typeStr = "string";
         resType = HiveMetaStoreTableUtils.convertHiveTableColumnType(typeStr);
         Assert.assertEquals(resType, stringType);
