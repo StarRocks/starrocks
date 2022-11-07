@@ -186,7 +186,7 @@ public class PrivilegeCollection {
             return false;
         }
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object) && privilegeEntry.actionSet.contains(want)) {
+            if (objectMatch(object, privilegeEntry.object) && privilegeEntry.actionSet.contains(want)) {
                 return true;
             }
             // still looking for the next entry, maybe object match but with/without grant option
@@ -200,7 +200,7 @@ public class PrivilegeCollection {
             return false;
         }
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
-            if (objectMatch(privilegeEntry.object, object)) {
+            if (objectMatch(object, privilegeEntry.object) || objectMatch(privilegeEntry.object, object)) {
                 return true;
             }
         }
@@ -217,7 +217,7 @@ public class PrivilegeCollection {
             Iterator<PEntryObject> iterator = unCheckedObjects.iterator();
             while (iterator.hasNext()) {
                 PEntryObject object = iterator.next();
-                if (privilegeEntry.isGrant && objectMatch(privilegeEntry.object, object)) {
+                if (privilegeEntry.isGrant && objectMatch(object, privilegeEntry.object)) {
                     if (privilegeEntry.actionSet.contains(wantSet)) {
                         iterator.remove();
                         if (unCheckedObjects.isEmpty()) {

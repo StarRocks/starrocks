@@ -1377,7 +1377,6 @@ public class PrivilegeManager {
     }
 
     public void upgradeRoleInitPrivilegeUnlock(long roleId, RolePrivilegeCollection collection) {
-        // will produce journal in bdb
         roleIdToPrivilegeCollection.put(roleId, collection);
         roleNameToId.put(collection.getName(), roleId);
         LOG.info("upgrade role {}[{}]", collection.getName(), roleId);
@@ -1388,5 +1387,11 @@ public class PrivilegeManager {
         for (long roleId : roleIds) {
             collection.grantRole(roleId);
         }
+    }
+
+    // This function only change data in parent roles
+    // Child role will be update as a whole by upgradeRoleInitPrivilegeUnlock
+    public void upgradeParentRoleRelationUnlock(long parentRoleId, long subRoleId) {
+        roleIdToPrivilegeCollection.get(parentRoleId).addSubRole(subRoleId);
     }
 }

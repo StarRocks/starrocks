@@ -66,16 +66,23 @@ public class TablePEntryObject implements PEntryObject {
         this.databaseId = databaseId;
     }
 
+    /**
+     * if the current table matches other table, including fuzzy matching.
+     *
+     * this(db1.tbl1), other(db1.tbl1) -> true
+     * this(db1.tbl1), other(db1.ALL) -> true
+     * this(db1.ALL), other(db1.tbl1) -> false
+     */
     @Override
     public boolean match(Object obj) {
         if (!(obj instanceof TablePEntryObject)) {
             return false;
         }
         TablePEntryObject other = (TablePEntryObject) obj;
-        if (databaseId == ALL_DATABASE_ID || other.databaseId == ALL_DATABASE_ID) {
+        if (other.databaseId == ALL_DATABASE_ID) {
             return true;
         }
-        if (tableId == ALL_TABLES_ID || other.tableId == ALL_TABLES_ID) {
+        if (other.tableId == ALL_TABLES_ID) {
             return databaseId == other.databaseId;
         }
         return other.databaseId == databaseId && other.tableId == tableId;
