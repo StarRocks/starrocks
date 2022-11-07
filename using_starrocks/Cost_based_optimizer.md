@@ -264,8 +264,8 @@ SHOW ANALYZE JOB [WHERE predicate]
 | Database     | 数据库名。                                                   |
 | Table        | 表名。                                                       |
 | Columns      | 列名列表。                                                   |
-| Type         | 统计信息的类型。取值： FULL, SAMPLE。                        |
-| Schedule     | 调度的类型。自动采集任务固定为`SCHEDULE`。                   |
+| Type         | 统计信息的类型。取值： FULL，SAMPLE。                        |
+| Schedule     | 调度的类型。自动采集任务固定为 `SCHEDULE`。                   |
 | Properties   | 自定义参数信息。                                             |
 | Status       | 任务状态，包括 PENDING（等待）、RUNNING（正在执行）、SUCCESS（执行成功）和 FAILED（执行失败）。 |
 | LastWorkTime | 最近一次采集时间。                                           |
