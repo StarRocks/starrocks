@@ -189,7 +189,7 @@ public:
         int64_t offsets_size = offsets.size() * sizeof(typename vectorized::BinaryColumnBase<T>::Offset);
         if ((encode_level & 2) && offsets_size >= ENCODE_SIZE_LIMIT) {
             res += sizeof(uint64_t) +
-                   std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(offsets_size));
+                   std::max((int64_t)offsets_size, (int64_t)streamvbyte_max_compressedbytes(upper_int32(offsets_size)));
         } else {
             res += offsets_size;
         }
