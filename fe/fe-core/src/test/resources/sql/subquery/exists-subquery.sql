@@ -382,6 +382,7 @@ RIGHT OUTER JOIN (join-predicate [5: v8 = 2: v2] post-join-predicate [null])
 [end]
 
 /* test ExistentialApply2OuterJoinRule */
+/* test ExistentialApply2OuterJoinRule */
 
 [sql]
 select v1, exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6) from t0;
@@ -524,10 +525,10 @@ LEFT OUTER JOIN (join-predicate [add(20: cast, 3: v3) = subtract(10: t1d, 6: v6)
 [sql]
 select v1 from t0 where exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
 [result]
-RIGHT SEMI JOIN (join-predicate [4: v4 = 1: v1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
-    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
-    EXCHANGE SHUFFLE[1]
-        SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1])
+LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
 [sql]
@@ -545,10 +546,10 @@ LEFT SEMI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d
 [sql]
 select v1 from t0 where not exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
 [result]
-RIGHT ANTI JOIN (join-predicate [4: v4 = 1: v1 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
-    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
-    EXCHANGE SHUFFLE[1]
-        SCAN (columns[1: v1, 2: v2] predicate[null])
+LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
 [end]
 
 [sql]
@@ -564,14 +565,15 @@ LEFT ANTI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d
 [end]
 
 /* test ExistentialApply2JoinRule */
+/* test ExistentialApply2JoinRule */
 
 [sql]
 select v1 from t0 where exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
 [result]
-RIGHT SEMI JOIN (join-predicate [4: v4 = 1: v1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
-    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
-    EXCHANGE SHUFFLE[1]
-        SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1])
+LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[1: v1 = 1])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[4: v4 = 1])
 [end]
 
 [sql]
@@ -589,10 +591,10 @@ LEFT SEMI JOIN (join-predicate [19: add = 18: cast AND add(add(18: cast, 10: t1d
 [sql]
 select v1 from t0 where not exists (select v5 + v4 from t1 where v1 = 1 and v1 = v4 and v2 + v5 = v6);
 [result]
-RIGHT ANTI JOIN (join-predicate [4: v4 = 1: v1 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
-    SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
-    EXCHANGE SHUFFLE[1]
-        SCAN (columns[1: v1, 2: v2] predicate[null])
+LEFT ANTI JOIN (join-predicate [1: v1 = 4: v4 AND 1: v1 = 1 AND add(2: v2, 5: v5) = 6: v6] post-join-predicate [null])
+    SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE SHUFFLE[4]
+        SCAN (columns[4: v4, 5: v5, 6: v6] predicate[null])
 [end]
 
 [sql]
@@ -726,3 +728,4 @@ LEFT OUTER JOIN (join-predicate [1: v1 = 4: v4] post-join-predicate [null])
                 AGGREGATE ([LOCAL] aggregate [{12: countRows=count(1)}] group by [[]] having [null]
                     SCAN (columns[7: v7] predicate[null])
 [end]
+

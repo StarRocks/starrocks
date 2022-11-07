@@ -1,14 +1,14 @@
 [sql]
 select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2 from t0 order by v3) b on a.v = b.v2;
 [result]
-RIGHT SEMI JOIN (join-predicate [7: v2 = 4: sum] post-join-predicate [null])
-    EXCHANGE SHUFFLE[7]
-        SCAN (columns[7: v2] predicate[7: v2 IS NOT NULL])
+LEFT SEMI JOIN (join-predicate [4: sum = 7: v2] post-join-predicate [null])
     EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum), 5: sum=sum(5: sum)}] group by [[]] having [null]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1), 5: sum=sum(2: v2)}] group by [[]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE SHUFFLE[7]
+        SCAN (columns[7: v2] predicate[7: v2 IS NOT NULL])
 [end]
 
 [sql]
@@ -120,14 +120,14 @@ CROSS JOIN (join-predicate [null] post-join-predicate [null])
 [sql]
 select * from (select sum(v1) as v, sum(v2) from t0) a left semi join (select v1,v2,v3 from t0 order by v3) b on a.v = b.v3;
 [result]
-RIGHT SEMI JOIN (join-predicate [8: v3 = 4: sum] post-join-predicate [null])
-    EXCHANGE SHUFFLE[8]
-        SCAN (columns[8: v3] predicate[8: v3 IS NOT NULL])
+LEFT SEMI JOIN (join-predicate [4: sum = 8: v3] post-join-predicate [null])
     EXCHANGE SHUFFLE[4]
         AGGREGATE ([GLOBAL] aggregate [{4: sum=sum(4: sum), 5: sum=sum(5: sum)}] group by [[]] having [null]
             EXCHANGE GATHER
                 AGGREGATE ([LOCAL] aggregate [{4: sum=sum(1: v1), 5: sum=sum(2: v2)}] group by [[]] having [null]
                     SCAN (columns[1: v1, 2: v2] predicate[null])
+    EXCHANGE SHUFFLE[8]
+        SCAN (columns[8: v3] predicate[8: v3 IS NOT NULL])
 [end]
 
 [sql]
@@ -188,11 +188,11 @@ INNER JOIN (join-predicate [3: v3 = 4: v4] post-join-predicate [null])
 [sql]
 select t1f from test_all_type left semi join (select v1,v2 from t0 order by v1) a on a.v2 = test_all_type.t1f;
 [result]
-RIGHT SEMI JOIN (join-predicate [14: cast = 6: t1f] post-join-predicate [null])
-    EXCHANGE SHUFFLE[14]
-        SCAN (columns[12: v2] predicate[cast(12: v2 as double) IS NOT NULL])
+LEFT SEMI JOIN (join-predicate [6: t1f = 14: cast] post-join-predicate [null])
     EXCHANGE SHUFFLE[6]
         SCAN (columns[6: t1f] predicate[null])
+    EXCHANGE SHUFFLE[14]
+        SCAN (columns[12: v2] predicate[cast(12: v2 as double) IS NOT NULL])
 [end]
 
 [sql]
@@ -260,6 +260,7 @@ AGGREGATE ([GLOBAL] aggregate [{7: count=count(7: count)}] group by [[]] having 
                 EXCHANGE SHUFFLE[4]
                     VALUES
 [end]
+
 [sql]
 select * from (select abs(v1) as t from t0 ) ta left join (select abs(v4) as t from t1 group by t) tb on ta.t = tb.t
 [result]
@@ -289,3 +290,4 @@ AGGREGATE ([GLOBAL] aggregate [{13: count=count(13: count)}] group by [[]] havin
                         EXCHANGE SHUFFLE[10]
                             SCAN (columns[10: v4, 11: v5] predicate[10: v4 IS NOT NULL AND 11: v5 IS NOT NULL])
 [end]
+
