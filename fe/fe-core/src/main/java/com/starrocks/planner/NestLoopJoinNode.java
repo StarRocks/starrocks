@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 
 /**
  * NESTLOOP JOIN
- *  TODO: support all kinds of join type
+ * Support all kinds of join type and join conjuncts
  */
 public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode {
 
@@ -35,8 +35,14 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
         super("NESTLOOP JOIN", id, outer, inner, joinOp, eqJoinConjuncts, joinConjuncts);
     }
 
+    /**
+     * Build the filter if inner table contains only one row, which is a common case for scalar subquery
+     */
     @Override
     public void buildRuntimeFilters(IdGenerator<RuntimeFilterId> generator) {
+        if (!joinOp.isInnerJoin() && !joinOp.isLeftSemiJoin() && !joinOp.isRightJoin() && !joinOp.isCrossJoin()) {
+            return;
+        }
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
         PlanNode buildStageNode = this.getChild(1);
         List<Expr> conjuncts = new ArrayList<>(otherJoinConjuncts);
@@ -88,7 +94,8 @@ public class NestLoopJoinNode extends JoinNode implements RuntimeFilterBuildNode
 
     @Override
     protected void toThrift(TPlanNode msg) {
-        Preconditions.checkState(eqJoinConjuncts == null || eqJoinConjuncts.isEmpty());
+        Preconditions.checkState(CollectionUtils.isEmpty(eqJoinConjuncts));
+        Preconditions.checkState(!joinOp.isRightSemiAntiJoin());
         msg.node_type = TPlanNodeType.NESTLOOP_JOIN_NODE;
         msg.nestloop_join_node = new TNestLoopJoinNode();
         msg.nestloop_join_node.join_op = joinOp.toThrift();
