@@ -5,12 +5,10 @@
 #include <glog/logging.h>
 
 #include <boost/algorithm/string.hpp>
-#include <memory>
 #include <orc/OrcFile.hh>
 #include <unordered_map>
 
 #include "common/status.h"
-#include "common/statusor.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
@@ -19,6 +17,12 @@ namespace starrocks::vectorized {
 
 class OrcMapping;
 using OrcMappingPtr = std::shared_ptr<OrcMapping>;
+
+struct OrcMappingOrOrcColumnId {
+    const OrcMappingPtr orc_mapping = nullptr;
+    // Large invalid number
+    size_t orc_column_id = SIZE_MAX;
+};
 
 // OrcMapping is used to create a global mapping for orc
 // Why we need this?
@@ -69,39 +73,36 @@ using OrcMappingPtr = std::shared_ptr<OrcMapping>;
 //     └── 1->10
 class OrcMapping {
 public:
-    size_t get_column_id(size_t src_pos);
-
     // Only Array, Map, Struct contains child mapping, other primitive types will return nullptr directly.
     // src_pos is origin column position in table defination.
-    const OrcMappingPtr get_child_mapping(size_t src_pos);
+    const OrcMappingOrOrcColumnId& get_column_id_or_child_mapping(size_t original_pos_in_table_defination);
+
+    void add_mapping(size_t pos_in_src, size_t orc_column_id, const OrcMappingPtr& child_mapping);
 
     void clear();
-
-    static std::unique_ptr<OrcMapping> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
-                                                     const orc::Type& root_orc_type, const bool case_sensitve);
 
     Status set_include_column_id(const uint64_t slot_pos, const TypeDescriptor& desc,
                                  std::list<uint64_t>* column_id_list);
 
 private:
-    // index in src_slot_descriptor -> column id in orc types
-    std::unordered_map<size_t, size_t> _mapping;
-    // Used for complex data types.
-    std::unordered_map<size_t, OrcMappingPtr> _children;
+    std::unordered_map<size_t, OrcMappingOrOrcColumnId> _mapping;
 
-    void add_mapping(size_t pos_in_src, size_t orc_column_id);
-    void add_child(size_t pos_in_src, const OrcMappingPtr& child_mapping);
+    Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
+                                         std::list<uint64_t>* column_id_list);
+};
 
+class OrcMapingFactory {
+public:
+    static std::unique_ptr<OrcMapping> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
+                                                     const orc::Type& root_orc_type, const bool case_sensitve);
+
+private:
     static Status _init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
                                     const std::vector<SlotDescriptor*>& slot_descs, const orc::Type& orc_root_type,
                                     const bool case_sensitve);
 
     static Status _set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
                                      const orc::Type& orc_type, const bool case_sensitive);
-
-    Status set_include_column_id_by_type(const OrcMappingPtr& mapping, const TypeDescriptor& desc,
-                                         std::list<uint64_t>* column_id_list);
-
-    static std::string format_column_name(const std::string& col_name, bool case_sensitive);
 };
+
 } // namespace starrocks::vectorized
