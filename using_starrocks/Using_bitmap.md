@@ -103,7 +103,7 @@ mysql> select page_id, count(distinct visit_users) from page_uv group by page_id
 3. 对新 value 进行编码并插入全局字典。
 4. 对事实表和更新后的全局字典进行 left join，将词典项替换为 ID。
 
-采用这种构建全局字典的方式，可以通过 Spark 或者 MR 实现全局字典的更新，和对事实表中 Value 列的替换。相比基于 Trie 树的全局字典，这种方式可以分布式化，还可以实现全局字典复用。
+采用这种构建全局字典的方式，可以通过 Spark 或者 MapReduce 实现全局字典的更新，和对事实表中 Value 列的替换。相比基于 Trie 树的全局字典，这种方式可以分布式化，还可以实现全局字典复用。
 
 但需要注意的是，使用这种方式构建全局字典时，事实表会被读取多次，并且过程中有两次 Join 操作，会导致计算全局字典使用大量额外资源。
 
