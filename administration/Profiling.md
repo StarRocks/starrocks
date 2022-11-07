@@ -175,7 +175,7 @@ StarRocks 支持倒排索引，采用位图技术构建索引（Bitmap Index）�
 
 ### 使用物化视图
 
-物化视图（Rollup）本质上可以理解为原始表（Base table）的一个物化索引。建立物化视图时，您可以只选取 Base table 中的部分列作为 schema，schema 中的字段顺序也可与Base table 不同。下列情形可以考虑建立物化视图：
+物化视图（Rollup）本质上可以理解为原始表（Base table）的一个物化索引。建立物化视图时，您可以只选取 Base table 中的部分列作为 schema，schema 中的字段顺序也可与 Base table 不同。下列情形可以考虑建立物化视图：
 
 * Base table 中数据聚合度不高。这通常是因为 Base table 有区分度比较大的字段而导致。此时，您可以考虑选取部分列，建立物化视图。对于上述 `site_visit` 表，`siteid` 可能导致数据聚合度不高。如果有经常根据城市统计 `pv` 需求，可以建立一个只有 `city`，`pv` 的物化视图。
 
