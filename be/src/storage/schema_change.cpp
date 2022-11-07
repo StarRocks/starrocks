@@ -116,22 +116,14 @@ bool ChunkSorter::sort(ChunkPtr& chunk, const TabletSharedPtr& new_tablet) {
 
     _swap_chunk->reset();
 
-    std::vector<ColumnId> sort_key_idxes;
-    if (chunk->schema()->sort_key_idxes().empty()) {
-        int num_key_columns = chunk->schema()->num_key_fields();
-        for (ColumnId i = 0; i < num_key_columns; ++i) {
-            sort_key_idxes.push_back(i);
-        }
-    } else {
-        sort_key_idxes = chunk->schema()->sort_key_idxes();
-    }
     Columns key_columns;
-    for (const auto sort_key_idx : sort_key_idxes) {
-        key_columns.push_back(chunk->get_column_by_index(sort_key_idx));
+    int num_key_columns = chunk->schema()->num_key_fields();
+    for (int i = 0; i < num_key_columns; i++) {
+        key_columns.push_back(chunk->get_column_by_index(i));
     }
+
     SmallPermutation perm = create_small_permutation(chunk->num_rows());
-    Status st =
-            stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(sort_key_idxes.size()), &perm);
+    Status st = stable_sort_and_tie_columns(false, key_columns, SortDescs::asc_null_first(num_key_columns), &perm);
     CHECK(st.ok());
     std::vector<uint32_t> selective;
     permutate_to_selective(perm, &selective);
