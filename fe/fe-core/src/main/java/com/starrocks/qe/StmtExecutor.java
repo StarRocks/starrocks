@@ -667,14 +667,15 @@ public class StmtExecutor {
             // Suicide
             context.setKilled();
         } else {
-            // Check auth
-            // Only user itself and user with admin priv can kill connection
-            if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
-                    && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
-                    PrivPredicate.ADMIN)) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
+            if (!GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
+                // Check auth
+                // Only user itself and user with admin priv can kill connection
+                if (!killCtx.getQualifiedUser().equals(ConnectContext.get().getQualifiedUser())
+                        && !GlobalStateMgr.getCurrentState().getAuth().checkGlobalPriv(ConnectContext.get(),
+                                                                                   PrivPredicate.ADMIN)) {
+                    ErrorReport.reportDdlException(ErrorCode.ERR_KILL_DENIED_ERROR, id);
+                }
             }
-
             killCtx.kill(killStmt.isConnectionKill());
         }
         context.getState().setOk();
