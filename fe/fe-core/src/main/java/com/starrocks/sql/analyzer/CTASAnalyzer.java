@@ -5,9 +5,11 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.KeysDesc;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TypeDef;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -75,12 +77,26 @@ public class CTASAnalyzer {
             }
         }
 
+        boolean isPKTable = false;
+        KeysDesc keysDesc = createTableStmt.getKeysDesc();
+        if (keysDesc != null) {
+            KeysType keysType = keysDesc.getKeysType();
+            if (keysType == KeysType.PRIMARY_KEYS) {
+                isPKTable = true;
+            } else if (keysType != KeysType.DUP_KEYS) {
+                throw new SemanticException("CTAS does not support %s table", keysDesc.getKeysType().toString());
+            }
+        }
+
         for (int i = 0; i < allFields.size(); i++) {
             Type type = AnalyzerUtils.transformType(allFields.get(i).getType());
-            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
-                    null, true, ColumnDef.DefaultValueDef.NOT_SET, "");
-            createTableStmt.addColumnDef(columnDef);
             Expr originExpression = allFields.get(i).getOriginExpression();
+            ColumnDef columnDef = new ColumnDef(finalColumnNames.get(i), new TypeDef(type), false,
+                        null, originExpression.isNullable(), ColumnDef.DefaultValueDef.NOT_SET, "");
+            if (isPKTable) {
+                columnDef.setAllowNull(false);
+            }
+            createTableStmt.addColumnDef(columnDef);
             if (originExpression instanceof SlotRef) {
                 SlotRef slotRef = (SlotRef) originExpression;
                 // lateral json_each(parse_json(c1)) will return null
@@ -129,6 +145,8 @@ public class CTASAnalyzer {
             DistributionDesc distributionDesc =
                     new HashDistributionDesc(defaultBucket, Lists.newArrayList(defaultColumnName));
             createTableStmt.setDistributionDesc(distributionDesc);
+
+
         }
 
         Analyzer.analyze(createTableStmt, session);
