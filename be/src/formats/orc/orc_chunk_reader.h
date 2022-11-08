@@ -25,7 +25,7 @@ class RuntimeState;
 } // namespace starrocks
 namespace starrocks::vectorized {
 
-using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
+using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
                                     const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
 
 // OrcChunkReader is a bridge between apache/orc and Column

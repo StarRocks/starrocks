@@ -67,7 +67,7 @@ struct OrcMappingOrOrcColumnId {
 // └── 1->4
 //     ├── 0->5
 //     └── 1->6
-// 3->7
+// 2->7
 // └── 0->8
 //     ├── 0->9
 //     └── 1->10
@@ -91,7 +91,7 @@ private:
                                          std::list<uint64_t>* column_id_list);
 };
 
-class OrcMapingFactory {
+class OrcMappingFactory {
 public:
     static std::unique_ptr<OrcMapping> build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
                                                      const orc::Type& root_orc_type, const bool case_sensitve);

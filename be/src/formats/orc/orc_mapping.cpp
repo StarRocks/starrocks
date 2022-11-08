@@ -85,8 +85,8 @@ Status OrcMapping::set_include_column_id_by_type(const OrcMappingPtr& mapping, c
     return Status::OK();
 }
 
-std::unique_ptr<OrcMapping> OrcMapingFactory::build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
-                                                            const orc::Type& root_orc_type, const bool case_sensitve) {
+std::unique_ptr<OrcMapping> OrcMappingFactory::build_mapping(const std::vector<SlotDescriptor*>& slot_descs,
+                                                             const orc::Type& root_orc_type, const bool case_sensitve) {
     std::unique_ptr<OrcMapping> orc_mapping = std::make_unique<OrcMapping>();
     Status res = _init_orc_mapping(orc_mapping, slot_descs, root_orc_type, case_sensitve);
     if (!res.ok()) {
@@ -96,9 +96,9 @@ std::unique_ptr<OrcMapping> OrcMapingFactory::build_mapping(const std::vector<Sl
     return orc_mapping;
 }
 
-Status OrcMapingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
-                                           const std::vector<SlotDescriptor*>& slot_descs,
-                                           const orc::Type& orc_root_type, const bool case_sensitve) {
+Status OrcMappingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
+                                            const std::vector<SlotDescriptor*>& slot_descs,
+                                            const orc::Type& orc_root_type, const bool case_sensitve) {
     // build mapping for orc [orc field name -> pos in orc]
     std::unordered_map<std::string, size_t> orc_fieldname_2_pos;
     for (size_t i = 0; i < orc_root_type.getSubtypeCount(); i++) {
@@ -134,8 +134,8 @@ Status OrcMapingFactory::_init_orc_mapping(std::unique_ptr<OrcMapping>& mapping,
 
 // origin_type is TypeDescriptor in table defination
 // orc_type is orc's type
-Status OrcMapingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
-                                            const orc::Type& orc_type, const bool case_sensitive) {
+Status OrcMappingFactory::_set_child_mapping(const OrcMappingPtr& mapping, const TypeDescriptor& origin_type,
+                                             const orc::Type& orc_type, const bool case_sensitive) {
     DCHECK(origin_type.is_complex_type());
     if (origin_type.type == PrimitiveType::TYPE_STRUCT) {
         DCHECK(orc_type.getKind() == orc::TypeKind::STRUCT);
