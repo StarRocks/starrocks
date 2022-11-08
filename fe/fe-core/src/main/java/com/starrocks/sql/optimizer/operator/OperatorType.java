@@ -106,4 +106,6 @@ public enum OperatorType {
     PATTERN,
     PATTERN_LEAF,
     PATTERN_MULTI_LEAF,
+    // for all type scan node
+    PATTERN_SCAN,
 }
