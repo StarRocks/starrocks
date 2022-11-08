@@ -14,7 +14,7 @@
 user_identity:user@'host'
 ```
 
- 删除指定的 `user identitiy`。`user identitiy`由`user_name` 和 `host`两部分组成，其中 `user_name` 为用户名。`host` 标识用户端连接所在的主机地址。
+ 删除指定的 `user identitiy`。`user identitiy` 由 `user_name` 和 `host` 两部分组成，其中 `user_name` 为用户名。`host` 标识用户端连接所在的主机地址。
 
 ## 示例
 
