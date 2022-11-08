@@ -4,7 +4,9 @@
 
 ### Syntax
 
+```Haskell
 VARCHAR money_format(Number)
+```
 
 This function returns a string formatted as a currency string. The integer part is separated by comma every three bits and the decimal part is reserved for two bits.
 

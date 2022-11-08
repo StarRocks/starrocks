@@ -6,7 +6,7 @@ Returns a random UUID of the LARGEINT type. This function has an execution perfo
 
 ## Syntax
 
-```Plain Text
+```Haskell
 uuid_numeric();
 ```
 

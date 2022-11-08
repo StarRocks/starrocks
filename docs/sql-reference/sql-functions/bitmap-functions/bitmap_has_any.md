@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)`
+```Haskell
+B00LEAN BITMAP_HAS_ANY(BITMAP lhs, BITMAP rhs)
+```
 
 Calculate whether there are intersecting elements between two Bitmap columns, and the return value is Boolean value.
 

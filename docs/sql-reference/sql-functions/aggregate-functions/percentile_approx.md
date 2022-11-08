@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])`
+```Haskell
+PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
+```
 
 It returns the approximation of the pth percentile , where the value of p is between 0 and 1.
 
