@@ -6,7 +6,7 @@ Obtains the maximum value of a bitmap. If the bitmap is `NULL`, this function re
 
 ## Syntax
 
-```SQL
+```Haskell
 bitmap_max(bitmap)
 ```
 
