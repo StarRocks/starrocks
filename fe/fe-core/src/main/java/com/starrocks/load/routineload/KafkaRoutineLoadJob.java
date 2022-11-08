@@ -50,6 +50,8 @@ import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.SmallFileMgr;
 import com.starrocks.common.util.SmallFileMgr.SmallFile;
+import com.starrocks.load.RoutineLoadDesc;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
@@ -65,6 +67,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * KafkaRoutineLoadJob is a kind of RoutineLoadJob which fetch data from kafka.
@@ -385,12 +388,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 db.getId(), tableId, stmt.getKafkaBrokerList(), stmt.getKafkaTopic());
         kafkaRoutineLoadJob.setOptional(stmt);
         kafkaRoutineLoadJob.checkCustomProperties();
-        kafkaRoutineLoadJob.checkCustomPartition();
+        kafkaRoutineLoadJob.checkCustomPartition(kafkaRoutineLoadJob.customKafkaPartitions);
 
         return kafkaRoutineLoadJob;
     }
 
-    private void checkCustomPartition() throws UserException {
+    private void checkCustomPartition(List<Integer> customKafkaPartitions) throws UserException {
         if (customKafkaPartitions.isEmpty()) {
             return;
         }
@@ -513,6 +516,35 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
                 }
             }
         }
+    }
+
+    /**
+     * add extra parameter check for changing kafka offset
+     * 1. if customKafkaParition is specified, only the specific partitions can be modified
+     * 2. otherwise, will check if partition is validated by actually reading kafka meta from kafka proxy
+     */
+    @Override
+    public void modifyJob(RoutineLoadDesc routineLoadDesc, Map<String, String> jobProperties,
+                          RoutineLoadDataSourceProperties dataSourceProperties, OriginStatement originStatement,
+                          boolean isReplay) throws DdlException {
+        if (!isReplay && dataSourceProperties != null && dataSourceProperties.hasAnalyzedProperties()) {
+            List<Pair<Integer, Long>> kafkaPartitionOffsets = dataSourceProperties.getKafkaPartitionOffsets();
+            if (customKafkaPartitions != null && customKafkaPartitions.size() != 0) {
+                for (Pair<Integer, Long> pair : kafkaPartitionOffsets) {
+                    if (! customKafkaPartitions.contains(pair.first)) {
+                        throw new DdlException("The specified partition " + pair.first + " is not in the custom partitions");
+                    }
+                }
+            } else {
+                // check if partition is validate
+                try {
+                    checkCustomPartition(kafkaPartitionOffsets.stream().map(k -> k.first).collect(Collectors.toList()));
+                } catch (UserException e) {
+                    throw new DdlException("The specified partition is not in the consumed partitions ", e);
+                }
+            }
+        }
+        super.modifyJob(routineLoadDesc, jobProperties, dataSourceProperties, originStatement, isReplay);
     }
 
     @Override
