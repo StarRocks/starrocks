@@ -8,7 +8,9 @@
 
 ## 语法
 
-`group_concat(str[, VARCHAR sep])`
+```Haskell
+group_concat(str[, VARCHAR sep])
+```
 
 ## 参数说明
 

@@ -6,7 +6,7 @@
 
 ## 语法
 
-```sql
+```Haskell
 BITMAP_UNION_COUNT(value)
 ```
 

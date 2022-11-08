@@ -6,7 +6,9 @@
 
 ## 语法
 
-`ARRAY_DISTINCT(array)`
+```Haskell
+ARRAY_DISTINCT(array)
+```
 
 ## 参数说明
 
