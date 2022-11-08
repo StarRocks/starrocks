@@ -48,7 +48,7 @@ public:
     Status from_string(const std::string& value_string) {
         if (_is_string_type) {
             if (value_string.size() > _var_length) {
-                Slice* slice = reinterpret_cast<Slice*>(cell_ptr());
+                auto* slice = reinterpret_cast<Slice*>(_cell_ptr());
                 slice->size = value_string.size();
                 _var_length = slice->size;
                 _string_content.reset(new char[slice->size]);
@@ -58,17 +58,12 @@ public:
         return _rep->from_string(_field_buf + 1, value_string);
     }
 
-    bool is_string_type() const { return _is_string_type; }
-    char* ptr() const { return _field_buf + 1; }
-    size_t size() const { return _rep->size(); }
     bool is_null() const { return *reinterpret_cast<bool*>(_field_buf); }
-    void set_is_null(bool is_null) { *reinterpret_cast<bool*>(_field_buf) = is_null; }
     void set_null() { *reinterpret_cast<bool*>(_field_buf) = true; }
-    void* cell_ptr() const { return _field_buf + 1; }
-    void* mutable_cell_ptr() const { return _field_buf + 1; }
-    const Field* field() const { return _rep; }
 
 private:
+    void* _cell_ptr() const { return _field_buf + 1; }
+
     Field* _rep = nullptr;
     bool _is_string_type;
     char* _field_buf = nullptr;

@@ -30,7 +30,6 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/exec_env.h"
 #include "service/backend_options.h"
 #include "storage/olap_define.h"
 #include "storage/rowset/rowset_factory.h"
@@ -40,7 +39,7 @@
 #include "storage/tablet_manager.h"
 #include "storage/tablet_meta_manager.h"
 #include "storage/txn_manager.h"
-#include "storage/utils.h" // for check_dir_existed
+#include "storage/utils.h"
 #include "util/defer_op.h"
 #include "util/errno.h"
 #include "util/monotime.h"
