@@ -3,7 +3,6 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.delta.DeltaLakeConnectorFactory;
 import com.starrocks.connector.hive.HiveConnectorFactory;
@@ -14,7 +13,8 @@ import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -26,7 +26,7 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
-    public static final List<String> SUPPORT_CONNECTOR_TYPE = Lists.newArrayList();
+    public static final Set<String> SUPPORT_CONNECTOR_TYPE = new HashSet<>();
 
     public ConnectorMgr() {
         init();
