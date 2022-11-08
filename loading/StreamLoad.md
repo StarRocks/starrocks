@@ -27,6 +27,10 @@ Stream Load 支持如下数据文件格式：
 
 您可以通过 `streaming_load_max_mb` 参数来设置单个待导入数据文件的大小上限，但一般不建议调大此参数。具体请参见本文档“[参数配置](../loading/StreamLoad.md#参数配置)”章节。
 
+> **说明**
+>
+> 对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+
 ## 使用限制
 
 Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
@@ -35,11 +39,15 @@ Stream Load 当前不支持导入某一列为 JSON 的 CSV 文件的数据。
 
 Stream Load 需要您在客户端上通过 HTTP 发送导入作业请求给 FE 节点，FE 节点会通过 HTTP 重定向 (Redirect) 指令将请求转发给某一个 BE 节点。
 
-> 说明：您也可以直接发送导入作业请求给某一个 BE 节点。
+> **说明**
+>
+> 您也可以直接发送导入作业请求给某一个 BE 节点。
 
 接收导入作业请求的 BE 节点作为 Coordinator BE 节点，将数据按表结构划分、并分发数据到相关的 BE 节点。导入作业的结果信息由 Coordinator BE 节点返回给客户端。
 
-> 说明：如果把导入作业请求发送给 FE 节点，FE 节点会通过轮询机制选定由哪一个 BE 节点来接收请求，从而实现 StarRocks 集群内的负载均衡。因此，推荐您把导入作业请求发送给 FE 节点，由 FE 节点来选定接收请求的 Coordinator BE 节点。
+> **说明**
+>
+> 如果把导入作业请求发送给 FE 节点，FE 节点会通过轮询机制选定由哪一个 BE 节点来接收请求，从而实现 StarRocks 集群内的负载均衡。因此，推荐您把导入作业请求发送给 FE 节点，由 FE 节点来选定接收请求的 Coordinator BE 节点。
 
 下图展示了 Stream Load 的主要流程：
 
@@ -156,7 +164,9 @@ curl -v --location-trusted -u root: -H "strict_mode: true" \
 - 提取 `jsonpaths` 参数中声明的 `name` 和 `code` 两个字段，**按顺序映射**到 `columns` 参数中声明的 `city` 和 `tmp_id` 两列。
 - 提取 `columns` 参数声明中的 `city` 和 `id` 两列，**按名称映射**到 `table2` 表中的 `city` 和 `id` 两列。
 
-> 说明：上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 字段对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
+> **说明**
+>
+> 上述示例中，在导入过程中先将 `example2.json` 文件中 `code` 字段对应的值乘以 100，然后再落入到 `table2` 表的 `id` 中。
 
 有关导入 JSON 数据时 `jsonpaths`、`columns` 和 StarRocks 表中的字段之间的对应关系，请参见 STREAM LOAD 文档中“[列映射](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#列映射)”章节。
 
@@ -202,7 +212,7 @@ Stream Load 支持通过程序导入数据流，具体操作方法，请参见�
 
   需要注意的是，如果您调大该参数的取值，需要重启 BE 才能生效，并且系统性能有可能会受影响，并且也会增加失败重试时的代价。
 
-> 说明
+> **说明**
 >
 > 导入 JSON 格式的数据时，需要注意以下两点：
 >
@@ -217,7 +227,9 @@ Stream Load 支持通过程序导入数据流，具体操作方法，请参见�
 
   例如，如果待导入数据文件的大小为 10 GB，并且当前 StarRocks 集群的平均导入速度为 100 MB/s，则超时时间应该设置为大于 100 秒。
 
-  > 说明：“平均导入速度”是指目前 StarRocks 集群的平均导入速度。导入速度主要受限于集群的磁盘 I/O 及 BE 个数。
+  > **说明**
+  >
+  > “平均导入速度”是指目前 StarRocks 集群的平均导入速度。导入速度主要受限于集群的磁盘 I/O 及 BE 个数。
 
   Stream Load 还提供 `timeout` 参数来设置当前导入作业的超时时间。具体请参见 [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md)。
 
