@@ -147,9 +147,10 @@ public class CatalogMgr {
         if (Strings.isNullOrEmpty(type)) {
             throw new DdlException("Missing properties 'type'");
         }
-        if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(type)) {
-            // if catalog type is not supported, skip it
-            LOG.warn("Replay catalog encounter unknown catalog type: " + type);
+
+        // skip unsupport connector type
+        if (!connectorMgr.SUPPORT_CONNECTOR_TYPE.contains(type)) {
+            LOG.warn("Replay catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
             return;
         }
 
@@ -173,7 +174,10 @@ public class CatalogMgr {
         String catalogName = log.getCatalogName();
         readLock();
         try {
-            Preconditions.checkState(catalogs.containsKey(catalogName), "Catalog '%s' doesn't exist", catalogName);
+            if (!catalogs.containsKey(catalogName)) {
+                LOG.warn("Catalog [{}] doesn't exist", catalogName);
+                return;
+            }
         } finally {
             readUnlock();
         }

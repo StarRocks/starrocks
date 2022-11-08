@@ -3,6 +3,7 @@
 package com.starrocks.connector;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.starrocks.common.DdlException;
 import com.starrocks.connector.delta.DeltaLakeConnectorFactory;
 import com.starrocks.connector.hive.HiveConnectorFactory;
@@ -13,6 +14,7 @@ import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -23,6 +25,8 @@ public class ConnectorMgr {
     private final ConcurrentHashMap<String, Connector> connectors = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, ConnectorFactory> connectorFactories = new ConcurrentHashMap<>();
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
+
+    public static final List<String> SUPPORT_CONNECTOR_TYPE = Lists.newArrayList();
 
     public ConnectorMgr() {
         init();
@@ -39,6 +43,7 @@ public class ConnectorMgr {
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
+        SUPPORT_CONNECTOR_TYPE.add(connectorFactory.name());
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
         Preconditions.checkArgument(existingConnectorFactory == null,
