@@ -308,4 +308,4 @@ Execute `Kubectl get po -A` to check the status of pods.
     Warning  BackOff    41s (x27 over 5m46s)   kubelet            Back-off restarting failed container
     ```
 
-- **Solution:** Refer to [Deploy a CN cluster](#deploy-cn) and check the path of **start_cn.shell** in **cn.yaml**.
+- **Solution:** Refer to [Deploy a CN cluster](#deploy-a-cn-cluster) and check the path of **start_cn.shell** in **cn.yaml**.
