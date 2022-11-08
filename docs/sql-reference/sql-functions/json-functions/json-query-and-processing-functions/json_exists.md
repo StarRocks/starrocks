@@ -6,7 +6,7 @@ Checks whether a JSON object contains an element that can be located by the `jso
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 json_exists(json_object_expr, json_path)
 ```
 

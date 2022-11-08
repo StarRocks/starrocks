@@ -6,7 +6,7 @@ Converts an array into BITMAP values.
 
 ## Syntax
 
-```Plain
+```Haskell
 BITMAP array_to_bitmap(array)
 ```
 
