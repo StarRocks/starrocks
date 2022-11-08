@@ -6,7 +6,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeNameFormat;
-import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -16,6 +15,7 @@ import com.starrocks.sql.ast.StatementBase;
 
 import java.util.Map;
 
+import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
@@ -50,7 +50,7 @@ public class CatalogAnalyzer {
                 throw new SemanticException("'type' can not be null or empty");
             }
             statement.setCatalogType(catalogType);
-            if (!ConnectorMgr.SUPPORT_CONNECTOR_TYPE.contains(catalogType)) {
+            if (!SUPPORT_CONNECTOR_TYPE.contains(catalogType)) {
                 throw new SemanticException("[type : %s] is not supported", catalogType);
             }
             return null;

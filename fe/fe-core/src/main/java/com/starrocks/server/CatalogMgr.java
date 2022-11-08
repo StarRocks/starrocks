@@ -44,6 +44,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.ResourceMgr.NEED_MAPPING_CATALOG_RESOURCES;
+import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.connector.hive.HiveConnector.HIVE_METASTORE_URIS;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.getResourceMappingCatalogName;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
@@ -149,8 +150,8 @@ public class CatalogMgr {
         }
 
         // skip unsupport connector type
-        if (!connectorMgr.SUPPORT_CONNECTOR_TYPE.contains(type)) {
-            LOG.warn("Replay catalog [{}] encounter unknown catalog type [{}]", catalogName, type);
+        if (!SUPPORT_CONNECTOR_TYPE.contains(type)) {
+            LOG.error("Replay catalog [{}] encounter unknown catalog type [{}], ignore it", catalogName, type);
             return;
         }
 
@@ -175,7 +176,7 @@ public class CatalogMgr {
         readLock();
         try {
             if (!catalogs.containsKey(catalogName)) {
-                LOG.warn("Catalog [{}] doesn't exist", catalogName);
+                LOG.error("Catalog [{}] doesn't exist, unsupport this catalog type, ignore it", catalogName);
                 return;
             }
         } finally {
