@@ -8,13 +8,13 @@ Converts a value between a JSON data type and an SQL data type.
 
 - Converts a value from a JSON data type to an SQL data type.
 
-```SQL
+```Haskell
 cast(json_expr AS sql_data_type)
 ```
 
 - Converts a value from an SQL data type to a JSON data type.
 
-```SQL
+```Haskell
 cast(sql_expr AS JSON)
 ```
 
