@@ -5,6 +5,8 @@ package com.starrocks.lake.compaction;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
+import javax.annotation.Nullable;
+
 class PartitionStatistics {
     @SerializedName(value = "partition")
     private final PartitionIdentifier partition;
@@ -14,6 +16,8 @@ class PartitionStatistics {
     private PartitionVersion currentVersion;
     @SerializedName(value = "nextCompactionTime")
     private long nextCompactionTime;
+    @SerializedName(value = "compactionScore")
+    private Quantiles compactionScore;
 
     PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
@@ -55,6 +59,15 @@ class PartitionStatistics {
 
     long getDeltaVersions() {
         return getCurrentVersion().getVersion() - getLastCompactionVersion().getVersion();
+    }
+
+    void setCompactionScore(@Nullable Quantiles compactionScore) {
+        this.compactionScore = compactionScore;
+    }
+
+    @Nullable
+    Quantiles getCompactionScore() {
+        return compactionScore;
     }
 
     @Override

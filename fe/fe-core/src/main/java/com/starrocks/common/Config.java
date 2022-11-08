@@ -1759,19 +1759,22 @@ public class Config extends ConfigBase {
     public static String jaeger_grpc_endpoint = "";
 
     @ConfField
-    public static String lake_compaction_selector = "SimpleSelector";
+    public static String lake_compaction_selector = "ScoreSelector";
 
     @ConfField
-    public static String lake_compaction_sorter = "RandomSorter";
+    public static String lake_compaction_sorter = "ScoreSorter";
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_min_versions = 3;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_threshold_versions = 10;
 
-    @ConfField
+    @ConfField(mutable = true)
     public static long lake_compaction_simple_selector_threshold_seconds = 300;
+
+    @ConfField(mutable = true)
+    public static double lake_compaction_score_selector_min_score = 1.0;
 
     /**
      * -1 means calculate the value in an adaptive way.

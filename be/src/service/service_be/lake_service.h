@@ -65,6 +65,11 @@ public:
                            ::starrocks::lake::RestoreSnapshotsResponse* response,
                            ::google::protobuf::Closure* done) override;
 
+    void check_compaction(::google::protobuf::RpcController* controller,
+                          const ::starrocks::lake::CheckCompactionRequest* request,
+                          ::starrocks::lake::CheckCompactionResponse* response,
+                          ::google::protobuf::Closure* done) override;
+
 private:
     ExecEnv* _env;
 

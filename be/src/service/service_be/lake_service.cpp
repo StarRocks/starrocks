@@ -15,9 +15,11 @@
 #include "gutil/macros.h"
 #include "runtime/exec_env.h"
 #include "runtime/lake_snapshot_loader.h"
+#include "storage/lake/compaction_policy.h"
 #include "storage/lake/compaction_task.h"
 #include "storage/lake/tablet.h"
 #include "util/countdown_latch.h"
+#include "util/defer_op.h"
 #include "util/threadpool.h"
 
 namespace starrocks {
@@ -74,11 +76,14 @@ void LakeServiceImpl::publish_version(::google::protobuf::RpcController* control
             auto new_version = request->new_version();
             auto txns = request->txn_ids().data();
             auto txns_size = request->txn_ids().size();
+            auto tablet_manager = _env->lake_tablet_manager();
 
-            auto st =
-                    _env->lake_tablet_manager()->publish_version(tablet_id, base_version, new_version, txns, txns_size);
-            if (!st.ok()) {
-                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << st;
+            auto res = tablet_manager->publish_version(tablet_id, base_version, new_version, txns, txns_size);
+            if (res.ok()) {
+                std::lock_guard l(response_mtx);
+                response->mutable_compaction_scores()->insert({tablet_id, *res});
+            } else {
+                LOG(WARNING) << "Fail to publish version for tablet " << tablet_id << ": " << res.status();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
             }
@@ -237,13 +242,13 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
 
     for (auto tablet_id : request->tablet_ids()) {
         auto task = [&, tablet_id]() {
+            DeferOp defer([&]() { latch.count_down(); });
             auto t1 = butil::gettimeofday_ms();
             auto res = _env->lake_tablet_manager()->compact(tablet_id, request->version(), request->txn_id());
             if (!res.ok()) {
                 LOG(ERROR) << "Fail to create compaction task for tablet " << tablet_id << ": " << res.status();
                 std::lock_guard l(response_mtx);
                 response->add_failed_tablets(tablet_id);
-                latch.count_down();
                 return;
             }
 
@@ -261,7 +266,6 @@ void LakeServiceImpl::compact(::google::protobuf::RpcController* controller,
                 VLOG(3) << "Compacted tablet " << tablet_id << ". version=" << request->version()
                         << " txn_id=" << request->txn_id() << " cost=" << (t2 - t1) << " stats=" << stats;
             }
-            latch.count_down();
         };
 
         auto task_wrapper = [&, f = std::move(task)]() {
@@ -591,4 +595,42 @@ void LakeServiceImpl::restore_snapshots(::google::protobuf::RpcController* contr
         cntl->SetFailed(st.to_string());
     }
 }
+
+void LakeServiceImpl::check_compaction(::google::protobuf::RpcController* controller,
+                                       const ::starrocks::lake::CheckCompactionRequest* request,
+                                       ::starrocks::lake::CheckCompactionResponse* response,
+                                       ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
+    (void)controller;
+
+    auto response_mtx = bthread::Mutex();
+    auto latch = BThreadCountDownLatch(request->tablet_ids_size());
+    auto version = request->version();
+    for (auto tablet_id : request->tablet_ids()) {
+        auto task = [&, tablet_id]() -> Status {
+            DeferOp defer([&]() { latch.count_down(); });
+            ASSIGN_OR_RETURN(auto tablet, _env->lake_tablet_manager()->get_tablet(tablet_id));
+            ASSIGN_OR_RETURN(auto metadata_or, tablet.get_metadata(version));
+            auto score1 = base_compaction_score(*metadata_or);
+            auto score2 = cumulative_compaction_score(*metadata_or);
+            std::lock_guard l(response_mtx);
+            response->mutable_compaction_scores()->insert({tablet_id, std::max(score1, score2)});
+            return Status::OK();
+        };
+
+        auto task_with_log = [&, tablet_id, f = std::move(task)]() {
+            auto st = f();
+            LOG_IF(WARNING, !st.ok()) << "Fail to compute compaction score of tablet " << tablet_id << ": " << st;
+        };
+
+        auto st = _compact_thread_pool->submit_func(std::move(task_with_log));
+        if (!st.ok()) {
+            latch.count_down();
+            LOG(WARNING) << "Fail to submit check compaction task of tablet " << tablet_id << ": " << st;
+        }
+    }
+
+    latch.wait();
+}
+
 } // namespace starrocks

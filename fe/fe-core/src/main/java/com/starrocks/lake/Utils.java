@@ -73,8 +73,13 @@ public class Utils {
         return groupMap;
     }
 
-    @NotNull
     public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion)
+            throws NoAliveBackendException, RpcException {
+        publishVersion(tablets, txnId, baseVersion, newVersion, null);
+    }
+
+    public static void publishVersion(@NotNull List<Tablet> tablets, long txnId, long baseVersion, long newVersion, Map<Long,
+            Double> compactionScores)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();
         for (Tablet tablet : tablets) {
@@ -116,13 +121,15 @@ public class Utils {
                     throw new RpcException(backendList.get(i).getHost(),
                             "Fail to publish version for tablets {}" + response.failedTablets);
                 }
+                if (compactionScores != null && response != null && response.compactionScores != null) {
+                    compactionScores.putAll(response.compactionScores);
+                }
             } catch (Exception e) {
                 throw new RpcException(backendList.get(i).getHost(), e.getMessage());
             }
         }
     }
 
-    @NotNull
     public static void publishLogVersion(@NotNull List<Tablet> tablets, long txnId, long version)
             throws NoAliveBackendException, RpcException {
         Map<Long, List<Long>> beToTablets = new HashMap<>();

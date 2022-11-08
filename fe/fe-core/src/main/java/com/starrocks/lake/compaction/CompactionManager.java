@@ -58,10 +58,12 @@ public class CompactionManager {
         }
     }
 
-    public synchronized void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime) {
+    public synchronized void handleLoadingFinished(PartitionIdentifier partition, long version, long versionTime,
+                                                   Quantiles compactionScore) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfAbsent(partition, PartitionStatistics::new);
         PartitionVersion currentVersion = new PartitionVersion(version, versionTime);
         statistics.setCurrentVersion(currentVersion);
+        statistics.setCompactionScore(compactionScore);
         if (statistics.getLastCompactionVersion() == null) {
             // Set version-1 as last compaction version
             statistics.setLastCompactionVersion(new PartitionVersion(version - 1, versionTime));
@@ -71,11 +73,13 @@ public class CompactionManager {
         }
     }
 
-    public synchronized void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime) {
+    public synchronized void handleCompactionFinished(PartitionIdentifier partition, long version, long versionTime,
+                                                      Quantiles compactionScore) {
         PartitionStatistics statistics = partitionStatisticsHashMap.computeIfAbsent(partition, PartitionStatistics::new);
         PartitionVersion compactionVersion = new PartitionVersion(version, versionTime);
         statistics.setCurrentVersion(compactionVersion);
         statistics.setLastCompactionVersion(compactionVersion);
+        statistics.setCompactionScore(compactionScore);
         if (LOG.isDebugEnabled()) {
             LOG.debug("Finished compaction: {}", statistics);
         }
