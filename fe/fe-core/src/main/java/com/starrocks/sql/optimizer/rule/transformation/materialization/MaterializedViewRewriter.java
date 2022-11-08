@@ -17,10 +17,8 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Projection;
-import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -102,7 +100,6 @@ public class MaterializedViewRewriter {
         EquivalenceClasses queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
 
         // should get all query tables
-        // add filter here
         List<Table> queryTables = Utils.getAllTables(queryExpression);
 
         LogicalProjectOperator mvTopProjection;
@@ -156,7 +153,7 @@ public class MaterializedViewRewriter {
         Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns =
                 getRelationIdToColumns(materializationContext.getMvColumnRefFactory());
 
-        // for query: A1 join A2 join B, mv A1 join A2 join B
+        // for query: A1 join A2 join B, mv: A1 join A2 join B
         // there may be two mapping:
         //    1. A1 -> A1, A2 -> A2, B -> B
         //    2. A1 -> A2, A2 -> A1, B -> B
@@ -185,7 +182,6 @@ public class MaterializedViewRewriter {
         return results;
     }
 
-    // rewriteContext is query to view context
     private OptExpression tryRewriteForRelationMapping(RewriteContext rewriteContext) {
         // the rewritten expression to replace query
         OptExpression rewrittenExpression = OptExpression.create(materializationContext.getScanMvOperator());
@@ -211,7 +207,7 @@ public class MaterializedViewRewriter {
             ScalarOperator otherPredicates = Utils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
             if (!Utils.isAlwaysTrue(equalPredicates) || !Utils.isAlwaysTrue(otherPredicates)) {
-                Map<ColumnRefOperator, ScalarOperator> viewExprMap = getProjectionMap(rewriteContext.getMvProjection(),
+                Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(rewriteContext.getMvProjection(),
                         rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
 
                 if (!Utils.isAlwaysTrue(equalPredicates)) {
@@ -228,7 +224,6 @@ public class MaterializedViewRewriter {
                     if (rewrittens == null) {
                         return null;
                     }
-                    // TODO: consider normalizing it
                     equalPredicates = Utils.compoundAnd(rewrittens);
                 }
 
@@ -257,7 +252,7 @@ public class MaterializedViewRewriter {
                 deriveLogicalProperty(rewrittenExpression);
             }
 
-            // add projection operator
+            // add projection
             rewrittenExpression = viewBasedRewrite(rewriteContext, rewrittenExpression);
         }
         return rewrittenExpression;
@@ -343,7 +338,7 @@ public class MaterializedViewRewriter {
 
     // TODO: consider no-loss type cast
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> viewExprMap = getProjectionMap(rewriteContext.getMvProjection(),
+        Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(rewriteContext.getMvProjection(),
                 rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
         // normalize view projection by query relation and ec
         Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
@@ -355,7 +350,7 @@ public class MaterializedViewRewriter {
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
                                     Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                     OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> queryMap = getProjectionMap(rewriteContext.getQueryProjection(),
+        Map<ColumnRefOperator, ScalarOperator> queryMap = Utils.getProjectionMap(rewriteContext.getQueryProjection(),
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
@@ -377,39 +372,7 @@ public class MaterializedViewRewriter {
         }
         Projection newProjection = new Projection(newQueryProjection);
         targetExpr.getOp().setProjection(newProjection);
-        // LogicalProjectOperator projectOperator = new LogicalProjectOperator(newQueryProjection);
-        // OptExpression projection = OptExpression.create(projectOperator, targetExpr);
-        // deriveLogicalProperty(projection);
         return targetExpr;
-    }
-
-    protected Map<ColumnRefOperator, ScalarOperator> getProjectionMap(LogicalProjectOperator projection,
-                                                                    OptExpression expression, ColumnRefFactory refFactory) {
-        Map<ColumnRefOperator, ScalarOperator> projectionMap;
-        if (projection != null) {
-            projectionMap = projection.getColumnRefMap();
-        } else {
-            if (expression.getOp().getProjection() != null) {
-                projectionMap = expression.getOp().getProjection().getColumnRefMap();
-            } else {
-                projectionMap = Maps.newHashMap();
-                if (expression.getOp() instanceof LogicalAggregationOperator) {
-                    LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
-                    Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
-                            java.util.function.Function.identity(),
-                            java.util.function.Function.identity()));
-                    projectionMap.putAll(keyMap);
-                    projectionMap.putAll(agg.getAggregations());
-                } else {
-                    ColumnRefSet refSet = expression.getOutputColumns();
-                    for (int columnId : refSet.getColumnIds()) {
-                        ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
-                        projectionMap.put(columnRef, columnRef);
-                    }
-                }
-            }
-        }
-        return projectionMap;
     }
 
     protected List<ScalarOperator> rewriteQueryScalarOpToTarget(List<ScalarOperator> exprsToRewrites,
@@ -554,14 +517,9 @@ public class MaterializedViewRewriter {
         // relationId -> column list
         Map<Integer, List<ColumnRefOperator>> result = Maps.newHashMap();
         for (Map.Entry<Integer, Integer> entry : refFactory.getColumnToRelationIds().entrySet()) {
-            if (result.containsKey(entry.getValue())) {
-                ColumnRefOperator columnRef = refFactory.getColumnRef(entry.getKey());
-                result.get(entry.getValue()).add(columnRef);
-            } else {
-                ColumnRefOperator columnRef = refFactory.getColumnRef(entry.getKey());
-                List<ColumnRefOperator> columnRefs = Lists.newArrayList(columnRef);
-                result.put(entry.getValue(), columnRefs);
-            }
+            result.computeIfAbsent(entry.getValue(), k -> Lists.newArrayList());
+            ColumnRefOperator columnRef = refFactory.getColumnRef(entry.getKey());
+            result.get(entry.getValue()).add(columnRef);
         }
         return result;
     }

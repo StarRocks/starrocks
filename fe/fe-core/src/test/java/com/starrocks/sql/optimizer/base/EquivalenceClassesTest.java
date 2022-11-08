@@ -27,5 +27,15 @@ public class EquivalenceClassesTest {
         Assert.assertEquals(4, columnSet.size());
         List<Set<ColumnRefOperator>> columnSetList = ec.getEquivalenceClasses();
         Assert.assertEquals(4, columnSetList.size());
+        Assert.assertEquals(columnSetList.get(0), columnSetList.get(1));
+        Assert.assertEquals(columnSetList.get(1), columnSetList.get(2));
+        Assert.assertEquals(columnSetList.get(2), columnSetList.get(3));
+
+        ColumnRefOperator columnRef5 = columnRefFactory.create("column5", Type.INT, true);
+        ColumnRefOperator columnRef6 = columnRefFactory.create("column6", Type.INT, true);
+        ColumnRefOperator columnRef7 = columnRefFactory.create("column7", Type.INT, true);
+        ec.addEquivalence(columnRef5, columnRef6);
+        ec.addEquivalence(columnRef5, columnRef7);
+        Assert.assertEquals(ec.getEquivalenceClass(columnRef6), ec.getEquivalenceClass(columnRef7));
     }
 }

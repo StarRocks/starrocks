@@ -23,13 +23,10 @@ public class EquivalenceClasses {
         Set<ColumnRefOperator> s2 = columnToEquivalenceClass.get(right);
 
         if (s1 != null && s2 != null) {
-            if (s1.size() > s2.size()) {
-                Set<ColumnRefOperator> tmp = s1;
-                s1 = s2;
-                s2 = tmp;
-            }
-            for (ColumnRefOperator columnRefOperator : s1) {
-                s2.add(columnRefOperator);
+            Set<ColumnRefOperator> shortSet = s1.size() < s2.size() ? s1 : s2;
+            Set<ColumnRefOperator> longSet = s1.size() < s2.size() ? s2 : s1;
+            for (ColumnRefOperator columnRefOperator : shortSet) {
+                longSet.add(columnRefOperator);
                 columnToEquivalenceClass.put(columnRefOperator, s2);
             }
         } else if (s1 != null) {

@@ -4,6 +4,7 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
@@ -69,6 +70,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -866,10 +868,9 @@ public class Utils {
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
             boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
-            if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN && isEqualPredicate) {
-                return true;
+            if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN || !isEqualPredicate) {
+                return false;
             }
-            return false;
         }
         for (OptExpression child : root.getInputs()) {
             if (!isAllEqualInnerJoin(child)) {
@@ -892,5 +893,35 @@ public class Utils {
             }
         }
         return false;
+    }
+
+    public static Map<ColumnRefOperator, ScalarOperator> getProjectionMap(
+            LogicalProjectOperator projection,
+            OptExpression expression, ColumnRefFactory refFactory) {
+        Map<ColumnRefOperator, ScalarOperator> projectionMap;
+        if (projection != null) {
+            projectionMap = projection.getColumnRefMap();
+        } else {
+            if (expression.getOp().getProjection() != null) {
+                projectionMap = expression.getOp().getProjection().getColumnRefMap();
+            } else {
+                projectionMap = Maps.newHashMap();
+                if (expression.getOp() instanceof LogicalAggregationOperator) {
+                    LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
+                    Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
+                            java.util.function.Function.identity(),
+                            java.util.function.Function.identity()));
+                    projectionMap.putAll(keyMap);
+                    projectionMap.putAll(agg.getAggregations());
+                } else {
+                    ColumnRefSet refSet = expression.getOutputColumns();
+                    for (int columnId : refSet.getColumnIds()) {
+                        ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
+                        projectionMap.put(columnRef, columnRef);
+                    }
+                }
+            }
+        }
+        return projectionMap;
     }
 }

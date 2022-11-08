@@ -6,8 +6,16 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 public class PredicateSplit {
+    // column equality predicates conjuncts
+    // a column equality predicate of the form (Ti.Cp =Tj.Cq)
     private ScalarOperator equalPredicates;
+    // range predicates conjuncts
+    // a range predicate is any atomic predicate of the form (Ti.Cp op c)
+    // where c is a constant and op is one of the operators “<”, “≤”, “=”, “≥”, “>”
     private ScalarOperator rangePredicates;
+    // residual predicates conjuncts
+    // residual predicates containing all conjuncts except the two types above
+    // eg: Ti.Cp like "%abc%"
     private ScalarOperator residualPredicates;
 
     private PredicateSplit(ScalarOperator equalPredicates,
