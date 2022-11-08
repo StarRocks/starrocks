@@ -22,7 +22,7 @@ SET global enable_cbo = true;
 Lateral Join 功能的语法如下：
 
 ~~~SQL
-from table_reference join [lateral] table_reference
+from table_reference join [lateral] table_reference;
 ~~~
 
 您可以结合 Lateral Join 功能与 Unnest 功能实现常见的行展开逻辑。
