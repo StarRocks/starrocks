@@ -6,7 +6,9 @@
 
 ## 语法
 
-`ARRAY_JOIN(array, sep[, null_replace_str])`
+```Haskell
+ARRAY_JOIN(array, sep[, null_replace_str])
+```
 
 ## 参数说明
 

@@ -2,11 +2,13 @@
 
 ## 功能
 
-获取Bitmap中的最小值。如果Bitmap为NULL，则返回NULL。如果Bitmap为空，默认返回-1。
+获取 Bitmap 中的最小值。如果 Bitmap 为 NULL，则返回 NULL。如果 Bitmap 为空，默认返回 -1。
 
 ## 语法
 
-`BITMAP_MIN(bitmap)`
+```Haskell
+bitmap_min(bitmap)
+```
 
 ## 参数说明
 

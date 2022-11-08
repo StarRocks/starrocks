@@ -6,7 +6,9 @@
 
 ## 语法
 
-`ARRAY_SORT(array)`
+```Haskell
+ARRAY_SORT(array)
+```
 
 ## 参数说明
 

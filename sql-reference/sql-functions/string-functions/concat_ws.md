@@ -6,7 +6,7 @@
 
 ### 语法
 
-```sql
+```Haskell
 VARCHAR concat_ws(VARCHAR sep, VARCHAR str,...)
 ```
 

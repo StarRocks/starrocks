@@ -6,7 +6,9 @@
 
 ## 语法
 
-`BITMAP_MAX(bitmap)`
+```Haskell
+bitmap_max(bitmap)
+```
 
 ## 参数说明
 
