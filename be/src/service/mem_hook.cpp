@@ -291,6 +291,9 @@ void* my_malloc(size_t size) __THROW {
 
 // free
 void my_free(void* p) __THROW {
+    if (UNLIKELY(p == nullptr)) {
+        return;
+    }
     MEMORY_RELEASE_PTR(p);
     STARROCKS_FREE(p);
 }
@@ -353,6 +356,9 @@ void* my_calloc(size_t n, size_t size) __THROW {
 }
 
 void my_cfree(void* ptr) __THROW {
+    if (UNLIKELY(ptr == nullptr)) {
+        return;
+    }
     MEMORY_RELEASE_PTR(ptr);
     STARROCKS_CFREE(ptr);
 }

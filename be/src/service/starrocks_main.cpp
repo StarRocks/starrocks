@@ -32,6 +32,7 @@
 #include <gperftools/profiler.h>
 #include <thrift/TOutput.h>
 
+#include "agent/agent_server.h"
 #include "agent/heartbeat_server.h"
 #include "agent/status.h"
 #include "common/config.h"
@@ -290,6 +291,7 @@ int main(int argc, char** argv) {
     heartbeat_thrift_server->stop();
     heartbeat_thrift_server->join();
 
+    exec_env->agent_server()->stop();
     engine->stop();
     delete engine;
     exec_env->set_storage_engine(nullptr);

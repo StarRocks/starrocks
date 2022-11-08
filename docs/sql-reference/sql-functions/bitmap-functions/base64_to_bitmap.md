@@ -7,7 +7,7 @@ This function is used to convert Base64 strings into bitmap data.
 
 ## Syntax
 
-```SQL
+```Haskell
 BITMAP base64_to_bitmap(STRING bitmap)
 ```
 
