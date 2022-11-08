@@ -7,23 +7,30 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Database;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -315,5 +322,155 @@ public class UtilsTest {
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 1));
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 2));
         Assert.assertTrue(Utils.capableSemiReorder(root, false, 0, 3));
+    }
+
+    @Test
+    public void testGetAllPredicate() {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
+        BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef2);
+
+        Database db = starRocksAssert.getCtx().getGlobalStateMgr().getDb("test");
+        Table table1 = db.getTable("t0");
+        LogicalScanOperator scanOperator1 = new LogicalOlapScanOperator(table1);
+        BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
+        scanOperator1.setPredicate(binaryPredicate2);
+        OptExpression scanExpr = OptExpression.create(scanOperator1);
+        Table table2 = db.getTable("t1");
+        LogicalScanOperator scanOperator2 = new LogicalOlapScanOperator(table2);
+        BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.GE, columnRef2, ConstantOperator.createInt(1));
+        scanOperator2.setPredicate(binaryPredicate3);
+        OptExpression scanExpr2 = OptExpression.create(scanOperator2);
+        LogicalJoinOperator joinOperator = new LogicalJoinOperator(JoinOperator.INNER_JOIN, binaryPredicate);
+        OptExpression joinExpr = OptExpression.create(joinOperator, scanExpr, scanExpr2);
+        List<ScalarOperator> predicates = Utils.getAllPredicates(joinExpr);
+        Assert.assertEquals(3, predicates.size());
+        Assert.assertTrue(Utils.isAllEqualInnerJoin(joinExpr));
+    }
+
+    @Test
+    public void testSplitPredicate() {
+        ScalarOperator predicate = null;
+        PredicateSplit split = Utils.splitPredicate(predicate);
+        Assert.assertNotNull(split);
+        Assert.assertNull(split.getEqualPredicates());
+        Assert.assertNull(split.getRangePredicates());
+        Assert.assertNull(split.getResidualPredicates());
+
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
+        BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef2);
+        BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
+
+        List<ScalarOperator> arguments = Lists.newArrayList();
+        arguments.add(columnRef1);
+        arguments.add(columnRef2);
+        CallOperator callOperator = new CallOperator(FunctionSet.SUM, Type.INT, arguments);
+        BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.GE, callOperator, ConstantOperator.createInt(1));
+        ScalarOperator andPredicate = Utils.compoundAnd(binaryPredicate, binaryPredicate2, binaryPredicate3);
+        PredicateSplit result = Utils.splitPredicate(andPredicate);
+        Assert.assertEquals(binaryPredicate, result.getEqualPredicates());
+        Assert.assertEquals(binaryPredicate2, result.getRangePredicates());
+        Assert.assertEquals(binaryPredicate3, result.getResidualPredicates());
+    }
+
+    @Test
+    public void testIsAlwaysTrueOrFalse() {
+        ConstantOperator alwaysTrue = ConstantOperator.TRUE;
+        Assert.assertTrue(Utils.isAlwaysTrue(alwaysTrue));
+        Assert.assertFalse(Utils.isAlwaysFalse(alwaysTrue));
+        ConstantOperator alwaysFalse = ConstantOperator.createBoolean(false);
+        Assert.assertFalse(Utils.isAlwaysTrue(alwaysFalse));
+        Assert.assertTrue(Utils.isAlwaysFalse(alwaysFalse));
+
+        CompoundPredicateOperator compound = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, alwaysFalse, alwaysTrue);
+        Assert.assertTrue(Utils.isAlwaysFalse(compound));
+        Assert.assertFalse(Utils.isAlwaysTrue(compound));
+
+        CompoundPredicateOperator compound2 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, alwaysTrue, alwaysTrue);
+        Assert.assertFalse(Utils.isAlwaysFalse(compound2));
+        Assert.assertTrue(Utils.isAlwaysTrue(compound2));
+
+        CompoundPredicateOperator compound3 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, alwaysFalse, alwaysFalse);
+        Assert.assertTrue(Utils.isAlwaysFalse(compound3));
+        Assert.assertFalse(Utils.isAlwaysTrue(compound3));
+
+        CompoundPredicateOperator compound4 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysTrue);
+        Assert.assertFalse(Utils.isAlwaysFalse(compound4));
+        Assert.assertTrue(Utils.isAlwaysTrue(compound4));
+
+        CompoundPredicateOperator compound5 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, alwaysTrue, alwaysTrue);
+        Assert.assertFalse(Utils.isAlwaysFalse(compound5));
+        Assert.assertTrue(Utils.isAlwaysTrue(compound5));
+
+        CompoundPredicateOperator compound6 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysFalse);
+        Assert.assertTrue(Utils.isAlwaysFalse(compound6));
+        Assert.assertFalse(Utils.isAlwaysTrue(compound6));
+    }
+
+    @Test
+    public void testSplitOr() {
+        ConstantOperator alwaysTrue = ConstantOperator.TRUE;
+        ConstantOperator alwaysFalse = ConstantOperator.createBoolean(false);
+        CompoundPredicateOperator compound = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysTrue);
+        Assert.assertEquals(alwaysTrue, Utils.splitOr(alwaysTrue, compound));
+        Assert.assertEquals(alwaysFalse, Utils.splitOr(alwaysFalse, compound));
+        Assert.assertEquals(null, Utils.splitOr(compound, alwaysFalse));
+        Assert.assertEquals(alwaysTrue, Utils.splitOr(compound, compound));
+    }
+
+    @Test
+    public void testCanonizePredicate() {
+        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
+        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
+        BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.GT, columnRef1, ConstantOperator.createInt(1));
+        BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(2));
+        ScalarOperator canonizedPredicate = Utils.canonizePredicateForRewrite(binaryPredicate);
+        Assert.assertEquals(binaryPredicate2, canonizedPredicate);
+        BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.LT, columnRef2, ConstantOperator.createInt(1));
+        ScalarOperator canonizedPredicate2 = Utils.canonizePredicateForRewrite(binaryPredicate3);
+        BinaryPredicateOperator binaryPredicate4 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.LE, columnRef2, ConstantOperator.createInt(0));
+        Assert.assertEquals(binaryPredicate4, canonizedPredicate2);
+
+        CompoundPredicateOperator compound1 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, binaryPredicate, binaryPredicate3);
+        CompoundPredicateOperator compound2 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.AND, binaryPredicate2, binaryPredicate4);
+        ScalarOperator canonizedPredicate3 = Utils.canonizePredicateForRewrite(compound1);
+        Assert.assertEquals(compound2, canonizedPredicate3);
+
+        CompoundPredicateOperator compound3 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, binaryPredicate, binaryPredicate3);
+        CompoundPredicateOperator compound4 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.OR, binaryPredicate2, binaryPredicate4);
+        ScalarOperator canonizedPredicate4 = Utils.canonizePredicateForRewrite(compound3);
+        Assert.assertEquals(compound4, canonizedPredicate4);
+
+        CompoundPredicateOperator compound5 = new CompoundPredicateOperator(
+                CompoundPredicateOperator.CompoundType.NOT, binaryPredicate);
+        ScalarOperator canonizedPredicate5 = Utils.canonizePredicateForRewrite(compound5);
+        BinaryPredicateOperator binaryPredicate5 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.LE, columnRef1, ConstantOperator.createInt(1));
+        Assert.assertEquals(binaryPredicate5, canonizedPredicate5);
     }
 }

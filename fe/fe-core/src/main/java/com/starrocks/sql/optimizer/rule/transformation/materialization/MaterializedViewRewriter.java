@@ -19,6 +19,7 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
@@ -374,10 +375,12 @@ public class MaterializedViewRewriter {
             }
             newQueryProjection.put(entry.getKey(), rewritten);
         }
-        LogicalProjectOperator projectOperator = new LogicalProjectOperator(newQueryProjection);
-        OptExpression projection = OptExpression.create(projectOperator, targetExpr);
-        deriveLogicalProperty(projection);
-        return projection;
+        Projection newProjection = new Projection(newQueryProjection);
+        targetExpr.getOp().setProjection(newProjection);
+        // LogicalProjectOperator projectOperator = new LogicalProjectOperator(newQueryProjection);
+        // OptExpression projection = OptExpression.create(projectOperator, targetExpr);
+        // deriveLogicalProperty(projection);
+        return targetExpr;
     }
 
     protected Map<ColumnRefOperator, ScalarOperator> getProjectionMap(LogicalProjectOperator projection,
@@ -505,7 +508,6 @@ public class MaterializedViewRewriter {
             Preconditions.checkState(queryEntry.getValue().size() > 0);
             if (queryEntry.getValue().size() == 1) {
                 Integer src = queryEntry.getValue().iterator().next();
-                // TODO: should make sure equals for external tables
                 Integer target = mvTableToRelationId.get(queryEntry.getKey()).iterator().next();
                 for (BiMap<Integer, Integer> m : result) {
                     m.put(src, target);
@@ -592,6 +594,11 @@ public class MaterializedViewRewriter {
                 : rewriteContext.getMvPredicateSplit().getResidualPredicates();
         ScalarOperator targetPu = isQueryAgainstView ? rewriteContext.getMvPredicateSplit().getResidualPredicates()
                 : rewriteContext.getQueryPredicateSplit().getResidualPredicates();
+        if (srcPu == null && targetPu != null) {
+            // query: empid < 5
+            // mv: empid < 5 or salary > 100
+            srcPu = Utils.compoundAnd(compensationEqualPredicate, compensationPr);
+        }
         ScalarOperator compensationPu = getCompensationResidualPredicate(srcPu, targetPu, columnRewriter);
         if (compensationPu == null) {
             return null;

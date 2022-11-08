@@ -98,17 +98,18 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
             if (Lists.newArrayList(after).equals(before)) {
                 return predicate;
             }
+            return Utils.compoundAnd(Lists.newArrayList(after));
         } else if (predicate.isOr()) {
             List<ScalarOperator> before = Utils.extractDisjunctive(predicate);
             after.addAll(before);
             if (Lists.newArrayList(after).equals(before)) {
                 return predicate;
             }
+            return Utils.compoundOr(Lists.newArrayList(after));
         } else {
             // for not
             return predicate;
         }
-        return Utils.compoundAnd(Lists.newArrayList(after));
     }
 
     private ConstantOperator createConstantIntegerOne(Type type) {

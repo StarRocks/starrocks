@@ -48,7 +48,7 @@ public class MvRewriteOptimizationTest {
                 "    empid int not null,\n" +
                 "    deptno int not null,\n" +
                 "    name varchar(25) not null,\n" +
-                "    salary float\n" +
+                "    salary double\n" +
                 ")\n" +
                 "distributed by hash(`empid`) buckets 10\n" +
                 "properties (\n" +
@@ -79,6 +79,8 @@ public class MvRewriteOptimizationTest {
                         "\"replication_num\" = \"1\"\n" +
                         ");");
         cluster.runSql("test", "insert into emps values(1, 1, \"emp_name1\", 100);");
+        cluster.runSql("test", "insert into emps values(2, 1, \"emp_name1\", 120);");
+        cluster.runSql("test", "insert into emps values(3, 1, \"emp_name1\", 150);");
         cluster.runSql("test", "insert into dept values(1, \"dept_name1\")");
         cluster.runSql("test", "insert into dependents values(1, \"dependent_name1\")");
         cluster.runSql("test", "insert into locations values(1, \"location1\")");
@@ -90,6 +92,13 @@ public class MvRewriteOptimizationTest {
     }
 
     @Test
+    public void testSingleTableRewrite() throws Exception {
+        testSingleTableEqualPredicateRewrite();
+        testSingleTableRangePredicateRewrite();
+        testMultiMvsForSingleTable();
+        testNestedMvOnSingleTable();
+    }
+
     public void testSingleTableEqualPredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -125,7 +134,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan5, "1:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : CAST(10: salary AS DOUBLE) + 1.0 * 2.0\n" +
+                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
@@ -139,9 +148,9 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertNotContains(plan6, "mv_1");
 
         dropMv("test", "mv_1");
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
     }
 
-    @Test
     public void testSingleTableRangePredicateRewrite() throws Exception {
         createAndRefreshMv("test", "mv_1",
                 "create materialized view mv_1 distributed by hash(empid)" +
@@ -190,7 +199,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan5, "2:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : CAST(10: salary AS DOUBLE) + 1.0 * 2.0\n" +
+                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
                 "  1:SELECT\n" +
                 "  |  predicates: 7: empid = 4\n" +
@@ -206,7 +215,7 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan6, "2:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : CAST(10: salary AS DOUBLE) + 1.0 * 2.0\n" +
+                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
                 "  1:SELECT\n" +
                 "  |  predicates: 7: empid <= 4, 7: empid >= 3\n" +
@@ -222,10 +231,10 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan7, "2:Project\n" +
                 "  |  <slot 1> : 7: empid\n" +
                 "  |  <slot 5> : length(9: name)\n" +
-                "  |  <slot 6> : CAST(10: salary AS DOUBLE) + 1.0 * 2.0\n" +
+                "  |  <slot 6> : 10: salary + 1.0 * 2.0\n" +
                 "  |  \n" +
                 "  1:SELECT\n" +
-                "  |  predicates: CAST(10: salary AS DOUBLE) > 100.0\n" +
+                "  |  predicates: 10: salary > 100.0\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: mv_1\n" +
@@ -236,11 +245,60 @@ public class MvRewriteOptimizationTest {
 
         createAndRefreshMv("test", "mv_2",
                 "create materialized view mv_2 distributed by hash(empid)" +
-                        " as select empid, deptno, name, salary from emps where empid < 5 and salary >100");
+                        " as select empid, deptno, name, salary from emps where empid < 5 and salary > 100");
         String query8 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5";
         String plan8 = getFragmentPlan(query8);
         PlanTestBase.assertNotContains(plan8, "mv_2");
 
+        String query9 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 90";
+        String plan9 = getFragmentPlan(query9);
+        PlanTestBase.assertNotContains(plan9, "mv_2");
+        dropMv("test", "mv_2");
+
+        createAndRefreshMv("test", "mv_3",
+                "create materialized view mv_3 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where empid < 5 or salary > 100");
+        String query10 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5";
+        String plan10 = getFragmentPlan(query10);
+        PlanTestBase.assertContains(plan10, "mv_3");
+
+        String query11 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 or salary > 100";
+        String plan11 = getFragmentPlan(query11);
+        PlanTestBase.assertContains(plan11, "mv_3");
+
+        String query12 = "select empid, length(name), (salary + 1) * 2 from emps" +
+                " where empid < 5 or salary > 100 or salary < 10";
+        String plan12 = getFragmentPlan(query12);
+        PlanTestBase.assertNotContains(plan12, "mv_3");
+        dropMv("test", "mv_3");
+    }
+
+    public void testMultiMvsForSingleTable() throws Exception {
+        createAndRefreshMv("test", "mv_1",
+                "create materialized view mv_1 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where empid < 5");
+        createAndRefreshMv("test", "mv_2",
+                "create materialized view mv_2 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where empid < 6 and salary > 100");
+        String query = "select empid, length(name), (salary + 1) * 2 from emps where empid < 3 and salary > 110";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_");
+
+        dropMv("test", "mv_1");
+        dropMv("test", "mv_2");
+    }
+
+    public void testNestedMvOnSingleTable() throws Exception {
+        createAndRefreshMv("test", "mv_1",
+                "create materialized view mv_1 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where empid < 5");
+        createAndRefreshMv("test", "mv_2",
+                "create materialized view mv_2 distributed by hash(empid)" +
+                        " as select empid, deptno, salary from mv_1 where salary > 100");
+        String query = "select empid, deptno, (salary + 1) * 2 from emps where empid < 5 and salary > 110";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_2");
+        dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }
 

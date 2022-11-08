@@ -837,10 +837,10 @@ public class Utils {
         for (ScalarOperator item : srcItems) {
             removeAll(targetItems, item);
         }
-        if (srcItems.isEmpty() && srcLength == targetLength) {
+        if (targetItems.isEmpty() && srcLength == targetLength) {
             // it is the same, so return true constant
             return ConstantOperator.createBoolean(true);
-        } else if (srcItems.isEmpty()) {
+        } else if (!targetItems.isEmpty()) {
             // the target has more or item, so return src
             return src;
         } else {
@@ -865,7 +865,7 @@ public class Utils {
         }
         if (operator instanceof LogicalJoinOperator) {
             LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
-            boolean isEqualPredicate = isEqualPredicate(joinOperator.getOnPredicate());
+            boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
             if (joinOperator.getJoinType() == JoinOperator.INNER_JOIN && isEqualPredicate) {
                 return true;
             }
@@ -879,7 +879,7 @@ public class Utils {
         return true;
     }
 
-    public static boolean isEqualPredicate(ScalarOperator predicate) {
+    public static boolean isColumnEqualPredicate(ScalarOperator predicate) {
         if (predicate == null) {
             return false;
         }
