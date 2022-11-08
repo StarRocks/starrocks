@@ -22,7 +22,9 @@ http://fe_host:http_port/api/{db}/{table}/_stream_load
 
 - 当前支持 HTTP **分块上传**和**非分块上传**两种方式。如果使用非分块上传方式，必须使用请求头字段 `Content-Length` 来标示待上传内容的长度，从而保证数据完整性。
 
-  > 说明：使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
+  > **说明**
+  >
+  > 使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
 
 - 建议在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
 
@@ -318,7 +320,9 @@ curl --location-trusted -u root -H "label:123" -H "max_filter_ratio:0.2" -T test
 http://host:port/api/testDb/testTbl/_stream_load
 ```
 
-### 导入数据时指定列名
+> **说明**
+>
+> 上述示例中，因为 `example3.csv` 和 `table3` 所包含的列不能按顺序依次对应，因此需要通过 `columns` 参数来设置 `example3.csv` 和 `table3` 之间的列映射关系。
 
 将本地文件'testData'中的数据导入到数据库'testDb'中'testTbl'的表, 允许 20%的错误率，并且指定文件的列名（用户是 defalut_cluster 中的）。
 
@@ -328,7 +332,9 @@ curl --location-trusted -u root  -H "label:123" -H "max_filter_ratio:0.2" \
 http://host:port/api/testDb/testTbl/_stream_load
 ```
 
-### 将数据导入对应分区
+> **说明**
+>
+> 上述示例中，虽然 `example4.csv` 和 `table4` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `columns` 参数对 `example4.csv` 中的列进行临时命名。
 
 将本地文件'testData'中的数据导入到数据库'testDb'中'testTbl'的表中的 p1, p2 分区, 允许 20%的错误率。
 
@@ -357,7 +363,13 @@ curl --location-trusted -u root \
 http://host:port/api/testDb/testTbl/_stream_load
 ```
 
-### 以严格模式导入数据并设置时区
+> **说明**
+>
+> 上述示例中，通过 `columns` 参数，把 `example7.csv` 中的两列临时命名为 `temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
+>
+> - 使用 `hll_hash` 函数把 `example7.csv` 中的 `temp1` 列转换成 HLL 类型的数据并落入 `table7`中的 `col1` 列。
+>
+> - 使用 `empty_hll` 函数给导入的数据行在 `table7` 中的第二列补充默认值。
 
 导入数据进行严格模式过滤，并设置时区为 Africa/Abidjan。
 
@@ -367,7 +379,13 @@ curl --location-trusted -u root -H "strict_mode: true" \
 http://host:port/api/testDb/testTbl/_stream_load
 ```
 
-### 导入数据到含有 BITMAP 列的表中
+> **说明**
+>
+> 上述示例中，通过 `columns` 参数，把 `example8.csv` 中的两列临时命名为 `temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
+>
+> - 使用 `to_bitmap` 函数把 `example8.csv` 中的 `temp1` 列转换成 BITMAP 类型的数据并落入 `table8` 中的 `col1` 列。
+>
+> - 使用 `bitmap_empty` 函数给导入的数据行在 `table8` 中的第二列补充默认值。
 
 导入含有 BITMAP 列的表，可以是表中的列或者数据中的列用于生成 BITMAP 列，也可以使用 bitmap_empty 填充空的 Bitmap
 
@@ -404,7 +422,20 @@ http://host:port/api/testDb/testTbl/_stream_load
 
 为了提升吞吐量，支持一次性导入多条数据，json 数据格式如下：
 
-```plain text
+```Bash
+curl --location-trusted -u root: -H "label:label6" \
+    -H "format: json" \
+    -T example1.json -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
+```
+
+> **说明**
+>
+> 如上述示例所示，在没有指定 `columns` 和 `jsonpaths` 参数的情况下，则会按照 StarRocks 表中的列名称去对应 JSON 数据文件中的字段。
+
+为了提升吞吐量，Stream Load 支持一次性导入多条数据。比如，可以一次性导入 JSON 数据文件中如下多条数据：
+
+```JSON
 [
 {"category":"C++","author":"avc","title":"C++ primer","price":89.5},
 {"category":"Java","author":"avc","title":"Effective Java","price":95},
@@ -431,9 +462,11 @@ curl --location-trusted -u root \
 http://host:port/api/testDb/testTbl/_stream_load
 ```
 
-说明：
-1）如果 json 数据是以数组开始，并且数组中每个对象是一条记录，则需要将 `strip_outer_array` 设置成 true，表示展平数组。
-2）如果 json 数据是以数组开始，并且数组中每个对象是一条记录，在设置 `jsonpath` 时，我们的 ROOT 节点实际上是数组中对象。
+> **说明**
+>
+> - 这里的 JSON 数据是以数组形式表示，并且数组中每个元素（一个 JSON 对象）表示一条记录，则需要设置 `strip_outer_array` 为 `true`，以表示展开数组。
+>
+> - 如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，在设置 `jsonpaths` 时，我们的 ROOT 节点实际上是数组中对象。
 
 ### 导入数据并指定 json 根节点
 
@@ -456,6 +489,10 @@ curl --location-trusted -u root \
 http://host:port/api/testDb/testTbl/_stream_load
 ```
 
-## 关键字(keywords)
-
-STREAM, LOAD
+> **说明**
+>
+> - 通过 `json_root` 参数指定了需要真正导入的数据为 `RECORDS` 字段对应的值，即一个 JSON 数组。
+>
+> - 通过指定 `strip_outer_array: true` 来展开这个 JSON 数组，内部每一个 JSON 对象表示一行数据。
+>
+> - 其他如 `id`、`comments` 字段的信息都会被忽略掉。
