@@ -215,7 +215,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                     OptExpression decodeExp = generateDecodeOExpr(context, Collections.singletonList(optExpression));
                     decodeExp.getOp().setProjection(optExpression.getOp().getProjection());
                     optExpression.getOp().setProjection(null);
-                    context.clear();
                     return decodeExp;
                 } else if (projection.couldApplyStringDict(stringColumnIds)) {
                     Projection newProjection = rewriteProjectOperator(projection, context);
@@ -424,18 +423,17 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
         private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
                                                             Map<Integer, Integer> stringColumnIdToDictColumnIds) {
             ColumnRefSet outputColumns = logicalProperty.getOutputColumns();
+            final ColumnRefSet rewritesOutputColumns = new ColumnRefSet();
             int[] columnIds = outputColumns.getColumnIds();
-            outputColumns.clear();
             // For string column rewrite to dictionary column, other columns remain unchanged
             Arrays.stream(columnIds).map(cid -> stringColumnIdToDictColumnIds.getOrDefault(cid, cid))
-                    .forEach(outputColumns::union);
-            return logicalProperty;
+                    .forEach(rewritesOutputColumns::union);
+            return new LogicalProperty(rewritesOutputColumns);
         }
 
         private static LogicalProperty rewriteLogicProperty(LogicalProperty logicalProperty,
                                                             ColumnRefSet outputColumns) {
-            logicalProperty.setOutputColumns(outputColumns);
-            return logicalProperty;
+            return new LogicalProperty(outputColumns);
         }
 
         private Projection rewriteProjectOperator(Projection projectOperator, DecodeContext context) {
@@ -875,8 +873,6 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
                                         DecodeContext context) {
         OptExpression decodeExp = generateDecodeOExpr(context, childExpr);
         parentExpr.setChild(index, decodeExp);
-
-        context.clear();
     }
 
     private static OptExpression generateDecodeOExpr(DecodeContext context, List<OptExpression> childExpr) {
@@ -892,6 +888,7 @@ public class AddDecodeNodeForDictStringRule implements PhysicalOperatorTreeRewri
 
         LogicalProperty decodeProperty = new LogicalProperty(childExpr.get(0).getLogicalProperty());
         result.setLogicalProperty(DecodeVisitor.rewriteLogicProperty(decodeProperty, dictToStrings));
+        context.clear();
         return result;
     }
 
