@@ -118,7 +118,14 @@ public class StringLiteral extends LiteralExpr {
 
     @Override
     public String toSqlImpl() {
-        return "'" + value + "'";
+        String sql = value;
+        if (value != null) {
+            if (value.contains("\\")) {
+                sql = value.replace("\\", "\\\\");
+            }
+            sql = sql.replace("'", "\\'");
+        }
+        return "'" + sql + "'";
     }
 
     @Override
@@ -157,7 +164,7 @@ public class StringLiteral extends LiteralExpr {
      * @throws AnalysisException when entire given string cannot be transformed into a date
      */
     private LiteralExpr convertToDate(Type targetType) throws AnalysisException {
-        LiteralExpr newLiteral = null;
+        LiteralExpr newLiteral;
         try {
             newLiteral = new DateLiteral(value, targetType);
         } catch (AnalysisException e) {
