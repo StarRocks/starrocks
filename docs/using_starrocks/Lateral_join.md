@@ -15,7 +15,7 @@ set global enable_cbo = true;
 Syntax:
 
 ~~~SQL
-from table_reference join [lateral] table_reference
+from table_reference join [lateral] table_reference;
 ~~~
 
 The Unnest keyword is a table function that converts an array into multiple rows.Together with Lateral Join, it can implement our common row expansion logic.
