@@ -620,21 +620,9 @@ public class AuthUpgrader {
         }
     }
 
+    // `grantPattern` only contains dbx.tblx or dbx.*.
     private boolean matchTableGrant(Set<Pair<String, String>> grantPattern, String db, String table) {
-        // check db.table
-        if (grantPattern.contains(Pair.create(db, table))) {
-            return true;
-        }
-        // check db.*
-        if (!table.equals(STAR) && grantPattern.contains(Pair.create(db, STAR))) {
-            return true;
-        }
-        // check *.*
-        if (!db.equals(STAR) && grantPattern.contains(Pair.create(STAR, STAR))) {
-            return true;
-        }
-        // check *.*
-        return false;
+        return grantPattern.contains(Pair.create(db, table)) || grantPattern.contains(Pair.create(db, STAR));
     }
 
     protected void upgradeImpersontaePrivileges(UserIdentity user, PrivilegeCollection collection)
