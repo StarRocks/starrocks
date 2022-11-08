@@ -269,10 +269,10 @@ public class ReplayFromDumpTest {
                 getPlanFragment(getDumpInfoFromFile("query_dump/tpcds23_1"), null, TExplainLevel.NORMAL);
         Assert.assertTrue(replayPair.second, replayPair.second.contains("  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 52\n" +
+                "    EXCHANGE ID: 54\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 73\n" +
+                "    EXCHANGE ID: 74\n" +
                 "    RANDOM\n" +
                 "\n" +
                 "  40:Project\n" +
@@ -336,13 +336,11 @@ public class ReplayFromDumpTest {
     public void testTPCDS94() throws Exception {
         Pair<QueryDumpInfo, String> replayPair = getCostPlanFragment(getDumpInfoFromFile("query_dump/tpcds94"));
         // check ANTI JOIN cardinality is not 0
-        Assert.assertTrue(replayPair.second, replayPair.second.contains("  21:HASH JOIN\n" +
-                "  |  join op: RIGHT ANTI JOIN (PARTITIONED)\n" +
-                "  |  equal join conjunct: [138: wr_order_number, INT, false] = [2: ws_order_number, INT, false]\n" +
-                "  |  build runtime filters:\n" +
-                "  |  - filter_id = 3, build_expr = (2: ws_order_number), remote = true\n" +
-                "  |  output columns: 2, 17, 29, 34\n" +
-                "  |  cardinality: 26765"));
+        Assert.assertTrue(replayPair.second, replayPair.second.contains("  23:HASH JOIN\n" +
+                "  |  join op: LEFT ANTI JOIN (BUCKET_SHUFFLE(S))\n" +
+                "  |  equal join conjunct: [2: ws_order_number, INT, false] = [138: wr_order_number, INT, false]\n" +
+                "  |  output columns: 2, 29, 34\n" +
+                "  |  cardinality: 25414"));
     }
 
     @Test

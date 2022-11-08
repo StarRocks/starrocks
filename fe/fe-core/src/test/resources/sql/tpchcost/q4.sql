@@ -64,25 +64,26 @@ HASH_PARTITIONED: 6: O_ORDERPRIORITY
 |  <slot 6> : 6: O_ORDERPRIORITY
 |
 5:HASH JOIN
-|  join op: RIGHT SEMI JOIN (BUCKET_SHUFFLE)
+|  join op: LEFT SEMI JOIN (BUCKET_SHUFFLE)
 |  colocate: false, reason:
-|  equal join conjunct: 11: L_ORDERKEY = 1: O_ORDERKEY
+|  equal join conjunct: 1: O_ORDERKEY = 11: L_ORDERKEY
 |
 |----4:EXCHANGE
 |
 1:Project
-|  <slot 11> : 11: L_ORDERKEY
+|  <slot 1> : 1: O_ORDERKEY
+|  <slot 6> : 6: O_ORDERPRIORITY
 |
 0:OlapScanNode
-TABLE: lineitem
+TABLE: orders
 PREAGGREGATION: ON
-PREDICATES: 23: L_RECEIPTDATE > 22: L_COMMITDATE
+PREDICATES: 5: O_ORDERDATE >= '1994-09-01', 5: O_ORDERDATE < '1994-12-01'
 partitions=1/1
-rollup: lineitem
-tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
-cardinality=300000000
-avgRowSize=16.0
+rollup: orders
+tabletRatio=10/10
+tabletList=10204,10206,10208,10210,10212,10214,10216,10218,10220,10222
+cardinality=5675676
+avgRowSize=27.0
 numNodes=0
 
 PLAN FRAGMENT 3
@@ -91,22 +92,21 @@ PARTITION: RANDOM
 
 STREAM DATA SINK
 EXCHANGE ID: 04
-BUCKET_SHUFFLE_HASH_PARTITIONED: 1: O_ORDERKEY
+BUCKET_SHUFFLE_HASH_PARTITIONED: 11: L_ORDERKEY
 
 3:Project
-|  <slot 1> : 1: O_ORDERKEY
-|  <slot 6> : 6: O_ORDERPRIORITY
+|  <slot 11> : 11: L_ORDERKEY
 |
 2:OlapScanNode
-TABLE: orders
+TABLE: lineitem
 PREAGGREGATION: ON
-PREDICATES: 5: O_ORDERDATE >= '1994-09-01', 5: O_ORDERDATE < '1994-12-01'
+PREDICATES: 23: L_RECEIPTDATE > 22: L_COMMITDATE
 partitions=1/1
-rollup: orders
-tabletRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
-cardinality=5675676
-avgRowSize=27.0
+rollup: lineitem
+tabletRatio=20/20
+tabletList=10278,10280,10282,10284,10286,10288,10290,10292,10294,10296 ...
+cardinality=300000000
+avgRowSize=16.0
 numNodes=0
 [end]
 

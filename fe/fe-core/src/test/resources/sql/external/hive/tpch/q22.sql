@@ -78,7 +78,7 @@ cardinality: 1500000
 
 PLAN FRAGMENT 2(F07)
 
-Input Partition: HASH_PARTITIONED: 20: o_custkey
+Input Partition: HASH_PARTITIONED: 1: c_custkey
 OutPut Partition: HASH_PARTITIONED: 29: substring
 OutPut Exchange Id: 15
 
@@ -92,10 +92,8 @@ OutPut Exchange Id: 15
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 3750000.0] ESTIMATE
 |
 13:HASH JOIN
-|  join op: RIGHT ANTI JOIN (PARTITIONED)
-|  equal join conjunct: [20: o_custkey, INT, true] = [1: c_custkey, INT, true]
-|  build runtime filters:
-|  - filter_id = 0, build_expr = (1: c_custkey), remote = true
+|  join op: LEFT ANTI JOIN (PARTITIONED)
+|  equal join conjunct: [1: c_custkey, INT, true] = [20: o_custkey, INT, true]
 |  output columns: 5, 6
 |  cardinality: 1500000
 |  column statistics:
@@ -106,18 +104,33 @@ OutPut Exchange Id: 15
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 3750000.0] ESTIMATE
 |
 |----12:EXCHANGE
-|       cardinality: 3750000
+|       cardinality: 150000000
 |
-1:EXCHANGE
-cardinality: 150000000
+10:EXCHANGE
+cardinality: 3750000
 
-PLAN FRAGMENT 3(F02)
+PLAN FRAGMENT 3(F05)
+
+Input Partition: RANDOM
+OutPut Partition: HASH_PARTITIONED: 20: o_custkey
+OutPut Exchange Id: 12
+
+11:HdfsScanNode
+TABLE: orders
+partitions=1/1
+avgRowSize=8.0
+numNodes=0
+cardinality: 150000000
+column statistics:
+* o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
+
+PLAN FRAGMENT 4(F00)
 
 Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 1: c_custkey
-OutPut Exchange Id: 12
+OutPut Exchange Id: 10
 
-11:Project
+9:Project
 |  output columns:
 |  1 <-> [1: c_custkey, INT, true]
 |  5 <-> [5: c_phone, VARCHAR, true]
@@ -128,7 +141,7 @@ OutPut Exchange Id: 12
 |  * c_phone-->[-Infinity, Infinity, 0.0, 15.0, 3750000.0] ESTIMATE
 |  * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 |
-10:NESTLOOP JOIN
+8:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  other join predicates: cast([6: c_acctbal, DECIMAL64(15,2), true] as DECIMAL128(38,8)) > [17: avg, DECIMAL128(38,8), true]
 |  cardinality: 3750000
@@ -138,10 +151,10 @@ OutPut Exchange Id: 12
 |  * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-|----9:EXCHANGE
+|----7:EXCHANGE
 |       cardinality: 1
 |
-2:HdfsScanNode
+0:HdfsScanNode
 TABLE: customer
 NON-PARTITION PREDICATES: substring(5: c_phone, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 partitions=1/1
@@ -153,47 +166,47 @@ column statistics:
 * c_phone-->[-Infinity, Infinity, 0.0, 15.0, 7500000.0] ESTIMATE
 * c_acctbal-->[-999.99, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 
-PLAN FRAGMENT 4(F04)
+PLAN FRAGMENT 5(F02)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 09
+OutPut Exchange Id: 07
 
-8:ASSERT NUMBER OF ROWS
+6:ASSERT NUMBER OF ROWS
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-7:AGGREGATE (merge finalize)
+5:AGGREGATE (merge finalize)
 |  aggregate: avg[([17: avg, VARCHAR, true]); args: DECIMAL64; result: DECIMAL128(38,8); args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-6:EXCHANGE
+4:EXCHANGE
 cardinality: 1
 
-PLAN FRAGMENT 5(F03)
+PLAN FRAGMENT 6(F01)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 06
+OutPut Exchange Id: 04
 
-5:AGGREGATE (update serialize)
+3:AGGREGATE (update serialize)
 |  aggregate: avg[([14: c_acctbal, DECIMAL64(15,2), true]); args: DECIMAL64; result: VARCHAR; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-4:Project
+2:Project
 |  output columns:
 |  14 <-> [14: c_acctbal, DECIMAL64(15,2), true]
 |  cardinality: 6818187
 |  column statistics:
 |  * c_acctbal-->[0.0, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
 |
-3:HdfsScanNode
+1:HdfsScanNode
 TABLE: customer
 NON-PARTITION PREDICATES: 14: c_acctbal > 0.00, substring(13: c_phone, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 MIN/MAX PREDICATES: 32: c_acctbal > 0.00
@@ -204,22 +217,5 @@ cardinality: 6818187
 column statistics:
 * c_phone-->[-Infinity, Infinity, 0.0, 15.0, 6818187.396704358] ESTIMATE
 * c_acctbal-->[0.0, 9999.99, 0.0, 8.0, 1086564.0] ESTIMATE
-
-PLAN FRAGMENT 6(F00)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 20: o_custkey
-OutPut Exchange Id: 01
-
-0:HdfsScanNode
-TABLE: orders
-partitions=1/1
-avgRowSize=8.0
-numNodes=0
-cardinality: 150000000
-probe runtime filters:
-- filter_id = 0, probe_expr = (20: o_custkey)
-column statistics:
-* o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 [end]
 

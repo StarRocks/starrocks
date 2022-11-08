@@ -37,25 +37,25 @@ group by
 order by
     cntrycode ;
 [fragment statistics]
-PLAN FRAGMENT 0(F09)
+PLAN FRAGMENT 0(F07)
 Output Exprs:32: substring | 33: count | 34: sum
 Input Partition: UNPARTITIONED
 RESULT SINK
 
-19:MERGING-EXCHANGE
+18:MERGING-EXCHANGE
 cardinality: 150000
 column statistics:
 * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
 * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
 
-PLAN FRAGMENT 1(F08)
+PLAN FRAGMENT 1(F06)
 
 Input Partition: HASH_PARTITIONED: 32: substring
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 19
+OutPut Exchange Id: 18
 
-18:SORT
+17:SORT
 |  order by: [32, VARCHAR, true] ASC
 |  offset: 0
 |  cardinality: 150000
@@ -64,7 +64,7 @@ OutPut Exchange Id: 19
 |  * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
 |  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
 |
-17:AGGREGATE (merge finalize)
+16:AGGREGATE (merge finalize)
 |  aggregate: count[([33: count, BIGINT, false]); args: ; result: BIGINT; args nullable: true; result nullable: false], sum[([34: sum, DOUBLE, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  group by: [32: substring, VARCHAR, true]
 |  cardinality: 150000
@@ -73,16 +73,16 @@ OutPut Exchange Id: 19
 |  * count-->[0.0, 150000.0, 0.0, 8.0, 150000.0] ESTIMATE
 |  * sum-->[-1191.1273641969974, 11911.380844504778, 0.0, 8.0, 137439.0] ESTIMATE
 |
-16:EXCHANGE
+15:EXCHANGE
 cardinality: 150000
 
-PLAN FRAGMENT 2(F07)
+PLAN FRAGMENT 2(F00)
 
-Input Partition: HASH_PARTITIONED: 22: O_CUSTKEY
+Input Partition: RANDOM
 OutPut Partition: HASH_PARTITIONED: 32: substring
-OutPut Exchange Id: 16
+OutPut Exchange Id: 15
 
-15:AGGREGATE (update serialize)
+14:AGGREGATE (update serialize)
 |  STREAMING
 |  aggregate: count[(*); args: ; result: BIGINT; args nullable: false; result nullable: false], sum[([6: C_ACCTBAL, DOUBLE, false]); args: DOUBLE; result: DOUBLE; args nullable: false; result nullable: true]
 |  group by: [32: substring, VARCHAR, true]
@@ -92,7 +92,7 @@ OutPut Exchange Id: 16
 |  * count-->[0.0, 1500000.0, 0.0, 8.0, 150000.0] ESTIMATE
 |  * sum-->[-1091.382358719141, 10913.921812585948, 0.0, 8.0, 137439.0] ESTIMATE
 |
-14:Project
+13:Project
 |  output columns:
 |  6 <-> [6: C_ACCTBAL, DOUBLE, false]
 |  32 <-> substring[([5: C_PHONE, VARCHAR, false], 1, 2); args: VARCHAR,INT,INT; result: VARCHAR; args nullable: false; result nullable: true]
@@ -101,11 +101,9 @@ OutPut Exchange Id: 16
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
-13:HASH JOIN
-|  join op: RIGHT ANTI JOIN (PARTITIONED)
-|  equal join conjunct: [22: O_CUSTKEY, INT, false] = [1: C_CUSTKEY, INT, false]
-|  build runtime filters:
-|  - filter_id = 1, build_expr = (1: C_CUSTKEY), remote = true
+12:HASH JOIN
+|  join op: LEFT ANTI JOIN (BUCKET_SHUFFLE)
+|  equal join conjunct: [1: C_CUSTKEY, INT, false] = [22: O_CUSTKEY, INT, false]
 |  output columns: 5, 6
 |  cardinality: 1500000
 |  column statistics:
@@ -115,19 +113,10 @@ OutPut Exchange Id: 16
 |  * O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 3750000.0] ESTIMATE
 |  * substring-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |
-|----12:EXCHANGE
-|       cardinality: 3750000
+|----11:EXCHANGE
+|       cardinality: 150000000
 |
-1:EXCHANGE
-cardinality: 150000000
-
-PLAN FRAGMENT 3(F02)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 1: C_CUSTKEY
-OutPut Exchange Id: 12
-
-11:Project
+9:Project
 |  output columns:
 |  1 <-> [1: C_CUSTKEY, INT, false]
 |  5 <-> [5: C_PHONE, CHAR, false]
@@ -138,7 +127,7 @@ OutPut Exchange Id: 12
 |  * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |
-10:NESTLOOP JOIN
+8:NESTLOOP JOIN
 |  join op: CROSS JOIN
 |  other join predicates: [6: C_ACCTBAL, DOUBLE, false] > [19: avg, DOUBLE, true]
 |  build runtime filters:
@@ -150,14 +139,15 @@ OutPut Exchange Id: 12
 |  * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-|----9:EXCHANGE
+|----7:EXCHANGE
 |       cardinality: 1
 |
-2:OlapScanNode
+0:OlapScanNode
 table: customer, rollup: customer
 preAggregation: on
 Predicates: substring(5: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10227,10229,10231,10233,10235,10237,10239,10241,10243,10245
 actualRows=0, avgRowSize=31.0
 cardinality: 7500000
 probe runtime filters:
@@ -167,72 +157,72 @@ column statistics:
 * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 * C_ACCTBAL-->[-999.99, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 
-PLAN FRAGMENT 4(F04)
+PLAN FRAGMENT 3(F04)
+
+Input Partition: RANDOM
+OutPut Partition: BUCKET_SHUFFLE_HASH_PARTITIONED: 22: O_CUSTKEY
+OutPut Exchange Id: 11
+
+10:OlapScanNode
+table: orders, rollup: orders
+preAggregation: on
+partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10204,10206,10208,10210,10212,10214,10216,10218,10220,10222
+actualRows=0, avgRowSize=8.0
+cardinality: 150000000
+column statistics:
+* O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
+
+PLAN FRAGMENT 4(F02)
 
 Input Partition: UNPARTITIONED
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 09
+OutPut Exchange Id: 07
 
-8:ASSERT NUMBER OF ROWS
+6:ASSERT NUMBER OF ROWS
 |  assert number of rows: LE 1
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-7:AGGREGATE (merge finalize)
+5:AGGREGATE (merge finalize)
 |  aggregate: avg[([19: avg, VARCHAR, true]); args: DOUBLE; result: DOUBLE; args nullable: true; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-6:EXCHANGE
+4:EXCHANGE
 cardinality: 1
 
-PLAN FRAGMENT 5(F03)
+PLAN FRAGMENT 5(F01)
 
 Input Partition: RANDOM
 OutPut Partition: UNPARTITIONED
-OutPut Exchange Id: 06
+OutPut Exchange Id: 04
 
-5:AGGREGATE (update serialize)
+3:AGGREGATE (update serialize)
 |  aggregate: avg[([15: C_ACCTBAL, DOUBLE, false]); args: DOUBLE; result: VARCHAR; args nullable: false; result nullable: true]
 |  cardinality: 1
 |  column statistics:
 |  * avg-->[0.0, 9999.99, 0.0, 8.0, 1.0] ESTIMATE
 |
-4:Project
+2:Project
 |  output columns:
 |  15 <-> [15: C_ACCTBAL, DOUBLE, false]
 |  cardinality: 6815795
 |  column statistics:
 |  * C_ACCTBAL-->[0.0, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
 |
-3:OlapScanNode
+1:OlapScanNode
 table: customer, rollup: customer
 preAggregation: on
 Predicates: [15: C_ACCTBAL, DOUBLE, false] > 0.0, substring(14: C_PHONE, 1, 2) IN ('21', '28', '24', '32', '35', '34', '37')
 partitionsRatio=1/1, tabletsRatio=10/10
+tabletList=10227,10229,10231,10233,10235,10237,10239,10241,10243,10245
 actualRows=0, avgRowSize=23.0
 cardinality: 6815795
 column statistics:
 * C_PHONE-->[-Infinity, Infinity, 0.0, 15.0, 150000.0] ESTIMATE
 * C_ACCTBAL-->[0.0, 9999.99, 0.0, 8.0, 137439.0] ESTIMATE
-
-PLAN FRAGMENT 6(F00)
-
-Input Partition: RANDOM
-OutPut Partition: HASH_PARTITIONED: 22: O_CUSTKEY
-OutPut Exchange Id: 01
-
-0:OlapScanNode
-table: orders, rollup: orders
-preAggregation: on
-partitionsRatio=1/1, tabletsRatio=10/10
-actualRows=0, avgRowSize=8.0
-cardinality: 150000000
-probe runtime filters:
-- filter_id = 1, probe_expr = (22: O_CUSTKEY)
-column statistics:
-* O_CUSTKEY-->[1.0, 1.49999E7, 0.0, 8.0, 9999600.0] ESTIMATE
 [end]
 
