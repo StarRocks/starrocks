@@ -235,9 +235,7 @@ Stream Load 支持通过程序导入数据流，具体操作方法，请参见�
 
 ## 使用说明
 
-如果待导入数据文件中某行数据的某个字段缺失、并且 StarRocks 表中跟该字段对应的列定义为 `NOT NULL`，StarRocks 会在导入该行数据时自动往 StarRocks 表中对应的列补充 `NULL`。您也可以通过 `ifnull()` 函数指定要补充的默认值。
-
-例如，如果上述 `example2.json` 文件中代表城市 ID 的列缺失，您希望 StarRocks 在导入数据时往 StarRocks 表中对应的列中补充 `x`，可以指定 `"columns: city, tmp_id, id = ifnull(tmp_id, 'x')"`。
+如果待导入数据文件中某行数据的某个字段缺失、并且 StarRocks 表中跟该字段对应的列定义为 `NOT NULL`，StarRocks 会在导入该行数据时自动往 StarRocks 表中对应的列补充 `NULL`。您也可以通过 [`ifnull()`](../sql-reference/sql-functions/condition-functions/ifnull.md) 函数指定要补充的默认值。
 
 ## 常见问题
 
