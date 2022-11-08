@@ -6,7 +6,6 @@ import com.google.common.collect.BiMap;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
@@ -16,7 +15,6 @@ import java.util.Set;
 
 public class RewriteContext {
     private final OptExpression queryExpression;
-    private final LogicalProjectOperator queryProjection;
     private final PredicateSplit queryPredicateSplit;
     private final EquivalenceClasses queryEc;
     // key is table relation id
@@ -25,7 +23,6 @@ public class RewriteContext {
     private final ReplaceColumnRefRewriter queryColumnRefRewriter;
 
     private final OptExpression mvExpression;
-    private final LogicalProjectOperator mvProjection;
     private final PredicateSplit mvPredicateSplit;
     private final Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns;
     private final ColumnRefFactory mvRefFactory;
@@ -37,14 +34,12 @@ public class RewriteContext {
     private BiMap<Integer, Integer> queryToMvRelationIdMapping;
 
     public RewriteContext(OptExpression queryExpression,
-                          LogicalProjectOperator queryProjection,
                           PredicateSplit queryPredicateSplit,
                           EquivalenceClasses queryEc,
                           Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns,
                           ColumnRefFactory queryRefFactory,
                           ReplaceColumnRefRewriter queryColumnRefRewriter,
                           OptExpression mvExpression,
-                          LogicalProjectOperator mvProjection,
                           PredicateSplit mvPredicateSplit,
                           Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns,
                           ColumnRefFactory mvRefFactory,
@@ -52,14 +47,12 @@ public class RewriteContext {
                           Map<ColumnRefOperator, ColumnRefOperator> outputMapping,
                           Set<ColumnRefOperator> queryColumnSet) {
         this.queryExpression = queryExpression;
-        this.queryProjection = queryProjection;
         this.queryPredicateSplit = queryPredicateSplit;
         this.queryEc = queryEc;
         this.queryRelationIdToColumns = queryRelationIdToColumns;
         this.queryRefFactory = queryRefFactory;
         this.queryColumnRefRewriter = queryColumnRefRewriter;
         this.mvExpression = mvExpression;
-        this.mvProjection = mvProjection;
         this.mvPredicateSplit = mvPredicateSplit;
         this.mvRelationIdToColumns = mvRelationIdToColumns;
         this.mvRefFactory = mvRefFactory;
@@ -80,10 +73,6 @@ public class RewriteContext {
         return queryExpression;
     }
 
-    public LogicalProjectOperator getQueryProjection() {
-        return queryProjection;
-    }
-
     public PredicateSplit getQueryPredicateSplit() {
         return queryPredicateSplit;
     }
@@ -98,10 +87,6 @@ public class RewriteContext {
 
     public OptExpression getMvExpression() {
         return mvExpression;
-    }
-
-    public LogicalProjectOperator getMvProjection() {
-        return mvProjection;
     }
 
     public PredicateSplit getMvPredicateSplit() {

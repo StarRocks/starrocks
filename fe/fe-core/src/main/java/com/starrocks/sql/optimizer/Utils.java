@@ -896,29 +896,24 @@ public class Utils {
     }
 
     public static Map<ColumnRefOperator, ScalarOperator> getProjectionMap(
-            LogicalProjectOperator projection,
             OptExpression expression, ColumnRefFactory refFactory) {
         Map<ColumnRefOperator, ScalarOperator> projectionMap;
-        if (projection != null) {
-            projectionMap = projection.getColumnRefMap();
+        if (expression.getOp().getProjection() != null) {
+            projectionMap = expression.getOp().getProjection().getColumnRefMap();
         } else {
-            if (expression.getOp().getProjection() != null) {
-                projectionMap = expression.getOp().getProjection().getColumnRefMap();
+            projectionMap = Maps.newHashMap();
+            if (expression.getOp() instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
+                Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
+                        java.util.function.Function.identity(),
+                        java.util.function.Function.identity()));
+                projectionMap.putAll(keyMap);
+                projectionMap.putAll(agg.getAggregations());
             } else {
-                projectionMap = Maps.newHashMap();
-                if (expression.getOp() instanceof LogicalAggregationOperator) {
-                    LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
-                    Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
-                            java.util.function.Function.identity(),
-                            java.util.function.Function.identity()));
-                    projectionMap.putAll(keyMap);
-                    projectionMap.putAll(agg.getAggregations());
-                } else {
-                    ColumnRefSet refSet = expression.getOutputColumns();
-                    for (int columnId : refSet.getColumnIds()) {
-                        ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
-                        projectionMap.put(columnRef, columnRef);
-                    }
+                ColumnRefSet refSet = expression.getOutputColumns();
+                for (int columnId : refSet.getColumnIds()) {
+                    ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
+                    projectionMap.put(columnRef, columnRef);
                 }
             }
         }

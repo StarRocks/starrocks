@@ -350,6 +350,11 @@ public class UtilsTest {
         List<ScalarOperator> predicates = Utils.getAllPredicates(joinExpr);
         Assert.assertEquals(3, predicates.size());
         Assert.assertTrue(Utils.isAllEqualInnerJoin(joinExpr));
+        LogicalJoinOperator joinOperator2 = new LogicalJoinOperator(JoinOperator.LEFT_OUTER_JOIN, binaryPredicate);
+        OptExpression joinExpr2 = OptExpression.create(joinOperator2, scanExpr, scanExpr2);
+        Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr2));
+        OptExpression joinExpr3 = OptExpression.create(joinOperator, scanExpr, joinExpr2);
+        Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr3));
     }
 
     @Test

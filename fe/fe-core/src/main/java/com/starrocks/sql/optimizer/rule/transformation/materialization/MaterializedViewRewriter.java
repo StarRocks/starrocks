@@ -76,17 +76,6 @@ public class MaterializedViewRewriter {
         }
 
         OptExpression queryExpression = materializationContext.getQueryExpression();
-        // top projection from query, null if not exist
-        LogicalProjectOperator queryProjection;
-        // query expression below projection
-        OptExpression query;
-        if (queryExpression.getOp() instanceof LogicalProjectOperator) {
-            queryProjection = (LogicalProjectOperator) queryExpression.getOp();
-            query = queryExpression.getInputs().get(0);
-        } else {
-            queryProjection = null;
-            query = queryExpression;
-        }
         Map<ColumnRefOperator, ScalarOperator> queryLineage =
                 getLineage(queryExpression, materializationContext.getQueryRefFactory());
         ReplaceColumnRefRewriter queryColumnRefRewriter = new ReplaceColumnRefRewriter(queryLineage, true);
@@ -117,7 +106,7 @@ public class MaterializedViewRewriter {
             return null;
         }
 
-        MatchMode matchMode = getMatchMode(query, queryTables, mvExpression, mvTables);
+        MatchMode matchMode = getMatchMode(queryExpression, queryTables, mvExpression, mvTables);
         if (matchMode != MatchMode.COMPLETE) {
             // Now only MatchMode.COMPLETE is supported.
             // It will be extended later
@@ -165,9 +154,9 @@ public class MaterializedViewRewriter {
                 .stream().flatMap(List::stream)
                 .filter(columnRef -> !materializationContext.getScanMvOutputExpressions().contains(columnRef))
                 .collect(Collectors.toSet());
-        RewriteContext rewriteContext = new RewriteContext(query, queryProjection,
+        RewriteContext rewriteContext = new RewriteContext(queryExpression, /*queryProjection,*/
                 queryPredicateSplit, queryEc, queryRelationIdToColumns, materializationContext.getQueryRefFactory(),
-                queryColumnRefRewriter, mvExpression, mvTopProjection, mvPredicateSplit, mvRelationIdToColumns,
+                queryColumnRefRewriter, mvExpression, /* mvTopProjection ,*/ mvPredicateSplit, mvRelationIdToColumns,
                 materializationContext.getMvColumnRefFactory(), mvColumnRefRewriter, outputMapping, queryColumnSet);
         List<OptExpression> results = Lists.newArrayList();
         for (BiMap<Integer, Integer> relationIdMapping : relationIdMappings) {
@@ -207,7 +196,7 @@ public class MaterializedViewRewriter {
             ScalarOperator otherPredicates = Utils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
             if (!Utils.isAlwaysTrue(equalPredicates) || !Utils.isAlwaysTrue(otherPredicates)) {
-                Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(rewriteContext.getMvProjection(),
+                Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(
                         rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
 
                 if (!Utils.isAlwaysTrue(equalPredicates)) {
@@ -338,7 +327,7 @@ public class MaterializedViewRewriter {
 
     // TODO: consider no-loss type cast
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(rewriteContext.getMvProjection(),
+        Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(
                 rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
         // normalize view projection by query relation and ec
         Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
@@ -350,7 +339,7 @@ public class MaterializedViewRewriter {
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
                                     Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                     OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> queryMap = Utils.getProjectionMap(rewriteContext.getQueryProjection(),
+        Map<ColumnRefOperator, ScalarOperator> queryMap = Utils.getProjectionMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
