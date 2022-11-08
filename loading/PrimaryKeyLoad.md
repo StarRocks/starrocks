@@ -6,7 +6,9 @@ StarRocks 还支持部分更新。该特性目前正在公测中。
 
 本文以 CSV 格式的数据文件为例介绍如何通过导入实现数据变更。具体支持的数据文件类型，跟您选择的导入方式有关。
 
-> 说明：对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+> **说明**
+>
+> 对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
 ## 内部实现
 
@@ -14,7 +16,9 @@ StarRocks 的主键模型目前支持 UPSERT 和 DELETE 操作，不支持区分
 
 在创建导入作业时，StarRocks 支持在导入作业的创建语句或或命令中添加 `__op` 字段，用于指定操作类型。
 
-> 说明：不需要在创建 StarRocks 表时添加 `__op` 列。
+> **说明**
+>
+> 不需要在创建 StarRocks 表时添加 `__op` 列。
 
 不同的导入方式，定义 `__op` 字段的方法也不相同：
 
@@ -372,7 +376,9 @@ MySQL [test_db]> SELECT * FROM table2;
       http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
   ```
 
-  > 说明：上述示例中，通过 `columns` 参数把 `example3.csv` 文件中代表组别代码的第四列临时命名为 `temp`，然后定义 `__op` 字段等于临时命名的 `temp` 列。这样，StarRocks 可以根据 `example3.csv` 文件中第四列的取值是 `0` 还是 `1` 来确定执行 UPSERT 还是 DELETE 操作。
+  > **说明**
+  >
+  > 上述示例中，通过 `columns` 参数把 `example3.csv` 文件中代表组别代码的第四列临时命名为 `temp`，然后定义 `__op` 字段等于临时命名的 `temp` 列。这样，StarRocks 可以根据 `example3.csv` 文件中第四列的取值是 `0` 还是 `1` 来确定执行 UPSERT 还是 DELETE 操作。
 
 - 通过 Broker Load 导入：
 
@@ -482,7 +488,9 @@ MySQL [test_db]> SELECT * FROM table3;
       http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
   ```
 
-  > 说明：使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `columns` 中声明待更新数据的列的名称。
+  > **说明**
+  >
+  > 使用 Stream Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `columns` 中声明待更新数据的列的名称。
 
 - 通过 Broker Load 导入：
 
@@ -501,7 +509,9 @@ MySQL [test_db]> SELECT * FROM table3;
   );
   ```
 
-  > 说明：使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
+  > **说明**
+  >
+  > 使用 Broker Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `column_list` 中声明待更新数据的列的名称。
 
 - 通过 Routine Load 导入：
 
@@ -521,7 +531,9 @@ MySQL [test_db]> SELECT * FROM table3;
   );
   ```
 
-  > 说明：使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
+  > **说明**
+  >
+  > 使用 Routine Load 导入数据时，需要设置 `partial_update` 为 `true`，以开启部分更新特性。另外，还需要在 `COLUMNS` 中声明待更新数据的列的名称。
 
 ### 查询数据
 
