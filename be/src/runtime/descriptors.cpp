@@ -572,6 +572,15 @@ SlotDescriptor* DescriptorTbl::get_slot_descriptor(SlotId id) const {
     }
 }
 
+// return all registered tuple descriptors
+void DescriptorTbl::get_tuple_descs(std::vector<TupleDescriptor*>* descs) const {
+    descs->clear();
+
+    for (auto i : _tuple_desc_map) {
+        descs->push_back(i.second);
+    }
+}
+
 std::string DescriptorTbl::debug_string() const {
     std::stringstream out;
     out << "tuples:\n";
