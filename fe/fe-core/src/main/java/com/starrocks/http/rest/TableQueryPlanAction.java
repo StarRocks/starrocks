@@ -238,7 +238,7 @@ public class TableQueryPlanAction extends RestBaseAction {
         }
 
         if (execPlan == null) {
-            LOG.error("plan is null for queryId: {}", context.getQueryId(), sql);
+            LOG.error("plan is null for queryId: {}", context.getQueryId());
             throw new StarRocksHttpException(HttpResponseStatus.INTERNAL_SERVER_ERROR,
                     "The Sql is invalid");
         }
