@@ -90,7 +90,7 @@ PROPERTIES
 );
 
 # 写入数据至 StarRocks 外表，实现源集群的数据写入至目标集群。推荐生产环境使用第二种方式。
-insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10: 00: 00');
+insert into external_t values ('2020-10-11', 1, 1, 'hello', '2020-10-11 10:00:00');
 
 insert into external_t select * from other_table;
 ~~~
