@@ -52,6 +52,9 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     if (tnode.__isset.nestloop_join_node) {
         _join_op = tnode.nestloop_join_node.join_op;
+        if (!state->enable_pipeline_engine() && _join_op != TJoinOp::CROSS_JOIN && _join_op != TJoinOp::INNER_JOIN) {
+            return Status::NotSupported("non-pipeline engine only support CROSS JOIN");
+        }
         if (!_support_join_type(_join_op)) {
             std::string type_string = starrocks::to_string(_join_op);
             return Status::NotSupported("nestloop join not supoort: " + type_string);
