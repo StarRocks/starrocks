@@ -20,7 +20,9 @@ curl --location-trusted -u <username>:<password> -XPUT <url>
 
 - 当前支持 HTTP **分块上传**和**非分块上传**两种方式。如果使用非分块上传方式，必须使用请求头字段 `Content-Length` 来标示待上传内容的长度，从而保证数据完整性。
 
-  > 说明：使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
+  > **说明**
+  >
+  > 使用 curl 工具提交导入作业的时候，会自动添加 `Content-Length` 字段，因此无需手动指定 `Content-Length`。
 
 - 建议在 HTTP 请求的请求头字段 `Expect` 中指定 `100-continue`，即 `"Expect:100-continue"`。这样在服务器拒绝导入作业请求的情况下，可以避免不必要的数据传输，从而减少不必要的资源开销。
 
@@ -267,7 +269,9 @@ curl --location-trusted -u root:  -H "label:label4" \
     http://<fe_host>:<fe_http_port>/api/test_db/table3/_stream_load
 ```
 
-> 说明：上述示例中，因为 `example3.csv` 和 `table3` 所包含的列不能按顺序依次对应，因此需要通过 `columns` 参数来设置 `example3.csv` 和 `table3` 之间的列映射关系。
+> **说明**
+>
+> 上述示例中，因为 `example3.csv` 和 `table3` 所包含的列不能按顺序依次对应，因此需要通过 `columns` 参数来设置 `example3.csv` 和 `table3` 之间的列映射关系。
 
 #### **设置筛选条件**
 
@@ -285,7 +289,9 @@ curl --location-trusted -u root: -H "label:label2" \
     http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
 ```
 
-> 说明：上述示例中，虽然 `example4.csv` 和 `table4` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `columns` 参数对 `example4.csv` 中的列进行临时命名。
+> **说明**
+>
+> 上述示例中，虽然 `example4.csv` 和 `table4` 所包含的列数目相同、并且按顺序一一对应，但是因为需要通过 WHERE 子句指定基于列的过滤条件，因此需要通过 `columns` 参数对 `example4.csv` 中的列进行临时命名。
 
 #### **设置目标分区**
 
@@ -333,7 +339,7 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table7/_stream_load
 ```
 
-> 说明：
+> **说明**
 >
 > 上述示例中，通过 `columns` 参数，把 `example7.csv` 中的两列临时命名为 `temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
 >
@@ -358,7 +364,7 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table8/_stream_load
 ```
 
-> 说明：
+> **说明**
 >
 > 上述示例中，通过 `columns` 参数，把 `example8.csv` 中的两列临时命名为 `temp1`、`temp2`，然后使用函数指定数据转换规则，包括：
 >
@@ -398,7 +404,9 @@ curl --location-trusted -u root: -H "label:label6" \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
 ```
 
-> 说明：如上述示例所示，在没有指定 `columns` 和 `jsonpaths` 参数的情况下，则会按照 StarRocks 表中的列名称去对应 JSON 数据文件中的字段。
+> **说明**
+>
+> 如上述示例所示，在没有指定 `columns` 和 `jsonpaths` 参数的情况下，则会按照 StarRocks 表中的列名称去对应 JSON 数据文件中的字段。
 
 为了提升吞吐量，Stream Load 支持一次性导入多条数据。比如，可以一次性导入 JSON 数据文件中如下多条数据：
 
@@ -434,7 +442,7 @@ curl --location-trusted -u root: -H "label:label7" \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
 ```
 
-> 说明：
+> **说明**
 >
 > - 这里的 JSON 数据是以数组形式表示，并且数组中每个元素（一个 JSON 对象）表示一条记录，则需要设置 `strip_outer_array` 为 `true`，以表示展开数组。
 >
@@ -469,7 +477,7 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/tbl1/_stream_load
 ```
 
-> 说明：
+> **说明**
 >
 > - 通过 `json_root` 参数指定了需要真正导入的数据为 `RECORDS` 字段对应的值，即一个 JSON 数组。
 >
