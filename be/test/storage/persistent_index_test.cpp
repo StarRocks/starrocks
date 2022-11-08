@@ -495,6 +495,77 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
+PARALLEL_TEST(PersistentIndexTest, test_flush_l0_max_file_size) {
+    int64_t flush_l0_max_file_size = config::flush_l0_max_file_size;
+    config::flush_l0_max_file_size = 200000;
+    int64_t l0_l1_merge_ratio = config::l0_l1_merge_ratio;
+    config::l0_l1_merge_ratio = 0;
+    FileSystem* fs = FileSystem::Default();
+    const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l0_max_file_size";
+    const std::string kIndexFile = "./PersistentIndexTest_test_flush_l0_max_file_size/index.l0.0.0";
+    bool created;
+    ASSERT_OK(fs->create_dir_if_missing(kPersistentIndexDir, &created));
+
+    using Key = uint64_t;
+    PersistentIndexMetaPB index_meta;
+    const int N = 40000;
+    vector<Key> keys;
+    vector<Slice> key_slices;
+    vector<IndexValue> values;
+    keys.reserve(N);
+    key_slices.reserve(N);
+    for (int i = 0; i < N; i++) {
+        keys.emplace_back(i);
+        values.emplace_back(i * 2);
+        key_slices.emplace_back((uint8_t*)(&keys[i]), sizeof(Key));
+    }
+
+    {
+        ASSIGN_OR_ABORT(auto wfile, FileSystem::Default()->new_writable_file(kIndexFile));
+        ASSERT_OK(wfile->close());
+    }
+
+    EditVersion version(0, 0);
+    index_meta.set_key_size(sizeof(Key));
+    index_meta.set_size(0);
+    version.to_pb(index_meta.mutable_version());
+    MutableIndexMetaPB* l0_meta = index_meta.mutable_l0_meta();
+    IndexSnapshotMetaPB* snapshot_meta = l0_meta->mutable_snapshot();
+    version.to_pb(snapshot_meta->mutable_version());
+
+    std::vector<IndexValue> old_values(N);
+    PersistentIndex index(kPersistentIndexDir);
+    auto one_time_num = N / 4;
+    bool flushed_l0 = false;
+    for (auto i = 0; i < 2; ++i) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
+        ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
+                               old_values.data() + one_time_num * i));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        flushed_l0 |= !index_meta.l0_meta().snapshot().data().size();
+    }
+    ASSERT_TRUE(flushed_l0);
+
+    flushed_l0 = false;
+    for (auto i = 2; i < 4; ++i) {
+        ASSERT_OK(index.load(index_meta));
+        ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
+        ASSERT_OK(index.upsert(one_time_num, key_slices.data() + one_time_num * i, values.data() + one_time_num * i,
+                               old_values.data() + one_time_num * i));
+        ASSERT_OK(index.commit(&index_meta));
+        ASSERT_OK(index.on_commited());
+        flushed_l0 |= !index_meta.l0_meta().snapshot().data().size();
+    }
+    ASSERT_TRUE(flushed_l0);
+
+    ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
+
+    config::flush_l0_max_file_size = flush_l0_max_file_size;
+    config::l0_l1_merge_ratio = l0_l1_merge_ratio;
+}
+
 PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_small_varlen_mutable_index_snapshot";
