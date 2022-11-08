@@ -6,7 +6,7 @@ Converts each element of an SQL array to a JSON value and returns a JSON array t
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 json_array(value, ...)
 ```
 
