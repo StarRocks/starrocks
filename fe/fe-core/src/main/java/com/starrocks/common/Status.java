@@ -77,6 +77,10 @@ public class Status {
         return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
     }
 
+    public void setErrorMsg(String errorMsg) {
+        this.errorMsg = errorMsg;
+    }
+
     public void setStatus(Status status) {
         this.errorCode = status.errorCode;
         this.errorMsg = status.getErrorMsg();

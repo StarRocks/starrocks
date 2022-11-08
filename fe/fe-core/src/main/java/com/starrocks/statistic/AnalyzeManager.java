@@ -6,7 +6,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Catalog;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,7 +27,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
-import java.util.stream.Collectors;
 
 public class AnalyzeManager implements Writable {
     private static final Logger LOG = LogManager.getLogger(AnalyzeManager.class);
@@ -179,8 +177,7 @@ public class AnalyzeManager implements Writable {
             }
             if (jobLastWorkTime.isBefore(updateTime)) {
                 List<String> columns = (job.getColumns() == null || job.getColumns().isEmpty()) ?
-                        table.getFullSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                                .collect(Collectors.toList()) : job.getColumns();
+                        StatisticUtils.getCollectibleColumns(table) : job.getColumns();
                 Catalog.getCurrentStatisticStorage().expireColumnStatistics(table, columns);
             }
         }
