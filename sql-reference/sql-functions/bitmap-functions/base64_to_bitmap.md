@@ -8,7 +8,7 @@
 
 ## 语法
 
-```Plain Text
+```Haskell
 BITMAP base64_to_bitmap(STRING bitmap)
 ```
 
