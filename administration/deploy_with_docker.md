@@ -69,7 +69,7 @@ cd $StarRocks_home/StarRocks-$StarRocks_version/fe/bin/
 ./start_fe.sh --daemon
 
 # Start BE.
-cd $StarRocks_home/StarRocks-StarRocks_version/be/bin/
+cd $StarRocks_home/StarRocks-$StarRocks_version/be/bin/
 ./start_be.sh --daemon
 
 # Sleep until the cluster starts.
