@@ -97,7 +97,7 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 
-import static com.starrocks.catalog.TableProperty.NO_TTL;
+import static com.starrocks.catalog.TableProperty.INVALID;
 
 public class Alter {
     private static final Logger LOG = LogManager.getLogger(Alter.class);
@@ -274,7 +274,7 @@ public class Alter {
         Map<String, String> properties = modifyTablePropertiesClause.getProperties();
         Map<String, String> propClone = Maps.newHashMap();
         propClone.putAll(properties);
-        int partitionTTL = NO_TTL;
+        int partitionTTL = INVALID;
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
             partitionTTL = PropertyAnalyzer.analyzePartitionTimeToLive(properties);
         }
