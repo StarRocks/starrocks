@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`INT MURMUR_HASH3_32(VARCHAR input, ...)`
+```Haskell
+INT MURMUR_HASH3_32(VARCHAR input, ...)
+```
 
 Returns the 32-bit murmur3 hash value of the input string.
 

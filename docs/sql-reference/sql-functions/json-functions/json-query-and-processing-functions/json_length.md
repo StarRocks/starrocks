@@ -16,7 +16,7 @@ The length of a document is determined according to the following rules:
 
 ## Syntax
 
-```SQL
+```Haskell
 json_length(json_doc[, path])
 ```
 
