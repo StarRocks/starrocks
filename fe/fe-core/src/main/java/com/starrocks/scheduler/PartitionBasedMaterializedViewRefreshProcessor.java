@@ -452,7 +452,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
             if (snapshotTable.getId() == partitionTable.getId()) {
                 continue;
             }
-            // External table don't need to check here
+            // External tables don't need to check here
             if (!snapshotTable.isOlapTable()) {
                 continue;
             }
@@ -466,7 +466,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
     private boolean unPartitionedMVNeedToRefresh() {
         for (Pair<MaterializedView.BaseTableInfo, Table> tablePair : snapshotBaseTables.values()) {
             Table snapshotTable = tablePair.second;
-            // External table need to refresh, we can't get updated info of external table now.
+            // External tables need to refresh, we can't get updated info of external table now.
             if (!snapshotTable.isOlapTable()) {
                 return true;
             }
