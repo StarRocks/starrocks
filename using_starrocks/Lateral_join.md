@@ -15,7 +15,7 @@ set global enable_cbo = true;
 Lateral 关键字语法说明：
 
 ~~~SQL
-from table_reference join [lateral] table_reference
+from table_reference join [lateral] table_reference;
 ~~~
 
 Unnest关键字，是一种 table function，可以把数组类型转化成table的多行，配合 Lateral Join 就能实现我们常见的各种行展开逻辑。
