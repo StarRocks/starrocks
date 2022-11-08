@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`AVG([DISTINCT] expr)`
+```Haskell
+AVG([DISTINCT] expr)
+```
 
 It is used to return the average value of selected fields.
 
