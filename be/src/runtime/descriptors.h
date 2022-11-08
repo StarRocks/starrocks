@@ -386,8 +386,7 @@ public:
     RowDescriptor(const RowDescriptor& desc)
             : _tuple_desc_map(desc._tuple_desc_map),
               _tuple_idx_nullable_map(desc._tuple_idx_nullable_map),
-              _tuple_idx_map(desc._tuple_idx_map) {
-    }
+              _tuple_idx_map(desc._tuple_idx_map) {}
 
     RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
 

@@ -84,14 +84,12 @@ void SlotDescriptor::to_protobuf(PSlotDescriptor* pslot) const {
 std::string SlotDescriptor::debug_string() const {
     std::stringstream out;
     out << "Slot(id=" << _id << " type=" << _type << " name=" << _col_name
-         << " null=" << _null_indicator_offset.debug_string() << ")";
+        << " null=" << _null_indicator_offset.debug_string() << ")";
     return out.str();
 }
 
 TableDescriptor::TableDescriptor(const TTableDescriptor& tdesc)
-        : _name(tdesc.tableName),
-          _database(tdesc.dbName),
-          _id(tdesc.id) {}
+        : _name(tdesc.tableName), _database(tdesc.dbName), _id(tdesc.id) {}
 
 std::string TableDescriptor::debug_string() const {
     std::stringstream out;
@@ -299,16 +297,10 @@ std::string JDBCTableDescriptor::debug_string() const {
 }
 
 TupleDescriptor::TupleDescriptor(const TTupleDescriptor& tdesc)
-        : _id(tdesc.id),
-          _table_desc(nullptr),
-          _byte_size(tdesc.byteSize) {
-}
+        : _id(tdesc.id), _table_desc(nullptr), _byte_size(tdesc.byteSize) {}
 
 TupleDescriptor::TupleDescriptor(const PTupleDescriptor& pdesc)
-        : _id(pdesc.id()),
-          _table_desc(nullptr),
-          _byte_size(pdesc.byte_size()) {
-}
+        : _id(pdesc.id()), _table_desc(nullptr), _byte_size(pdesc.byte_size()) {}
 
 void TupleDescriptor::add_slot(SlotDescriptor* slot) {
     _slots.push_back(slot);
