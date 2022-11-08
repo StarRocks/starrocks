@@ -252,13 +252,22 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     // 这里的循环表示我们获取到capacity条记录，则停止循环
     for (size_t num_rows = chunk->num_rows(); num_rows < capacity; /**/) {
         status = _curr_reader->next_record(&fields);
-        if (status.is_end_of_file()) {
-            break;
-        } else if (!status.ok()) {
+        if (!status.ok() && !status.is_end_of_file()) {
             return status;
         }
 
+        // 跳过空行
+        if (fields.size() == 0) {
+            if (status.is_end_of_file()) {
+                break;
+            }
+            continue;
+        }
+
         if (fields.size() != _num_fields_in_csv) {
+            if (status.is_end_of_file()) {
+                break;
+            }
             if (_counter->num_rows_filtered++ < 50) {
                 std::stringstream error_msg;
                 error_msg << "Value count does not match column count. "
@@ -306,6 +315,9 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             k++;
         }
         num_rows += !has_error;
+        if (status.is_end_of_file()) {
+            break;
+        }
     }
     return chunk->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
 }

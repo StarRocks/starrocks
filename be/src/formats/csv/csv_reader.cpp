@@ -111,19 +111,25 @@ Status CSVReader::readMore(CSVBuffer& buff) {
 // 这个函数我们要从状态START开始，读取下一条记录。
 // 重载。
 Status CSVReader::next_record(Fields* fields) {
+    fields->clear();
     if (_limit > 0 && _parsed_bytes > _limit) {
         return Status::EndOfFile("Reached limit");
     }
-    fields->clear();
     // TODO: 每次读一条记录时先做一次compact，这里性能会有问题
     _buff.compact();
     ParseState curState = START;
     ParseState preState = curState;
     char* filed_start = nullptr;
+    char* parsed_start = _buff.position();
+    Status status = Status::OK();
     while (true) {
         // 到了一行的行尾,或者字段尾部，此次不再读新的数据
         if (curState != NEWLINE && curState != DELIMITER) {
-            RETURN_IF_ERROR(readMore(_buff));
+            status = readMore(_buff);
+            if (!status.ok()) {
+                curState = NEWLINE;
+                goto newline_label;
+            }
         }
         // 每一次根据当前的状态+当前的字符流，来推进到下一个状态
         switch (curState)
@@ -133,8 +139,10 @@ Status CSVReader::next_record(Fields* fields) {
             if (_trim_space) {
                 while (*(_buff.position()) == ' ') {
                     _buff.skip(1);
-                    if(!readMore(_buff).ok()) {
-                        break;
+                    status = readMore(_buff);
+                    if (!status.ok()) {
+                        curState = NEWLINE;
+                        goto newline_label;
                     }
                 }
             }
@@ -167,7 +175,11 @@ Status CSVReader::next_record(Fields* fields) {
             if (*(_buff.position()) == _enclose) {
                 _buff.skip(1);
                 // TODO: 这里还需要调整
-                RETURN_IF_ERROR(readMore(_buff));
+                status = readMore(_buff);
+                if (!status.ok()) {
+                    curState = NEWLINE;
+                    goto newline_label;
+                }
                 filed_start = _buff.position();
                 if (*(_buff.position()) != _enclose) {
                     curState = ENCLOSE;
@@ -176,8 +188,11 @@ Status CSVReader::next_record(Fields* fields) {
                     // ""something
                     // 空字段还是转义？
                     _buff.skip(1);
-                    RETURN_IF_ERROR(readMore(_buff));
-                    // ""rowseperator
+                    status = readMore(_buff);
+                    if (!status.ok()) {
+                        curState = NEWLINE;
+                        goto newline_label;
+                    }                    // ""rowseperator
                     if (isRowDelimiter(_buff)) {
                         curState = NEWLINE;
                         break;
@@ -279,11 +294,24 @@ Status CSVReader::next_record(Fields* fields) {
             fields->emplace_back(filed_start, _buff.position() - _column_separator_length - filed_start);
             curState = START;
             break;
+
+    newline_label:
         case NEWLINE:
+            _parsed_bytes += _buff.position() - parsed_start;
             // push line
-            fields->emplace_back(filed_start, _buff.position() - _row_delimiter_length - filed_start);
+            // 如果未发生异常，那么将行分隔符从字段中去除，发生异常，不做修饰了。
+            if (status.ok()) {
+                // 空行
+                if (!(fields->size() == 0 && _buff.position() - _row_delimiter_length - filed_start == 0)) {
+                    fields->emplace_back(filed_start, _buff.position() - _row_delimiter_length - filed_start);
+                }
+            } else {
+                if (filed_start) {
+                    fields->emplace_back(filed_start, _buff.position() - filed_start);
+                }
+            }
             curState = START;
-            return Status::OK();
+            return status;
         default:
             return Status::NotSupported("Not supported state when csv parsing");
         }
