@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)`
+```Haskell
+BOOL ST_Contains(GEOMETRY shape1, GEOMETRY shape2)
+```
 
 Check whether the geometric figure shape1 can fully contain shape2.
 
