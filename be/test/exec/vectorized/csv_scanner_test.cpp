@@ -601,7 +601,7 @@ TEST_F(CSVScannerTest, test_ENCLOSE_ESCAPE) {
     EXPECT_EQ(7, chunk->get(3)[0].get_int32());
     EXPECT_EQ(9, chunk->get(4)[0].get_int32());
 
-    EXPECT_EQ(" aa", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("aa", chunk->get(0)[1].get_slice());
     EXPECT_EQ("bb", chunk->get(1)[1].get_slice());
     EXPECT_EQ("cc", chunk->get(2)[1].get_slice());
     EXPECT_EQ("dd", chunk->get(3)[1].get_slice());

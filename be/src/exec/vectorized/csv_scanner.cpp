@@ -49,6 +49,9 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
         } else if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             // Has reached the end of file but still no record delimiter found, which
             // is valid, according the RFC, add the record delimiter ourself.
+            if (_buff.free_space() < _row_delimiter_length) {
+                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()));
+            }
             for (char ch : _row_delimiter) {
                 _buff.append(ch);
             }

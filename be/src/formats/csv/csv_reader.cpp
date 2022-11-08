@@ -119,12 +119,12 @@ Status CSVReader::next_record(Fields* fields) {
     _buff.compact();
     ParseState curState = START;
     ParseState preState = curState;
+    char* filed_start = nullptr;
     while (true) {
         // 到了一行的行尾,或者字段尾部，此次不再读新的数据
         if (curState != NEWLINE && curState != DELIMITER) {
             RETURN_IF_ERROR(readMore(_buff));
         }
-        char* filed_start = nullptr;
         // 每一次根据当前的状态+当前的字符流，来推进到下一个状态
         switch (curState)
         {
