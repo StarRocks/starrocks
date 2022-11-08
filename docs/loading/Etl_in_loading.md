@@ -6,7 +6,9 @@ This feature supports [Stream Load](../loading/StreamLoad.md), [Broker Load](../
 
 This topic uses CSV data as an example to describe how to extract and transform data at loading. The data file formats that are supported vary depending on the loading method of your choice.
 
-> Note: For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
 
 ## Scenarios
 
@@ -95,7 +97,9 @@ This feature supports loading data from the following data sources:
 
 - HDFS and cloud storage
   
-  > Note: This section uses HDFS as an example.
+  > **NOTE**
+  >
+  > This section uses HDFS as an example.
 
 - Kafka
 
@@ -123,7 +127,9 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
-> Note: If you choose Stream Load, you must use the `columns` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
+> **NOTE**
+>
+> If you choose Stream Load, you must use the `columns` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
 For detailed syntax and parameter descriptions, see [STREAM LOAD](../sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md).
 
@@ -143,7 +149,9 @@ LOAD LABEL test_db.label1
 WITH BROKER "broker1";
 ```
 
-> Note: If you choose Broker Load, you must use the `column_list` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
+> **NOTE**
+>
+> If you choose Broker Load, you must use the `column_list` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
@@ -163,7 +171,9 @@ FROM KAFKA
 );
 ```
 
-> Note: If you choose Routine Load, you must use the `COLUMNS` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
+> **NOTE**
+>
+> If you choose Routine Load, you must use the `COLUMNS` parameter to temporarily name the columns of the data file to create a column mapping between the data file and the StarRocks table.
 
 For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
@@ -193,7 +203,9 @@ This feature supports loading data from the following data sources:
 - Local file system
 
 - HDFS and cloud storage
-  > Note: This section uses HDFS as an example.
+  > **NOTE**
+  >
+  > This section uses HDFS as an example.
 
 - Kafka
 
@@ -278,7 +290,9 @@ This feature supports loading data from the following data sources:
 - Local file system
 
 - HDFS and cloud storage
-  > Note: This section uses HDFS as an example.
+  > **NOTE**
+  >
+  > This section uses HDFS as an example.
 
 - Kafka
 
@@ -298,7 +312,7 @@ curl --location-trusted -u root: \
     http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
 
-> Note:
+> **NOTE**
 >
 > - In the `columns` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 >
@@ -323,7 +337,9 @@ LOAD LABEL test_db.label3
 WITH BROKER "broker1";
 ```
 
-> Note: You must first use the `column_list` parameter to temporarily name **all columns** of the data file, and then use the SET clause to temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date` in the `column_list` parameter, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked in the SET clause to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
+> **NOTE**
+>
+> You must first use the `column_list` parameter to temporarily name **all columns** of the data file, and then use the SET clause to temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date` in the `column_list` parameter, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked in the SET clause to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
@@ -343,7 +359,9 @@ FROM KAFKA
 );
 ```
 
-> Note: In the `COLUMNS` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
+> **NOTE**
+>
+> In the `COLUMNS` parameter, you must first temporarily name **all columns** of the data file, and then temporarily name the new columns that you want to generate from the original columns of the data file. As shown in the preceding example, the only column of `file2.csv` is temporarily named as `date`, and then the `year=year(date)`, `month=month(date)`, and `day=day(date)` functions are invoked to generate three new columns, which are temporarily named as `year`, `month`, and `day`.
 
 For detailed syntax and parameter descriptions, see [CREATE ROUTINE LOAD](../sql-reference/sql-statements/data-manipulation/ROUTINE%20LOAD.md).
 
@@ -401,7 +419,9 @@ LOAD LABEL test_db.label4
 WITH BROKER "broker1";
 ```
 
-> Note: In the preceding example, the `date` partition field in the specified file path is equivalent to the `event_date` column of `table1`. Therefore, you need to use the SET clause to map the `date` partition field onto the `event_date` column. If the partition field in the specified file path has the same name as a column of the StarRocks table, you do not need to use the SET clause to create a mapping.
+> **NOTE**
+>
+> In the preceding example, the `date` partition field in the specified file path is equivalent to the `event_date` column of `table1`. Therefore, you need to use the SET clause to map the `date` partition field onto the `event_date` column. If the partition field in the specified file path has the same name as a column of the StarRocks table, you do not need to use the SET clause to create a mapping.
 
 For detailed syntax and parameter descriptions, see [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD.md).
 
