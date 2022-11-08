@@ -10,12 +10,9 @@ import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
-=======
 import com.starrocks.sql.ast.AlterDatabaseQuotaStmt;
 import com.starrocks.sql.ast.AlterDatabaseRenameStatement;
->>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
@@ -28,11 +25,8 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
-<<<<<<< HEAD
-import com.starrocks.sql.ast.DropFileStmt;
-=======
 import com.starrocks.sql.ast.DropDbStmt;
->>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
+import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -45,9 +39,9 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.RecoverDbStmt;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
-<<<<<<< HEAD
 import com.starrocks.sql.ast.SetUserPropertyStmt;
 import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowGrantsStmt;
 import com.starrocks.sql.ast.ShowPluginsStmt;
 import com.starrocks.sql.ast.ShowRolesStmt;
@@ -58,13 +52,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UninstallPluginStmt;
-=======
-import com.starrocks.sql.ast.ShowCreateDbStmt;
-import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.ast.SubqueryRelation;
-import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.UseDbStmt;
->>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
 import com.starrocks.sql.ast.ViewRelation;
 
 public class PrivilegeCheckerV2 {
@@ -90,16 +78,10 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-<<<<<<< HEAD
-    static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
-        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-=======
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
                               PrivilegeType.DbAction action) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException("external catalog is not supported for now!");
->>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
+        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
@@ -109,7 +91,7 @@ public class PrivilegeCheckerV2 {
 
     static void checkAnyActionInDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException("external catalog is not supported for now!");
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
 
         if (!PrivilegeManager.checkAnyActionInDb(context, dbName)) {
@@ -229,9 +211,6 @@ public class PrivilegeCheckerV2 {
             }
         }
 
-<<<<<<< HEAD
-        // ---------------------------------------- External Resource Statement---------------------------------------------
-=======
         // --------------------------------- Database Statement ---------------------------------
 
         @Override
@@ -246,22 +225,26 @@ public class PrivilegeCheckerV2 {
             return null;
         }
 
+        @Override
         public Void visitRecoverDbStatement(RecoverDbStmt statement, ConnectContext context) {
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
             // TODO(yiming): check the `CREATE_DATABASE` action on internal catalog after catalog object is added
             return null;
         }
 
+        @Override
         public Void visitAlterDatabaseQuotaStatement(AlterDatabaseQuotaStmt statement, ConnectContext context) {
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.ALTER);
             return null;
         }
 
+        @Override
         public Void visitAlterDatabaseRenameStatement(AlterDatabaseRenameStatement statement, ConnectContext context) {
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.ALTER);
             return null;
         }
 
+        @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
             return null;
@@ -280,7 +263,6 @@ public class PrivilegeCheckerV2 {
 
         // --------------------------------- External Resource Statement ---------------------------------
 
->>>>>>> d71852c7e ([Feature] New privilege: authorization support for database object)
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.CREATE_RESOURCE)) {

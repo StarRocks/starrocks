@@ -125,6 +125,7 @@ public class Analyzer {
             return null;
         }
 
+        @Override
         public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
             BasicDbStmtAnalyzer.analyze(statement, context);
             return null;
