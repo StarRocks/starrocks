@@ -2,11 +2,11 @@
 
 ## 功能
 
-将array类型转化为bitmap类型。
+将 array 类型转化为 bitmap 类型。
 
 ## 语法
 
-```Plain Text
+```Haskell
 array_to_bitmap(array)
 ```
 
@@ -16,7 +16,7 @@ array_to_bitmap(array)
 
 ## 返回值说明
 
-返回BITMAP类型的值。
+返回 BITMAP 类型的值。
 
 ## 注意事项
 

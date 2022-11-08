@@ -8,7 +8,7 @@
 
 ## 语法
 
-```SQL
+```Haskell
 BOOLEAN array_contains_all(arr1, arr2)
 ```
 

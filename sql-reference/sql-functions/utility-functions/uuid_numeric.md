@@ -6,7 +6,7 @@
 
 ## 语法
 
-```Plain Text
+```Haskell
 uuid_numeric();
 ```
 

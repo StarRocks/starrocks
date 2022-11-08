@@ -6,7 +6,9 @@
 
 ## 语法
 
-`ARRAY_AGG(col)`
+```Haskell
+ARRAY_AGG(col)
+```
 
 ## 参数说明
 

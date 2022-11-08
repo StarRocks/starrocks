@@ -8,7 +8,6 @@
 
 ```Haskell
 host_name();
-
 ```
 
 ## 参数说明
