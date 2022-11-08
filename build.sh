@@ -42,11 +42,6 @@ export STARROCKS_HOME=${ROOT}
 
 . ${STARROCKS_HOME}/env.sh
 
-if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/fast_float/fast_float.h ]]; then
-    echo "Thirdparty libraries need to be build because fast_float has not been built yet ..."
-    ${STARROCKS_THIRDPARTY}/build-thirdparty.sh
-fi
-
 if [[ ! -f ${STARROCKS_THIRDPARTY}/installed/include/pulsar/Client.h ]]; then
     echo "Thirdparty libraries need to be build because pulsar has not been built yet ..."
     ${STARROCKS_HOME}/thirdparty/build-thirdparty.sh
