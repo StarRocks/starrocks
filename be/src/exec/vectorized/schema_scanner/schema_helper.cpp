@@ -111,7 +111,7 @@ Status SchemaHelper::get_task_runs(const std::string& ip, const int32_t port, co
 }
 
 void fill_data_column_with_null(vectorized::Column* data_column) {
-    vectorized::NullableColumn* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
+    auto* nullable_column = down_cast<vectorized::NullableColumn*>(data_column);
     nullable_column->append_nulls(1);
 }
 

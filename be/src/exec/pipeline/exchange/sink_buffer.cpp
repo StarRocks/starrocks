@@ -2,12 +2,9 @@
 
 #include "exec/pipeline/exchange/sink_buffer.h"
 
-#include <chrono>
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
-DIAGNOSTIC_POP
+
+#include <chrono>
 
 #include "fmt/core.h"
 #include "util/time.h"
@@ -174,9 +171,15 @@ int64_t SinkBuffer::_network_time() {
     return max;
 }
 
-void SinkBuffer::cancel_one_sinker() {
+void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+    }
+    if (state != nullptr) {
+        LOG(INFO) << fmt::format(
+                "fragment_instance_id {} -> {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}",
+                print_id(_fragment_ctx->fragment_instance_id()), print_id(state->fragment_instance_id()),
+                _num_uncancelled_sinkers, _is_finishing, _num_remaining_eos);
     }
 }
 
@@ -203,7 +206,7 @@ void SinkBuffer::_process_send_window(const TUniqueId& instance_id, const int64_
     }
 }
 
-void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, std::function<void()> pre_works) {
+void SinkBuffer::_try_to_send_rpc(const TUniqueId& instance_id, const std::function<void()>& pre_works) {
     std::lock_guard<Mutex> l(*_mutexes[instance_id.lo]);
     pre_works();
 

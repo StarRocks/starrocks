@@ -67,7 +67,7 @@ using strings::Substitute;
 
 class ByteIterator {
 public:
-    ByteIterator(const uint8_t* bytes, size_t size) : _bytes(bytes), _size(size), _pos(0) {}
+    ByteIterator(const uint8_t* bytes, size_t size) : _bytes(bytes), _size(size) {}
 
     // Returns a pair consisting of the run length and the value of the run.
     std::pair<size_t, uint8_t> next() {
@@ -84,7 +84,7 @@ public:
 private:
     const uint8_t* _bytes;
     const size_t _size;
-    size_t _pos;
+    size_t _pos{0};
 };
 
 class NullMapRLEBuilder {
@@ -92,7 +92,7 @@ public:
     NullMapRLEBuilder() : _bitmap_buf(512), _rle_encoder(&_bitmap_buf, 1) {}
 
     explicit NullMapRLEBuilder(size_t reserve_bits)
-            : _has_null(false), _bitmap_buf(BitmapSize(reserve_bits)), _rle_encoder(&_bitmap_buf, 1) {}
+            : _bitmap_buf(BitmapSize(reserve_bits)), _rle_encoder(&_bitmap_buf, 1) {}
 
     void add_run(bool value, size_t run) {
         _has_null |= value;
@@ -125,7 +125,7 @@ public:
     explicit NullFlagsBuilder(NullEncodingPB null_encoding) : NullFlagsBuilder(32 * 1024, null_encoding) {}
 
     explicit NullFlagsBuilder(size_t reserve_bits, NullEncodingPB null_encoding)
-            : _has_null(false), _null_map(reserve_bits), _null_encoding(null_encoding) {}
+            : _null_map(reserve_bits), _null_encoding(null_encoding) {}
 
     void add_null_flags(const uint8_t* flags, size_t count) { _null_map.append(flags, count); }
 
@@ -143,7 +143,7 @@ public:
                                                  sizeof(uint8_t), 0);
             if (r < 0) {
                 LOG(ERROR) << "bitshuffle compress failed: " << bitshuffle_error_msg(r);
-                return OwnedSlice();
+                return {};
             }
             return _encode_buf.build();
         } else if (_null_encoding == NullEncodingPB::LZ4_NULL) {
@@ -152,7 +152,7 @@ public:
             Status status = get_block_compression_codec(type, &codec);
             if (!status.ok()) {
                 LOG(ERROR) << "get codec failed, fail to encode null flags";
-                return OwnedSlice();
+                return {};
             }
             _encode_buf.resize(codec->max_compressed_len(_null_map.size()));
             Slice origin_slice(_null_map);
@@ -160,14 +160,14 @@ public:
             status = codec->compress(origin_slice, &compressed_slice);
             if (!status.ok()) {
                 LOG(ERROR) << "compress null map failed";
-                return OwnedSlice();
+                return {};
             }
             // _encode_buf must be resize to compressed slice's size
             _encode_buf.resize(compressed_slice.get_size());
             return _encode_buf.build();
         } else {
             LOG(ERROR) << "invalid null encoding:" << _null_encoding;
-            return OwnedSlice();
+            return {};
         }
     }
 
@@ -633,7 +633,7 @@ Status ScalarColumnWriter::append_array_offsets(const vectorized::Column& column
         array_size[i] = data[i + 1] - data[i];
     }
 
-    const uint8_t* raw_data = reinterpret_cast<const uint8_t*>(array_size.data());
+    const auto* raw_data = reinterpret_cast<const uint8_t*>(array_size.data());
     const size_t field_size = get_field()->size();
     size_t remaining = array_size.size();
     size_t offset_ordinal = 0;
@@ -806,7 +806,7 @@ Status ArrayColumnWriter::append(const vectorized::Column& column) {
 }
 
 Status ArrayColumnWriter::append(const uint8_t* data, const uint8_t* null_map, size_t count, bool has_null) {
-    const Collection* collection = reinterpret_cast<const Collection*>(data);
+    const auto* collection = reinterpret_cast<const Collection*>(data);
     // 1. Write null column when necessary
     if (is_nullable()) {
         _null_writer->append(null_map, nullptr, count, false);
@@ -818,7 +818,7 @@ Status ArrayColumnWriter::append(const uint8_t* data, const uint8_t* null_map, s
                                                              count, false));
 
     // 3. writer elements column one by one
-    const uint8_t* element_data = reinterpret_cast<const uint8_t*>(collection->data);
+    const auto* element_data = reinterpret_cast<const uint8_t*>(collection->data);
     if (collection->has_null) {
         for (size_t i = 0; i < collection->length; ++i) {
             RETURN_IF_ERROR(

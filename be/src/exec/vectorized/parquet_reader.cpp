@@ -137,7 +137,7 @@ Status ParquetReaderWrap::init_parquet_reader(const std::vector<SlotDescriptor*>
 }
 
 void ParquetReaderWrap::close() {
-    _parquet->Close();
+    [[maybe_unused]] auto st = _parquet->Close();
 }
 
 Status ParquetReaderWrap::size(int64_t* size) {
@@ -279,37 +279,11 @@ using ArrowStatusCode = ::arrow::StatusCode;
 using StarRocksStatus = ::starrocks::Status;
 using ArrowStatus = ::arrow::Status;
 
-static inline ArrowStatusCode convert_status_code(StarRocksStatusCode code) {
-    switch (code) {
-    case StarRocksStatusCode::OK:
-        return ArrowStatusCode::OK;
-    case StarRocksStatusCode::NOT_FOUND:
-    case StarRocksStatusCode::END_OF_FILE:
-        return ArrowStatusCode::IOError;
-    case StarRocksStatusCode::NOT_IMPLEMENTED_ERROR:
-        return ArrowStatusCode::NotImplemented;
-    case StarRocksStatusCode::MEM_ALLOC_FAILED:
-    case StarRocksStatusCode::BUFFER_ALLOCATION_FAILED:
-    case StarRocksStatusCode::MEM_LIMIT_EXCEEDED:
-        return ArrowStatusCode::OutOfMemory;
-    default:
-        return ArrowStatusCode::ExecutionError;
-    }
-}
-
-static inline ArrowStatus convert_status(const StarRocksStatus& status) {
-    if (LIKELY(status.ok())) {
-        return ArrowStatus::OK();
-    } else {
-        return ArrowStatus(convert_status_code(status.code()), status.get_error_msg());
-    }
-}
-
 ParquetChunkFile::ParquetChunkFile(std::shared_ptr<starrocks::RandomAccessFile> file, uint64_t pos)
         : _file(std::move(file)), _pos(pos) {}
 
 ParquetChunkFile::~ParquetChunkFile() {
-    Close();
+    [[maybe_unused]] auto st = Close();
 }
 
 arrow::Status ParquetChunkFile::Close() {

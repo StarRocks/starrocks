@@ -77,7 +77,7 @@ WrapperField::WrapperField(Field* rep, size_t variable_len, bool is_string_type)
 
     if (_is_string_type) {
         _var_length = variable_len > 0 ? variable_len : DEFAULT_STRING_LENGTH;
-        Slice* slice = reinterpret_cast<Slice*>(buf);
+        auto* slice = reinterpret_cast<Slice*>(buf);
         slice->size = _var_length;
         _string_content.reset(new char[slice->size]);
         slice->data = _string_content.get();

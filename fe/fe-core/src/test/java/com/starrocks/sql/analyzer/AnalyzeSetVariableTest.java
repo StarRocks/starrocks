@@ -62,14 +62,12 @@ public class AnalyzeSetVariableTest {
         sql = "set @var = 1 + 2";
         SetStmt setStmt = (SetStmt) analyzeSuccess(sql);
         UserVariable userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        userVariable.analyze();
         Assert.assertNotNull(userVariable.getResolvedExpression());
         Assert.assertEquals("3", userVariable.getResolvedExpression().getStringValue());
 
         sql = "set @var = abs(1.2)";
         setStmt = (SetStmt) analyzeSuccess(sql);
         userVariable = (UserVariable) setStmt.getSetVars().get(0);
-        userVariable.analyze();
         Assert.assertTrue(userVariable.getExpression() instanceof Subquery);
 
         sql = "set @var = (select 1)";
@@ -88,6 +86,12 @@ public class AnalyzeSetVariableTest {
         sql = "set @var1 = 1, @var2 = 2";
         setStmt = (SetStmt) analyzeSuccess(sql);
         Assert.assertEquals(2, setStmt.getSetVars().size());
+
+        sql = "set @var = cast(\"a\" as json)";
+        analyzeFail(sql, "Can't set variable with type JSON");
+
+        sql = "set @var = [1,2,3]";
+        analyzeFail(sql, "Can't set variable with type ARRAY");
 
         sql = "set @var = bitmap_empty()";
         analyzeFail(sql, "Can't set variable with type BITMAP");

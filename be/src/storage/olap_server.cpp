@@ -25,6 +25,7 @@
 
 #include <cmath>
 #include <ctime>
+#include <memory>
 #include <string>
 #include <unordered_set>
 
@@ -254,8 +255,8 @@ void* StorageEngine::_adjust_pagecache_callback(void* arg_this) {
                      cur_interval != config::auto_adjust_pagecache_interval_seconds)) {
             cur_period = config::pagecache_adjust_period;
             cur_interval = config::auto_adjust_pagecache_interval_seconds;
-            dec_advisor.reset(new GCHelper(cur_period, cur_interval, MonoTime::Now()));
-            inc_advisor.reset(new GCHelper(cur_period, cur_interval, MonoTime::Now()));
+            dec_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
+            inc_advisor = std::make_unique<GCHelper>(cur_period, cur_interval, MonoTime::Now());
             // We re-initialized advisor, just continue.
             continue;
         }

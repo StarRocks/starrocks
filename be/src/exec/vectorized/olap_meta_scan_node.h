@@ -30,6 +30,9 @@ public:
         *out << "vectorized:OlapMetaScanNode";
     }
 
+    std::vector<std::shared_ptr<pipeline::OperatorFactory>> decompose_to_pipeline(
+            pipeline::PipelineBuilderContext* context) override;
+
 private:
     void _init_counter(RuntimeState* state);
     friend class OlapMetaScanner;

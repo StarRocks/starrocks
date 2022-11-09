@@ -5,9 +5,10 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.iceberg.IcebergCatalog;
-import com.starrocks.external.iceberg.IcebergCustomCatalogTest;
-import com.starrocks.external.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.IcebergCatalog;
+import com.starrocks.connector.iceberg.IcebergCatalogType;
+import com.starrocks.connector.iceberg.IcebergCustomCatalogTest;
+import com.starrocks.connector.iceberg.IcebergUtil;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mock;
@@ -140,6 +141,14 @@ public class IcebergTableTest {
         };
 
         properties.put("resource", resourceName);
+        IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
+        Assert.assertEquals(tableName, table.getTable());
+        Assert.assertEquals(db, table.getDb());
+    }
+
+    @Test
+    public void testWithGlueMetaStore() throws DdlException {
+        this.properties.put("iceberg.catalog.type", IcebergCatalogType.GLUE_CATALOG.name());
         IcebergTable table = new IcebergTable(1000, "iceberg_table", columns, properties);
         Assert.assertEquals(tableName, table.getTable());
         Assert.assertEquals(db, table.getDb());

@@ -114,6 +114,8 @@ public:
 
     bool is_data_ready();
 
+    bool get_encode_level() const { return _encode_level; }
+
 private:
     friend class DataStreamMgr;
     class SenderQueue;
@@ -217,6 +219,8 @@ private:
     // if _keep_order is set to true, then receiver will keep the order according sequence
     bool _keep_order;
     PassThroughContext _pass_through_context;
+
+    int _encode_level;
 };
 
 } // end namespace starrocks

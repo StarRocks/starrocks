@@ -160,7 +160,7 @@ StatusOr<ChunkPtr> FileScanner::materialize(const starrocks::vectorized::ChunkPt
         int dest_index = ctx_index++;
         ExprContext* ctx = _dest_expr_ctx[dest_index];
         ASSIGN_OR_RETURN(auto col, ctx->evaluate(cast.get()));
-        uintptr_t col_pointer = reinterpret_cast<uintptr_t>(col.get());
+        auto col_pointer = reinterpret_cast<uintptr_t>(col.get());
         if (column_pointers.contains(col_pointer)) {
             col = col->clone();
         } else {

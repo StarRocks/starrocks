@@ -85,7 +85,7 @@ void MysqlTableSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectoriz
         }
     }
 
-    auto chunk = *iter;
+    const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
         close(_state);

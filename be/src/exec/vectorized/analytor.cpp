@@ -484,7 +484,7 @@ void Analytor::_append_column(size_t chunk_size, vectorized::Column* dst_column,
     if (src_column->only_null()) {
         static_cast<void>(dst_column->append_nulls(chunk_size));
     } else if (src_column->is_constant()) {
-        vectorized::ConstColumn* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
+        auto* const_column = static_cast<vectorized::ConstColumn*>(src_column.get());
         const_column->data_column()->assign(chunk_size, 0);
         dst_column->append(*const_column->data_column(), 0, chunk_size);
     } else {

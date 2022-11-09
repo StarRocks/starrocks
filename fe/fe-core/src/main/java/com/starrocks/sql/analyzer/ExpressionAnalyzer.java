@@ -7,7 +7,6 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.ArithmeticExpr;
-import com.starrocks.analysis.ArrayElementExpr;
 import com.starrocks.analysis.ArrayExpr;
 import com.starrocks.analysis.ArraySliceExpr;
 import com.starrocks.analysis.ArrowExpr;
@@ -16,6 +15,7 @@ import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.CaseExpr;
 import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
+import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
@@ -42,6 +42,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
@@ -104,7 +105,7 @@ public class ExpressionAnalyzer {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER)) {
                 return true;
-            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.TRANSFORM)) {
+            } else if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM)) {
                 // transform just a alias of array_map
                 ((FunctionCallExpr) expr).resetFnName("", FunctionSet.ARRAY_MAP);
                 return true;
@@ -171,7 +172,7 @@ public class ExpressionAnalyzer {
     }
 
     private void bottomUpAnalyze(Visitor visitor, Expr expression, Scope scope) {
-        if (expression.hasLambdaFunction()) {
+        if (expression.hasLambdaFunction(expression)) {
             analyzeHighOrderFunction(visitor, expression, scope);
         } else {
             for (Expr expr : expression.getChildren()) {
@@ -249,25 +250,37 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitArrayElementExpr(ArrayElementExpr node, Scope scope) {
+        public Void visitCollectionElementExpr(CollectionElementExpr node, Scope scope) {
             Expr expr = node.getChild(0);
             Expr subscript = node.getChild(1);
-            if (!expr.getType().isArrayType()) {
+            if (!expr.getType().isArrayType() && !expr.getType().isMapType()) {
                 throw new SemanticException("cannot subscript type " + expr.getType()
-                        + " because it is not an array");
+                        + " because it is not an array or a map");
             }
-            if (!subscript.getType().isNumericType()) {
-                throw new SemanticException("array subscript must have type integer");
-            }
-            try {
-                if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
-                    node.castChild(Type.INT, 1);
-
+            if (expr.getType().isArrayType()) {
+                if (!subscript.getType().isNumericType()) {
+                    throw new SemanticException("array subscript must have type integer");
                 }
-                node.setType(((ArrayType) expr.getType()).getItemType());
-            } catch (AnalysisException e) {
-                throw new SemanticException(e.getMessage());
+                try {
+                    if (subscript.getType().getPrimitiveType() != PrimitiveType.INT) {
+                        node.castChild(Type.INT, 1);
+                    }
+                    node.setType(((ArrayType) expr.getType()).getItemType());
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
+            } else {
+                try {
+                    if (subscript.getType().getPrimitiveType() !=
+                            ((MapType) expr.getType()).getKeyType().getPrimitiveType()) {
+                        node.castChild(((MapType) expr.getType()).getKeyType(), 1);
+                    }
+                    node.setType(((MapType) expr.getType()).getValueType());
+                } catch (AnalysisException e) {
+                    throw new SemanticException(e.getMessage());
+                }
             }
+
             return null;
         }
 
@@ -646,6 +659,11 @@ public class ExpressionAnalyzer {
                 //TODO: fix how we equal count distinct.
                 fn = Expr.getBuiltinFunction(FunctionSet.COUNT, new Type[] {argumentTypes[0]},
                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.EXCHANGE_BYTES) || fnName.equals(FunctionSet.EXCHANGE_SPEED)) {
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes,
+                        Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+                fn.setArgsType(argumentTypes); // as accepting various types
+                fn.setIsNullable(false);
             } else if (FunctionSet.decimalRoundFunctions.contains(fnName) ||
                     Arrays.stream(argumentTypes).anyMatch(Type::isDecimalV3)) {
                 // Since the priority of decimal version is higher than double version (according functionId),
@@ -692,14 +710,14 @@ public class ExpressionAnalyzer {
                 node.setChild(1, new CastExpr(Type.ARRAY_BOOLEAN, node.getChild(1)));
                 argumentTypes[1] = Type.ARRAY_BOOLEAN;
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
-            } else if (fnName.equals(FunctionSet.TIME_SLICE)) {
+            } else if (fnName.equals(FunctionSet.TIME_SLICE) || fnName.equals(FunctionSet.DATE_SLICE)) {
                 if (!(node.getChild(1) instanceof IntLiteral)) {
                     throw new SemanticException(
-                            FunctionSet.TIME_SLICE + " requires second parameter must be a constant interval");
+                            fnName + " requires second parameter must be a constant interval");
                 }
                 if (((IntLiteral) node.getChild(1)).getValue() <= 0) {
                     throw new SemanticException(
-                            FunctionSet.TIME_SLICE + " requires second parameter must be greater than 0");
+                            fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             } else {
@@ -1007,43 +1025,21 @@ public class ExpressionAnalyzer {
                     }
 
                     Type variableType = userVariable.getResolvedExpression().getType();
-                    String variableValue = userVariable.getResolvedExpression().getStringValue();
+                    node.setType(variableType);
 
                     if (userVariable.getResolvedExpression() instanceof NullLiteral) {
-                        node.setType(variableType);
                         node.setIsNull();
-                        return null;
+                    } else {
+                        Object variableValue = userVariable.getResolvedExpression().getRealValue();
+                        node.setValue(variableValue);
                     }
-
-                    node.setType(variableType);
-                    switch (variableType.getPrimitiveType()) {
-                        case BOOLEAN:
-                            node.setBoolValue(Boolean.parseBoolean(variableValue));
-                            break;
-                        case TINYINT:
-                        case SMALLINT:
-                        case INT:
-                        case BIGINT:
-                            node.setIntValue(Long.parseLong(variableValue));
-                        case FLOAT:
-                        case DOUBLE:
-                            node.setFloatValue(Double.parseDouble(variableValue));
-                            break;
-                        case CHAR:
-                        case VARCHAR:
-                            node.setStringValue(variableValue);
-                            break;
-                        default:
-                            break;
+                } else {
+                    VariableMgr.fillValue(session.getSessionVariable(), node);
+                    if (!Strings.isNullOrEmpty(node.getName()) &&
+                            node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
+                        node.setType(Type.VARCHAR);
+                        node.setValue(SqlModeHelper.decode((long) node.getValue()));
                     }
-                    return null;
-                }
-
-                VariableMgr.fillValue(session.getSessionVariable(), node);
-                if (!Strings.isNullOrEmpty(node.getName()) &&
-                        node.getName().equalsIgnoreCase(SessionVariable.SQL_MODE)) {
-                    node.setType(Type.VARCHAR);
-                    node.setStringValue(SqlModeHelper.decode(node.getIntValue()));
                 }
             } catch (AnalysisException | DdlException e) {
                 throw new SemanticException(e.getMessage());

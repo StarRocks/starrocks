@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
 
 import java.util.ArrayList;
@@ -177,7 +178,7 @@ public class PrivilegeStmtAnalyzerV2 {
                     stmt.setObjectList(null);
                 }
                 privilegeManager.validateGrant(stmt.getPrivType(), stmt.getPrivList(), stmt.getObjectList());
-                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getPrivType(), stmt.getTypeId(), stmt.getPrivList()));
+                stmt.setActionList(privilegeManager.analyzeActionSet(stmt.getTypeId(), stmt.getPrivList()));
             } catch (PrivilegeException e) {
                 SemanticException exception = new SemanticException(e.getMessage());
                 exception.initCause(e);
@@ -186,16 +187,32 @@ public class PrivilegeStmtAnalyzerV2 {
             return null;
         }
 
-        /**
-         * GRANT rolexx to userxx
-         * REVOKE rolexx from userxx
-         */
         @Override
-        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
-            analyseUser(stmt.getUserIdent(), true);
-            validRoleName(stmt.getRole(), "Can not granted/revoke role to user", true);
+        public Void visitSetRoleStatement(SetRoleStmt stmt, ConnectContext session) {
+            if (stmt.getRoles() != null) {
+                for (String roleName : stmt.getRoles()) {
+                    validRoleName(roleName, "Cannot set role", true);
+                }
+            }
             return null;
         }
 
+        /**
+         * GRANT rolexx to userxx
+         * GRANT role1 to role role2
+         * REVOKE rolexx from userxx
+         * REVOKE role1 from role role2
+         */
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt stmt, ConnectContext session) {
+            if (stmt.getUserIdent() != null) {
+                analyseUser(stmt.getUserIdent(), true);
+                validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to user", true);
+            } else {
+                validRoleName(stmt.getGranteeRole(), "Can not granted/revoke role to role", true);
+                validRoleName(stmt.getRole(), "Can not granted/revoke role to role", true);
+            }
+            return null;
+        }
     }
 }

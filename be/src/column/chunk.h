@@ -29,8 +29,8 @@ public:
 
     Chunk();
     Chunk(Columns columns, SchemaPtr schema);
-    Chunk(Columns columns, const SlotHashMap& slot_map);
-    Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map);
+    Chunk(Columns columns, SlotHashMap slot_map);
+    Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map);
 
     Chunk(Chunk&& other) = default;
     Chunk& operator=(Chunk&& other) = default;
@@ -90,7 +90,7 @@ public:
     // For simplicity and better performance, we are assuming |indexes| all all valid
     // and is sorted in ascending order, if it's not, unexpected columns may be removed (silently).
     // |indexes| can be empty and no column will be removed in this case.
-    void remove_columns_by_index(const std::vector<size_t>& indexes);
+    [[maybe_unused]] void remove_columns_by_index(const std::vector<size_t>& indexes);
 
     // schema must exists.
     const ColumnPtr& get_column_by_name(const std::string& column_name) const;

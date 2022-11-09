@@ -22,6 +22,7 @@
 package com.starrocks.clone;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -35,6 +36,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.Replica;
 import com.starrocks.clone.TabletSchedCtx.Priority;
 import com.starrocks.clone.TabletScheduler.AddResult;
 import com.starrocks.common.Config;
@@ -71,6 +73,7 @@ public class ColocateTableBalancer extends LeaderDaemon {
      * Only for unit test purpose.
      */
     public static boolean disableRepairPrecedence = false;
+    public static boolean ignoreSingleReplicaCheck = false;
 
     public static ColocateTableBalancer getInstance() {
         if (INSTANCE == null) {
@@ -328,6 +331,12 @@ public class ColocateTableBalancer extends LeaderDaemon {
                                             LOG.debug("get unhealthy tablet {} in colocate table. status: {}",
                                                     tablet.getId(),
                                                     st);
+
+                                            // If tablet has bad replica, `getColocateHealthStatus()` will also return
+                                            // COLOCATE_MISMATCH, we need to replace the backend which owns the bad
+                                            // replica.
+                                            adjustBackendSetIfReplicaBad(idx, tablet, st, groupId,
+                                                    ignoreSingleReplicaCheck);
 
                                             TabletSchedCtx tabletCtx = new TabletSchedCtx(
                                                     TabletSchedCtx.Type.REPAIR,
@@ -743,6 +752,77 @@ public class ColocateTableBalancer extends LeaderDaemon {
             return Sets.newHashSet(info.getLastBackendsPerBucketSeq().get(ctx.getTabletOrderIdx()));
         } else {
             return Sets.newHashSet();
+        }
+    }
+
+    void adjustBackendSetIfReplicaBad(int tabletOrderIdx, LocalTablet tablet, TabletStatus st, GroupId groupId,
+                                      boolean ignoreSingleReplicaCheck) {
+        if (st != TabletStatus.COLOCATE_MISMATCH) {
+            return;
+        }
+
+        List<Replica> replicas = tablet.getImmutableReplicas();
+        if (!ignoreSingleReplicaCheck && replicas.size() <= 1) {
+            return;
+        }
+
+        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+        SystemInfoService infoService = GlobalStateMgr.getCurrentSystemInfo();
+        ClusterLoadStatistic statistic = globalStateMgr.getTabletScheduler().getLoadStatistic();
+        ColocateTableIndex colocateIndex = globalStateMgr.getColocateTableIndex();
+
+        Set<Long> currentBackendsSet = colocateIndex.getTabletBackendsByGroup(groupId, tabletOrderIdx);
+        Set<Long> savedBackendSet = ImmutableSet.copyOf(currentBackendsSet);
+        List<Long> badReplicaIdList = Lists.newArrayList();
+        Set<Long> unavailableBeIdsInGroup = getUnavailableBeIdsInGroup(infoService, colocateIndex, groupId);
+        List<Long> availableBeIds = getAvailableBeIds(infoService);
+        Set<Long> removedBackendIdSet = Sets.newHashSet();
+        boolean isBackendSetChanged = false;
+
+        // Traverse all replicas of the tablet to check if we need to replace backend of bad replica.
+        for (Replica replica : replicas) {
+            long backendId = replica.getBackendId();
+            if (replica.isBad() && currentBackendsSet.contains(backendId)) {
+                badReplicaIdList.add(replica.getId());
+                long replaceBackendId = -1;
+                List<List<Long>> backendsPerBucketSeq =
+                        Lists.newArrayList(colocateIndex.getBackendsPerBucketSeq(groupId));
+                List<Long> flatBackendsPerBucketSeq =
+                        backendsPerBucketSeq.stream().flatMap(List::stream).collect(Collectors.toList());
+                // Get the aggregated number of replicas per backend and sort it in desc order, if we have to replace
+                // some backend in the current backend set, we will choose the backend with the least number
+                // of replicas first. The returned list only contains available backend.
+                List<Map.Entry<Long, Long>> backendWithReplicaNum =
+                        getSortedBackendReplicaNumPairs(availableBeIds, unavailableBeIdsInGroup, statistic,
+                                flatBackendsPerBucketSeq);
+
+                int idx = backendWithReplicaNum.size() - 1;
+                while (idx >= 0) {
+                    long chosenBackendId = backendWithReplicaNum.get(idx).getKey();
+                    if (chosenBackendId != backendId && !currentBackendsSet.contains(chosenBackendId) &&
+                            !removedBackendIdSet.contains(chosenBackendId)) {
+                        replaceBackendId = chosenBackendId;
+                        removedBackendIdSet.add(backendId);
+                        break;
+                    }
+                    idx--;
+                }
+
+                if (replaceBackendId != -1) {
+                    currentBackendsSet.add(replaceBackendId);
+                    currentBackendsSet.remove(backendId);
+                    isBackendSetChanged = true;
+                }
+            }
+        }
+
+        if (isBackendSetChanged) {
+            // Backend set changed, update metadata in ColocateIndex, ColocateBalancer will arrange tablet migration
+            // based on the new backend set.
+            colocateIndex.setBackendsSetByIdxForGroup(groupId, tabletOrderIdx, currentBackendsSet);
+            LOG.info("backend set changed because of bad replica, tablet id: {}, bad replica: {}," +
+                    " old backend set: {}, new backend set: {}",
+                    tablet.getId(), badReplicaIdList, savedBackendSet, currentBackendsSet);
         }
     }
 }

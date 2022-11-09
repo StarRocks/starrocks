@@ -113,6 +113,7 @@ public abstract class Type implements Cloneable {
 
     public static final PseudoType ANY_ELEMENT = PseudoType.ANY_ELEMENT;
     public static final PseudoType ANY_ARRAY = PseudoType.ANY_ARRAY;
+    public static final PseudoType ANY_MAP = PseudoType.ANY_MAP;
 
     public static final Type ARRAY_BOOLEAN = new ArrayType(Type.BOOLEAN);
     public static final Type ARRAY_TINYINT = new ArrayType(Type.TINYINT);
@@ -154,6 +155,7 @@ public abstract class Type implements Cloneable {
                     .add(DECIMALV2)
                     .add(TIME)
                     .add(ANY_ARRAY)
+                    .add(ANY_MAP)
                     .add(DECIMAL32)
                     .add(DECIMAL64)
                     .add(DECIMAL128)

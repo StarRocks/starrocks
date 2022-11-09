@@ -79,6 +79,7 @@ public class SnapshotTask extends AgentTask {
         request.setList_files(true);
         request.setPreferred_snapshot_format(TypesConstants.TPREFER_SNAPSHOT_REQ_VERSION);
         request.setTimeout(timeoutMs / 1000);
+        request.setIs_restore_task(isRestoreTask);
         return request;
     }
 }

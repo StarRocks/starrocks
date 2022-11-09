@@ -39,7 +39,7 @@ class RuntimeState;
 
 namespace vectorized {
 class Column;
-class JavaUDAFContext;
+struct JavaUDAFContext;
 using ColumnPtr = std::shared_ptr<Column>;
 } // namespace vectorized
 

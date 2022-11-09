@@ -123,7 +123,7 @@ Status RowsetWriter::init() {
 }
 
 StatusOr<RowsetSharedPtr> RowsetWriter::build() {
-    if (_num_rows_written > 0) {
+    if (_num_rows_written > 0 || (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _num_delfile > 0)) {
         RETURN_IF_ERROR(_fs->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta_pb->set_num_rows(_num_rows_written);
@@ -201,7 +201,9 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
                                                      wfile->filename(), segment_pb.data_size() - remaining_bytes,
                                                      segment_pb.data_size()));
         }
-
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
 
         // 3. update statistic
@@ -241,6 +243,9 @@ Status RowsetWriter::flush_segment(const SegmentPB& segment_pb, butil::IOBuf& da
                                                      segment_pb.delete_data_size()));
         }
 
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
 
         _num_delfile++;
@@ -403,6 +408,9 @@ Status HorizontalRowsetWriter::flush_chunk_with_deletes(const vectorized::Chunk&
             return Status::InternalError("deletes column serialize failed");
         }
         RETURN_IF_ERROR(wfile->append(Slice(content.data(), content.size())));
+        if (config::sync_tablet_meta) {
+            RETURN_IF_ERROR(wfile->sync());
+        }
         RETURN_IF_ERROR(wfile->close());
         if (seg_info) {
             seg_info->set_delete_num_rows(deletes.size());
@@ -530,7 +538,7 @@ Status HorizontalRowsetWriter::_final_merge() {
                                                      segments.size()) == VERTICAL_COMPACTION) {
         std::vector<std::vector<uint32_t>> column_groups;
         CompactionUtils::split_column_into_groups(_context.tablet_schema->num_columns(),
-                                                  _context.tablet_schema->num_key_columns(),
+                                                  _context.tablet_schema->sort_key_idxes(),
                                                   config::vertical_compaction_max_columns_per_group, &column_groups);
 
         auto schema = ChunkHelper::convert_schema_to_format_v2(*_context.tablet_schema, column_groups[0]);
@@ -841,7 +849,7 @@ Status HorizontalRowsetWriter::_flush_segment_writer(std::unique_ptr<SegmentWrit
         seg_info->set_data_size(segment_size);
         seg_info->set_index_size(index_size);
         seg_info->set_segment_id((*segment_writer)->segment_id());
-        seg_info->set_path(std::move((*segment_writer)->segment_path()));
+        seg_info->set_path((*segment_writer)->segment_path());
     }
 
     (*segment_writer).reset();

@@ -177,14 +177,14 @@ public class LakeTable extends OlapTable {
         ShardStorageInfo shardStorageInfo = getPartitionShardStorageInfo(partitionId);
         List<Long> shardIds = null;
         try {
-            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, shardStorageInfo);
+            shardIds = globalStateMgr.getStarOSAgent().createShards(tabletNum, shardStorageInfo, partitionId);
         } catch (DdlException e) {
             LOG.error(e.getMessage());
             return new Status(Status.ErrCode.COMMON_ERROR, e.getMessage());
         }
         for (long shardId : shardIds) {
             LakeTablet tablet = new LakeTablet(shardId);
-            index.addTablet(tablet, null /* tablet meta */, true /* is restore */);
+            index.addTablet(tablet, null /* tablet meta */, false/* update inverted index */);
         }
         return Status.OK;
     }

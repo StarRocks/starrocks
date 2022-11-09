@@ -509,6 +509,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             info.setError_code(status.getErrorCode());
             info.setError_message(status.getErrorMessage());
             info.setExpire_time(status.getExpireTime() / 1000);
+            info.setProgress(status.getProgress() + "%");
             tasksResult.add(info);
         }
         return result;

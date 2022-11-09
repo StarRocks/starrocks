@@ -7,8 +7,7 @@
 #include <algorithm>
 #include <limits>
 
-namespace starrocks {
-namespace query_cache {
+namespace starrocks::query_cache {
 
 LaneArbiter::LaneArbiter(int num_lanes)
         : _passthrough_mode(false), _num_lanes(num_lanes), _assignments(num_lanes, LANE_UNASSIGNED) {}
@@ -84,9 +83,9 @@ size_t LaneArbiter::must_acquire_lane(LaneOwnerType lane_owner) {
 
 void LaneArbiter::release_lane(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
-    for (auto i = 0; i < _assignments.size(); ++i) {
-        if (_assignments[i].lane_owner == lane_owner) {
-            _assignments[i] = LANE_UNASSIGNED;
+    for (auto& _assignment : _assignments) {
+        if (_assignment.lane_owner == lane_owner) {
+            _assignment = LANE_UNASSIGNED;
         }
     }
 }
@@ -95,5 +94,4 @@ void LaneArbiter::mark_processed(LaneOwnerType lane_owner) {
     _processed.insert(lane_owner);
 }
 
-} // namespace query_cache
-} // namespace starrocks
+} // namespace starrocks::query_cache

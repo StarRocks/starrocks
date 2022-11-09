@@ -22,8 +22,8 @@ public abstract class ScalarOperatorVisitor<R, C> {
         return visit(array, context);
     }
 
-    public R visitArrayElement(ArrayElementOperator array, C context) {
-        return visit(array, context);
+    public R visitCollectionElement(CollectionElementOperator collectionElementOp, C context) {
+        return visit(collectionElementOp, context);
     }
 
     public R visitArraySlice(ArraySliceOperator array, C context) {

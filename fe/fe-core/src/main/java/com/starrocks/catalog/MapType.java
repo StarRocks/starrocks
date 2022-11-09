@@ -60,6 +60,15 @@ public class MapType extends Type {
     }
 
     @Override
+    public boolean matchesType(Type t) {
+        if (t.isPseudoType()) {
+            return t.matchesType(this);
+        }
+        return t.isMapType()
+                && keyType.matchesType(((MapType) t).keyType) && valueType.matchesType(((MapType) t).getValueType());
+    }
+
+    @Override
     public String toSql(int depth) {
         if (depth >= MAX_NESTING_DEPTH) {
             return "MAP<...>";

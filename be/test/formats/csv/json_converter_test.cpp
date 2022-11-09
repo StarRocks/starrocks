@@ -25,7 +25,7 @@ TEST_F(JsonConverterTest, test_read_string) {
     auto json_column = JsonColumn::create();
 
     string s1 = "{\"key\": 1}";
-    string s2 = "{\"a\":1,\"b\":2}";
+    string s2 = R"({"a":1,"b":2})";
     EXPECT_TRUE(conv->read_string(json_column.get(), s1, Converter::Options()));
     EXPECT_TRUE(conv->read_string(json_column.get(), s2, Converter::Options()));
 
@@ -51,7 +51,7 @@ TEST_F(JsonConverterTest, test_read_quoted_string) {
     auto input = JsonValue::parse("{\"key\": 1}");
     EXPECT_EQ(0, json_column->get_object(0)->compare(*input));
 
-    input = JsonValue::parse("{\"a\": 1,\"b\": 2}");
+    input = JsonValue::parse(R"({"a": 1,"b": 2})");
     EXPECT_EQ(0, json_column->get_object(1)->compare(*input));
 }
 

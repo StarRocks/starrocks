@@ -8,7 +8,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.common.UserException;
-import com.starrocks.external.RemoteScanRangeLocations;
+import com.starrocks.connector.RemoteScanRangeLocations;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;

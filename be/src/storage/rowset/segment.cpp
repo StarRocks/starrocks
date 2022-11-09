@@ -21,11 +21,7 @@
 
 #include "storage/rowset/segment.h"
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wclass-memaccess"
 #include <bvar/bvar.h>
-#pragma GCC diagnostic pop
-
 #include <fmt/core.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 

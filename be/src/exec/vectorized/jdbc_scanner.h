@@ -11,6 +11,7 @@
 #include "exprs/expr_context.h"
 #include "jni.h"
 #include "runtime/descriptors.h"
+#include "runtime/mem_tracker.h"
 #include "runtime/primitive_type.h"
 #include "runtime/runtime_state.h"
 #include "udf/java/java_udf.h"
@@ -37,10 +38,7 @@ struct JDBCScannerProfile {
 class JDBCScanner {
 public:
     JDBCScanner(const JDBCScanContext& context, const TupleDescriptor* tuple_desc, RuntimeProfile* runtime_profile)
-            : _scan_ctx(context),
-              _tuple_desc(tuple_desc),
-              _slot_descs(tuple_desc->slots()),
-              _runtime_profile(runtime_profile) {}
+            : _scan_ctx(context), _slot_descs(tuple_desc->slots()), _runtime_profile(runtime_profile) {}
 
     ~JDBCScanner() = default;
 
@@ -61,7 +59,7 @@ private:
 
     Status _init_jdbc_scanner();
 
-    Status _init_column_class_name();
+    Status _init_column_class_name(RuntimeState* state);
 
     Status _init_jdbc_util();
 
@@ -74,8 +72,6 @@ private:
     Status _close_jdbc_scanner();
 
     JDBCScanContext _scan_ctx;
-    // result tuple desc
-    const TupleDescriptor* _tuple_desc;
     // result column slot desc
     std::vector<SlotDescriptor*> _slot_descs;
     // java class name for each result column
@@ -111,5 +107,8 @@ private:
     static constexpr const char* JDBC_SCAN_CONTEXT_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanContext";
     static constexpr const char* JDBC_SCANNER_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCScanner";
     static constexpr const char* JDBC_UTIL_CLASS_NAME = "com/starrocks/jdbcbridge/JDBCUtil";
+
+    static const int32_t DEFAULT_JDBC_CONNECTION_POOL_SIZE = 8;
+    static const int32_t MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS = 10000;
 };
 } // namespace starrocks::vectorized

@@ -8,7 +8,12 @@ import com.starrocks.analysis.UserIdentity;
 // share the same parameter and check logic with GrantRoleStmt
 public class RevokeRoleStmt extends BaseGrantRevokeRoleStmt {
 
-    public RevokeRoleStmt(String role, UserIdentity userIdent) {
-        super(role, userIdent, "REVOKE", "FROM");
+    public RevokeRoleStmt(String granteeRole, UserIdentity userIdent) {
+        super(granteeRole, userIdent, "REVOKE", "FROM");
     }
+
+    public RevokeRoleStmt(String granteeRole, String role) {
+        super(granteeRole, role, "REVOKE", "FROM");
+    }
+
 }

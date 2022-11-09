@@ -30,8 +30,6 @@ namespace starrocks {
 
 ESScrollQueryBuilder::ESScrollQueryBuilder() = default;
 
-ESScrollQueryBuilder::~ESScrollQueryBuilder() = default;
-
 std::string ESScrollQueryBuilder::build_next_scroll_body(const std::string& scroll_id, const std::string& scroll) {
     rapidjson::Document scroll_dsl;
     rapidjson::Document::AllocatorType& allocator = scroll_dsl.GetAllocator();

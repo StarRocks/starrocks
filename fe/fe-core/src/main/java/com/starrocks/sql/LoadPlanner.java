@@ -45,14 +45,12 @@ import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
-import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.task.StreamLoadTask;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TRoutineLoadTask;
 import com.starrocks.thrift.TUniqueId;
-import com.starrocks.thrift.TWriteQuorumType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -185,15 +183,12 @@ public class LoadPlanner {
         this.routineLoadTask = routineLoadTask;
     }
 
-    public ExecPlan plan() throws UserException {
+    public void plan() throws UserException {
         if (this.etlJobType == EtlJobType.BROKER) {
             brokerLoadPlan();
-            return null;
         } else if (this.etlJobType == EtlJobType.ROUTINE_LOAD || this.etlJobType == EtlJobType.STREAM_LOAD) {
             routineStreamLoadPlan();
-            return null;
         }
-        return null;
     }
 
     public void brokerLoadPlan() throws UserException {
@@ -257,9 +252,27 @@ public class LoadPlanner {
         if (!needShufflePlan) {
             sinkFragment = new PlanFragment(new PlanFragmentId(0), scanNode, DataPartition.RANDOM);
         }
-        // Parallel pipeline for broker loads are currently not supported, so disable
-        // the pipeline engine when users need parallel load
-        prepareSinkFragment(sinkFragment, partitionIds, parallelInstanceNum <= 1, true);
+        prepareSinkFragment(sinkFragment, partitionIds, true, true);
+        if (this.context != null) {
+            if (this.context.getSessionVariable().isEnablePipelineEngine() && Config.enable_pipeline_load) {
+                if (needShufflePlan) {
+                    sinkFragment.setPipelineDop(1);
+                    sinkFragment.setParallelExecNum(parallelInstanceNum);
+                    sinkFragment.setForceSetTableSinkDop();
+                } else {
+                    sinkFragment.setPipelineDop(parallelInstanceNum);
+                    sinkFragment.setParallelExecNum(1);
+                }
+                sinkFragment.setHasOlapTableSink();
+                sinkFragment.setForceAssignScanRangesPerDriverSeq();
+            } else {
+                sinkFragment.setPipelineDop(1);
+                sinkFragment.setParallelExecNum(parallelInstanceNum);
+            }
+        } else {
+            sinkFragment.setPipelineDop(1);
+            sinkFragment.setParallelExecNum(parallelInstanceNum);
+        }
         fragments.add(sinkFragment);
 
         // 5. finalize
@@ -370,23 +383,13 @@ public class LoadPlanner {
         DataSink dataSink = null;
         if (destTable instanceof OlapTable) {
             // 4. Olap table sink
-            TWriteQuorumType writeQuorum = ((OlapTable) destTable).writeQuorum();
-
-            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine, writeQuorum);
+            dataSink = new OlapTableSink((OlapTable) destTable, tupleDesc, partitionIds, canUsePipeLine,
+                    ((OlapTable) destTable).writeQuorum(), ((OlapTable) destTable).enableReplicatedStorage());
             if (completeTabletSink) {
                 ((OlapTableSink) dataSink).init(loadId, txnId, dbId, timeoutS);
                 ((OlapTableSink) dataSink).complete();
             }
-            // At present, we only support dop=1 for olap table sink.
-            // because tablet writing needs to know the number of senders in advance
-            // and guaranteed order of data writing
-            // It can be parallel only in some scenes, for easy use 1 dop now.
-            sinkFragment.setPipelineDop(1);
-            if (this.etlJobType == EtlJobType.BROKER) {
-                sinkFragment.setParallelExecNum(parallelInstanceNum);
-            }
-            // if sink is OlapTableSink Assigned to Be execute this sql [cn execute
-            // OlapTableSink will crash]
+            // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
             context.getSessionVariable().setPreferComputeNode(false);
             context.getSessionVariable().setUseComputeNodes(0);
         } else {
@@ -478,6 +481,10 @@ public class LoadPlanner {
         }
 
         if (olapDestTable.getDefaultReplicationNum() <= 1) {
+            return false;
+        }
+
+        if (olapDestTable.enableReplicatedStorage()) {
             return false;
         }
 

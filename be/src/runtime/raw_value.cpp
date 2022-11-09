@@ -120,8 +120,8 @@ int RawValue::compare(const void* v1, const void* v2, const TypeDescriptor& type
     }
 
     case TYPE_LARGEINT: {
-        __int128 large_int_value1 = unaligned_load<int128_t>(v1);
-        __int128 large_int_value2 = unaligned_load<int128_t>(v2);
+        auto large_int_value1 = unaligned_load<int128_t>(v1);
+        auto large_int_value2 = unaligned_load<int128_t>(v2);
         return large_int_value1 > large_int_value2 ? 1 : (large_int_value1 < large_int_value2 ? -1 : 0);
     }
 

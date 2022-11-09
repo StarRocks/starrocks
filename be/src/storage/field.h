@@ -252,7 +252,7 @@ public:
         new_field->_key_coder = get_key_coder(type);
 
         // TODO(zc): we only support fixed length type now.
-        new_field->_index_size = new_field->_type_info->size();
+        new_field->_index_size = static_cast<uint16_t>(new_field->_type_info->size());
 
         *output = std::move(new_field);
         return Status::OK();

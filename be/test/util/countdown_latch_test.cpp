@@ -46,13 +46,13 @@ TEST(TestCountDownLatch, TestLatch) {
 
     // Decrement the count by 1 in another thread, this should not fire the
     // latch.
-    ASSERT_TRUE(pool->submit_func(std::bind(decrement_latch, &latch, 1)).ok());
+    ASSERT_TRUE(pool->submit_func([capture0 = &latch] { return decrement_latch(capture0, 1); }).ok());
     ASSERT_FALSE(latch.wait_for(MonoDelta::FromMilliseconds(200)));
     ASSERT_EQ(999, latch.count());
 
     // Now decrement by 1000 this should decrement to 0 and fire the latch
     // (even though 1000 is one more than the current count).
-    ASSERT_TRUE(pool->submit_func(std::bind(decrement_latch, &latch, 1000)).ok());
+    ASSERT_TRUE(pool->submit_func([capture0 = &latch] { return decrement_latch(capture0, 1000); }).ok());
     latch.wait();
     ASSERT_EQ(0, latch.count());
 }

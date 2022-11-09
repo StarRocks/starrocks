@@ -80,10 +80,10 @@ public:
             ColumnBlockView column_block_view(&block);
 
             status = page_decoder.next_batch(&size, &column_block_view);
-            Slice* values = reinterpret_cast<Slice*>(block.data());
+            auto* values = reinterpret_cast<Slice*>(block.data());
             ASSERT_TRUE(status.ok());
 
-            Slice* value = reinterpret_cast<Slice*>(values);
+            auto* value = reinterpret_cast<Slice*>(values);
             ASSERT_EQ(3U, size);
             ASSERT_EQ("Hello", value[0].to_string());
             ASSERT_EQ(",", value[1].to_string());
@@ -97,9 +97,9 @@ public:
             size_t fetch_num = 1;
             page_decoder.seek_to_position_in_page(2);
             status = page_decoder.next_batch(&fetch_num, &column_block_view2);
-            Slice* values2 = reinterpret_cast<Slice*>(block2.data());
+            auto* values2 = reinterpret_cast<Slice*>(block2.data());
             ASSERT_TRUE(status.ok());
-            Slice* value2 = reinterpret_cast<Slice*>(values2);
+            auto* value2 = reinterpret_cast<Slice*>(values2);
             ASSERT_EQ(1, fetch_num);
             ASSERT_EQ("StarRocks", value2[0].to_string());
         } else {
@@ -173,7 +173,7 @@ TEST_F(BinaryPlainPageTest, test_reserve_head) {
     BinaryPlainPageDecoder<OLAP_FIELD_TYPE_VARCHAR> decoder(data_without_head);
     ASSERT_TRUE(decoder.init().ok());
     ASSERT_EQ(5, decoder.count());
-    for (int i = 0; i < 5; i++) {
+    for (uint32_t i = 0; i < 5; i++) {
         EXPECT_EQ(slices[i], decoder.string_at_index(i));
     }
 }

@@ -1059,8 +1059,9 @@ public class MaterializedViewHandler extends AlterHandler {
                 ErrorReport.reportDdlException(ErrorCode.ERR_NOT_OLAP_TABLE, tableName);
             }
             OlapTable olapTable = (OlapTable) table;
-            if (olapTable.getState() != OlapTableState.ROLLUP) {
-                throw new DdlException("Table[" + tableName + "] is not under ROLLUP. "
+            if (olapTable.getState() != OlapTableState.ROLLUP
+                    && olapTable.getState() != OlapTableState.WAITING_STABLE) {
+                throw new DdlException("Table[" + tableName + "] is not under ROLLUP/WAITING_STABLE. "
                         + "Use 'ALTER TABLE DROP ROLLUP' if you want to.");
             }
 

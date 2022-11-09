@@ -125,7 +125,7 @@ ColumnPtr PushBrokerReader::_build_hll_column(const ColumnPtr& column) {
 ColumnPtr PushBrokerReader::_padding_char_column(const ColumnPtr& column, const SlotDescriptor* slot_desc,
                                                  size_t num_rows) {
     Column* data_column = ColumnHelper::get_data_column(column.get());
-    BinaryColumn* binary = down_cast<BinaryColumn*>(data_column);
+    auto* binary = down_cast<BinaryColumn*>(data_column);
     Offsets& offset = binary->get_offset();
     uint32_t len = slot_desc->type().len;
 

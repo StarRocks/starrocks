@@ -75,8 +75,7 @@ private:
     uint8_t* _buffer;
 };
 
-template class IntersectHashSet<
-        phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
 using IntersectHashSerializeSet =
         IntersectHashSet<phmap::flat_hash_set<IntersectSliceFlag, IntersectSliceFlagHash, IntersectSliceFlagEqual>>;
+
 } // namespace starrocks::vectorized

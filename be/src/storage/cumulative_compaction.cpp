@@ -13,7 +13,7 @@ namespace starrocks::vectorized {
 CumulativeCompaction::CumulativeCompaction(MemTracker* mem_tracker, TabletSharedPtr tablet)
         : Compaction(mem_tracker, std::move(tablet)) {}
 
-CumulativeCompaction::~CumulativeCompaction() {}
+CumulativeCompaction::~CumulativeCompaction() = default;
 
 Status CumulativeCompaction::compact() {
     if (!_tablet->init_succeeded()) {
@@ -92,7 +92,7 @@ Status CumulativeCompaction::pick_rowsets_to_compact() {
     // (5) means version 5 is delete version
     // <4,5> means version 4,5 selected for cumulative compaction
     int64_t prev_end_version = _tablet->cumulative_layer_point() - 1;
-    for (auto rowset : candidate_rowsets) {
+    for (const auto& rowset : candidate_rowsets) {
         // meet missed version
         if (rowset->start_version() != prev_end_version + 1) {
             if (!transient_rowsets.empty() &&

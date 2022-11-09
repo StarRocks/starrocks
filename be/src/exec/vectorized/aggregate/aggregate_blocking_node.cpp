@@ -2,16 +2,22 @@
 
 #include "exec/vectorized/aggregate/aggregate_blocking_node.h"
 
+#include <type_traits>
+#include <variant>
+
 #include "exec/pipeline/aggregate/aggregate_blocking_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_blocking_source_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_sink_operator.h"
 #include "exec/pipeline/aggregate/aggregate_streaming_source_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_sink_operator.h"
+#include "exec/pipeline/aggregate/sorted_aggregate_streaming_source_operator.h"
 #include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/operator.h"
 #include "exec/pipeline/pipeline_builder.h"
 #include "exec/vectorized/aggregator.h"
+#include "exec/vectorized/sorted_streaming_aggregator.h"
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
 
@@ -61,18 +67,14 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         {
             SCOPED_TIMER(_aggregator->agg_compute_timer());
             if (!_aggregator->is_none_group_by_exprs()) {
-                if (false) {
-                }
-#define HASH_MAP_METHOD(NAME)                                                                                          \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) {                                  \
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                *_aggregator->hash_map_variant().NAME, chunk_size, agg_group_by_with_limit));                          \
-    }
-                APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
-
+                TRY_CATCH_ALLOC_SCOPE_START()
+                _aggregator->hash_map_variant().visit([&](auto& hash_table_with_key) {
+                    _aggregator->build_hash_map(*hash_table_with_key, chunk_size, agg_group_by_with_limit);
+                });
                 _mem_tracker->set(_aggregator->hash_map_variant().reserved_memory_usage(_aggregator->mem_pool()));
-                TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+
+                _aggregator->try_convert_to_two_level_map();
+                TRY_CATCH_ALLOC_SCOPE_END()
             }
             if (_aggregator->is_none_group_by_exprs()) {
                 _aggregator->compute_single_agg_state(chunk_size);
@@ -102,14 +104,8 @@ Status AggregateBlockingNode::open(RuntimeState* state) {
         if (_aggregator->hash_map_variant().size() == 0) {
             _aggregator->set_ht_eos();
         }
-
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME) _aggregator->it_hash() = \
-            _aggregator->_state_allocator.begin();
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        _aggregator->hash_map_variant().visit(
+                [&](auto& hash_map_with_key) { _aggregator->it_hash() = _aggregator->_state_allocator.begin(); });
     } else if (_aggregator->is_none_group_by_exprs()) {
         // for aggregate no group by, if _num_input_rows is 0,
         // In update phase, we directly return empty chunk.
@@ -140,17 +136,11 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     int32_t chunk_size = runtime_state()->chunk_size();
 
     if (_aggregator->is_none_group_by_exprs()) {
-        SCOPED_TIMER(_aggregator->get_results_timer());
         _aggregator->convert_to_chunk_no_groupby(chunk);
     } else {
-        if (false) {
-        }
-#define HASH_MAP_METHOD(NAME)                                                                                     \
-    else if (_aggregator->hash_map_variant().type == AggHashMapVariant::Type::NAME)                               \
-            _aggregator->convert_hash_map_to_chunk<decltype(_aggregator->hash_map_variant().NAME)::element_type>( \
-                    *_aggregator->hash_map_variant().NAME, chunk_size, chunk);
-        APPLY_FOR_AGG_VARIANT_ALL(HASH_MAP_METHOD)
-#undef HASH_MAP_METHOD
+        _aggregator->hash_map_variant().visit([&](auto& hash_map_with_key) {
+            _aggregator->convert_hash_map_to_chunk(*hash_map_with_key, chunk_size, chunk);
+        });
     }
 
     size_t old_size = (*chunk)->num_rows();
@@ -169,41 +159,32 @@ Status AggregateBlockingNode::get_next(RuntimeState* state, ChunkPtr* chunk, boo
     return Status::OK();
 }
 
-std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::decompose_to_pipeline(
+template <class AggFactory, class SourceFactory, class SinkFactory>
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::_decompose_to_pipeline(
+        std::vector<std::shared_ptr<pipeline::OperatorFactory>>& ops_with_sink,
         pipeline::PipelineBuilderContext* context) {
     using namespace pipeline;
+    // create aggregator factory
+    // shared by sink operator and source operator
+    auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
 
-    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
-    auto& agg_node = _tnode.agg_node;
-    if (agg_node.need_finalize) {
-        // If finalize aggregate with group by clause, then it can be parallelized
-        if (agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty()) {
-            if (context->need_local_shuffle(ops_with_sink)) {
-                std::vector<ExprContext*> group_by_expr_ctxs;
-                Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
-                ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops_with_sink,
-                                                                                  group_by_expr_ctxs);
-            }
-        } else {
-            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
-        }
-    }
     // We cannot get degree of parallelism from PipelineBuilderContext, of which is only a suggest value
     // and we may set other parallelism for source operator in many special cases
     size_t degree_of_parallelism = down_cast<SourceOperatorFactory*>(ops_with_sink[0].get())->degree_of_parallelism();
 
     auto should_cache = context->should_interpolate_cache_operator(ops_with_sink[0], id());
-    auto operators_generator = [this, should_cache, &context](bool post_cache) {
+    bool could_local_shuffle = !should_cache && context->could_local_shuffle(ops_with_sink);
+    auto operators_generator = [this, should_cache, could_local_shuffle, &context](bool post_cache) {
         // shared by sink operator and source operator
-        AggregatorFactoryPtr aggregator_factory = std::make_shared<AggregatorFactory>(_tnode);
+        auto aggregator_factory = std::make_shared<AggFactory>(_tnode);
         AggrMode aggr_mode = should_cache ? (post_cache ? AM_BLOCKING_POST_CACHE : AM_BLOCKING_PRE_CACHE) : AM_DEFAULT;
         aggregator_factory->set_aggr_mode(aggr_mode);
-        auto sink_operator = std::make_shared<AggregateBlockingSinkOperatorFactory>(context->next_operator_id(), id(),
-                                                                                    aggregator_factory);
-        auto source_operator = std::make_shared<AggregateBlockingSourceOperatorFactory>(context->next_operator_id(),
-                                                                                        id(), aggregator_factory);
+        auto sink_operator = std::make_shared<SinkFactory>(context->next_operator_id(), id(), aggregator_factory);
+        auto source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), aggregator_factory);
+        source_operator->set_could_local_shuffle(could_local_shuffle);
         return std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(sink_operator, source_operator);
     };
+
     auto operators = operators_generator(false);
     auto sink_operator = std::move(std::get<0>(operators));
     auto source_operator = std::move(std::get<1>(operators));
@@ -220,15 +201,62 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory> > AggregateBlockingNode::
     // so ops_with_source's degree of parallelism must be equal with operators_with_sink's
     source_operator->set_degree_of_parallelism(degree_of_parallelism);
 
-    down_cast<pipeline::SourceOperatorFactory*>(source_operator.get())
-            ->set_need_local_shuffle(
-                    down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->need_local_shuffle());
+    source_operator->set_could_local_shuffle(
+            down_cast<pipeline::SourceOperatorFactory*>(ops_with_sink[0].get())->could_local_shuffle());
 
     ops_with_source.push_back(std::move(source_operator));
     if (should_cache) {
         ops_with_source = context->interpolate_cache_operator(ops_with_sink, ops_with_source, operators_generator);
     }
     context->add_pipeline(ops_with_sink);
+
+    return ops_with_source;
+}
+
+std::vector<std::shared_ptr<pipeline::OperatorFactory>> AggregateBlockingNode::decompose_to_pipeline(
+        pipeline::PipelineBuilderContext* context) {
+    using namespace pipeline;
+    context->has_aggregation = true;
+    OpFactories ops_with_sink = _children[0]->decompose_to_pipeline(context);
+    auto& agg_node = _tnode.agg_node;
+
+    bool sorted_streaming_aggregate = _tnode.agg_node.__isset.use_sort_agg && _tnode.agg_node.use_sort_agg;
+    bool has_group_by_keys = agg_node.__isset.grouping_exprs && !_tnode.agg_node.grouping_exprs.empty();
+    bool could_local_shuffle = context->could_local_shuffle(ops_with_sink);
+
+    auto try_interpolate_local_shuffle = [this, context](auto& ops) {
+        std::vector<ExprContext*> group_by_expr_ctxs;
+        Expr::create_expr_trees(_pool, _tnode.agg_node.grouping_exprs, &group_by_expr_ctxs);
+        Expr::prepare(group_by_expr_ctxs, runtime_state());
+        Expr::open(group_by_expr_ctxs, runtime_state());
+        return context->maybe_interpolate_local_shuffle_exchange(runtime_state(), ops, group_by_expr_ctxs);
+    };
+
+    if (agg_node.need_finalize && !sorted_streaming_aggregate) {
+        // If finalize aggregate with group by clause, then it can be parallelized
+        if (has_group_by_keys) {
+            if (could_local_shuffle) {
+                ops_with_sink = try_interpolate_local_shuffle(ops_with_sink);
+            }
+        } else {
+            ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), ops_with_sink);
+        }
+    }
+
+    OpFactories ops_with_source;
+    if (sorted_streaming_aggregate) {
+        ops_with_source =
+                _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
+                                       SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
+    } else {
+        ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
+                                                 AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+    }
+
+    // insert local shuffle after sorted streaming aggregate
+    if (_tnode.agg_node.need_finalize && sorted_streaming_aggregate && could_local_shuffle && has_group_by_keys) {
+        ops_with_source = try_interpolate_local_shuffle(ops_with_source);
+    }
 
     if (!_tnode.conjuncts.empty() || ops_with_source.back()->has_runtime_filters()) {
         ops_with_source.emplace_back(

@@ -179,6 +179,7 @@ TEST_F(TypeDescriptorTest, test_from_thrift) {
         ttype_desc.types[0].struct_fields.resize(2);
         ttype_desc.types[0].struct_fields[0].__set_name("a");
         ttype_desc.types[0].struct_fields[1].__set_name("b");
+        ttype_desc.types[0].__set_selected_fields({true, true});
         ttype_desc.types[1].__set_type(TTypeNodeType::SCALAR);
         ttype_desc.types[1].__set_scalar_type(TScalarType());
         ttype_desc.types[1].scalar_type.__set_type(TPrimitiveType::INT);
@@ -286,6 +287,8 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
         t.children[1].children.resize(2);
         t.children[1].children[0].type = PrimitiveType::TYPE_TINYINT;
         t.children[1].children[1].type = PrimitiveType::TYPE_BIGINT;
+        t.children[1].selected_fields.emplace_back(true);
+        t.children[1].selected_fields.emplace_back(true);
 
         TTypeDesc ttype_desc = t.to_thrift();
         ASSERT_TRUE(ttype_desc.__isset.types);
@@ -677,7 +680,9 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
         t.children[0].type = PrimitiveType::TYPE_VARCHAR;
         t.children[0].len = 20;
         t.children[1].type = PrimitiveType::TYPE_INT;
-        EXPECT_EQ("STRUCT{name VARCHAR(20), age INT}", t.debug_string());
+        t.selected_fields.push_back(true);
+        t.selected_fields.push_back(false);
+        EXPECT_EQ("STRUCT{name VARCHAR(20), age INT}, Selected fields: [1, 0]", t.debug_string());
     }
 }
 

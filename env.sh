@@ -82,6 +82,11 @@ if [[ -z ${JAVA_HOME} ]]; then
     exit 1
 fi
 
+if ! command -v $JAVA_HOME/bin/java &> /dev/null; then
+    echo "Error: JAVA not found, JAVA_HOME may be set wrong"
+    exit 1
+fi
+
 # check java version
 export JAVA=${JAVA_HOME}/bin/java
 JAVA_VER=$(${JAVA} -version 2>&1 | sed 's/.* version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q' | cut -f1 -d " ")

@@ -17,6 +17,7 @@
 #include "exec/pipeline/scan/scan_operator.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group_fwd.h"
+#include "fmt/printf.h"
 #include "util/phmap/phmap.h"
 
 namespace starrocks {
@@ -31,6 +32,7 @@ namespace pipeline {
 class PipelineDriver;
 using DriverPtr = std::shared_ptr<PipelineDriver>;
 using Drivers = std::vector<DriverPtr>;
+using IterateImmutableDriverFunc = std::function<void(DriverConstRawPtr)>;
 
 enum DriverState : uint32_t {
     NOT_READY = 0,
@@ -157,15 +159,18 @@ public:
         for (auto& op : _operators) {
             _operator_stages[op->get_id()] = OperatorStage::INIT;
         }
+        _driver_name = fmt::sprintf("driver_%d_%d", _source_node_id, _driver_id);
     }
 
     PipelineDriver(const PipelineDriver& driver)
             : PipelineDriver(driver._operators, driver._query_ctx, driver._fragment_ctx, driver._driver_id) {}
 
-    ~PipelineDriver();
+    ~PipelineDriver() noexcept;
 
     QueryContext* query_ctx() { return _query_ctx; }
+    const QueryContext* query_ctx() const { return _query_ctx; }
     FragmentContext* fragment_ctx() { return _fragment_ctx; }
+    const FragmentContext* fragment_ctx() const { return _fragment_ctx; }
     int32_t source_node_id() { return _source_node_id; }
     int32_t driver_id() const { return _driver_id; }
     DriverPtr clone() { return std::make_shared<PipelineDriver>(*this); }
@@ -400,6 +405,7 @@ private:
     // The default value -1 means no source
     int32_t _source_node_id = -1;
     int32_t _driver_id;
+    std::string _driver_name;
     DriverAcct _driver_acct;
     // The first one is source operator
     MorselQueue* _morsel_queue = nullptr;

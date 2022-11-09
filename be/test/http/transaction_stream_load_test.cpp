@@ -33,8 +33,8 @@ extern Status k_stream_load_plan_status;
 
 class TransactionStreamLoadActionTest : public testing::Test {
 public:
-    TransactionStreamLoadActionTest() {}
-    virtual ~TransactionStreamLoadActionTest() {}
+    TransactionStreamLoadActionTest() = default;
+    ~TransactionStreamLoadActionTest() override = default;
     void SetUp() override {
         k_stream_load_begin_result = TLoadTxnBeginResult();
         k_stream_load_commit_result = TLoadTxnCommitResult();

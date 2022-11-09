@@ -1593,7 +1593,7 @@ public class Config extends ConfigBase {
      * connection and socket timeout for broker client
      */
     @ConfField
-    public static int broker_client_timeout_ms = 10000;
+    public static int broker_client_timeout_ms = 120000;
 
     /**
      * Unused config field, leave it here for backward compatibility
@@ -1786,4 +1786,23 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int profile_info_reserved_num = 500;
+
+    /**
+     * Max number of roles that can be granted to user including all direct roles and all parent roles
+     * Used in new RBAC framework after 3.0 released
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_total_roles_per_user = 64;
+
+    /**
+     * Max role inheritance depth allowed. To avoid bad performance when merging privileges.
+     **/
+    @ConfField(mutable = true)
+    public static int privilege_max_role_depth = 16;
+
+    /**
+     * ignore invalid privilege & authentication when upgraded to new RBAC privilege framework in 3.0
+     */
+    @ConfField(mutable = true)
+    public static boolean ignore_invalid_privilege_authentications = false;
 }

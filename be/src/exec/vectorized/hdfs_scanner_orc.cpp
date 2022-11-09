@@ -32,12 +32,12 @@ public:
 private:
     const HdfsScannerParams& _scanner_params;
     const HdfsScannerContext& _scanner_ctx;
-    uint64_t _current_stripe_index;
-    bool _init_use_dict_filter_slots;
+    uint64_t _current_stripe_index{0};
+    bool _init_use_dict_filter_slots{false};
     std::vector<pair<SlotDescriptor*, uint64_t>> _use_dict_filter_slots;
     friend class HdfsOrcScanner;
     std::unordered_map<SlotId, FilterPtr> _dict_filter_eval_cache;
-    bool _can_do_filter_on_orc_cvb; // cvb: column vector batch.
+    bool _can_do_filter_on_orc_cvb{true}; // cvb: column vector batch.
     // key: end of range.
     // value: start of range.
     // ranges are not overlapped.
@@ -66,9 +66,7 @@ OrcRowReaderFilter::OrcRowReaderFilter(const HdfsScannerParams& scanner_params, 
                                        OrcChunkReader* reader)
         : _scanner_params(scanner_params),
           _scanner_ctx(scanner_ctx),
-          _current_stripe_index(0),
-          _init_use_dict_filter_slots(false),
-          _can_do_filter_on_orc_cvb(true),
+
           _reader(reader),
           _writer_tzoffset_in_seconds(reader->tzoffset_in_seconds()) {
     if (_scanner_params.min_max_tuple_desc != nullptr) {
@@ -213,8 +211,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         ColumnPtr column_ptr = vectorized::ColumnHelper::create_column(slot_desc->type(), true);
         dict_value_chunk->append_column(column_ptr, slot_id);
 
-        NullableColumn* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
-        BinaryColumn* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
+        auto* nullable_column = down_cast<NullableColumn*>(column_ptr.get());
+        auto* dict_value_column = down_cast<BinaryColumn*>(nullable_column->data_column().get());
 
         // copy dict and offset to column.
         Bytes& bytes = dict_value_column->get_bytes();
@@ -223,8 +221,8 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
         const char* content_data = dict->dictionaryBlob.data();
         size_t content_size = dict->dictionaryBlob.size();
         bytes.reserve(content_size);
-        const uint8_t* start = reinterpret_cast<const uint8_t*>(content_data);
-        const uint8_t* end = reinterpret_cast<const uint8_t*>(content_data + content_size);
+        const auto* start = reinterpret_cast<const uint8_t*>(content_data);
+        const auto* end = reinterpret_cast<const uint8_t*>(content_data + content_size);
 
         size_t offset_size = dict->dictionaryOffset.size();
         size_t dict_size = offset_size - 1;

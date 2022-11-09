@@ -10,8 +10,7 @@
 #include "exprs/expr.h"
 #include "storage/chunk_helper.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 // ================================
@@ -60,6 +59,9 @@ Status HiveDataSource::open(RuntimeState* state) {
     if (state->query_options().__isset.use_scan_block_cache) {
         _use_block_cache &= state->query_options().use_scan_block_cache;
     }
+    if (state->query_options().__isset.enable_populate_block_cache) {
+        _enable_populate_block_cache = state->query_options().enable_populate_block_cache;
+    }
 
     RETURN_IF_ERROR(_init_conjunct_ctxs(state));
     _init_tuples_and_slots(state);
@@ -69,6 +71,7 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
+    SCOPED_TIMER(_profile.scan_timer);
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }
@@ -286,7 +289,11 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     scanner_params.case_sensitive = _case_sensitive;
     scanner_params.profile = &_profile;
     scanner_params.open_limit = nullptr;
+    for (const auto& delete_file : scan_range.delete_files) {
+        scanner_params.deletes.emplace_back(&delete_file);
+    }
     scanner_params.use_block_cache = _use_block_cache;
+    scanner_params.enable_populate_block_cache = _enable_populate_block_cache;
 
     HdfsScanner* scanner = nullptr;
     auto format = scan_range.file_format;
@@ -407,5 +414,4 @@ int64_t HiveDataSource::cpu_time_spent() const {
     return _scanner->cpu_time_spent();
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

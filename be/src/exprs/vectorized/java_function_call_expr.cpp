@@ -39,15 +39,15 @@ struct UDFFunctionCallHelper {
         int num_cols = ctx->get_num_args();
         std::vector<const Column*> input_cols;
 
-        for (int i = 0; i < columns.size(); ++i) {
-            if (columns[i]->only_null()) {
+        for (auto& column : columns) {
+            if (column->only_null()) {
                 // we will handle NULL later
-            } else if (columns[i]->is_constant()) {
-                columns[i] = ColumnHelper::unpack_and_duplicate_const_column(size, columns[i]);
+            } else if (column->is_constant()) {
+                column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
             }
         }
 
-        for (auto col : columns) {
+        for (const auto& col : columns) {
             input_cols.emplace_back(col.get());
         }
         // each input arguments as three local references (nullcolumn, offsetcolumn, bytescolumn)

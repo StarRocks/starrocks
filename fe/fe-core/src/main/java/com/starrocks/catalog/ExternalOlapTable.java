@@ -328,6 +328,7 @@ public class ExternalOlapTable extends OlapTable {
             tableProperty.buildInMemory();
             tableProperty.buildDynamicProperty();
             tableProperty.buildWriteQuorum();
+            tableProperty.buildReplicatedStorage();
 
             indexes = null;
             if (meta.isSetIndex_infos()) {
@@ -483,12 +484,12 @@ public class ExternalOlapTable extends OlapTable {
                             replica.setLastFailedTime(replicaMeta.getLast_failed_time());
                             // forbidden repair for external table
                             replica.setNeedFurtherRepair(false);
-                            tablet.addReplica(replica, true);
+                            tablet.addReplica(replica, false);
                         }
                         TabletMeta tabletMeta = new TabletMeta(tTabletMeta.getDb_id(), tTabletMeta.getTable_id(),
                                 tTabletMeta.getPartition_id(), tTabletMeta.getIndex_id(),
                                 tTabletMeta.getOld_schema_hash(), tTabletMeta.getStorage_medium());
-                        index.addTablet(tablet, tabletMeta);
+                        index.addTablet(tablet, tabletMeta, false);
                     }
                     if (indexMeta.getPartition_id() == partition.getId()) {
                         if (index.getId() != baseIndexId) {

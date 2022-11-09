@@ -146,6 +146,9 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
     _params.use_page_cache = !config::disable_storage_page_cache;
+    if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
+        _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
+    }
     _params.runtime_range_pruner =
             OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
@@ -369,15 +372,7 @@ void OlapChunkSource::_update_realtime_counter(vectorized::Chunk* chunk) {
         _runtime_state->update_num_bytes_load_from_source(bytes_usage);
     }
 
-    // Update local counters.
-    _local_sum_row_bytes += chunk->memory_usage();
-    _local_num_rows += chunk->num_rows();
-    _local_max_chunk_rows = std::max(_local_max_chunk_rows, chunk->num_rows());
-    if (_local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
-        _chunk_buffer.limiter()->update_avg_row_bytes(_local_sum_row_bytes, _local_num_rows, _local_max_chunk_rows);
-        _local_sum_row_bytes = 0;
-        _local_num_rows = 0;
-    }
+    _chunk_buffer.update_limiter(chunk);
 }
 
 void OlapChunkSource::_update_counter() {

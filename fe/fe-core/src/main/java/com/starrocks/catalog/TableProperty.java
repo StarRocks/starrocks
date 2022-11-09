@@ -50,6 +50,7 @@ import java.util.Map;
  */
 public class TableProperty implements Writable, GsonPostProcessable {
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
+    public static final int INVALID = -1;
 
     @SerializedName(value = "properties")
     private Map<String, String> properties;
@@ -57,6 +58,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     private transient DynamicPartitionProperty dynamicPartitionProperty = new DynamicPartitionProperty(Maps.newHashMap());
     // table's default replication num
     private Short replicationNum = FeConstants.default_replication_num;
+
+    // partition time to live number, -1 means no ttl
+    private int partitionTTLNumber = INVALID;
+
+    private int partitionRefreshNumber = INVALID;
 
     private boolean isInMemory = false;
 
@@ -77,6 +83,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // the default write quorum
     private TWriteQuorumType writeQuorum = TWriteQuorumType.MAJORITY;
+
+    // the default disable replicated storage
+    private boolean enableReplicatedStorage = false;
 
     // 1. This table has been deleted. if hasDelete is false, the BE segment must don't have deleteConditions.
     //    If hasDelete is true, the BE segment maybe have deleteConditions because compaction.
@@ -119,9 +128,21 @@ public class TableProperty implements Writable, GsonPostProcessable {
             case OperationType.OP_MODIFY_WRITE_QUORUM:
                 buildWriteQuorum();
                 break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                buildMvProperties();
+                break;
+            case OperationType.OP_MODIFY_REPLICATED_STORAGE:
+                buildReplicatedStorage();
+                break;
             default:
                 break;
         }
+        return this;
+    }
+
+    public TableProperty buildMvProperties() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(INVALID)));
         return this;
     }
 
@@ -139,6 +160,18 @@ public class TableProperty implements Writable, GsonPostProcessable {
     public TableProperty buildReplicationNum() {
         replicationNum = Short.parseShort(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM,
                 String.valueOf(FeConstants.default_replication_num)));
+        return this;
+    }
+
+    public TableProperty buildPartitionTTL() {
+        partitionTTLNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER,
+                String.valueOf(INVALID)));
+        return this;
+    }
+
+    public TableProperty buildPartitionRefreshNumber() {
+        partitionRefreshNumber = Integer.parseInt(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER,
+                String.valueOf(INVALID)));
         return this;
     }
 
@@ -165,6 +198,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
                         WriteQuorum.MAJORITY));
         return this;
     }
+
+    public TableProperty buildReplicatedStorage() {
+        enableReplicatedStorage = Boolean
+                .parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, "false"));
+        return this;
+    }
+
     public TableProperty buildEnablePersistentIndex() {
         enablePersistentIndex = Boolean.parseBoolean(
                 properties.getOrDefault(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false"));
@@ -191,6 +231,22 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return replicationNum;
     }
 
+    public void setPartitionTTLNumber(int partitionTTLNumber) {
+        this.partitionTTLNumber = partitionTTLNumber;
+    }
+
+    public int getPartitionTTLNumber() {
+        return partitionTTLNumber;
+    }
+
+    public int getPartitionRefreshNumber() {
+        return partitionRefreshNumber;
+    }
+
+    public void setPartitionRefreshNumber(int partitionRefreshNumber) {
+        this.partitionRefreshNumber = partitionRefreshNumber;
+    }
+
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -201,6 +257,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public TWriteQuorumType writeQuorum() {
         return writeQuorum;
+    }
+
+    public boolean enableReplicatedStorage() {
+        return enableReplicatedStorage;
     }
 
     public TStorageFormat getStorageFormat() {
@@ -253,5 +313,8 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildEnablePersistentIndex();
         buildCompressionType();
         buildWriteQuorum();
+        buildPartitionTTL();
+        buildPartitionRefreshNumber();
+        buildReplicatedStorage();
     }
 }

@@ -49,9 +49,12 @@ static std::unique_ptr<DataStreamSender> create_data_stream_sink(
             params.__isset.send_query_statistics_with_every_batch && params.send_query_statistics_with_every_batch;
     bool enable_exchange_pass_through =
             params.__isset.enable_exchange_pass_through && params.enable_exchange_pass_through;
+    bool enable_exchange_perf = params.__isset.enable_exchange_perf && params.enable_exchange_perf;
+
     // TODO: figure out good buffer size based on size of output row
     auto ret = std::make_unique<DataStreamSender>(state, sender_id, row_desc, data_stream_sink, destinations, 16 * 1024,
-                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through);
+                                                  send_query_statistics_with_every_batch, enable_exchange_pass_through,
+                                                  enable_exchange_perf);
     return ret;
 }
 
@@ -64,8 +67,8 @@ Status DataSink::create_data_sink(RuntimeState* state, const TDataSink& thrift_s
         if (!thrift_sink.__isset.stream_sink) {
             return Status::InternalError("Missing data stream sink.");
         }
-        *sink = std::move(create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
-                                                  params.destinations));
+        *sink = create_data_stream_sink(state, thrift_sink.stream_sink, row_desc, params, sender_id,
+                                        params.destinations);
         break;
     }
     case TDataSinkType::RESULT_SINK:

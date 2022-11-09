@@ -11,6 +11,8 @@ import com.starrocks.privilege.RolePrivilegeCollection;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.HashMap;
+import java.util.Map;
 
 public class RolePrivilegeCollectionInfo implements Writable {
 
@@ -18,28 +20,26 @@ public class RolePrivilegeCollectionInfo implements Writable {
     private short pluginId;
     @SerializedName(value = "v")
     private short pluginVersion;
-    @SerializedName(value = "ri")
-    private long roleId;
-    @SerializedName(value = "p")
-    private RolePrivilegeCollection privilegeCollection;
+    @SerializedName(value = "r")
+    private Map<Long, RolePrivilegeCollection> rolePrivilegeCollectionMap;
 
     public RolePrivilegeCollectionInfo(
             long roleId,
-            RolePrivilegeCollection rolePrivilegeCollectionInfo,
+            RolePrivilegeCollection collection,
             short pluginId,
             short pluginVersion) {
-        this.roleId = roleId;
-        this.privilegeCollection = rolePrivilegeCollectionInfo;
+        this.rolePrivilegeCollectionMap = new HashMap<>();
+        this.rolePrivilegeCollectionMap.put(roleId, collection);
         this.pluginId = pluginId;
         this.pluginVersion = pluginVersion;
     }
 
-    public long getRoleId() {
-        return roleId;
+    public void add(long roleId, RolePrivilegeCollection collection) {
+        this.rolePrivilegeCollectionMap.put(roleId, collection);
     }
 
-    public RolePrivilegeCollection getPrivilegeCollection() {
-        return privilegeCollection;
+    public Map<Long, RolePrivilegeCollection> getRolePrivilegeCollectionMap() {
+        return rolePrivilegeCollectionMap;
     }
 
     public short getPluginId() {

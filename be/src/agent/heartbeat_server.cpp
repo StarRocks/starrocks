@@ -107,7 +107,7 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
         heartbeat_result.backend_info.__set_version(get_short_version());
         heartbeat_result.backend_info.__set_num_hardware_cores(num_hardware_cores);
         if (reboot_time == 0) {
-            std::time_t currTime = std::time(0);
+            std::time_t currTime = std::time(nullptr);
             reboot_time = static_cast<int64_t>(currTime);
         }
         heartbeat_result.backend_info.__set_reboot_time(reboot_time);
@@ -145,8 +145,8 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
     if (master_info.__isset.backend_ip) {
         if (master_info.backend_ip != BackendOptions::get_localhost()) {
-            LOG(INFO) << master_info.backend_ip << " not equal to to backend localhost "
-                      << BackendOptions::get_localhost();
+            LOG(WARNING) << master_info.backend_ip << " not equal to to backend localhost "
+                         << BackendOptions::get_localhost();
             bool fe_saved_is_valid_ip = is_valid_ip(master_info.backend_ip);
             if (fe_saved_is_valid_ip && is_valid_ip(BackendOptions::get_localhost())) {
                 return Status::InternalError("FE saved address not match backend address");

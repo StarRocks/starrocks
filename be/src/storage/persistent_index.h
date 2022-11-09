@@ -372,8 +372,6 @@ private:
     std::unique_ptr<RandomAccessFile> _file;
     EditVersion _version;
     size_t _size = 0;
-    size_t _fixed_key_size = 0;
-    size_t _fixed_value_size = 0;
 
     struct ShardInfo {
         uint64_t offset;
@@ -436,7 +434,7 @@ private:
 class PersistentIndex {
 public:
     // |path|: directory that contains index files
-    PersistentIndex(const std::string& path);
+    PersistentIndex(std::string path);
     ~PersistentIndex();
 
     bool loaded() const { return (bool)_l0; }

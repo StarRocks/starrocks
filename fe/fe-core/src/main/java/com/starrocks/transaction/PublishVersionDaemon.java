@@ -26,7 +26,7 @@ import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
@@ -261,6 +261,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
         boolean finished = true;
         long txnId = txnState.getTransactionId();
         for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+
+            long currentTime = System.currentTimeMillis();
+            long versionTime = partitionCommitInfo.getVersionTime();
+            if (versionTime > 0) {
+                continue;
+            }
+            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+                finished = false;
+                continue;
+            }
+
             boolean ok = false;
             try {
                 ok = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
@@ -305,14 +316,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
-            }
-            long currentTime = System.currentTimeMillis();
-            long versionTime = partitionCommitInfo.getVersionTime();
-            if (versionTime > 0) {
-                return true;
-            }
-            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
-                return false;
             }
             if (partition.getVisibleVersion() + 1 != txnVersion) {
                 LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
@@ -374,12 +377,13 @@ public class PublishVersionDaemon extends LeaderDaemon {
         try {
             for (long tableId : transactionState.getTableIdList()) {
                 Table table = db.getTable(tableId);
-                Set<Long> relatedMvs = ((OlapTable) table).getRelatedMaterializedViews();
-                for (long mvId : relatedMvs) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+                for (MvId mvId : relatedMvs) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
                     if (materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), db.getTable(mvId).getName(), Constants.TaskRunPriority.NORMAL.value());
+                                db.getFullName(), db.getTable(mvId.getId()).getName(),
+                                Constants.TaskRunPriority.NORMAL.value());
                     }
                 }
             }

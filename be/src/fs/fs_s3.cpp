@@ -17,8 +17,8 @@
 #include <aws/s3/model/ListObjectsV2Result.h>
 #include <aws/s3/model/PutObjectRequest.h>
 #include <fmt/core.h>
-#include <time.h>
 
+#include <ctime>
 #include <limits>
 
 #include "common/config.h"
@@ -90,14 +90,14 @@ private:
     constexpr static int kMaxItems = 8;
 
     std::mutex _lock;
-    int _items;
+    int _items{0};
     // _configs[i] is the client configuration of |_clients[i].
     ClientConfiguration _configs[kMaxItems];
     S3ClientPtr _clients[kMaxItems];
     Random _rand;
 };
 
-S3ClientFactory::S3ClientFactory() : _items(0), _rand((int)::time(NULL)) {}
+S3ClientFactory::S3ClientFactory() : _rand((int)::time(nullptr)) {}
 
 S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfiguration& config, const FSOptions& opts) {
     std::lock_guard l(_lock);
@@ -443,7 +443,7 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
             std::string_view name(full_name.data() + uri.key().size(), full_name.size() - uri.key().size() - 1);
             bool is_dir = true;
             int64_t file_size = 0;
-            file_status->emplace_back(std::move(name), is_dir, file_size);
+            file_status->emplace_back(name, is_dir, file_size);
         }
         for (auto&& obj : result.GetContents()) {
             if (obj.GetKey() == uri.key()) {
@@ -464,7 +464,7 @@ Status S3FileSystem::list_path(const std::string& dir, std::vector<FileStatus>* 
 
             std::string_view name(obj_key.data() + uri.key().size(), obj_key.size() - uri.key().size());
 
-            file_status->emplace_back(std::move(name), is_dir, file_size);
+            file_status->emplace_back(name, is_dir, file_size);
         }
     } while (result.GetIsTruncated());
     return directory_exist ? Status::OK() : Status::NotFound(dir);

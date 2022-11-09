@@ -30,7 +30,7 @@ namespace starrocks {
 class StoragePageCacheTest : public testing::Test {
 public:
     StoragePageCacheTest() { _mem_tracker = std::make_unique<MemTracker>(); }
-    virtual ~StoragePageCacheTest() {}
+    ~StoragePageCacheTest() override = default;
 
 private:
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;

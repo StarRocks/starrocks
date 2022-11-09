@@ -25,10 +25,11 @@ class RuntimeFilterProbeCollector;
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t num_rows_read = 0;
-    int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;
+
+    int64_t expr_filter_ns = 0;
     int64_t column_read_ns = 0;
     int64_t column_convert_ns = 0;
     int64_t reader_init_ns = 0;
@@ -50,8 +51,7 @@ struct HdfsScanStats {
 
     int64_t get_cpu_time_ns() const {
         // TODO: make it more accurate
-        return expr_filter_ns + column_convert_ns + level_decode_ns + value_decode_ns + group_dict_filter_ns +
-               group_dict_decode_ns;
+        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns;
     }
 };
 
@@ -131,9 +131,12 @@ struct HdfsScannerParams {
 
     std::atomic<int32_t>* open_limit;
 
-    bool use_block_cache = false;
+    std::vector<const TIcebergDeleteFile*> deletes;
 
     bool is_lazy_materialization_slot(SlotId slot_id) const;
+
+    bool use_block_cache = false;
+    bool enable_populate_block_cache = false;
 };
 
 struct HdfsScannerContext {
@@ -200,6 +203,8 @@ struct HdfsScannerContext {
 
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
+
+    bool enable_block_cache = false;
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)
@@ -282,7 +287,7 @@ protected:
     std::unique_ptr<RandomAccessFile> _file;
     // by default it's no compression.
     CompressionTypePB _compression_type = CompressionTypePB::NO_COMPRESSION;
-    std::shared_ptr<io::CacheInputStream> _cache_input_stream;
+    std::shared_ptr<io::CacheInputStream> _cache_input_stream = nullptr;
 };
 
 } // namespace starrocks::vectorized

@@ -175,8 +175,8 @@ MorselQueueFactory* PipelineBuilderContext::morsel_queue_factory_of_source_opera
     return morsel_queue_factory_of_source_operator(source_op->plan_node_id());
 }
 
-bool PipelineBuilderContext::need_local_shuffle(OpFactories ops) const {
-    return down_cast<SourceOperatorFactory*>(ops[0].get())->need_local_shuffle();
+bool PipelineBuilderContext::could_local_shuffle(OpFactories ops) const {
+    return down_cast<SourceOperatorFactory*>(ops[0].get())->could_local_shuffle();
 }
 
 bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& source_op, int32_t plan_node_id) {
@@ -192,7 +192,7 @@ bool PipelineBuilderContext::should_interpolate_cache_operator(OpFactoryPtr& sou
 
 OpFactories PipelineBuilderContext::interpolate_cache_operator(
         OpFactories& upstream_pipeline, OpFactories& downstream_pipeline,
-        std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)> merge_operators_generator) {
+        const std::function<std::tuple<OpFactoryPtr, SourceOperatorFactoryPtr>(bool)>& merge_operators_generator) {
     DCHECK(should_interpolate_cache_operator(upstream_pipeline[0], downstream_pipeline[0]->plan_node_id()));
 
     const auto& cache_param = _fragment_context->cache_param();

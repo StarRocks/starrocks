@@ -78,8 +78,8 @@ public:
     std::list<std::string> get_events() {
         _extend_lifetime();
         std::list<std::string> event_strings;
-        for (auto it = _events.begin(); it != _events.end(); ++it) {
-            event_strings.push_back((*it)->to_string());
+        for (auto& _event : _events) {
+            event_strings.push_back(_event->to_string());
         }
         return event_strings;
     }
@@ -203,8 +203,8 @@ std::unordered_map<std::string, std::list<std::string>> RuntimeFilterCache::get_
         auto& mutex = _event_mutexes[i];
         auto& map = _event_maps[i];
         std::shared_lock read_lock(mutex);
-        for (auto it = map.begin(); it != map.end(); ++it) {
-            events[print_id(it->first)] = it->second->get_events();
+        for (auto& it : map) {
+            events[print_id(it.first)] = it.second->get_events();
         }
     }
     return events;

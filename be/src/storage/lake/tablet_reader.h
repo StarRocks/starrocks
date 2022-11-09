@@ -40,7 +40,7 @@ class TabletReader final : public vectorized::ChunkIterator {
 
 public:
     TabletReader(Tablet tablet, int64_t version, Schema schema);
-    TabletReader(Tablet tablet, int64_t version, Schema schema, const std::vector<RowsetPtr>& rowsets);
+    TabletReader(Tablet tablet, int64_t version, Schema schema, std::vector<RowsetPtr> rowsets);
     TabletReader(Tablet tablet, int64_t version, Schema schema, bool is_key, RowSourceMaskBuffer* mask_buffer);
     ~TabletReader() override;
 

@@ -49,9 +49,9 @@
 #include "exprs/vectorized/java_function_call_expr.h"
 #include "exprs/vectorized/lambda_function.h"
 #include "exprs/vectorized/literal.h"
+#include "exprs/vectorized/map_element_expr.h"
 #include "exprs/vectorized/placeholder_ref.h"
-#include "gen_cpp/Exprs_types.h"
-#include "gen_cpp/Types_types.h"
+#include "exprs/vectorized/subfield_expr.h"
 #include "runtime/primitive_type.h"
 #include "runtime/raw_value.h"
 #include "runtime/runtime_state.h"
@@ -82,7 +82,7 @@ Expr::Expr(const Expr& expr)
           _fn(expr._fn),
           _fn_context_index(expr._fn_context_index) {}
 
-Expr::Expr(TypeDescriptor type) : Expr(type, false) {}
+Expr::Expr(TypeDescriptor type) : Expr(std::move(type), false) {}
 
 Expr::Expr(TypeDescriptor type, bool is_slotref)
         : _opcode(TExprOpcode::INVALID_OPCODE),
@@ -342,6 +342,12 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::ARRAY_ELEMENT_EXPR:
         *expr = pool->add(vectorized::ArrayElementExprFactory::from_thrift(texpr_node));
         break;
+    case TExprNodeType::MAP_ELEMENT_EXPR:
+        *expr = pool->add(vectorized::MapElementExprFactory::from_thrift(texpr_node));
+        break;
+    case TExprNodeType::SUBFIELD_EXPR:
+        *expr = pool->add(vectorized::SubfieldExprFactory::from_thrift(texpr_node));
+        break;
     case TExprNodeType::INFO_FUNC:
         *expr = pool->add(new vectorized::VectorizedInfoFunc(texpr_node));
         break;
@@ -364,6 +370,7 @@ Status Expr::create_vectorized_expr(starrocks::ObjectPool* pool, const starrocks
     case TExprNodeType::LIKE_PRED:
     case TExprNodeType::LITERAL_PRED:
     case TExprNodeType::TUPLE_IS_NULL_PRED:
+    case TExprNodeType::RUNTIME_FILTER_MIN_MAX_EXPR:
         break;
     }
     if (*expr == nullptr) {
@@ -592,6 +599,10 @@ StatusOr<ColumnPtr> Expr::evaluate_const(ExprContext* context) {
 
 ColumnPtr Expr::evaluate(ExprContext* context, vectorized::Chunk* ptr) {
     return nullptr;
+}
+
+ColumnPtr Expr::evaluate_with_filter(ExprContext* context, vectorized::Chunk* ptr, uint8_t* filter) {
+    return evaluate(context, ptr);
 }
 
 vectorized::ColumnRef* Expr::get_column_ref() {

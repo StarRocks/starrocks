@@ -8,7 +8,7 @@ Creates an external catalog. You can use external catalogs to query data in exte
 - Iceberg catalog: used for querying data in Apache Iceberg.
 - Hudi catalog: used for querying data in Apache Hudi.
 
-Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see [Hive catalog](../../../using_starrocks/catalog/hive_catalog.md#before-you-begin)、[Iceberg catalog](../../../using_starrocks/catalog/iceberg_catalog.md#before-you-begin) and [Hudi catalog](../../../using_starrocks/catalog/hudi_catalog.md#before-you-begin)。
+Before you create external catalogs, configure your StarRocks cluster to meet the requirements of the data storage system (such as Amazon S3), metadata service (such as Hive metastore), and authenticating service (such as Kerberos) of external data sources. For more information, see [Hive catalog](../../../data_source/catalog/hive_catalog.md#before-you-begin)、[Iceberg catalog](../../../data_source/catalog/iceberg_catalog.md#before-you-begin) and [Hudi catalog](../../../data_source/catalog/hudi_catalog.md#before-you-begin)。
 
 ## Syntax
 

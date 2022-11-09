@@ -202,7 +202,7 @@ protected:
     }
 
     void create_partial_rowset_writer_context(int64_t tablet_id, const std::vector<int32_t>& column_indexes,
-                                              std::shared_ptr<TabletSchema> partial_schema,
+                                              const std::shared_ptr<TabletSchema>& partial_schema,
                                               RowsetWriterContext* rowset_writer_context) {
         RowsetId rowset_id;
         rowset_id.init(10000);
@@ -584,8 +584,9 @@ static ssize_t read_and_compare(const vectorized::ChunkIteratorPtr& iter, int64_
     return count;
 }
 
-static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet, std::shared_ptr<TabletSchema> partial_schema,
-                                       int64_t version, int64_t nkeys) {
+static ssize_t read_tablet_and_compare(const TabletSharedPtr& tablet,
+                                       const std::shared_ptr<TabletSchema>& partial_schema, int64_t version,
+                                       int64_t nkeys) {
     vectorized::Schema schema = ChunkHelper::convert_schema_to_format_v2(*partial_schema);
     vectorized::TabletReader reader(tablet, Version(0, version), schema);
     auto iter = create_tablet_iterator(reader, schema);
@@ -820,7 +821,7 @@ TEST_F(RowsetTest, SegmentWriteTest) {
 
         butil::IOBuf data;
         auto buf = new uint8[seg_info->data_size()];
-        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[] (uint8*)buf; });
+        data.append_user_data(buf, seg_info->data_size(), [](void* buf) { delete[](uint8*) buf; });
 
         ASSERT_TRUE(rfile->read_fully(buf, seg_info->data_size()).ok());
         auto st = segment_rowset_writer->flush_segment(*seg_info, data);

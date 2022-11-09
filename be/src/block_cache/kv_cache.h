@@ -19,9 +19,7 @@ public:
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned.
-    virtual StatusOr<size_t> read_cache(const std::string& key, char* value) = 0;
-
-    virtual Status read_cache_zero_copy(const std::string& key, const char** buf) = 0;
+    virtual StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) = 0;
 
     // Remove data from cache. The offset must be aligned by block size
     virtual Status remove_cache(const std::string& key) = 0;

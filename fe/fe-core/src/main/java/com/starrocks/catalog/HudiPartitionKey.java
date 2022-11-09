@@ -2,7 +2,7 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.external.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetaClient;
 
 public class HudiPartitionKey extends PartitionKey implements NullablePartitionKey {
     public HudiPartitionKey() {

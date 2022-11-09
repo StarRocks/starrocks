@@ -243,8 +243,8 @@ public:
     Status clone_and_append_context(const char* filename, int line, const char* expr) const;
 
 private:
-    const char* copy_state(const char* state) const;
-    const char* copy_state_with_extra_ctx(const char* state, Slice ctx) const;
+    static const char* copy_state(const char* state);
+    static const char* copy_state_with_extra_ctx(const char* state, Slice ctx);
 
     // Indicates whether this Status was the rhs of a move operation.
     static bool is_moved_from(const char* state);
@@ -438,5 +438,3 @@ struct StatusInstance {
             return ret;               \
         }                             \
     } while (0)
-
-#define WARN_UNUSED_RESULT __attribute__((warn_unused_result))

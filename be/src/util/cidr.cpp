@@ -29,7 +29,7 @@
 
 namespace starrocks {
 
-CIDR::CIDR() {}
+CIDR::CIDR() = default;
 
 void CIDR::reset() {
     _address = 0;

@@ -19,16 +19,11 @@ class DictDecodeOperator final : public Operator {
 public:
     DictDecodeOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
                        std::vector<int32_t>& encode_column_cids, std::vector<int32_t>& decode_column_cids,
-                       std::vector<GlobalDictDecoderPtr>& decoders, std::vector<ExprContext*>& expr_ctxs,
-                       std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& string_functions,
-                       DictOptimizeParser& dict_optimize_parser)
+                       std::vector<GlobalDictDecoderPtr>& decoders)
             : Operator(factory, id, "dict_decode", plan_node_id, driver_sequence),
               _encode_column_cids(encode_column_cids),
               _decode_column_cids(decode_column_cids),
-              _decoders(decoders),
-              _expr_ctxs(expr_ctxs),
-              _string_functions(string_functions),
-              _dict_optimize_parser(dict_optimize_parser) {}
+              _decoders(decoders) {}
 
     ~DictDecodeOperator() override = default;
 
@@ -58,10 +53,6 @@ private:
     const std::vector<int32_t>& _decode_column_cids;
     const std::vector<GlobalDictDecoderPtr>& _decoders;
 
-    const std::vector<ExprContext*>& _expr_ctxs;
-    const std::map<SlotId, std::pair<ExprContext*, DictOptimizeContext>>& _string_functions;
-    const DictOptimizeParser& _dict_optimize_parser;
-
     bool _is_finished = false;
     vectorized::ChunkPtr _cur_chunk = nullptr;
 };
@@ -80,13 +71,12 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<DictDecodeOperator>(this, _id, _plan_node_id, driver_sequence, _encode_column_cids,
-                                                    _decode_column_cids, _decoders, _expr_ctxs, _string_functions,
-                                                    _dict_optimize_parser);
+                                                    _decode_column_cids, _decoders);
     }
 
-    Status prepare(RuntimeState* state);
+    Status prepare(RuntimeState* state) override;
 
-    void close(RuntimeState* state);
+    void close(RuntimeState* state) override;
 
 private:
     std::vector<int32_t> _encode_column_cids;

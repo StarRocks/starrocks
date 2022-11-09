@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/sort/sort_context.h"
 
+#include <utility>
+
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
@@ -17,7 +19,7 @@ void SortContext::close(RuntimeState* state) {
     _chunks_sorter_partitions.clear();
 }
 
-void SortContext::add_partition_chunks_sorter(std::shared_ptr<ChunksSorter> chunks_sorter) {
+void SortContext::add_partition_chunks_sorter(const std::shared_ptr<ChunksSorter>& chunks_sorter) {
     _chunks_sorter_partitions.push_back(chunks_sorter);
 }
 
@@ -76,11 +78,6 @@ Status SortContext::_init_merger() {
         _required_rows = ((_limit < 0) ? _total_rows.load() : std::min<int64_t>(_limit + _offset, _total_rows));
     }
 
-    std::vector<SortedRuns> partial_sorted_runs;
-    for (int i = 0; i < _num_partition_sinkers; ++i) {
-        auto& partition_sorter = _chunks_sorter_partitions[i];
-        partial_sorted_runs.push_back(partition_sorter->get_sorted_runs());
-    }
     _partial_cursors.reserve(_num_partition_sinkers);
     for (int i = 0; i < _num_partition_sinkers; i++) {
         vectorized::ChunkProvider provider = [i, this](vectorized::ChunkUniquePtr* out_chunk, bool* eos) -> bool {
@@ -110,8 +107,8 @@ Status SortContext::_init_merger() {
 
 SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                                        int64_t offset, int64_t limit, int32_t num_right_sinkers,
-                                       const std::vector<ExprContext*>& sort_exprs,
-                                       const std::vector<bool>& is_asc_order, const std::vector<bool>& is_null_first)
+                                       std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
+                                       const std::vector<bool>& is_null_first)
         : _state(state),
           _topn_type(topn_type),
           _is_merging(is_merging),
@@ -119,7 +116,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::typ
           _offset(offset),
           _limit(limit),
           _num_right_sinkers(num_right_sinkers),
-          _sort_exprs(sort_exprs),
+          _sort_exprs(std::move(sort_exprs)),
           _sort_descs(is_asc_order, is_null_first) {}
 
 SortContextPtr SortContextFactory::create(int32_t idx) {

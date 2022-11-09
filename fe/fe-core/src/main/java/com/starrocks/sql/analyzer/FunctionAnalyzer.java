@@ -14,6 +14,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.qe.ConnectContext;
 
 public class FunctionAnalyzer {
 
@@ -61,7 +62,10 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.ARRAY_MAP)) {
-            Preconditions.checkState(functionCallExpr.getChildren().size() > 1);
+            Preconditions.checkState(functionCallExpr.getChildren().size() > 1,
+                    "array_map should have at least two inputs");
+            Preconditions.checkState(functionCallExpr.getChild(0).getChild(0) != null,
+                    "array_map's lambda function can not be null");
             // the normalized high_order functions:
             // high-order function(lambda_func(lambda_expr, lambda_arguments), input_arrays),
             // which puts various arguments/inputs at the tail e.g.,
@@ -315,6 +319,13 @@ public class FunctionAnalyzer {
                     throw new SemanticException("percentile_approx requires the third parameter must be a constant : "
                             + functionCallExpr.toSql());
                 }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.EXCHANGE_BYTES) ||
+                fnName.getFunction().equals(FunctionSet.EXCHANGE_SPEED)) {
+            if (ConnectContext.get().getSessionVariable().getNewPlannerAggStage() != 1) {
+                throw new SemanticException(fnName.getFunction() + " should run in new_planner_agg_stage = 1.");
             }
         }
     }

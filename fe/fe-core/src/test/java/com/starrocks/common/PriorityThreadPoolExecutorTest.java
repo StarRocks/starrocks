@@ -63,31 +63,6 @@ public class PriorityThreadPoolExecutorTest {
     }
 
     @Test
-    public void testRandomPriority() throws InterruptedException, ExecutionException {
-        PriorityBlockingQueue<Runnable> workQueue = new PriorityBlockingQueue<Runnable>(1000);
-        PriorityThreadPoolExecutor pool = new PriorityThreadPoolExecutor(1, 1, 1, TimeUnit.MINUTES, workQueue);
-        sleepFlag.set(true);
-
-        Future[] futures = new Future[3];
-        StringBuffer buffer = new StringBuffer();
-        for (int i = 0; i < futures.length; i++) {
-            int r = (int) (Math.random() * 100);
-            futures[i] = pool.submit(new TenSecondTask(i, r, buffer));
-        }
-        sleepFlag.set(false);
-        for (int i = 0; i < futures.length; i++) {
-            futures[i].get();
-        }
-
-        buffer.append("01@00");
-        String[] split = buffer.toString().split(", ");
-        for (int i = 2; i < split.length - 1; i++) {
-            String s = split[i].split("@")[0];
-            assertTrue(Integer.valueOf(s) >= Integer.valueOf(split[i + 1].split("@")[0]));
-        }
-    }
-
-    @Test
     public void testDynamicPriority() throws InterruptedException, ExecutionException {
         PriorityBlockingQueue<Runnable> workQueue = new PriorityBlockingQueue<Runnable>(1000);
         PriorityThreadPoolExecutor pool = new PriorityThreadPoolExecutor(1, 1, 1, TimeUnit.MINUTES, workQueue);

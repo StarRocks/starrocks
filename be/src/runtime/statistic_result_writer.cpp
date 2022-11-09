@@ -173,12 +173,12 @@ Status StatisticResultWriter::_fill_statistic_data_v1(int version, const vectori
     auto& dbIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[2])->get_data();
     auto& tableIds = ColumnHelper::cast_to_raw<TYPE_BIGINT>(columns[3])->get_data();
     BinaryColumn* nameColumn = ColumnHelper::cast_to_raw<TYPE_VARCHAR>(columns[4]);
-    Int64Column* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
-    Int64Column* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
-    Int64Column* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
-    Int64Column* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
-    BinaryColumn* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
-    BinaryColumn* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
+    auto* rowCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[5].get()));
+    auto* dataSizes = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[6].get()));
+    auto* countDistincts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[7].get()));
+    auto* nullCounts = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[8].get()));
+    auto* maxColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[9].get()));
+    auto* minColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[10].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();
@@ -212,10 +212,10 @@ Status StatisticResultWriter::_fill_statistic_histogram(int version, const vecto
     SCOPED_TIMER(_serialize_timer);
     DCHECK(columns.size() == 5);
 
-    Int64Column* dbIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
-    Int64Column* tableIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
-    BinaryColumn* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
-    BinaryColumn* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
+    auto* dbIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[1].get()));
+    auto* tableIds = down_cast<Int64Column*>(ColumnHelper::get_data_column(columns[2].get()));
+    auto* nameColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[3].get()));
+    auto* histogramColumn = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(columns[4].get()));
 
     std::vector<TStatisticData> data_list;
     int num_rows = chunk->num_rows();

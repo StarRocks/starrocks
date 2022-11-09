@@ -161,7 +161,6 @@ private:
 
     jclass _udf_helper_class;
     jmethodID _create_boxed_array;
-    jmethodID _batch_update_single;
     jmethodID _batch_update;
     jmethodID _batch_update_if_not_null;
     jmethodID _batch_update_state;
@@ -256,7 +255,7 @@ private:
 // A global ref of the guard, handle can be shared across threads
 class JavaGlobalRef {
 public:
-    JavaGlobalRef(jobject&& handle) : _handle(std::move(handle)) {}
+    JavaGlobalRef(jobject handle) : _handle(handle) {}
     ~JavaGlobalRef();
     JavaGlobalRef(const JavaGlobalRef&) = delete;
 
@@ -284,7 +283,7 @@ private:
 // A Class object created from the ClassLoader that can be accessed by multiple threads
 class JVMClass {
 public:
-    JVMClass(jobject&& clazz) : _clazz(std::move(clazz)) {}
+    JVMClass(jobject clazz) : _clazz(clazz) {}
     JVMClass(const JVMClass&) = delete;
 
     JVMClass& operator=(const JVMClass&&) = delete;

@@ -168,7 +168,7 @@ static Status broker_close_writer(const TNetworkAddress& broker, const TBrokerFD
 class BrokerInputStream : public io::SeekableInputStream {
 public:
     BrokerInputStream(const TNetworkAddress& broker, const TBrokerFD& fd, int64_t size)
-            : _broker(broker), _fd(fd), _offset(0), _size(size) {}
+            : _broker(broker), _fd(fd), _size(size) {}
 
     ~BrokerInputStream() override { broker_close_reader(_broker, _fd); }
 
@@ -190,7 +190,7 @@ public:
 private:
     TNetworkAddress _broker;
     TBrokerFD _fd;
-    int64_t _offset;
+    int64_t _offset{0};
     int64_t _size;
 };
 

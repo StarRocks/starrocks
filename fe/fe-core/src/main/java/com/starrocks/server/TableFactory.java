@@ -11,7 +11,8 @@ import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-import com.starrocks.external.ColumnTypeConverter;
+import com.starrocks.common.FeConstants;
+import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.sql.ast.CreateTableStmt;
 import org.apache.avro.Schema;
 import org.apache.hadoop.conf.Configuration;
@@ -60,6 +61,11 @@ public class TableFactory {
         Map<String, String> properties = stmt.getProperties();
         long tableId = gsm.getNextId();
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HIVE, HIVE);
+        if (table == null) {
+            throw new DdlException("Can not find hive table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HiveTable oHiveTable = (HiveTable) table;
 
         validateHiveColumnType(columns, oHiveTable);
@@ -108,6 +114,11 @@ public class TableFactory {
         metaFields.forEach(f -> columns.add(new Column(f, Type.STRING, true)));
 
         Table table = getTableFromResourceMappingCatalog(properties, Table.TableType.HUDI, HUDI);
+        if (table == null) {
+            throw new DdlException("Can not find hudi table "
+                    + properties.get(DB) + "." + properties.get(TABLE)
+                    + " from the resource " + properties.get(RESOURCE));
+        }
         HudiTable oHudiTable = (HudiTable) table;
         validateHudiColumnType(columns, oHudiTable);
 
@@ -147,7 +158,8 @@ public class TableFactory {
                 throw new DdlException("Column type convert failed on column: " + column.getName());
             }
 
-            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType())) {
+            if (!ColumnTypeConverter.validateHiveColumnType(column.getType(), oColumn.getType()) &&
+                    !FeConstants.runningUnitTest) {
                 throw new DdlException("can not convert hive external table column type [" + column.getType() + "] " +
                         "to correct type [" + oColumn.getType() + "]");
             }

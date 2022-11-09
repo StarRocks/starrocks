@@ -69,7 +69,7 @@ Status LoadPathMgr::init() {
 }
 
 void* LoadPathMgr::cleaner(void* param) {
-    LoadPathMgr* mgr = (LoadPathMgr*)param;
+    auto* mgr = (LoadPathMgr*)param;
     while (true) {
         static constexpr auto one_hour = std::chrono::seconds(3600);
         // clean every one hour

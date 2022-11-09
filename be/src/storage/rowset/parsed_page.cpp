@@ -41,7 +41,7 @@ namespace starrocks {
 namespace {
 class ByteIterator {
 public:
-    ByteIterator(const uint8_t* bytes, size_t size) : _bytes(bytes), _size(size), _pos(0) {}
+    ByteIterator(const uint8_t* bytes, size_t size) : _bytes(bytes), _size(size) {}
 
     size_t next(uint8_t* value) {
         if (UNLIKELY(_pos == _size)) {
@@ -58,7 +58,7 @@ public:
 private:
     const uint8_t* _bytes;
     const size_t _size;
-    size_t _pos;
+    size_t _pos{0};
 };
 } // namespace
 

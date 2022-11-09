@@ -71,7 +71,6 @@ private:
     std::unordered_map<TUniqueId, NonPipelineReportTask> _non_pipeline_report_tasks;
     std::mutex _non_pipeline_report_mutex;
 
-    ExecEnv* _exec_env;
     std::thread _thread;
 
     std::atomic<bool> _stop;

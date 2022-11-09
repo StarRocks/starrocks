@@ -65,13 +65,13 @@ public class DateLiteral extends LiteralExpr {
     private static final DateTimeFormatter DATE_FORMATTER_TWO_DIGIT;
 
     static {
-        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s")
+        DATE_TIME_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e")
+        DATE_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s")
+        DATE_TIME_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e %H:%i:%s", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
-        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e")
+        DATE_FORMATTER_TWO_DIGIT = DateUtils.unixDatetimeFormatBuilder("%y-%m-%e", false)
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
         DATE_NO_SPLIT_FORMATTER = DateUtils.unixDatetimeFormatBuilder("%Y%m%e")
                 .toFormatter().withResolverStyle(ResolverStyle.STRICT);
@@ -183,6 +183,8 @@ public class DateLiteral extends LiteralExpr {
             if (type.isDate()) {
                 if (s.split("-")[0].length() == 2) {
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER_TWO_DIGIT);
+                } else if (s.split("-").length == 3) {
+                    dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_FORMATTER);
                 } else if (s.length() == 8) {
                     // 20200202
                     dateTime = DateUtils.parseStringWithDefaultHSM(s, DATE_NO_SPLIT_FORMATTER);

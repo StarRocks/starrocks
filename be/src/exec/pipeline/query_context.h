@@ -32,7 +32,7 @@ public:
     ~QueryContext();
     void set_exec_env(ExecEnv* exec_env) { _exec_env = exec_env; }
     void set_query_id(const TUniqueId& query_id) { _query_id = query_id; }
-    TUniqueId query_id() { return _query_id; }
+    TUniqueId query_id() const { return _query_id; }
     void set_total_fragments(size_t total_fragments) { _total_fragments = total_fragments; }
 
     void increment_num_fragments() {

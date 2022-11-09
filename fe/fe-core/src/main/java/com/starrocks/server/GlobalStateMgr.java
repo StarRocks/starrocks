@@ -34,6 +34,7 @@ import com.starrocks.alter.MaterializedViewHandler;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.backup.BackupHandler;
 import com.starrocks.catalog.BrokerMgr;
@@ -94,6 +95,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.UserException;
+import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.Daemon;
 import com.starrocks.common.util.LeaderDaemon;
 import com.starrocks.common.util.PrintableMap;
@@ -105,10 +107,10 @@ import com.starrocks.common.util.WriteQuorum;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.connector.hive.events.MetastoreEventsProcessor;
+import com.starrocks.connector.iceberg.IcebergRepository;
 import com.starrocks.consistency.ConsistencyChecker;
 import com.starrocks.external.elasticsearch.EsRepository;
-import com.starrocks.external.hive.events.MetastoreEventsProcessor;
-import com.starrocks.external.iceberg.IcebergRepository;
 import com.starrocks.external.starrocks.StarRocksRepository;
 import com.starrocks.ha.BDBHA;
 import com.starrocks.ha.FrontendNodeType;
@@ -129,6 +131,7 @@ import com.starrocks.lake.ShardManager;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionManager;
 import com.starrocks.leader.Checkpoint;
+import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.load.DeleteHandler;
 import com.starrocks.load.ExportChecker;
 import com.starrocks.load.ExportMgr;
@@ -145,18 +148,24 @@ import com.starrocks.load.routineload.RoutineLoadTaskScheduler;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.privilege.Auth;
+import com.starrocks.mysql.privilege.AuthUpgrader;
 import com.starrocks.mysql.privilege.PrivPredicate;
+import com.starrocks.mysql.privilege.UserPropertyInfo;
+import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.ChangeMaterializedViewRefreshSchemeLog;
 import com.starrocks.persist.DropPartitionInfo;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
+import com.starrocks.persist.ImpersonatePrivInfo;
 import com.starrocks.persist.ModifyTableColumnOperationLog;
 import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.MultiEraseTableInfo;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
+import com.starrocks.persist.PrivInfo;
 import com.starrocks.persist.RecoverInfo;
 import com.starrocks.persist.RenameMaterializedViewLog;
 import com.starrocks.persist.ReplacePartitionOperationLog;
@@ -362,7 +371,7 @@ public class GlobalStateMgr {
     // This is used to turned on in hard code.
     public static final boolean USING_NEW_PRIVILEGE = false;
     // change to true in UT
-    private boolean usingNewPrivilege = USING_NEW_PRIVILEGE;
+    private AtomicBoolean usingNewPrivilege;
 
     private AuthenticationManager authenticationManager;
     private PrivilegeManager privilegeManager;
@@ -425,6 +434,8 @@ public class GlobalStateMgr {
     private ShardManager shardManager;
 
     private StateChangeExecution execution;
+
+    private TaskRunStateSynchronizer taskRunStateSynchronizer;
 
     // For LakeTable
     private CompactionManager compactionManager;
@@ -535,13 +546,14 @@ public class GlobalStateMgr {
 
         this.globalTransactionMgr = new GlobalTransactionMgr(this);
         this.tabletStatMgr = new TabletStatMgr();
-        initAuth(usingNewPrivilege);
+        initAuth(USING_NEW_PRIVILEGE);
 
         this.resourceGroupMgr = new ResourceGroupMgr(this);
 
         this.esRepository = new EsRepository();
         this.starRocksRepository = new StarRocksRepository();
         this.icebergRepository = new IcebergRepository();
+        this.metastoreEventsProcessor = new MetastoreEventsProcessor();
 
         this.metaContext = new MetaContext();
         this.metaContext.setThreadLocalInfo();
@@ -781,6 +793,11 @@ public class GlobalStateMgr {
         this.metadataMgr = metadataMgr;
     }
 
+    @VisibleForTesting
+    public void setStarOSAgent(StarOSAgent starOSAgent) {
+        this.starOSAgent = starOSAgent;
+    }
+
     public TaskManager getTaskManager() {
         return taskManager;
     }
@@ -885,23 +902,31 @@ public class GlobalStateMgr {
 
     // set usingNewPrivilege = true in UT
     public void initAuth(boolean usingNewPrivilege) {
+        this.auth = new Auth();
+        this.usingNewPrivilege = new AtomicBoolean(usingNewPrivilege);
         if (usingNewPrivilege) {
-            this.usingNewPrivilege = usingNewPrivilege;
-            this.auth = null;
-            this.domainResolver = null;
             this.authenticationManager = new AuthenticationManager();
+            this.domainResolver = new DomainResolver(authenticationManager);
             this.privilegeManager = new PrivilegeManager(this, null);
             LOG.info("using new privilege framework..");
         } else {
-            this.auth = new Auth();
             this.domainResolver = new DomainResolver(auth);
             this.authenticationManager = null;
             this.privilegeManager = null;
         }
     }
 
+    @VisibleForTesting
+    public void setAuth(Auth auth) {
+        this.auth = auth;
+    }
+
     public boolean isUsingNewPrivilege() {
-        return usingNewPrivilege;
+        return usingNewPrivilege.get();
+    }
+
+    private boolean needUpgradedToNewPrivilege() {
+        return !privilegeManager.isLoaded() || !authenticationManager.isLoaded();
     }
 
     protected void initJournal() throws JournalException, InterruptedException {
@@ -1007,6 +1032,17 @@ public class GlobalStateMgr {
             // because checkpoint thread need this info to select non-leader FE to push image
             nodeMgr.setLeaderInfo();
 
+            if (USING_NEW_PRIVILEGE) {
+                if (needUpgradedToNewPrivilege()) {
+                    AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+                    // upgrade metadata in old privilege framework to the new one
+                    upgrader.upgradeAsLeader();
+                    this.domainResolver.setAuthenticationManager(authenticationManager);
+                    usingNewPrivilege.set(true);
+                }
+                auth = null;  // remove references to useless objects to release memory
+            }
+
             // start all daemon threads that only running on MASTER FE
             startLeaderOnlyDaemonThreads();
             // start other daemon threads that should running on all FE
@@ -1093,6 +1129,10 @@ public class GlobalStateMgr {
         taskManager.start();
         taskCleaner.start();
 
+        // start daemon thread to report the progress of RunningTaskRun to the follower by editlog
+        taskRunStateSynchronizer = new TaskRunStateSynchronizer();
+        taskRunStateSynchronizer.start();
+
         if (Config.use_staros) {
             shardManager.getShardDeleter().start();
         }
@@ -1108,15 +1148,10 @@ public class GlobalStateMgr {
         starRocksRepository.start();
 
         if (Config.enable_hms_events_incremental_sync) {
-            // TODO(stephen): refactor auto sync hive metadata cache
-            // load hive table to event processor and start to process hms events.
-            // metastoreEventsProcessor.init();
-            // metastoreEventsProcessor.start();
+            metastoreEventsProcessor.start();
         }
-        if (!usingNewPrivilege) {
-            // domain resolver
-            domainResolver.start();
-        }
+        // domain resolver
+        domainResolver.start();
         if (Config.use_staros) {
             compactionManager.start();
         }
@@ -1124,6 +1159,10 @@ public class GlobalStateMgr {
 
     private void transferToNonLeader(FrontendNodeType newType) {
         isReady.set(false);
+        if (isUsingNewPrivilege() && !needUpgradedToNewPrivilege()) {
+            // already upgraded, set auth = null
+            auth = null;
+        }
 
         if (feType == FrontendNodeType.OBSERVER || feType == FrontendNodeType.FOLLOWER) {
             Preconditions.checkState(newType == FrontendNodeType.UNKNOWN);
@@ -1174,9 +1213,6 @@ public class GlobalStateMgr {
                 GlobalStateMgr.isCheckpointThread());
         long loadImageStartTime = System.currentTimeMillis();
         DataInputStream dis = new DataInputStream(new BufferedInputStream(new FileInputStream(curFile)));
-        if (usingNewPrivilege) {
-            auth = new Auth();
-        }
 
         long checksum = 0;
         long remoteChecksum = -1;  // in case of empty image file checksum match
@@ -1236,8 +1272,10 @@ public class GlobalStateMgr {
 
         Preconditions.checkState(remoteChecksum == checksum, remoteChecksum + " vs. " + checksum);
 
-        if (usingNewPrivilege) {
-            auth = null;
+        if (isUsingNewPrivilege() && needUpgradedToNewPrivilege() && !isLeader() && !isCheckpointThread()) {
+            LOG.warn("follower has to wait for leader to upgrade the privileges, set usingNewPrivilege = false for now");
+            usingNewPrivilege.set(false);
+            domainResolver = new DomainResolver(auth);
         }
 
         long loadImageEndTime = System.currentTimeMillis();
@@ -1314,9 +1352,10 @@ public class GlobalStateMgr {
 
     // TODO put this at the end of the image before 3.0 release
     public void loadRBACPrivilege(DataInputStream dis) throws IOException, DdlException {
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             this.authenticationManager = AuthenticationManager.load(dis);
             this.privilegeManager = PrivilegeManager.load(dis, this, null);
+            this.domainResolver = new DomainResolver(authenticationManager);
         }
     }
 
@@ -1434,10 +1473,6 @@ public class GlobalStateMgr {
         // save image does not need any lock. because only checkpoint thread will call this method.
         LOG.info("start save image to {}. is ckpt: {}", curFile.getAbsolutePath(), GlobalStateMgr.isCheckpointThread());
 
-        if (usingNewPrivilege) {
-            auth = new Auth();
-        }
-
         long checksum = 0;
         long saveImageStartTime = System.currentTimeMillis();
         try (DataOutputStream dos = new DataOutputStream(new FileOutputStream(curFile))) {
@@ -1483,10 +1518,6 @@ public class GlobalStateMgr {
             saveRBACPrivilege(dos);
         }
 
-        if (usingNewPrivilege) {
-            auth = null;
-        }
-
         long saveImageEndTime = System.currentTimeMillis();
         LOG.info("finished save image {} in {} ms. checksum is {}",
                 curFile.getAbsolutePath(), (saveImageEndTime - saveImageStartTime), checksum);
@@ -1525,7 +1556,7 @@ public class GlobalStateMgr {
 
     // TODO put this at the end of the image before 3.0 release
     public void saveRBACPrivilege(DataOutputStream dos) throws IOException {
-        if (usingNewPrivilege) {
+        if (isUsingNewPrivilege()) {
             this.authenticationManager.save(dos);
             this.privilegeManager.save(dos);
         }
@@ -2032,7 +2063,15 @@ public class GlobalStateMgr {
                 }
             }
             sb.append(Joiner.on(", ").join(keysColumnNames)).append(")");
-
+            MaterializedIndexMeta index = olapTable.getIndexMetaByIndexId(olapTable.getBaseIndexId());
+            if (index.getSortKeyIdxes() != null) {
+                sb.append("\nORDER BY(");
+                List<String> sortKeysColumnNames = Lists.newArrayList();
+                for (Integer i : index.getSortKeyIdxes()) {
+                    sortKeysColumnNames.add("`" + table.getBaseSchema().get(i).getName() + "`");
+                }
+                sb.append(Joiner.on(", ").join(sortKeysColumnNames)).append(")");
+            }
             if (!Strings.isNullOrEmpty(table.getComment())) {
                 sb.append("\nCOMMENT \"").append(table.getComment()).append("\"");
             }
@@ -2126,6 +2165,14 @@ public class GlobalStateMgr {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)
                     .append("\" = \"");
             sb.append(olapTable.enablePersistentIndex()).append("\"");
+
+            // replicated_storage
+            if (olapTable.enableReplicatedStorage()) {
+                sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR)
+                        .append(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)
+                        .append("\" = \"");
+                sb.append(olapTable.enableReplicatedStorage()).append("\"");
+            }
 
             // write quorum
             if (olapTable.writeQuorum() != TWriteQuorumType.MAJORITY) {
@@ -2662,15 +2709,21 @@ public class GlobalStateMgr {
 
     public static short calcShortKeyColumnCount(List<Column> columns, Map<String, String> properties)
             throws DdlException {
-        List<Column> indexColumns = new ArrayList<Column>();
-        for (Column column : columns) {
+        List<Integer> sortKeyIdxes = new ArrayList<>();
+        for (int i = 0; i < columns.size(); ++i) {
+            Column column = columns.get(i);
             if (column.isKey()) {
-                indexColumns.add(column);
+                sortKeyIdxes.add(i);
             }
         }
-        LOG.debug("index column size: {}", indexColumns.size());
-        Preconditions.checkArgument(indexColumns.size() > 0);
+        return calcShortKeyColumnCount(columns, properties, sortKeyIdxes);
+    }
 
+    public static short calcShortKeyColumnCount(List<Column> indexColumns, Map<String, String> properties,
+            List<Integer> sortKeyIdxes)
+            throws DdlException {
+        LOG.debug("sort key size: {}", sortKeyIdxes.size());
+        Preconditions.checkArgument(sortKeyIdxes.size() > 0);
         // figure out shortKeyColumnCount
         short shortKeyColumnCount = (short) -1;
         try {
@@ -2683,13 +2736,11 @@ public class GlobalStateMgr {
             if (shortKeyColumnCount <= 0) {
                 throw new DdlException("Invalid short key: " + shortKeyColumnCount);
             }
-
-            if (shortKeyColumnCount > indexColumns.size()) {
-                throw new DdlException("Short key is too large. should less than: " + indexColumns.size());
+            if (shortKeyColumnCount > sortKeyIdxes.size()) {
+                throw new DdlException("Short key is too large. should less than: " + sortKeyIdxes.size());
             }
-
             for (int pos = 0; pos < shortKeyColumnCount; pos++) {
-                if (indexColumns.get(pos).getPrimitiveType() == PrimitiveType.VARCHAR &&
+                if (indexColumns.get(sortKeyIdxes.get(pos)).getPrimitiveType() == PrimitiveType.VARCHAR &&
                         pos != shortKeyColumnCount - 1) {
                     throw new DdlException("Varchar should not in the middle of short keys.");
                 }
@@ -2699,15 +2750,15 @@ public class GlobalStateMgr {
              * Calc short key column count. NOTE: short key column count is
              * calculated as follow: 1. All index column are taking into
              * account. 2. Max short key column count is Min(Num of
-             * indexColumns, META_MAX_SHORT_KEY_NUM). 3. Short key list can
+             * sortKeyIdxes, META_MAX_SHORT_KEY_NUM). 3. Short key list can
              * contains at most one VARCHAR column. And if contains, it should
              * be at the last position of the short key list.
              */
             shortKeyColumnCount = 0;
             int shortKeySizeByte = 0;
-            int maxShortKeyColumnCount = Math.min(indexColumns.size(), FeConstants.shortkey_max_column_count);
+            int maxShortKeyColumnCount = Math.min(sortKeyIdxes.size(), FeConstants.shortkey_max_column_count);
             for (int i = 0; i < maxShortKeyColumnCount; i++) {
-                Column column = indexColumns.get(i);
+                Column column = indexColumns.get(sortKeyIdxes.get(i));
                 shortKeySizeByte += column.getOlapColumnIndexSize();
                 if (shortKeySizeByte > FeConstants.shortkey_maxsize_bytes) {
                     if (column.getPrimitiveType().isCharFamily()) {
@@ -2730,7 +2781,6 @@ public class GlobalStateMgr {
             if (shortKeyColumnCount == 0) {
                 throw new DdlException("Data type of first column cannot be " + indexColumns.get(0).getType());
             }
-
         } // end calc shortKeyColumnCount
 
         return shortKeyColumnCount;
@@ -2777,6 +2827,9 @@ public class GlobalStateMgr {
         this.alter.replayChangeMaterializedViewRefreshScheme(log);
     }
 
+    public void replayAlterMaterializedViewProperties(short opCode, ModifyTablePropertyOperationLog log) {
+        this.alter.replayAlterMaterializedViewProperties(opCode, log);
+    }
     /*
      * used for handling CancelAlterStmt (for client is the CANCEL ALTER
      * command). including SchemaChangeHandler and RollupHandler
@@ -2918,7 +2971,7 @@ public class GlobalStateMgr {
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
-            if (usingNewPrivilege) {
+            if (isUsingNewPrivilege()) {
                 if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
@@ -3071,7 +3124,7 @@ public class GlobalStateMgr {
             catalogName = hmsTable.getCatalogName();
         }
 
-        metadataMgr.refreshTable(catalogName, dbName, tblName, table, partitions);
+        metadataMgr.refreshTable(catalogName, dbName, table, partitions);
     }
 
     public void initDefaultCluster() {
@@ -3189,6 +3242,80 @@ public class GlobalStateMgr {
             pluginMgr.uninstallPlugin(pluginInfo.getName());
         } catch (Exception e) {
             LOG.warn("replay uninstall plugin failed.", e);
+        }
+    }
+
+    /**
+     * pretend we're using old auth if we have replayed journal from old auth
+     */
+    public void replayOldAuthJournal(short code, Writable data) throws DdlException {
+        if (USING_NEW_PRIVILEGE) {
+            LOG.warn("replay old auth journal right after restart, set usingNewPrivilege = false for now");
+            usingNewPrivilege.set(false);
+            domainResolver = new DomainResolver(auth);
+        }
+        switch (code) {
+            case OperationType.OP_CREATE_USER: {
+                auth.replayCreateUser((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_NEW_DROP_USER: {
+                auth.replayDropUser((UserIdentity) data);
+                break;
+            }
+            case OperationType.OP_GRANT_PRIV: {
+                auth.replayGrant((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_REVOKE_PRIV: {
+                auth.replayRevoke((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_SET_PASSWORD: {
+                auth.replaySetPassword((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_CREATE_ROLE: {
+                auth.replayCreateRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_DROP_ROLE: {
+                auth.replayDropRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_GRANT_ROLE: {
+                auth.replayGrantRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_REVOKE_ROLE: {
+                auth.replayRevokeRole((PrivInfo) data);
+                break;
+            }
+            case OperationType.OP_UPDATE_USER_PROPERTY: {
+                auth.replayUpdateUserProperty((UserPropertyInfo) data);
+                break;
+            }
+            case OperationType.OP_GRANT_IMPERSONATE: {
+                auth.replayGrantImpersonate((ImpersonatePrivInfo) data);
+                break;
+            }
+            case OperationType.OP_REVOKE_IMPERSONATE: {
+                auth.replayRevokeImpersonate((ImpersonatePrivInfo) data);
+                break;
+            }
+            default:
+                throw new DdlException("unknown code " + code);
+        }
+
+    }
+
+    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
+        AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
+        upgrader.replayUpgrade(info.getRoleNameToId());
+        usingNewPrivilege.set(true);
+        domainResolver.setAuthenticationManager(authenticationManager);
+        if (!isCheckpointThread()) {
+            this.auth = null;
         }
     }
 

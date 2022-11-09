@@ -5,6 +5,7 @@ package com.starrocks.authentication;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.Password;
 
 public class PlainPasswordAuthenticationProvider implements AuthenticationProvider {
     public static final String PLUGIN_NAME = "MYSQL_NATIVE_PASSWORD";
@@ -74,5 +75,16 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
                 && !MysqlPassword.checkScramble(remotePassword, randomString, saltPassword)) {
             throw new AuthenticationException("password mismatch!");
         }
+    }
+
+    @Override
+    public UserAuthenticationInfo upgradedFromPassword(UserIdentity userIdentity, Password password)
+            throws AuthenticationException {
+        UserAuthenticationInfo ret = new UserAuthenticationInfo();
+        ret.setPassword(password.getPassword());
+        ret.setAuthPlugin(PLUGIN_NAME);
+        ret.setOrigUserHost(userIdentity.getQualifiedUser(), userIdentity.getHost());
+        ret.setTextForAuthPlugin(password.getUserForAuthPlugin());
+        return ret;
     }
 }

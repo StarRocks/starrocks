@@ -2,16 +2,25 @@
 
 package com.starrocks.scheduler;
 
+import java.util.Map;
+
 public class ExecuteOption {
 
     private int priority = Constants.TaskRunPriority.LOWEST.value();
     private boolean mergeRedundant = false;
+    private Map<String, String> taskRunProperties;
 
     public ExecuteOption() {
     }
 
     public ExecuteOption(int priority) {
         this.priority = priority;
+    }
+
+    public ExecuteOption(int priority, boolean mergeRedundant, Map<String, String> taskRunProperties) {
+        this.priority = priority;
+        this.mergeRedundant = mergeRedundant;
+        this.taskRunProperties = taskRunProperties;
     }
 
     public int getPriority() {
@@ -28,5 +37,9 @@ public class ExecuteOption {
 
     public void setMergeRedundant(boolean mergeRedundant) {
         this.mergeRedundant = mergeRedundant;
+    }
+
+    public Map<String, String> getTaskRunProperties() {
+        return this.taskRunProperties;
     }
 }

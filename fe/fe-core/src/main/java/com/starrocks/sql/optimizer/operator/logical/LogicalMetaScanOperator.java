@@ -75,7 +75,7 @@ public class LogicalMetaScanOperator extends LogicalScanOperator {
 
     @Override
     public boolean canUsePipeLine() {
-        return false;
+        return true;
     }
 
     public static class Builder

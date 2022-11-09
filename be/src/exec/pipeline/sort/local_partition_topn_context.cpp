@@ -4,31 +4,30 @@
 
 #include <exec/vectorized/partition/chunks_partitioner.h>
 
+#include <utility>
+
 #include "exec/vectorized/chunks_sorter_topn.h"
 
 namespace starrocks::pipeline {
 
-LocalPartitionTopnContext::LocalPartitionTopnContext(
-        const std::vector<TExpr>& t_partition_exprs, SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order,
-        std::vector<bool> is_null_first, const std::string& sort_keys, int64_t offset, int64_t partition_limit,
-        const TTopNType::type topn_type, const std::vector<OrderByType>& order_by_types,
-        TupleDescriptor* materialized_tuple_desc, const RowDescriptor& parent_node_row_desc,
-        const RowDescriptor& parent_node_child_row_desc)
+LocalPartitionTopnContext::LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs,
+                                                     const std::vector<ExprContext*>& sort_exprs,
+                                                     std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+                                                     std::string sort_keys, int64_t offset, int64_t partition_limit,
+                                                     const TTopNType::type topn_type)
         : _t_partition_exprs(t_partition_exprs),
-          _sort_exec_exprs(sort_exec_exprs),
-          _is_asc_order(is_asc_order),
-          _is_null_first(is_null_first),
-          _sort_keys(sort_keys),
+          _sort_exprs(sort_exprs),
+          _is_asc_order(std::move(is_asc_order)),
+          _is_null_first(std::move(is_null_first)),
+          _sort_keys(std::move(sort_keys)),
           _offset(offset),
           _partition_limit(partition_limit),
-          _topn_type(topn_type),
-          _order_by_types(order_by_types),
-          _materialized_tuple_desc(materialized_tuple_desc),
-          _parent_node_row_desc(parent_node_row_desc),
-          _parent_node_child_row_desc(parent_node_child_row_desc) {}
+          _topn_type(topn_type) {}
 
 Status LocalPartitionTopnContext::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Expr::create_expr_trees(state->obj_pool(), _t_partition_exprs, &_partition_exprs));
+    RETURN_IF_ERROR(Expr::prepare(_partition_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_partition_exprs, state));
     for (auto& expr : _partition_exprs) {
         auto& type_desc = expr->root()->type();
         if (!type_desc.support_groupby()) {
@@ -70,8 +69,8 @@ Status LocalPartitionTopnContext::transfer_all_chunks_from_partitioner_to_sorter
     _chunks_sorters.resize(num_partitions);
     for (int i = 0; i < num_partitions; ++i) {
         _chunks_sorters[i] = std::make_shared<vectorized::ChunksSorterTopn>(
-                state, &_sort_exec_exprs.lhs_ordering_expr_ctxs(), &_is_asc_order, &_is_null_first, _sort_keys, _offset,
-                _partition_limit, _topn_type, vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
+                state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit, _topn_type,
+                vectorized::ChunksSorterTopn::tunning_buffered_chunks(_partition_limit));
     }
     RETURN_IF_ERROR(_chunks_partitioner->consume_from_hash_map(
             [this, state](int32_t partition_idx, const vectorized::ChunkPtr& chunk) {
@@ -127,34 +126,36 @@ StatusOr<vectorized::ChunkPtr> LocalPartitionTopnContext::pull_one_chunk_from_so
 
 LocalPartitionTopnContextFactory::LocalPartitionTopnContextFactory(
         const int32_t degree_of_parallelism, const std::vector<TExpr>& t_partition_exprs,
-        SortExecExprs& sort_exec_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
-        const std::string& sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type,
+        const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order, std::vector<bool> is_null_first,
+        std::string sort_keys, int64_t offset, int64_t partition_limit, const TTopNType::type topn_type,
         const std::vector<OrderByType>& order_by_types, TupleDescriptor* materialized_tuple_desc,
         const RowDescriptor& parent_node_row_desc, const RowDescriptor& parent_node_child_row_desc)
         : _ctxs(degree_of_parallelism),
           _t_partition_exprs(t_partition_exprs),
-          _sort_exec_exprs(sort_exec_exprs),
-          _is_asc_order(is_asc_order),
-          _is_null_first(is_null_first),
-          _sort_keys(sort_keys),
+          _sort_exprs(sort_exprs),
+          _is_asc_order(std::move(is_asc_order)),
+          _is_null_first(std::move(is_null_first)),
+          _sort_keys(std::move(sort_keys)),
           _offset(offset),
           _partition_limit(partition_limit),
-          _topn_type(topn_type),
-          _order_by_types(order_by_types),
-          _materialized_tuple_desc(materialized_tuple_desc),
-          _parent_node_row_desc(parent_node_row_desc),
-          _parent_node_child_row_desc(parent_node_child_row_desc) {}
+          _topn_type(topn_type) {}
 
 LocalPartitionTopnContext* LocalPartitionTopnContextFactory::create(int32_t driver_sequence) {
     DCHECK_LT(driver_sequence, _ctxs.size());
 
     if (_ctxs[driver_sequence] == nullptr) {
-        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(
-                _t_partition_exprs, _sort_exec_exprs, _is_asc_order, _is_null_first, _sort_keys, _offset,
-                _partition_limit, _topn_type, _order_by_types, _materialized_tuple_desc, _parent_node_row_desc,
-                _parent_node_child_row_desc);
+        _ctxs[driver_sequence] = std::make_shared<LocalPartitionTopnContext>(_t_partition_exprs, _sort_exprs,
+                                                                             _is_asc_order, _is_null_first, _sort_keys,
+                                                                             _offset, _partition_limit, _topn_type);
     }
 
     return _ctxs[driver_sequence].get();
 }
+
+Status LocalPartitionTopnContextFactory::prepare(RuntimeState* state) {
+    RETURN_IF_ERROR(Expr::prepare(_sort_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_sort_exprs, state));
+    return Status::OK();
+}
+
 } // namespace starrocks::pipeline

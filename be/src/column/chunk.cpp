@@ -2,6 +2,8 @@
 
 #include "column/chunk.h"
 
+#include <utility>
+
 #include "column/column_helper.h"
 #include "column/datum_tuple.h"
 #include "column/fixed_length_column.h"
@@ -65,14 +67,17 @@ Chunk::Chunk(Columns columns, SchemaPtr schema) : _columns(std::move(columns)), 
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const SlotHashMap& slot_map) : _columns(std::move(columns)), _slot_id_to_index(slot_map) {
+Chunk::Chunk(Columns columns, SlotHashMap slot_map)
+        : _columns(std::move(columns)), _slot_id_to_index(std::move(slot_map)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
     _tuple_id_to_index.reserve(1);
 }
 
 // TODO: FlatMap don't support std::move
-Chunk::Chunk(Columns columns, const SlotHashMap& slot_map, const TupleHashMap& tuple_map)
-        : _columns(std::move(columns)), _slot_id_to_index(slot_map), _tuple_id_to_index(tuple_map) {
+Chunk::Chunk(Columns columns, SlotHashMap slot_map, TupleHashMap tuple_map)
+        : _columns(std::move(columns)),
+          _slot_id_to_index(std::move(slot_map)),
+          _tuple_id_to_index(std::move(tuple_map)) {
     // when use _slot_id_to_index, we don't need to rebuild_cid_index
 }
 
@@ -145,7 +150,7 @@ void Chunk::remove_column_by_index(size_t idx) {
     }
 }
 
-void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
+[[maybe_unused]] void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
     DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
     for (int i = indexes.size(); i > 0; i--) {
         _columns.erase(_columns.begin() + indexes[i - 1]);

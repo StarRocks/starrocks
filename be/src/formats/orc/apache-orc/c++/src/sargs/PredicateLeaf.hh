@@ -62,7 +62,7 @@ public:
 
     PredicateLeaf(Operator op, PredicateDataType type, std::string colName, const Literal& literal);
 
-    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, Literal literal);
+    PredicateLeaf(Operator op, PredicateDataType type, uint64_t columnId, const Literal& literal);
 
     PredicateLeaf(Operator op, PredicateDataType type, std::string colName,
                   const std::initializer_list<Literal>& literalList);

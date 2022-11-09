@@ -19,7 +19,7 @@ StatusOr<int64_t> CompressedInputStream::read(void* data, int64_t size) {
             break;
         }
 
-        uint8_t* output = reinterpret_cast<uint8_t*>(data);
+        auto* output = reinterpret_cast<uint8_t*>(data);
         Slice compressed_data = _compressed_buff.read_buffer();
         size_t input_bytes_read = 0;
         size_t output_bytes_written = 0;

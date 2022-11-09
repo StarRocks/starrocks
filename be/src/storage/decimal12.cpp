@@ -45,12 +45,17 @@ Status decimal12_t::from_string(const std::string& str) {
         integer = 999999999999999999;
         fraction = 999999999;
     } else {
+        DIAGNOSTIC_PUSH
+#if defined(__clang__)
+        DIAGNOSTIC_IGNORE("-Waddress-of-packed-member")
+#endif
         if (sepr == value_string) {
             sscanf(value_string, ".%9d", &fraction);
             integer = 0;
         } else {
             sscanf(value_string, "%18ld.%9d", &integer, &fraction);
         }
+        DIAGNOSTIC_POP
 
         int32_t frac_len = (nullptr != sepr) ? MAX_FRAC_DIGITS_NUM - strlen(sepr + 1) : MAX_FRAC_DIGITS_NUM;
         frac_len = frac_len > 0 ? frac_len : 0;

@@ -92,12 +92,19 @@ public:
 
     ColumnPtr build_nullable_column() { return NullableColumn::create(_column, _null_column); }
 
-    void reserve(int size) {
+    void reserve(size_t size) {
         _column->reserve(size);
         _null_column->reserve(size);
     }
 
+    void resize_uninitialized(size_t size) {
+        _column->resize_uninitialized(size);
+        _null_column->resize_uninitialized(size);
+    }
+
     DataColumnPtr data_column() { return _column; }
+    NullColumnPtr null_column() { return _null_column; }
+    void set_has_null(bool v) { _has_null = v; }
 
 protected:
     DataColumnPtr _column;

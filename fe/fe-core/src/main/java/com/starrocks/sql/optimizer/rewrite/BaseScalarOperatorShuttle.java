@@ -3,7 +3,6 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.clearspring.analytics.util.Lists;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
@@ -11,6 +10,7 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -57,13 +57,13 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
     }
 
     @Override
-    public ScalarOperator visitArrayElement(ArrayElementOperator array, Void context) {
+    public ScalarOperator visitCollectionElement(CollectionElementOperator collectionElementOp, Void context) {
         boolean[] update = {false};
-        List<ScalarOperator> clonedOperators = visitList(array.getChildren(), update);
+        List<ScalarOperator> clonedOperators = visitList(collectionElementOp.getChildren(), update);
         if (update[0]) {
-            return new ArrayElementOperator(array.getType(), clonedOperators.get(0), clonedOperators.get(1));
+            return new CollectionElementOperator(collectionElementOp.getType(), clonedOperators.get(0), clonedOperators.get(1));
         }
-        return array;
+        return collectionElementOp;
     }
 
     @Override

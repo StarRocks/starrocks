@@ -33,7 +33,7 @@ ColumnPtr BitmapFunctions::to_bitmap(FunctionContext* context, const starrocks::
         StringParser::ParseResult parse_result = StringParser::PARSE_SUCCESS;
 
         auto slice = viewer.value(row);
-        uint64_t value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
+        auto value = StringParser::string_to_unsigned_int<uint64_t>(slice.data, slice.size, &parse_result);
 
         if (parse_result != StringParser::PARSE_SUCCESS) {
             context->set_error(strings::Substitute("The input: {0} is not valid, to_bitmap only "
@@ -363,7 +363,7 @@ ColumnPtr BitmapFunctions::array_to_bitmap(FunctionContext* context, const starr
     NullData::pointer null_data = columns[0]->is_nullable()
                                           ? down_cast<NullableColumn*>(columns[0].get())->null_column_data().data()
                                           : nullptr;
-    ArrayColumn* array_column = down_cast<ArrayColumn*>(data_column);
+    auto* array_column = down_cast<ArrayColumn*>(data_column);
 
     RunTimeColumnType<TYPE>::Container& element_container =
             array_column->elements_column()->is_nullable()

@@ -2,18 +2,15 @@
 
 #include "storage/lake/async_delta_writer.h"
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/execution_queue.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 #include <fmt/format.h>
 
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "common/compiler_util.h"
 #include "runtime/current_thread.h"
 #include "storage/lake/delta_writer.h"
 #include "storage/storage_engine.h"

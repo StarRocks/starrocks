@@ -145,7 +145,7 @@ Status TimestampedVersionTracker::capture_consistent_versions(const Version& spe
 
 void TimestampedVersionTracker::capture_expired_paths(int64_t stale_sweep_endtime,
                                                       std::vector<int64_t>* path_version_vec) const {
-    std::map<int64_t, PathVersionListSharedPtr>::const_iterator iter = _stale_version_path_map.begin();
+    auto iter = _stale_version_path_map.begin();
 
     while (iter != _stale_version_path_map.end()) {
         int64_t max_create_time = iter->second->max_create_time();
@@ -186,11 +186,11 @@ std::string TimestampedVersionTracker::_get_current_path_map_str() {
     std::stringstream tracker_info;
     tracker_info << "current expired next_path_id " << _next_path_id << std::endl;
 
-    std::map<int64_t, PathVersionListSharedPtr>::const_iterator iter = _stale_version_path_map.begin();
+    auto iter = _stale_version_path_map.begin();
     while (iter != _stale_version_path_map.end()) {
         tracker_info << "current expired path_version " << iter->first;
         std::vector<TimestampedVersionSharedPtr>& timestamped_versions = iter->second->timestamped_versions();
-        std::vector<TimestampedVersionSharedPtr>::iterator version_path_iter = timestamped_versions.begin();
+        auto version_path_iter = timestamped_versions.begin();
         int64_t max_create_time = -1;
         while (version_path_iter != timestamped_versions.end()) {
             if (max_create_time < (*version_path_iter)->get_create_time()) {

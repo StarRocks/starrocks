@@ -36,21 +36,21 @@ namespace starrocks {
 class ExternalScanContextMgrTest : public testing::Test {
 public:
     ExternalScanContextMgrTest() {
-        FragmentMgr* fragment_mgr = new FragmentMgr(&_exec_env);
-        ThreadResourceMgr* thread_mgr = new ThreadResourceMgr();
-        ResultQueueMgr* result_queue_mgr = new ResultQueueMgr();
+        auto* fragment_mgr = new FragmentMgr(&_exec_env);
+        auto* thread_mgr = new ThreadResourceMgr();
+        auto* result_queue_mgr = new ResultQueueMgr();
         _exec_env._fragment_mgr = fragment_mgr;
         _exec_env._thread_mgr = thread_mgr;
         _exec_env._result_queue_mgr = result_queue_mgr;
     }
-    virtual ~ExternalScanContextMgrTest() {
+    ~ExternalScanContextMgrTest() override {
         delete _exec_env._fragment_mgr;
         delete _exec_env._thread_mgr;
         delete _exec_env._result_queue_mgr;
     }
 
 protected:
-    virtual void SetUp() {}
+    void SetUp() override {}
 
 private:
     ExecEnv _exec_env;

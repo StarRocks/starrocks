@@ -7,7 +7,7 @@ namespace starrocks::vectorized {
 class TimedChunkIterator final : public ChunkIterator {
 public:
     TimedChunkIterator(ChunkIteratorPtr iter, RuntimeProfile::Counter* counter)
-            : ChunkIterator(iter->schema(), iter->chunk_size()), _iter(std::move(iter)), _cost(0), _counter(counter) {}
+            : ChunkIterator(iter->schema(), iter->chunk_size()), _iter(std::move(iter)), _counter(counter) {}
 
     ~TimedChunkIterator() override = default;
 
@@ -19,13 +19,13 @@ public:
 
     size_t merged_rows() const override { return _iter->merged_rows(); }
 
-    virtual Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
+    Status init_encoded_schema(ColumnIdToGlobalDictMap& dict_maps) override {
         ChunkIterator::init_encoded_schema(dict_maps);
         _iter->init_encoded_schema(dict_maps);
         return Status::OK();
     }
 
-    virtual Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
+    Status init_output_schema(const std::unordered_set<uint32_t>& unused_output_column_ids) override {
         ChunkIterator::init_output_schema(unused_output_column_ids);
         _iter->init_output_schema(unused_output_column_ids);
         return Status::OK();
@@ -48,7 +48,7 @@ private:
     }
 
     ChunkIteratorPtr _iter;
-    int64_t _cost;
+    int64_t _cost{0};
     RuntimeProfile::Counter* _counter;
 };
 

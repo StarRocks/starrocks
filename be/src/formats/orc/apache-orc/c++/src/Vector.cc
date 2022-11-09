@@ -352,7 +352,7 @@ void ListVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_siz
     ColumnVectorBatch::filter(f_data, f_size, true_size);
     std::vector<uint8_t> p;
     uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
-    uint32_t size = static_cast<uint32_t>(p.size());
+    auto size = static_cast<uint32_t>(p.size());
     elements->filter(p.data(), size, true_count);
 }
 
@@ -398,7 +398,7 @@ void MapVectorBatch::filter(uint8_t* f_data, uint32_t f_size, uint32_t true_size
     ColumnVectorBatch::filter(f_data, f_size, true_size);
     std::vector<uint8_t> p;
     uint32_t true_count = build_filter_on_offsets(f_data, f_size, offsets, &p);
-    uint32_t size = static_cast<uint32_t>(p.size());
+    auto size = static_cast<uint32_t>(p.size());
     keys->filter(p.data(), size, true_count);
     elements->filter(p.data(), size, true_count);
 }

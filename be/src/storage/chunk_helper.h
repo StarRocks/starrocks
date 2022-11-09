@@ -35,7 +35,7 @@ public:
                                                           const std::vector<ColumnId>& cids);
 
     // Get schema with format v2 type containing short key columns from TabletSchema.
-    static vectorized::Schema get_short_key_schema_with_format_v2(const TabletSchema& schema);
+    static vectorized::Schema get_short_key_schema_with_format_v2(const TabletSchema& tablet_schema);
 
     static ColumnId max_column_id(const vectorized::Schema& schema);
 
@@ -89,6 +89,28 @@ private:
     size_t _desired_size;
     vectorized::ChunkPtr _tmp_chunk;
     std::deque<vectorized::ChunkPtr> _output;
+};
+
+class ChunkPipelineAccumulator {
+public:
+    ChunkPipelineAccumulator() = default;
+    void set_max_size(size_t max_size) { _max_size = max_size; }
+    void push(const vectorized::ChunkPtr& chunk);
+    vectorized::ChunkPtr& pull();
+    void finalize();
+    void reset();
+
+    bool has_output() const;
+    bool need_input() const;
+    bool is_finished() const;
+
+private:
+    static constexpr double LOW_WATERMARK_ROWS_RATE = 0.75;          // 0.75 * chunk_size
+    static constexpr size_t LOW_WATERMARK_BYTES = 256 * 1024 * 1024; // 256MB.
+    vectorized::ChunkPtr _in_chunk = nullptr;
+    vectorized::ChunkPtr _out_chunk = nullptr;
+    size_t _max_size = 4096;
+    bool _finalized = false;
 };
 
 } // namespace starrocks

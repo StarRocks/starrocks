@@ -81,9 +81,9 @@ void gc_memory(void* arg_this) {
     const static float kFreeRatio = 0.5;
     GCHelper gch(config::tc_gc_period, config::memory_maintenance_sleep_time_s, MonoTime::Now());
 
-    Daemon* daemon = static_cast<Daemon*>(arg_this);
+    auto* daemon = static_cast<Daemon*>(arg_this);
     while (!daemon->stopped()) {
-        sleep(config::memory_maintenance_sleep_time_s);
+        sleep(static_cast<unsigned int>(config::memory_maintenance_sleep_time_s));
 #if !defined(ADDRESS_SANITIZER) && !defined(LEAK_SANITIZER) && !defined(THREAD_SANITIZER) && !defined(USE_JEMALLOC)
         MallocExtension::instance()->MarkThreadBusy();
 #endif
@@ -308,8 +308,8 @@ void Daemon::init(int argc, char** argv, const std::vector<StorePath>& paths) {
 
 void Daemon::stop() {
     _stopped.store(true, std::memory_order_release);
-    int thread_size = _daemon_threads.size();
-    for (int i = 0; i < thread_size; ++i) {
+    size_t thread_size = _daemon_threads.size();
+    for (size_t i = 0; i < thread_size; ++i) {
         if (_daemon_threads[i].joinable()) {
             _daemon_threads[i].join();
         }

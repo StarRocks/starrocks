@@ -42,7 +42,7 @@ public class PushDownPredicateAggRule extends TransformationRule {
             if (groupColumns.containsAll(columns) && !columns.isEmpty()) {
                 // remove from filter
                 iter.remove();
-                // and to predicates
+                // add to push down predicates
                 pushDownPredicates.add(scalar);
             }
         }

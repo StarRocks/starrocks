@@ -24,8 +24,8 @@
 namespace starrocks {
 class UidUtilTest : public testing::Test {
 public:
-    UidUtilTest() {}
-    virtual ~UidUtilTest() {}
+    UidUtilTest() = default;
+    ~UidUtilTest() override = default;
 };
 
 TEST_F(UidUtilTest, UniqueId) {

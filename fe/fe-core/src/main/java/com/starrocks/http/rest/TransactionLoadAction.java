@@ -24,6 +24,7 @@ package com.starrocks.http.rest;
 import com.google.common.base.Strings;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.http.ActionController;
@@ -85,8 +86,14 @@ public class TransactionLoadAction extends RestBaseAction {
             executeTransaction(request, response);
         } catch (Exception e) {
             TransactionResult resp = new TransactionResult();
-            resp.status = ActionStatus.FAILED;
-            resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            if (e instanceof LabelAlreadyUsedException) {
+                resp.status = ActionStatus.LABEL_ALREADY_EXISTS;
+                resp.msg = e.getMessage();
+                resp.addResultEntry("ExistingJobStatus", ((LabelAlreadyUsedException) e).getJobStatus());
+            } else {
+                resp.status = ActionStatus.FAILED;
+                resp.msg = e.getClass().toString() + ": " + e.getMessage();
+            }
             LOG.warn(DebugUtil.getStackTrace(e));
             sendResult(request, response, resp);
         }

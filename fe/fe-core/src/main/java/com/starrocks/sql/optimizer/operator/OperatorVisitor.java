@@ -62,6 +62,9 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamAggOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamJoinOperator;
+import com.starrocks.sql.optimizer.operator.physical.stream.PhysicalStreamScanOperator;
 
 /**
  * OperatorVisitor is used to traverse Operator
@@ -323,4 +326,15 @@ public abstract class OperatorVisitor<R, C> {
         return visitOperator(node, context);
     }
 
+    public R visitPhysicalStreamScan(PhysicalStreamScanOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalStreamJoin(PhysicalStreamJoinOperator node, C context) {
+        return visitOperator(node, context);
+    }
+
+    public R visitPhysicalStreamAgg(PhysicalStreamAggOperator node, C context) {
+        return visitOperator(node, context);
+    }
 }

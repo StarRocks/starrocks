@@ -66,7 +66,7 @@ private:
 
 private:
     std::mutex _lock;
-    ExecEnv* _exec_env;
+    [[maybe_unused]] ExecEnv* _exec_env;
     std::string _local_path;
     // file id -> small file
     std::unordered_map<int64_t, CacheEntry> _file_cache;

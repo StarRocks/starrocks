@@ -25,7 +25,7 @@ Status ChunksSorterHeapSort::update(RuntimeState* state, const ChunkPtr& chunk) 
     }
 
     // chunk_holder was shared ownership by itself
-    detail::ChunkHolder* chunk_holder = new detail::ChunkHolder(std::make_shared<DataSegment>(_sort_exprs, chunk));
+    auto* chunk_holder = new detail::ChunkHolder(std::make_shared<DataSegment>(_sort_exprs, chunk));
     chunk_holder->ref();
     DeferOp defer([&] { chunk_holder->unref(); });
     int row_sz = chunk_holder->value()->chunk->num_rows();
@@ -117,6 +117,17 @@ Status ChunksSorterHeapSort::done(RuntimeState* state) {
             result_chunk->append_safe(*ref_chunk, rid, 1);
         }
         _merged_segment.init(_sort_exprs, result_chunk);
+        // Skip top OFFSET rows
+        if (_offset > 0) {
+            if (_offset > _merged_segment.chunk->num_rows()) {
+                _merged_segment.clear();
+                _next_output_row = 0;
+            } else {
+                _next_output_row += _offset;
+            }
+        } else {
+            _next_output_row = 0;
+        }
     }
     _sort_heap.reset();
     return Status::OK();

@@ -372,7 +372,7 @@ Suppose the number of the BE nodes that are alive increases to `6` and the Kafka
 
 > **NOTE**
 >
-> Because the actual task concurrency is determined by the minimum value of multiple parameters, you must make sure that the value of the FE dynamic parameter `routine_load_task_consume_second` is greater than or equal to `6`.
+> Because the actual task concurrency is determined by the minimum value of multiple parameters, you must make sure that the value of the FE dynamic parameter `max_routine_load_task_concurrent_num` is greater than or equal to `6`.
 
 ```SQL
 ALTER ROUTINE LOAD FOR example_tbl2_ordertest2

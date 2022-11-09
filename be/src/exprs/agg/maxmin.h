@@ -60,7 +60,7 @@ struct MaxAggregateData<TYPE_DATE, guard::Guard> {
 };
 
 template <PrimitiveType PT>
-struct MaxAggregateData<PT, BinaryPTGuard<PT>> {
+struct MaxAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     raw::RawVector<uint8_t> buffer;
 
@@ -121,7 +121,7 @@ struct MinAggregateData<TYPE_DATE, guard::Guard> {
 };
 
 template <PrimitiveType PT>
-struct MinAggregateData<PT, BinaryPTGuard<PT>> {
+struct MinAggregateData<PT, StringPTGuard<PT>> {
     int32_t size = -1;
     Buffer<uint8_t> buffer;
 
@@ -148,7 +148,7 @@ struct MinElement {
 };
 
 template <PrimitiveType PT>
-struct MaxElement<PT, MaxAggregateData<PT>, BinaryPTGuard<PT>> {
+struct MaxElement<PT, MaxAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(MaxAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) < 0) {
             state.buffer.resize(right.size);
@@ -159,7 +159,7 @@ struct MaxElement<PT, MaxAggregateData<PT>, BinaryPTGuard<PT>> {
 };
 
 template <PrimitiveType PT>
-struct MinElement<PT, MinAggregateData<PT>, BinaryPTGuard<PT>> {
+struct MinElement<PT, MinAggregateData<PT>, StringPTGuard<PT>> {
     void operator()(MinAggregateData<PT>& state, const Slice& right) const {
         if (!state.has_value() || state.slice().compare(right) > 0) {
             state.buffer.resize(right.size);
@@ -230,7 +230,7 @@ public:
 };
 
 template <PrimitiveType PT, typename State, class OP>
-class MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>, BinaryPTGuard<PT>> final
+class MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>, StringPTGuard<PT>> final
         : public AggregateFunctionBatchHelper<State, MaxMinAggregateFunction<PT, State, OP, RunTimeCppType<PT>>> {
 public:
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {

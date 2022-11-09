@@ -19,8 +19,9 @@ Status JniScanner::_check_jni_exception(JNIEnv* _jni_env, const std::string& mes
 }
 
 Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
-    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     _init_profile(scanner_params);
+    SCOPED_RAW_TIMER(&_stats.reader_init_ns);
+    COUNTER_UPDATE(_profile.scan_ranges, 1);
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     if (_jni_env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to ensure the local capacity."));
@@ -38,6 +39,16 @@ Status JniScanner::do_open(RuntimeState* state) {
     return Status::OK();
 }
 
+void JniScanner::do_update_counter(HdfsScanProfile* profile) {
+    _stats.raw_rows_read += _profile.rows_read_counter->value();
+    _stats.io_count += _profile.io_counter->value();
+    _stats.io_ns += _profile.open_timer->value() + _profile.io_timer->value() + _profile.fill_chunk_timer->value();
+
+    COUNTER_UPDATE(profile->rows_read_counter, _stats.raw_rows_read);
+    COUNTER_UPDATE(profile->io_timer, _stats.io_ns);
+    COUNTER_UPDATE(profile->io_counter, _stats.io_count);
+}
+
 void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
     JNIEnv* _jni_env = JVMFunctionHelper::getInstance().getEnv();
     _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_close);
@@ -49,10 +60,11 @@ void JniScanner::do_close(RuntimeState* runtime_state) noexcept {
 void JniScanner::_init_profile(const HdfsScannerParams& scanner_params) {
     auto _runtime_profile = scanner_params.profile->runtime_profile;
     _profile.rows_read_counter = ADD_COUNTER(_runtime_profile, "JniScannerRowsRead", TUnit::UNIT);
-    _profile.io_timer = ADD_TIMER(_runtime_profile, "JniScannerIOTime");
     _profile.io_counter = ADD_COUNTER(_runtime_profile, "JniScannerIOCounter", TUnit::UNIT);
-    _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "JniScannerFillChunkTime");
+    _profile.scan_ranges = ADD_COUNTER(_runtime_profile, "JniScanRanges", TUnit::UNIT);
     _profile.open_timer = ADD_TIMER(_runtime_profile, "JniScannerOpenTime");
+    _profile.io_timer = ADD_TIMER(_runtime_profile, "JniScannerIOTime");
+    _profile.fill_chunk_timer = ADD_TIMER(_runtime_profile, "JniScannerFillChunkTime");
 }
 
 Status JniScanner::_init_jni_method(JNIEnv* _jni_env) {
@@ -94,7 +106,7 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* _jni_env, RuntimeState* runti
     RETURN_IF_ERROR(_check_jni_exception(_jni_env, "Failed to get the HashMap methods."));
 
     string message = "Initialize a scanner with parameters: ";
-    for (auto it : _jni_scanner_params) {
+    for (const auto& it : _jni_scanner_params) {
         jstring key = _jni_env->NewStringUTF(it.first.c_str());
         jstring value = _jni_env->NewStringUTF(it.second.c_str());
         message.append(it.first);
@@ -132,7 +144,7 @@ template <PrimitiveType type, typename CppType>
 void JniScanner::_append_data(Column* column, CppType& value) {
     auto appender = [](auto* column, CppType& value) {
         using ColumnType = typename vectorized::RunTimeColumnType<type>;
-        ColumnType* runtime_column = down_cast<ColumnType*>(column);
+        auto* runtime_column = down_cast<ColumnType*>(column);
         runtime_column->append(value);
     };
 
@@ -151,7 +163,7 @@ template <PrimitiveType type, typename CppType>
 Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, int& chunk_meta_index,
                                           ColumnPtr& column) {
     bool* null_column_ptr = reinterpret_cast<bool*>(chunk_meta_ptr[chunk_meta_index++]);
-    CppType* column_ptr = reinterpret_cast<CppType*>(chunk_meta_ptr[chunk_meta_index++]);
+    auto* column_ptr = reinterpret_cast<CppType*>(chunk_meta_ptr[chunk_meta_index++]);
 
     auto* nullable_column = down_cast<NullableColumn*>(column.get());
     nullable_column->resize(num_rows);
@@ -161,7 +173,7 @@ Status JniScanner::_append_primitive_data(long num_rows, long* chunk_meta_ptr, i
 
     auto* data_column = nullable_column->data_column().get();
     using ColumnType = typename vectorized::RunTimeColumnType<type>;
-    ColumnType* runtime_column = down_cast<ColumnType*>(data_column);
+    auto* runtime_column = down_cast<ColumnType*>(data_column);
     memcpy(runtime_column->get_data().data(), column_ptr, num_rows * sizeof(CppType));
 
     nullable_column->update_has_null();
@@ -208,7 +220,7 @@ Status JniScanner::_append_string_data(long num_rows, long* chunk_meta_ptr, int&
 
     auto* data_column = nullable_column->data_column().get();
     using ColumnType = typename vectorized::RunTimeColumnType<type>;
-    ColumnType* runtime_column = down_cast<ColumnType*>(data_column);
+    auto* runtime_column = down_cast<ColumnType*>(data_column);
 
     int total_length = offset_ptr[num_rows];
     runtime_column->get_bytes().resize(total_length);
@@ -314,9 +326,6 @@ Status JniScanner::_fill_chunk(JNIEnv* _jni_env, long chunk_meta, ChunkPtr* chun
         _jni_env->CallVoidMethod(_jni_scanner_obj, _jni_scanner_release_column, col_idx);
         RETURN_IF_ERROR(_check_jni_exception(
                 _jni_env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
-    }
-    if (num_rows < _runtime_state->chunk_size()) {
-        return Status::EndOfFile("");
     }
     return Status::OK();
 }

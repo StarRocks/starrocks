@@ -43,8 +43,8 @@ extern TStreamLoadPutResult k_stream_load_put_result;
 
 class RoutineLoadTaskExecutorTest : public testing::Test {
 public:
-    RoutineLoadTaskExecutorTest() {}
-    virtual ~RoutineLoadTaskExecutorTest() {}
+    RoutineLoadTaskExecutorTest() = default;
+    ~RoutineLoadTaskExecutorTest() override = default;
 
     void SetUp() override {
         k_stream_load_begin_result = TLoadTxnBeginResult();

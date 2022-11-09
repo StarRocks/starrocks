@@ -34,11 +34,13 @@ namespace proto {
 class StripeInformation;
 class RowIndex;
 } // namespace proto
-class BloomFilterIndex;
-class StringDictionary;
+struct BloomFilterIndex;
+struct StringDictionary;
 
 class RowReaderFilter {
 public:
+    virtual ~RowReaderFilter() {}
+
     virtual bool filterOnOpeningStripe(uint64_t stripeIndex, const proto::StripeInformation* stripeInformation) {
         return false;
     }

@@ -24,6 +24,7 @@ package com.starrocks.catalog;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.IndexDef;
+import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.FastByteArrayOutputStream;
@@ -38,6 +39,7 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.List;
+import java.util.stream.Collectors;
 
 public class OlapTableTest {
 
@@ -50,7 +52,7 @@ public class OlapTableTest {
             }
         };
 
-        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7);
+        Database db = UnitTestUtil.createDb(1, 2, 3, 4, 5, 6, 7, KeysType.AGG_KEYS);
         List<Table> tables = db.getTables();
 
         for (Table table : tables) {
@@ -79,14 +81,19 @@ public class OlapTableTest {
             for (Tablet tablet : newIndex.getTablets()) {
                 Assert.assertTrue(tablet instanceof LocalTablet);
             }
-            tbl.addRelatedMaterializedView(10L);
-            tbl.addRelatedMaterializedView(20L);
-            tbl.addRelatedMaterializedView(30L);
-            Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L), tbl.getRelatedMaterializedViews());
-            tbl.removeRelatedMaterializedView(10L);
-            tbl.removeRelatedMaterializedView(20L);
-            Assert.assertEquals(Sets.newHashSet(30L), tbl.getRelatedMaterializedViews());
-            tbl.removeRelatedMaterializedView(30L);
+            MvId mvId1 = new MvId(db.getId(), 10L);
+            tbl.addRelatedMaterializedView(mvId1);
+            MvId mvId2 = new MvId(db.getId(), 20L);
+            tbl.addRelatedMaterializedView(mvId2);
+            MvId mvId3 = new MvId(db.getId(), 30L);
+            tbl.addRelatedMaterializedView(mvId3);
+            Assert.assertEquals(Sets.newHashSet(10L, 20L, 30L),
+                    tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
+            tbl.removeRelatedMaterializedView(mvId1);
+            tbl.removeRelatedMaterializedView(mvId2);
+            Assert.assertEquals(Sets.newHashSet(30L),
+                    tbl.getRelatedMaterializedViews().stream().map(mvId -> mvId.getId()).collect(Collectors.toSet()));
+            tbl.removeRelatedMaterializedView(mvId3);
             Assert.assertEquals(Sets.newHashSet(), tbl.getRelatedMaterializedViews());
         }
     }

@@ -35,8 +35,8 @@ public:
         return strings::Substitute("$0(HashJoiner=$1)", Operator::get_name(), _join_prober.get());
     }
 
-    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk);
-    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state);
+    Status push_chunk(RuntimeState* state, const vectorized::ChunkPtr& chunk) override;
+    StatusOr<vectorized::ChunkPtr> pull_chunk(RuntimeState* state) override;
 
 private:
     const HashJoinerPtr _join_prober;

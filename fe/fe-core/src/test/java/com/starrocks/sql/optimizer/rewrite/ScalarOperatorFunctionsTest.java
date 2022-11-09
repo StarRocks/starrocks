@@ -315,6 +315,27 @@ public class ScalarOperatorFunctionsTest {
         assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime().toString());
+
+        assertEquals("2013-01-17T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-1-17"),
+                        ConstantOperator.createVarchar("%Y-%m-%d")).getDatetime().toString());
+
+        assertEquals("2013-12-01T00:00", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013121"),
+                        ConstantOperator.createVarchar("%Y%m%d")).getDatetime().toString());
+
+        assertEquals("2013-05-17T12:35:10.000123", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.123"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
+
+        assertEquals("2013-05-17T12:35:10.000001", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00001"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
+
+        assertEquals("2013-05-17T12:35:10", ScalarOperatorFunctions
+                .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10.00000"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s.%f")).getDatetime().toString());
+
         assertEquals("2013-05-17T00:35:10", ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 00:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).getDatetime().toString());
@@ -367,6 +388,21 @@ public class ScalarOperatorFunctionsTest {
         Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class, () -> ScalarOperatorFunctions
                 .dateParse(ConstantOperator.createVarchar("2013-05-17 12:35:10"),
                         ConstantOperator.createVarchar("%Y-%m-%d %h:%i:%s")).getDatetime());
+
+        assertEquals("2022-10-18T01:02:03", ScalarOperatorFunctions.dateParse(
+                        ConstantOperator.createVarchar("2022-10-18 01:02:03"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i:%s")).
+                getDatetime().toString());
+
+        assertEquals("2022-10-18T01:02", ScalarOperatorFunctions.dateParse(
+                        ConstantOperator.createVarchar("2022-10-18 01:02:03"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%i")).
+                getDatetime().toString());
+
+        Assert.assertThrows("Unable to obtain LocalDateTime", DateTimeException.class,
+                () -> ScalarOperatorFunctions.dateParse(
+                        ConstantOperator.createVarchar("2022-10-18 01:02:03"),
+                        ConstantOperator.createVarchar("%Y-%m-%d %H:%s")).getDatetime());
     }
 
     @Test

@@ -16,7 +16,9 @@ StarRocks supports loading data of all data types. You only need to take note of
 
 StarRocks supports two loading modes: synchronous loading mode and asynchronous loading mode.
 
-> Note: If you load data by using external programs, you must choose a loading mode that best suits your business requirements before you decide the loading method of your choice.
+> **NOTE**
+>
+> If you load data by using external programs, you must choose a loading mode that best suits your business requirements before you decide the loading method of your choice.
 
 ### Synchronous loading
 
@@ -65,7 +67,9 @@ The workflow is described as follows:
 2. **ETL**
 
    The FE pre-processes the data, including cleansing, partitioning, sorting, and aggregation.
-   > Note: If the job is a Broker Load job, this stage is directly finished.
+   > **NOTE**
+   >
+   > If the job is a Broker Load job, this stage is directly finished.
 
 3. **LOADING**
 
@@ -96,9 +100,9 @@ You can determine the loading method of your choice based on your business scena
 
 - If you load data from Kafka and the data requires multi-table joins and extract, transform and load (ETL), you can use Apache Flink® to pre-process the data and then use the [flink-connector-starrocks](../loading/Flink-connector-starrocks.md) plug-in to perform a Stream Load job to load the data into StarRocks.
 
-- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../using_starrocks/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table. 
+- If you load data from Hive, you can use [Broker Load](../loading/BrokerLoad.md) or [Spark Load](../loading/SparkLoad.md) to load the data. However, we recommend that you create an [external Hive table](../data_source/External_table.md#hive-external-table) and then use the INSERT INTO SELECT statement to load the data into the external Hive table. 
 
-- If you load data from MySQL databases, you can use [starrockswriter](../loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](../using_starrocks/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
+- If you load data from MySQL databases, you can use [starrockswriter](../loading/DataX-starrocks-writer.md) to load the data. However, we recommend that you create an [external MySQL table](../data_source/External_table.md#mysql-external-table) and then load the data into the external MySQL table.
 
 - If you load data from other data sources such as Oracle and PostgreSQL, we recommend that you use [starrockswriter](../loading/DataX-starrocks-writer.md).
 
@@ -134,7 +138,9 @@ You can configure the following parameters in the configuration file **fe.conf**
   
   This parameter specifies the maximum number of ongoing load jobs that are allowed in each database of your StarRocks cluster. The default value is **100**. When the number of load jobs running in a database reaches the maximum number that you specify, the subsequent load jobs that you submit are not scheduled. In this situation, if you submit a synchronous load job, the job is rejected. If you submit an asynchronous load job, the job is held waiting in queue.
 
-  > Note: StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
+  > **NOTE**
+  >
+  > StarRocks counts all load jobs together and does not distinguish between synchronous load jobs and asynchronous load jobs.
 
 - `label_keep_max_second`
   

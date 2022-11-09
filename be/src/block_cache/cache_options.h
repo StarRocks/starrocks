@@ -13,9 +13,13 @@ struct DirSpace {
 };
 
 struct CacheOptions {
+    // basic
     size_t mem_space_size;
     std::vector<DirSpace> disk_spaces;
+
+    // advanced
     size_t block_size;
+    bool checksum;
 };
 
 } // namespace starrocks

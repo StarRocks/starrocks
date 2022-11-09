@@ -2,20 +2,15 @@
 
 package com.starrocks.connector.hive;
 
-import com.starrocks.external.CachingRemoteFileConf;
-import com.starrocks.external.CachingRemoteFileIO;
-import com.starrocks.external.RemoteFileIO;
-import com.starrocks.external.RemoteFileOperations;
-import com.starrocks.external.hive.CachingHiveMetastore;
-import com.starrocks.external.hive.CachingHiveMetastoreConf;
-import com.starrocks.external.hive.HiveMetastoreOperations;
-import com.starrocks.external.hive.HiveStatisticsProvider;
-import com.starrocks.external.hive.IHiveMetastore;
+import com.starrocks.connector.CachingRemoteFileConf;
+import com.starrocks.connector.CachingRemoteFileIO;
+import com.starrocks.connector.RemoteFileIO;
+import com.starrocks.connector.RemoteFileOperations;
 
 import java.util.Optional;
 import java.util.concurrent.ExecutorService;
 
-import static com.starrocks.external.hive.CachingHiveMetastore.createQueryLevelInstance;
+import static com.starrocks.connector.hive.CachingHiveMetastore.createQueryLevelInstance;
 
 public class HiveMetadataFactory {
     private final String catalogName;
@@ -25,6 +20,7 @@ public class HiveMetadataFactory {
     private final long perQueryCacheRemotePathMaxNum;
     private final ExecutorService pullRemoteFileExecutor;
     private final boolean isRecursive;
+    private final boolean enableHmsEventsIncrementalSync;
 
     public HiveMetadataFactory(String catalogName,
                                IHiveMetastore metastore,
@@ -32,7 +28,8 @@ public class HiveMetadataFactory {
                                CachingHiveMetastoreConf hmsConf,
                                CachingRemoteFileConf fileConf,
                                ExecutorService pullRemoteFileExecutor,
-                               boolean isRecursive) {
+                               boolean isRecursive,
+                               boolean enableHmsEventsIncrementalSync) {
         this.catalogName = catalogName;
         this.metastore = metastore;
         this.remoteFileIO = remoteFileIO;
@@ -40,6 +37,7 @@ public class HiveMetadataFactory {
         this.perQueryCacheRemotePathMaxNum = fileConf.getPerQueryCacheMaxSize();
         this.pullRemoteFileExecutor = pullRemoteFileExecutor;
         this.isRecursive = isRecursive;
+        this.enableHmsEventsIncrementalSync = enableHmsEventsIncrementalSync;
     }
 
     public HiveMetadata create() {
@@ -61,7 +59,8 @@ public class HiveMetadataFactory {
         Optional<CacheUpdateProcessor> cacheUpdateProcessor;
         if (remoteFileIO instanceof CachingRemoteFileIO || metastore instanceof CachingHiveMetastore) {
             cacheUpdateProcessor = Optional.of(new CacheUpdateProcessor(
-                    catalogName, metastore, remoteFileIO, pullRemoteFileExecutor, isRecursive));
+                    catalogName, metastore, remoteFileIO, pullRemoteFileExecutor,
+                    isRecursive, enableHmsEventsIncrementalSync));
         } else {
             cacheUpdateProcessor = Optional.empty();
         }

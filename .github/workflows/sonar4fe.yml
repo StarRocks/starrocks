@@ -4,6 +4,9 @@ on:
     branches:
       - main
       - 'branch*'
+    paths:
+      - 'fe/**.java'
+      - 'fe/**.xml'
   pull_request:
     paths:
       - 'fe/**.java'

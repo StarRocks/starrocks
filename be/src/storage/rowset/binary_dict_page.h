@@ -56,13 +56,13 @@ public:
 
     bool is_page_full() override;
 
-    size_t add(const uint8_t* vals, size_t count) override;
+    uint32_t add(const uint8_t* vals, uint32_t count) override;
 
     faststring* finish() override;
 
     void reset() override;
 
-    size_t count() const override;
+    uint32_t count() const override;
 
     uint64_t size() const override;
 
@@ -118,7 +118,7 @@ public:
 
     Status init() override;
 
-    Status seek_to_position_in_page(size_t pos) override;
+    Status seek_to_position_in_page(uint32_t pos) override;
 
     Status next_batch(size_t* n, ColumnBlockView* dst) override;
 
@@ -126,9 +126,9 @@ public:
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
-    size_t count() const override { return _data_page_decoder->count(); }
+    uint32_t count() const override { return _data_page_decoder->count(); }
 
-    size_t current_index() const override { return _data_page_decoder->current_index(); }
+    uint32_t current_index() const override { return _data_page_decoder->current_index(); }
 
     EncodingTypePB encoding_type() const override { return _encoding_type; }
 

@@ -21,14 +21,11 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <rapidjson/document.h>
-DIAGNOSTIC_POP
 
 #include <string>
 
+#include "common/compiler_util.h"
 #include "gen_cpp/persistent_index.pb.h"
 #include "storage/data_dir.h"
 #include "storage/kv_store.h"

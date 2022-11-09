@@ -8,7 +8,7 @@
 namespace starrocks::vectorized {
 class VectorizedDecimalCastExprTimeTest : public ::testing::Test {
 public:
-    void SetUp() { date::init_date_cache(); }
+    void SetUp() override { date::init_date_cache(); }
 };
 TEST_F(VectorizedDecimalCastExprTimeTest, testCastFromDateToDecimal32p9s0Normal) {
     CastTestCaseArray test_cases = {

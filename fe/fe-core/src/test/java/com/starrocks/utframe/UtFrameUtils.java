@@ -40,6 +40,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksFEMetaVersion;
 import com.starrocks.common.io.DataOutputBuffer;
 import com.starrocks.common.io.Writable;
+import com.starrocks.connector.hive.ReplayMetadataMgr;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.meta.MetaContext;
@@ -374,6 +375,16 @@ public class UtFrameUtils {
         // create resource
         for (String createResourceStmt : replayDumpInfo.getCreateResourceStmtList()) {
             starRocksAssert.withResource(createResourceStmt);
+        }
+
+        // mock replay external table info
+        if (!replayDumpInfo.getHmsTableMap().isEmpty()) {
+            ReplayMetadataMgr replayMetadataMgr = new ReplayMetadataMgr(
+                    connectContext.getGlobalStateMgr().getLocalMetastore(),
+                    connectContext.getGlobalStateMgr().getConnectorMgr(),
+                    replayDumpInfo.getHmsTableMap(),
+                    replayDumpInfo.getTableStatisticsMap());
+            connectContext.getGlobalStateMgr().setMetadataMgr(replayMetadataMgr);
         }
 
         // create table

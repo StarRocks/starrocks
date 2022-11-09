@@ -7,6 +7,7 @@
 #include "column/array_column.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/struct_column.h"
 #include "column/vectorized_fwd.h"
 #include "gutil/casts.h"
 #include "runtime/primitive_type.h"
@@ -224,15 +225,30 @@ ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool null
     }
 
     ColumnPtr p;
-    if (type_desc.type == TYPE_ARRAY) {
+    if (type_desc.type == PrimitiveType::TYPE_ARRAY) {
         auto offsets = UInt32Column::create(size);
         auto data = create_column(type_desc.children[0], true, is_const, size);
         p = ArrayColumn::create(std::move(data), std::move(offsets));
-    } else if (type_desc.type == TYPE_MAP) {
+    } else if (type_desc.type == PrimitiveType::TYPE_MAP) {
         auto offsets = UInt32Column ::create(size);
         auto keys = create_column(type_desc.children[0], true, is_const, size);
         auto values = create_column(type_desc.children[1], true, is_const, size);
         p = MapColumn::create(std::move(keys), std::move(values), std::move(offsets));
+    } else if (type_desc.type == PrimitiveType::TYPE_STRUCT) {
+        size_t field_size = type_desc.children.size();
+        DCHECK_EQ(field_size, type_desc.selected_fields.size());
+        Columns columns;
+        BinaryColumn::Ptr field_names = BinaryColumn::create();
+        for (size_t i = 0; i < field_size; i++) {
+            if (!type_desc.selected_fields.at(i)) {
+                continue;
+            }
+            // Subfield column must be nullable column.
+            ColumnPtr field_column = create_column(type_desc.children.at(i), true, is_const, size);
+            columns.emplace_back(field_column);
+            field_names->append_string(type_desc.field_names.at(i));
+        }
+        p = StructColumn::create(columns, field_names);
     } else {
         p = type_dispatch_column(type_desc.type, ColumnBuilder(), type_desc, size);
     }

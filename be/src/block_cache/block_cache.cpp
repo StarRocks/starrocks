@@ -61,50 +61,15 @@ Status BlockCache::write_cache(const CacheKey& cache_key, off_t offset, size_t s
 }
 
 StatusOr<size_t> BlockCache::read_cache(const CacheKey& cache_key, off_t offset, size_t size, char* buffer) {
-    if (offset % _block_size != 0) {
-        LOG(WARNING) << "read block key: " << cache_key << " with invalid offset: " << offset << ", size: " << size;
-        return Status::InvalidArgument(
-                strings::Substitute("offset and size must be aligned by block size $0", _block_size));
-    }
     if (!buffer) {
         return Status::InvalidArgument("invalid data buffer");
     }
     if (size == 0) {
         return 0;
     }
-
-    size_t start_block_index = offset / _block_size;
-    size_t end_block_index = (offset + size - 1) / _block_size + 1;
-    off_t off_in_buf = 0;
-    size_t read_size = 0;
-    for (size_t index = start_block_index; index < end_block_index; ++index) {
-        std::string block_key = fmt::format("{}/{}", cache_key, index);
-        char* block_buf = buffer + off_in_buf;
-        auto res = _kv_cache->read_cache(block_key, block_buf);
-        RETURN_IF_ERROR(res);
-        read_size += res.value();
-        off_in_buf += _block_size;
-    }
-
-    return read_size;
-}
-
-Status BlockCache::read_cache_zero_copy(const CacheKey& cache_key, off_t offset, size_t size, const char** buf) {
-    if (offset % _block_size != 0) {
-        LOG(WARNING) << "read block key: " << cache_key << " with invalid offset: " << offset << ", size: " << size;
-        return Status::InvalidArgument(
-                strings::Substitute("offset and size must be aligned by block size $0", _block_size));
-    }
-    if (!buf) {
-        return Status::InvalidArgument("invalid data buffer");
-    }
-    if (size == 0) {
-        return Status::OK();
-    }
-
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->read_cache_zero_copy(block_key, buf);
+    return _kv_cache->read_cache(block_key, buffer, offset - index * _block_size, size);
 }
 
 Status BlockCache::remove_cache(const CacheKey& cache_key, off_t offset, size_t size) {

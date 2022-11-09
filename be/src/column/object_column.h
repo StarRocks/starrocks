@@ -217,6 +217,9 @@ public:
     bool has_large_column() const override { return false; }
 
 private:
+    // add this to avoid warning clang-diagnostic-overloaded-virtual
+    using Column::append;
+
     void _build_cache() const {
         if (_cache_ok) {
             return;

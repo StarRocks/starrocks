@@ -3,11 +3,11 @@
 package com.starrocks.server;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.external.hive.HiveMetaClient;
-import com.starrocks.external.hive.HiveMetastoreApiConverter;
-import com.starrocks.external.hive.HiveMetastoreTest;
-import com.starrocks.external.iceberg.IcebergUtil;
-import com.starrocks.external.iceberg.hive.HiveTableOperations;
+import com.starrocks.connector.hive.HiveMetaClient;
+import com.starrocks.connector.hive.HiveMetastoreApiConverter;
+import com.starrocks.connector.hive.HiveMetastoreTest;
+import com.starrocks.connector.iceberg.IcebergUtil;
+import com.starrocks.connector.iceberg.hive.HiveTableOperations;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -75,7 +75,7 @@ public class CatalogLevelTest {
 
         org.apache.iceberg.Table tbl = new org.apache.iceberg.BaseTable(hiveTableOperations, "iceberg_table");
         com.starrocks.catalog.Table icebergTable = IcebergUtil.convertHiveCatalogToSRTable(tbl, "thrift://127.0.0.1:9083",
-                "iceberg_db", "iceberg_table");
+                "iceberg_catalog", "iceberg_db", "iceberg_table");
         GlobalStateMgr.getCurrentState().setMetadataMgr(metadataMgr);
         new Expectations(metadataMgr) {
             {

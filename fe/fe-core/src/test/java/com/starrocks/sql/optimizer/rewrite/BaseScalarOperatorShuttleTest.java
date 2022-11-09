@@ -3,12 +3,12 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.ImmutableList;
-import com.starrocks.sql.optimizer.operator.scalar.ArrayElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ArraySliceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BetweenPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CollectionElementOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ExistsPredicateOperator;
@@ -37,9 +37,9 @@ class BaseScalarOperatorShuttleTest {
     }
 
     @Test
-    void visitArrayElement() {
-        ArrayElementOperator operator = new ArrayElementOperator(STRING, null, null);
-        ScalarOperator newOperator = shuttle.visitArrayElement(operator, null);
+    void visitCollectionElement() {
+        CollectionElementOperator operator = new CollectionElementOperator(STRING, null, null);
+        ScalarOperator newOperator = shuttle.visitCollectionElement(operator, null);
         assertEquals(operator, newOperator);
     }
 

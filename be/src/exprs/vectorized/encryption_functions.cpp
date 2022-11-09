@@ -182,7 +182,7 @@ ColumnPtr EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Column
         list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
     }
     auto size = columns[0]->size();
-    ColumnBuilder<TYPE_VARCHAR> result(size);
+    ColumnBuilder<TYPE_LARGEINT> result(size);
     for (int row = 0; row < size; row++) {
         Md5Digest digest;
         for (auto& view : list) {
@@ -194,11 +194,10 @@ ColumnPtr EncryptionFunctions::md5sum_numeric(FunctionContext* ctx, const Column
         }
         digest.digest();
         StringParser::ParseResult parse_res;
-        uint128_t int_val =
+        auto int_val =
                 StringParser::string_to_int<uint128_t>(digest.hex().c_str(), digest.hex().size(), 16, &parse_res);
         DCHECK_EQ(parse_res, StringParser::PARSE_SUCCESS);
-        std::string decimal_str = starrocks::integer_to_string<uint128_t>(int_val);
-        result.append(Slice(decimal_str.data(), decimal_str.size()));
+        result.append(int_val);
     }
     return result.build(ColumnHelper::is_all_const(columns));
 }

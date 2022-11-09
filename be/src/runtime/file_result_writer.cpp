@@ -24,7 +24,6 @@
 #include <memory>
 
 #include "exec/local_file_writer.h"
-#include "exec/parquet_builder.h"
 #include "exec/plain_text_builder.h"
 #include "formats/csv/converter.h"
 #include "formats/csv/output_stream.h"
@@ -68,8 +67,9 @@ Status FileResultWriter::_create_fs() {
             _fs = new_fs_posix();
         } else {
             if (_file_opts->use_broker) {
-                _fs.reset(new BrokerFileSystem(*_file_opts->broker_addresses.begin(), _file_opts->broker_properties,
-                                               config::broker_write_timeout_seconds * 1000));
+                _fs = std::make_unique<BrokerFileSystem>(*_file_opts->broker_addresses.begin(),
+                                                         _file_opts->broker_properties,
+                                                         config::broker_write_timeout_seconds * 1000);
             } else {
                 ASSIGN_OR_RETURN(_fs, FileSystem::CreateUniqueFromString(_file_opts->file_path, FSOptions(_file_opts)));
             }
@@ -93,9 +93,6 @@ Status FileResultWriter::_create_file_writer() {
         _file_builder = std::make_unique<PlainTextBuilder>(
                 PlainTextBuilderOptions{_file_opts->column_separator, _file_opts->row_delimiter},
                 std::move(writable_file), _output_expr_ctxs);
-        break;
-    case TFileFormatType::FORMAT_PARQUET:
-        _file_builder = std::make_unique<ParquetBuilder>(std::move(writable_file), _output_expr_ctxs);
         break;
     default:
         return Status::InternalError(strings::Substitute("unsupported file format: $0", _file_opts->file_format));

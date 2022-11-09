@@ -37,7 +37,7 @@ Status JDBCScanner::open(RuntimeState* state) {
 
     RETURN_IF_ERROR(_init_jdbc_scanner());
 
-    RETURN_IF_ERROR(_init_column_class_name());
+    RETURN_IF_ERROR(_init_column_class_name(state));
 
     RETURN_IF_ERROR(_init_jdbc_util());
 
@@ -97,7 +97,7 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
 
     jmethodID constructor = env->GetMethodID(
             scan_context_cls, "<init>",
-            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)V");
+            "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IIII)V");
     jstring driver_class_name = env->NewStringUTF(_scan_ctx.driver_class_name.c_str());
     LOCAL_REF_GUARD_ENV(env, driver_class_name);
     jstring jdbc_url = env->NewStringUTF(_scan_ctx.jdbc_url.c_str());
@@ -110,9 +110,21 @@ Status JDBCScanner::_init_jdbc_scan_context(RuntimeState* state) {
     LOCAL_REF_GUARD_ENV(env, sql);
     int statement_fetch_size = state->chunk_size();
     int connection_pool_size = config::jdbc_connection_pool_size;
+    if (UNLIKELY(connection_pool_size <= 0)) {
+        connection_pool_size = DEFAULT_JDBC_CONNECTION_POOL_SIZE;
+    }
+    int minimum_idle_connections = config::jdbc_minimum_idle_connections;
+    if (UNLIKELY(minimum_idle_connections < 0 || minimum_idle_connections > connection_pool_size)) {
+        minimum_idle_connections = connection_pool_size;
+    }
+    int idle_timeout_ms = config::jdbc_connection_idle_timeout_ms;
+    if (UNLIKELY(idle_timeout_ms < MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS)) {
+        idle_timeout_ms = MINIMUM_ALLOWED_JDBC_CONNECTION_IDLE_TIMEOUT_MS;
+    }
 
-    auto scan_ctx = env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
-                                   statement_fetch_size, connection_pool_size);
+    auto scan_ctx =
+            env->NewObject(scan_context_cls, constructor, driver_class_name, jdbc_url, user, passwd, sql,
+                           statement_fetch_size, connection_pool_size, minimum_idle_connections, idle_timeout_ms);
     _jdbc_scan_context = env->NewGlobalRef(scan_ctx);
     LOCAL_REF_GUARD_ENV(env, scan_ctx);
     CHECK_JAVA_EXCEPTION(env, "construct JDBCScanContext failed")
@@ -257,7 +269,7 @@ StatusOr<PrimitiveType> JDBCScanner::_precheck_data_type(const std::string& java
     __builtin_unreachable();
 }
 
-Status JDBCScanner::_init_column_class_name() {
+Status JDBCScanner::_init_column_class_name(RuntimeState* state) {
     auto* env = JVMFunctionHelper::getInstance().getEnv();
 
     jmethodID get_result_column_class_names =
@@ -293,6 +305,8 @@ Status JDBCScanner::_init_column_class_name() {
                                                                            column_ref, &_pool, true);
         _cast_exprs.push_back(_pool.add(new ExprContext(cast_expr)));
     }
+    RETURN_IF_ERROR(Expr::prepare(_cast_exprs, state));
+    RETURN_IF_ERROR(Expr::open(_cast_exprs, state));
 
     return Status::OK();
 }

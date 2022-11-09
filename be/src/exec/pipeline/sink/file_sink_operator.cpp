@@ -2,6 +2,8 @@
 
 #include "exec/pipeline/sink/file_sink_operator.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "exec/pipeline/sink/sink_io_buffer.h"
 #include "exec/workgroup/scan_executor.h"
@@ -21,7 +23,7 @@ public:
                      int32_t num_sinkers, FragmentContext* const fragment_ctx)
             : SinkIOBuffer(num_sinkers),
               _output_expr_ctxs(output_expr_ctxs),
-              _file_opts(file_opts),
+              _file_opts(std::move(file_opts)),
               _fragment_ctx(fragment_ctx) {}
 
     ~FileSinkIOBuffer() override = default;
@@ -121,7 +123,7 @@ void FileSinkIOBuffer::_process_chunk(bthread::TaskIterator<const vectorized::Ch
         }
         _is_writer_opened = true;
     }
-    auto chunk = *iter;
+    const auto& chunk = *iter;
     if (chunk == nullptr) {
         // this is the last chunk
         close(_state);
@@ -176,7 +178,7 @@ FileSinkOperatorFactory::FileSinkOperatorFactory(int32_t id, std::vector<TExpr> 
                                                  FragmentContext* const fragment_ctx)
         : OperatorFactory(id, "file_sink", Operator::s_pseudo_plan_node_id_for_result_sink),
           _t_output_expr(std::move(t_output_expr)),
-          _file_opts(file_opts),
+          _file_opts(std::move(file_opts)),
           _num_sinkers(_num_sinkers),
           _fragment_ctx(fragment_ctx) {}
 

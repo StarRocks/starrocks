@@ -23,7 +23,7 @@ class BlockCompressionCodec;
 namespace starrocks::parquet {
 
 class PageReader;
-class ColumnReaderOptions;
+struct ColumnReaderOptions;
 
 class ColumnChunkReader {
 public:

@@ -21,13 +21,8 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/bthread.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 
 #include <ctime>
 #include <memory>
@@ -35,6 +30,7 @@ DIAGNOSTIC_POP
 #include <thread>
 #include <unordered_map>
 
+#include "common/compiler_util.h"
 #include "common/statusor.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"

@@ -83,7 +83,7 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {
-            _row_desc.reset(new RowDescriptor(_schema->tuple_desc(), false));
+            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc(), false);
         }
         if (_tablets_channels.find(index_id) == _tablets_channels.end()) {
             TabletsChannelKey key(request.id(), index_id);
@@ -144,7 +144,7 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
                  << ", sender_id=" << request.sender_id() << " request_index=" << i << " eos=" << request.eos();
 
         if (i == 0 && request.has_chunk()) {
-            chunk.reset(new vectorized::Chunk());
+            chunk = std::make_unique<vectorized::Chunk>();
             auto& pchunk = request.chunk();
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);

@@ -396,11 +396,11 @@ Slice JVMFunctionHelper::sliceVal(jstring jstr, std::string* buffer) {
     size_t length = this->string_length(jstr);
     buffer->resize(length);
     _env->GetStringUTFRegion(jstr, 0, length, buffer->data());
-    return Slice(buffer->data(), buffer->length());
+    return {buffer->data(), buffer->length()};
 }
 
 Slice JVMFunctionHelper::sliceVal(jstring jstr) {
-    return Slice(_env->GetStringUTFChars(jstr, NULL));
+    return {_env->GetStringUTFChars(jstr, nullptr)};
 }
 
 std::string JVMFunctionHelper::to_jni_class_name(const std::string& name) {

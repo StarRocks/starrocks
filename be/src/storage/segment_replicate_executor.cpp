@@ -5,6 +5,7 @@
 #include <fmt/format.h>
 
 #include <memory>
+#include <utility>
 
 #include "fs/fs_posix.h"
 #include "gen_cpp/data.pb.h"
@@ -31,9 +32,8 @@ private:
     bool _eos;
 };
 
-ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, const std::string& host, int32_t port,
-                                   int64_t node_id)
-        : _opt(opt), _host(host), _port(port), _node_id(node_id) {
+ReplicateChannel::ReplicateChannel(const DeltaWriterOptions* opt, std::string host, int32_t port, int64_t node_id)
+        : _opt(opt), _host(std::move(host)), _port(port), _node_id(node_id) {
     _closure = new ReusableClosure<PTabletWriterAddSegmentResult>();
     _closure->ref();
 }
@@ -187,11 +187,11 @@ void ReplicateChannel::cancel() {
 }
 
 ReplicateToken::ReplicateToken(std::unique_ptr<ThreadPoolToken> replicate_pool_token, const DeltaWriterOptions* opt)
-        : _replicate_token(std::move(replicate_pool_token)), _status(), _opt(opt), _fs(std::move(new_fs_posix())) {
+        : _replicate_token(std::move(replicate_pool_token)), _status(), _opt(opt), _fs(new_fs_posix()) {
     // first replica is primary replica, skip it
     for (size_t i = 1; i < opt->replicas.size(); ++i) {
-        _replicate_channels.emplace_back(std::move(std::make_unique<ReplicateChannel>(
-                opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id())));
+        _replicate_channels.emplace_back(std::make_unique<ReplicateChannel>(
+                opt, opt->replicas[i].host(), opt->replicas[i].port(), opt->replicas[i].node_id()));
     }
     if (opt->write_quorum == WriteQuorumTypePB::ONE) {
         _max_fail_replica_num = opt->replicas.size();

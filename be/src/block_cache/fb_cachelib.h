@@ -22,9 +22,7 @@ public:
 
     Status write_cache(const std::string& key, const char* value, size_t size, size_t ttl_seconds) override;
 
-    StatusOr<size_t> read_cache(const std::string& key, char* value) override;
-
-    Status read_cache_zero_copy(const std::string& key, const char** buf) override;
+    StatusOr<size_t> read_cache(const std::string& key, char* value, size_t off, size_t size) override;
 
     Status remove_cache(const std::string& key) override;
 

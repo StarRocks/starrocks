@@ -2,7 +2,7 @@
 
 ## Description
 
-Create a new table in StarRocks.
+Creates a new table in StarRocks.
 
 ## Syntax
 
@@ -38,37 +38,37 @@ col_type：Column type
 
 
 
-Specific column information, such as types and ranges, are as follows: 
+Specific column information, such as types and ranges: 
 
 
 
 * TINYINT（1 byte）
 
-Range ：-2^7 + 1 ~ 2^7 - 1
+Range: -2^7 + 1 ~ 2^7 - 1
 
 
 
 * SMALLINT（2 bytes）
 
-Range ：-2^15 + 1 ~ 2^15 - 1
+Range: -2^15 + 1 ~ 2^15 - 1
 
 
 
 * INT（4 bytes）
 
-Range ：-2^31 + 1 ~ 2^31 - 1
+Range: -2^31 + 1 ~ 2^31 - 1
 
 
 
 * BIGINT（8 bytes）
 
-Range ：-2^63 + 1 ~ 2^63 - 1
+Range: -2^63 + 1 ~ 2^63 - 1
 
 
 
 * LARGEINT（16 bytes）
 
-Range ：-2^127 + 1 ~ 2^127 - 1
+Range: -2^127 + 1 ~ 2^127 - 1
 
 
 
@@ -86,7 +86,7 @@ Support scientific notation
 
 * DECIMAL[(precision, scale)] (16 bytes) 
 
- Default: DECIMAL(10, 0)
+ Default value: DECIMAL(10, 0)
 
  precision: 1 ~ 38
 
@@ -100,25 +100,25 @@ Scientific notation is not supported
 
 * DATE（3 bytes）
 
-Range ：0000-01-01 ~ 9999-12-31
+Range: 0000-01-01 ~ 9999-12-31
 
 
 
 * DATETIME（8 bytes ）
 
-Range ：0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
+Range: 0000-01-01 00:00:00 ~ 9999-12-31 23:59:59
 
 
 
 * CHAR[(length)]
 
-Fixed length string. Range：1 ~ 255。default: 1
+Fixed length string. Range：1 ~ 255. Default value: 1.
 
 
 
 * VARCHAR[(length)]
 
-Variable length string. Range：1 ~ 65533
+Variable length string. Range：1 ~ 1048576
 
 
 
@@ -190,7 +190,7 @@ col_name: Column name
 
 ### ENGINE type
 
-Default: olap. Optional: mysql, elasticsearch, and hive.
+Default value: olap. Optional: mysql, elasticsearch, and hive.
 
 - For MySQL, properties should include:
 
@@ -413,11 +413,11 @@ PROPERTIES (
     "dynamic_partition.buckets" = "${integer_value}"
 ```
 
-dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default: true.
+dynamic_partition.enable: It is used to specify whether dynamic partitioning at the table level is enabled. Default value: true.
 
 dynamic_partition.time_unit: It is used to specify the time unit for adding partitions dynamically. Time unit could be DAY, WEEK, MONTH.
 
-dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default: integer.Min_VAULE.
+dynamic_partition.start: It is used to specify how many partitions should be deleted. The value must be less than 0. Default value: integer.Min_VAULE.
 
 dynamic_partition.end: It is used to specify the how many partitions will be created in advance. The value must be more than 0.
 

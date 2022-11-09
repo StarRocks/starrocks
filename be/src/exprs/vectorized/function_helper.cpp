@@ -17,16 +17,16 @@ NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const C
         const auto& n1 = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column();
         const auto& n2 = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column();
         if (!v1->has_null()) {
-            result = std::move(n2->clone());
+            result = n2->clone();
         }
         if (!v2->has_null()) {
-            result = std::move(n1->clone());
+            result = n1->clone();
         }
         return union_null_column(n1, n2);
     } else if (v1->is_nullable()) {
-        result = std::move(ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column()->clone());
+        result = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column()->clone();
     } else if (v2->is_nullable()) {
-        result = std::move(ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone());
+        result = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone();
     } else {
         DCHECK(false);
         return nullptr;

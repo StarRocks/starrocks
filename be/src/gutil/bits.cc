@@ -20,23 +20,23 @@ const char Bits::num_bits[] = {
 
 int Bits::Count(const void* m, int num_bytes) {
     int nbits = 0;
-    const uint8* s = (const uint8*)m;
+    const auto* s = (const uint8*)m;
     for (int i = 0; i < num_bytes; i++) nbits += num_bits[*s++];
     return nbits;
 }
 
 int Bits::Difference(const void* m1, const void* m2, int num_bytes) {
     int nbits = 0;
-    const uint8* s1 = (const uint8*)m1;
-    const uint8* s2 = (const uint8*)m2;
+    const auto* s1 = (const uint8*)m1;
+    const auto* s2 = (const uint8*)m2;
     for (int i = 0; i < num_bytes; i++) nbits += num_bits[(*s1++) ^ (*s2++)];
     return nbits;
 }
 
 int Bits::CappedDifference(const void* m1, const void* m2, int num_bytes, int cap) {
     int nbits = 0;
-    const uint8* s1 = (const uint8*)m1;
-    const uint8* s2 = (const uint8*)m2;
+    const auto* s1 = (const uint8*)m1;
+    const auto* s2 = (const uint8*)m2;
     for (int i = 0; i < num_bytes && nbits <= cap; i++) nbits += num_bits[(*s1++) ^ (*s2++)];
     return nbits;
 }

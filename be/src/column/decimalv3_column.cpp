@@ -8,7 +8,7 @@ namespace starrocks::vectorized {
 
 template <typename T>
 DecimalV3Column<T>::DecimalV3Column(size_t num_rows) {
-    this->resize(num_rows);
+    this->resize_uninitialized(num_rows);
 }
 
 template <typename T>
@@ -18,7 +18,7 @@ DecimalV3Column<T>::DecimalV3Column(int precision, int scale) : _precision(preci
 
 template <typename T>
 DecimalV3Column<T>::DecimalV3Column(int precision, int scale, size_t num_rows) : DecimalV3Column(precision, scale) {
-    this->resize(num_rows);
+    this->resize_uninitialized(num_rows);
 }
 template <typename T>
 bool DecimalV3Column<T>::is_decimal() const {

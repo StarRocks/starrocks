@@ -41,7 +41,7 @@ namespace starrocks {
 
 class RlePageTest : public testing::Test {
 public:
-    virtual ~RlePageTest() {}
+    ~RlePageTest() override = default;
 
     template <FieldType type, class PageDecoderType>
     void copy_one(PageDecoderType* decoder, typename TypeTraits<type>::CppType* ret) {
@@ -68,10 +68,10 @@ public:
         CHECK_EQ(size, rle_page_builder.count());
 
         //check first value and last value
-        CppType first_value;
+        CppType first_value = {};
         rle_page_builder.get_first_value(&first_value);
         CHECK_EQ(src[0], first_value);
-        CppType last_value;
+        CppType last_value = {};
         rle_page_builder.get_last_value(&last_value);
         CHECK_EQ(src[size - 1], last_value);
         return s;
@@ -99,7 +99,7 @@ public:
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        CppType* values = reinterpret_cast<CppType*>(block.data());
+        auto* values = reinterpret_cast<CppType*>(block.data());
         for (uint i = 0; i < size; i++) {
             if (src[i] != values[i]) {
                 FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
@@ -108,7 +108,7 @@ public:
 
         // Test Seek within block by ordinal
         for (int i = 0; i < 100; i++) {
-            int seek_off = random() % size;
+            uint32_t seek_off = random() % size;
             rle_page_decoder.seek_to_position_in_page(seek_off);
             EXPECT_EQ((int32_t)(seek_off), rle_page_decoder.current_index());
             CppType ret;

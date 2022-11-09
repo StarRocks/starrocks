@@ -27,8 +27,8 @@ namespace starrocks::vectorized {
 
 class SIMDTest : public testing::Test {
 public:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 TEST_F(SIMDTest, count_zeros) {

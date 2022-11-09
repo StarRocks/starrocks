@@ -70,7 +70,6 @@ private:
 
     // owned by RuntimeState
     ObjectPool* _pool;
-    const RowDescriptor& _row_desc;
     const std::vector<TExpr>& _t_output_expr;
 
     std::vector<ExprContext*> _output_expr_ctxs;

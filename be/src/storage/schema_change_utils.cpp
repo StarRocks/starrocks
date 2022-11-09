@@ -181,7 +181,7 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
-const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(std::string materialized_function,
+const MaterializeTypeConverter* ChunkChanger::get_materialize_type_converter(const std::string& materialized_function,
                                                                              FieldType type) {
     if (materialized_function == "to_bitmap") {
         return get_materialized_converter(type, OLAP_MATERIALIZE_TYPE_BITMAP);

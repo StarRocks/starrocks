@@ -113,7 +113,7 @@ void ProfileReportWorker::execute() {
     LOG(INFO) << "ProfileReportWorker going to exit.";
 }
 
-ProfileReportWorker::ProfileReportWorker(ExecEnv* env) : _exec_env(env), _thread([this] { execute(); }), _stop(false) {
+ProfileReportWorker::ProfileReportWorker(ExecEnv* env) : _thread([this] { execute(); }), _stop(false) {
     Thread::set_thread_name(_thread, "profile_report");
 }
 

@@ -180,9 +180,9 @@ TEST(Rle, TestValues) {
 
 class BitRle : public testing::Test {
 public:
-    BitRle() {}
+    BitRle() = default;
 
-    virtual ~BitRle() {}
+    ~BitRle() override = default;
 };
 
 // Tests all true/false values
@@ -204,7 +204,7 @@ TEST_F(BitRle, AllSame) {
 // group but flush before finishing.
 TEST_F(BitRle, Flush) {
     std::vector<bool> values;
-    for (int i = 0; i < 16; ++i) values.push_back(1);
+    for (int i = 0; i < 16; ++i) values.push_back(true);
     values.push_back(false);
     ValidateRle(values, 1, nullptr, -1);
     values.push_back(true);
@@ -223,7 +223,7 @@ TEST_F(BitRle, RandomBools) {
         srand(iters++);
         if (iters % 10000 == 0) LOG(ERROR) << "Seed: " << iters;
         std::vector<uint64_t> values;
-        bool parity = 0;
+        bool parity = false;
         for (int i = 0; i < 1000; ++i) {
             int group_size = rand() % 20 + 1; // NOLINT(*)
             if (group_size > 16) {

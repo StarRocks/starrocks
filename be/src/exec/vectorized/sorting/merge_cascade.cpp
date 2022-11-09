@@ -1,5 +1,7 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
 #include "exec/vectorized/sorting/merge.h"
@@ -17,7 +19,7 @@ struct CursorAlgo {
         return left.compare_row(desc, right, lhs_tail, rhs_tail);
     }
 
-    static void trim_permutation(SortedRun left, SortedRun right, Permutation& perm) {
+    static void trim_permutation(const SortedRun& left, const SortedRun& right, Permutation& perm) {
         if (perm.size() <= left.num_rows() + right.num_rows()) {
             return;
         }
@@ -66,7 +68,7 @@ MergeTwoCursor::MergeTwoCursor(const SortDescs& sort_desc, std::unique_ptr<Simpl
 }
 
 // Consume all inputs and produce output through the callback function
-Status MergeTwoCursor::consume_all(ChunkConsumer output) {
+Status MergeTwoCursor::consume_all(const ChunkConsumer& output) {
     for (auto chunk = next(); chunk.ok() && !is_eos(); chunk = next()) {
         if (chunk.value()) {
             output(std::move(chunk.value()));
@@ -85,7 +87,7 @@ bool MergeTwoCursor::is_data_ready() {
 }
 
 bool MergeTwoCursor::is_eos() {
-    return _left_cursor->is_eos() && _right_cursor->is_eos();
+    return _left_run.empty() && _left_cursor->is_eos() && _right_run.empty() && _right_cursor->is_eos();
 }
 
 StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
@@ -96,6 +98,29 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::next() {
         return ChunkUniquePtr();
     }
     return merge_sorted_cursor_two_way();
+}
+
+bool MergeTwoCursor::move_cursor() {
+    DCHECK(is_data_ready());
+    DCHECK(!is_eos());
+
+    bool eos = _left_run.empty() && _right_run.empty();
+    if (_left_run.empty() && !_left_cursor->is_eos()) {
+        auto chunk = _left_cursor->try_get_next();
+        if (chunk.first) {
+            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
+        }
+    }
+    if (_right_run.empty() && !_right_cursor->is_eos()) {
+        auto chunk = _right_cursor->try_get_next();
+        if (chunk.first) {
+            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
+            eos = false;
+        }
+    }
+
+    return eos;
 }
 
 // 1. Find smaller tail
@@ -131,7 +156,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             DCHECK_EQ(_left_run.num_rows() + right_1.num_rows(), perm.size());
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
             // TODO: avoid copy the whole chunk, but copy orderby columns only
-            append_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
+            materialize_by_permutation(merged.get(), {_left_run.chunk, right_1.chunk}, perm);
 
             VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output left and right [{}, {})",
                                     _right_run.start_index(), right_cut);
@@ -150,7 +175,7 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
             CursorAlgo::trim_permutation(left_1, _right_run, perm);
             DCHECK_EQ(_right_run.num_rows() + left_1.num_rows(), perm.size());
             ChunkUniquePtr merged = _left_run.chunk->clone_empty(perm.size());
-            append_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
+            materialize_by_permutation(merged.get(), {_right_run.chunk, left_1.chunk}, perm);
 
             VLOG_ROW << fmt::format("merge_sorted_cursor_two_way output right and left [{}, {})",
                                     _left_run.start_index(), left_cut);
@@ -161,29 +186,6 @@ StatusOr<ChunkUniquePtr> MergeTwoCursor::merge_sorted_cursor_two_way() {
     }
 
     return result;
-}
-
-bool MergeTwoCursor::move_cursor() {
-    DCHECK(is_data_ready());
-    DCHECK(!is_eos());
-
-    bool eos = _left_run.empty() && _right_run.empty();
-    if (_left_run.empty() && !_left_cursor->is_eos()) {
-        auto chunk = _left_cursor->try_get_next();
-        if (chunk.first) {
-            _left_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
-        }
-    }
-    if (_right_run.empty() && !_right_cursor->is_eos()) {
-        auto chunk = _right_cursor->try_get_next();
-        if (chunk.first) {
-            _right_run = SortedRun(ChunkPtr(chunk.first.release()), chunk.second);
-            eos = false;
-        }
-    }
-
-    return eos;
 }
 
 // TODO: avoid copy the whole chunk in cascade merge, but copy order-by column only
@@ -227,7 +229,7 @@ ChunkUniquePtr MergeCursorsCascade::try_get_next() {
     return _root_cursor->try_get_next().first;
 }
 
-Status MergeCursorsCascade::consume_all(ChunkConsumer consumer) {
+Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
     while (!is_eos()) {
         ChunkUniquePtr chunk = try_get_next();
         if (!!chunk) {
@@ -238,18 +240,18 @@ Status MergeCursorsCascade::consume_all(ChunkConsumer consumer) {
 }
 
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
-                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, ChunkConsumer output) {
+                                   std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));
-    return merger.consume_all(output);
+    return merger.consume_all(std::move(output));
 }
 
 Status merge_sorted_cursor_cascade(const SortDescs& sort_desc,
                                    std::vector<std::unique_ptr<SimpleChunkSortCursor>>&& cursors,
-                                   ChunkConsumer consumer) {
+                                   const ChunkConsumer& consumer) {
     MergeCursorsCascade merger;
     RETURN_IF_ERROR(merger.init(sort_desc, std::move(cursors)));
     CHECK(merger.is_data_ready());
-    merger.consume_all(consumer);
+    merger.consume_all(std::move(consumer));
     return Status::OK();
 }
 

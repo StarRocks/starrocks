@@ -105,7 +105,7 @@ SubstituteArg::SubstituteArg(const void* value) {
         size_ = strlen(text_);
     } else {
         char* ptr = scratch_ + sizeof(scratch_);
-        uintptr_t num = reinterpret_cast<uintptr_t>(value);
+        auto num = reinterpret_cast<uintptr_t>(value);
         static const char kHexDigits[] = "0123456789abcdef";
         do {
             *--ptr = kHexDigits[num & 0xf];

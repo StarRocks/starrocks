@@ -17,8 +17,8 @@
         <java-extensions.home>${basedir}/../</java-extensions.home>
         <slf4j.version>1.7.32</slf4j.version>
         <hudi.version>0.11.1</hudi.version>
-        <fasterxml.version>2.12.6</fasterxml.version>
-        <fasterxml.jackson.databind.version>2.12.6.1</fasterxml.jackson.databind.version>
+        <fasterxml.version>2.13.4</fasterxml.version>
+        <fasterxml.jackson.databind.version>2.13.4.1</fasterxml.jackson.databind.version>
     </properties>
 
     <dependencies>
@@ -106,6 +106,12 @@
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
             <version>${fasterxml.jackson.databind.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.esotericsoftware</groupId>
+            <artifactId>kryo-shaded</artifactId>
+            <version>4.0.2</version>
         </dependency>
 
     </dependencies>

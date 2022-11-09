@@ -290,4 +290,32 @@ public class TimeUtils {
                 return 0;
         }
     }
+
+    /**
+     * Based on the start seconds, get the seconds closest and greater than the target second by interval,
+     * the interval use period and time unit to calculate.
+     *
+     * @param startTimeSecond  start time second
+     * @param targetTimeSecond target time second
+     * @param period           period
+     * @param timeUnit         time unit
+     * @return next valid time second
+     * @throws DdlException
+     */
+    public static long getNextValidTimeSecond(long startTimeSecond, long targetTimeSecond,
+                                              long period, TimeUnit timeUnit) throws DdlException {
+        if (startTimeSecond > targetTimeSecond) {
+            return startTimeSecond;
+        }
+        long intervalSecond = convertTimeUnitValueToSecond(period, timeUnit);
+        if (intervalSecond < 1) {
+            throw new DdlException("Can not get next valid time second," +
+                    "startTimeSecond:" + startTimeSecond +
+                    " period:" + period +
+                    " timeUnit:" + timeUnit);
+        }
+        long difference = targetTimeSecond - startTimeSecond;
+        long step = difference / intervalSecond + 1;
+        return startTimeSecond + step * intervalSecond;
+    }
 }

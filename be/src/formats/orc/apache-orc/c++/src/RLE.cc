@@ -97,7 +97,7 @@ void RleEncoder::writeByte(char c) {
 
 void RleEncoder::recordPosition(PositionRecorder* recorder) const {
     uint64_t flushedSize = outputStream->getSize();
-    uint64_t unflushedSize = static_cast<uint64_t>(bufferPosition);
+    auto unflushedSize = static_cast<uint64_t>(bufferPosition);
     if (outputStream->isCompressed()) {
         recorder->add(flushedSize);
         recorder->add(unflushedSize);

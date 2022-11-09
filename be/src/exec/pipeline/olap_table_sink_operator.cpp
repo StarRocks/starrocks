@@ -13,6 +13,10 @@ namespace starrocks::pipeline {
 Status OlapTableSinkOperator::prepare(RuntimeState* state) {
     Operator::prepare(state);
 
+    state->set_per_fragment_instance_idx(_sender_id);
+
+    RETURN_IF_ERROR(_sink->prepare(state));
+
     RETURN_IF_ERROR(_sink->try_open(state));
 
     return Status::OK();
@@ -108,14 +112,17 @@ Status OlapTableSinkOperator::push_chunk(RuntimeState* state, const vectorized::
 }
 
 OperatorPtr OlapTableSinkOperatorFactory::create(int32_t degree_of_parallelism, int32_t driver_sequence) {
-    DCHECK_EQ(degree_of_parallelism, 1);
-    return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _sink, _fragment_ctx);
+    if (driver_sequence == 0) {
+        return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
+                                                       _sink0, _fragment_ctx);
+    } else {
+        return std::make_shared<OlapTableSinkOperator>(this, _id, _plan_node_id, driver_sequence, _cur_sender_id++,
+                                                       _sinks[driver_sequence - 1].get(), _fragment_ctx);
+    }
 }
 
 Status OlapTableSinkOperatorFactory::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(OperatorFactory::prepare(state));
-
-    RETURN_IF_ERROR(_sink->prepare(state));
 
     return Status::OK();
 }

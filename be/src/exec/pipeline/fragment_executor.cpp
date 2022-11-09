@@ -370,11 +370,9 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
         if (scan_ranges_per_driver_seq.empty()) {
             _fragment_ctx->set_enable_cache(false);
         }
-        // TODO (by satanson): intra-tablet parallelism will emit multiple EOS, this situation hard to handled in
-        //  current version. shared_scan mechanism conflicts with per-tablet computation that is required for query
-        //  cache, so it is turned off at present. in the future, these two issues will be handled.
+        // TODO (by satanson): shared_scan mechanism conflicts with per-tablet computation that is required for query
+        //  cache, so it is turned off at present, it would be solved in the future.
         if (_fragment_ctx->enable_cache()) {
-            enable_tablet_internal_parallel = false;
             enable_shared_scan = false;
         }
 
@@ -405,7 +403,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 
     if (_wg && _wg->big_query_scan_rows_limit() > 0) {
         if (logical_scan_limit >= 0 && logical_scan_limit <= _wg->big_query_scan_rows_limit()) {
-            _query_ctx->set_scan_limit(physical_scan_limit);
+            _query_ctx->set_scan_limit(std::max(_wg->big_query_scan_rows_limit(), physical_scan_limit));
         } else {
             _query_ctx->set_scan_limit(_wg->big_query_scan_rows_limit());
         }
@@ -415,7 +413,7 @@ Status FragmentExecutor::_prepare_exec_plan(ExecEnv* exec_env, const UnifiedExec
 }
 
 Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const UnifiedExecPlanFragmentParams& request) {
-    const auto fragment_instance_id = request.fragment_instance_id();
+    const auto& fragment_instance_id = request.fragment_instance_id();
     const auto degree_of_parallelism = _calc_dop(exec_env, request);
     const auto& fragment = request.common().fragment;
     const auto& params = request.common().params;
@@ -445,13 +443,13 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
         if (sink_profile != nullptr) {
             runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
         }
-        RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink));
+        RETURN_IF_ERROR(_decompose_data_sink_to_operator(runtime_state, &context, request, datasink, tsink,
+                                                         fragment.output_exprs));
     }
     RETURN_IF_ERROR(_fragment_ctx->prepare_all_pipelines());
 
     size_t driver_id = 0;
-    for (auto n = 0; n < pipelines.size(); ++n) {
-        const auto& pipeline = pipelines[n];
+    for (const auto& pipeline : pipelines) {
         // DOP(degree of parallelism) of Pipeline's SourceOperator determines the Pipeline's DOP.
         const auto cur_pipeline_dop = pipeline->source_operator_factory()->degree_of_parallelism();
         VLOG_ROW << "Pipeline " << pipeline->to_readable_string() << " parallel=" << cur_pipeline_dop
@@ -641,16 +639,22 @@ std::shared_ptr<ExchangeSinkOperatorFactory> _create_exchange_sink_operator(Pipe
             context->next_operator_id(), stream_sink.dest_node_id, sink_buffer, sender->get_partition_type(),
             sender->destinations(), is_pipeline_level_shuffle, dest_dop, sender->sender_id(),
             sender->get_dest_node_id(), sender->get_partition_exprs(), sender->get_enable_exchange_pass_through(),
-            fragment_ctx, sender->output_columns());
+            sender->get_enable_exchange_perf() && !context->has_aggregation, fragment_ctx, sender->output_columns());
     return exchange_sink;
 }
 
+DIAGNOSTIC_PUSH
+#if defined(__clang__)
+DIAGNOSTIC_IGNORE("-Wpotentially-evaluated-expression")
+#endif
 Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_state, PipelineBuilderContext* context,
                                                           const UnifiedExecPlanFragmentParams& request,
-                                                          std::unique_ptr<starrocks::DataSink>& datasink) {
+                                                          std::unique_ptr<starrocks::DataSink>& datasink,
+                                                          const TDataSink& thrift_sink,
+                                                          const std::vector<TExpr>& output_exprs) {
     auto fragment_ctx = context->fragment_context();
     if (typeid(*datasink) == typeid(starrocks::ResultSink)) {
-        ResultSink* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
+        auto* result_sink = down_cast<starrocks::ResultSink*>(datasink.get());
         // Result sink doesn't have plan node id;
         OpFactoryPtr op = nullptr;
         if (result_sink->get_sink_type() == TResultSinkType::FILE) {
@@ -664,7 +668,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // Add result sink operator to last pipeline
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::DataStreamSender)) {
-        DataStreamSender* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
+        auto* sender = down_cast<starrocks::DataStreamSender*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto& t_stream_sink = request.output_sink().stream_sink;
 
@@ -683,7 +687,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
         // and source[B] will pull chunk from exchanger
         // so basically you can think exchanger is a chunk repository.
         // Further workflow explanation is in mcast_local_exchange.h file.
-        MultiCastDataStreamSink* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
+        auto* mcast_sink = down_cast<starrocks::MultiCastDataStreamSink*>(datasink.get());
         const auto& sinks = mcast_sink->get_sinks();
         auto& t_multi_case_stream_sink = request.output_sink().multi_cast_stream_sink;
 
@@ -720,13 +724,73 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
             fragment_ctx->pipelines().emplace_back(pp);
         }
     } else if (typeid(*datasink) == typeid(starrocks::stream_load::OlapTableSink)) {
-        runtime_state->set_per_fragment_instance_idx(request.sender_id());
+        size_t desired_tablet_sink_dop = request.pipeline_sink_dop();
+        DCHECK(desired_tablet_sink_dop > 0);
+        size_t source_operator_dop =
+                fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
+
         runtime_state->set_num_per_fragment_instances(request.common().params.num_senders);
-        OpFactoryPtr op =
-                std::make_shared<OlapTableSinkOperatorFactory>(context->next_operator_id(), datasink, fragment_ctx);
-        fragment_ctx->pipelines().back()->add_op_factory(op);
+        std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>> tablet_sinks;
+        for (int i = 1; i < desired_tablet_sink_dop; i++) {
+            Status st;
+            std::unique_ptr<starrocks::stream_load::OlapTableSink> sink =
+                    std::make_unique<starrocks::stream_load::OlapTableSink>(runtime_state->obj_pool(), output_exprs,
+                                                                            &st);
+            RETURN_IF_ERROR(st);
+            if (sink != nullptr) {
+                RETURN_IF_ERROR(sink->init(thrift_sink));
+            }
+            RuntimeProfile* sink_profile = sink->profile();
+            if (sink_profile != nullptr) {
+                runtime_state->runtime_profile()->add_child(sink_profile, true, nullptr);
+            }
+            tablet_sinks.emplace_back(std::move(sink));
+        }
+        OpFactoryPtr tablet_sink_op = std::make_shared<OlapTableSinkOperatorFactory>(
+                context->next_operator_id(), datasink, fragment_ctx, request.sender_id(), desired_tablet_sink_dop,
+                tablet_sinks);
+        // FE will pre-set the parallelism for all fragment instance which contains the tablet sink,
+        // For stream load, routine load or broker load, the desired_tablet_sink_dop set
+        // by FE is same as the source_operator_dop.
+        // For insert into select, in the simplest case like insert into table select * from table2;
+        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop.
+        // However, if the select statement is complex, like insert into table select * from table2 limit 1,
+        // the desired_tablet_sink_dop set by FE is same as the source_operator_dop, and it needs to
+        // add a local passthrough exchange here
+        if (desired_tablet_sink_dop != source_operator_dop) {
+            std::vector<OpFactories> pred_operators_list;
+            pred_operators_list.push_back(fragment_ctx->pipelines().back()->get_op_factories());
+
+            size_t max_row_count = 0;
+            auto* source_operator =
+                    down_cast<SourceOperatorFactory*>(fragment_ctx->pipelines().back()->get_op_factories()[0].get());
+            max_row_count += source_operator->degree_of_parallelism() * runtime_state->chunk_size();
+
+            auto pseudo_plan_node_id = context->next_pseudo_plan_node_id();
+            auto mem_mgr = std::make_shared<LocalExchangeMemoryManager>(
+                    max_row_count * PipelineBuilderContext::localExchangeBufferChunks());
+            auto local_exchange_source = std::make_shared<LocalExchangeSourceOperatorFactory>(
+                    context->next_operator_id(), pseudo_plan_node_id, mem_mgr);
+            local_exchange_source->set_runtime_state(runtime_state);
+            auto exchanger = std::make_shared<PassthroughExchanger>(mem_mgr, local_exchange_source.get());
+
+            auto local_exchange_sink = std::make_shared<LocalExchangeSinkOperatorFactory>(
+                    context->next_operator_id(), pseudo_plan_node_id, exchanger);
+            fragment_ctx->pipelines().back()->add_op_factory(local_exchange_sink);
+
+            OpFactories operators_source_with_local_exchange;
+            local_exchange_source->set_degree_of_parallelism(desired_tablet_sink_dop);
+            operators_source_with_local_exchange.emplace_back(std::move(local_exchange_source));
+            operators_source_with_local_exchange.emplace_back(std::move(tablet_sink_op));
+
+            auto pipeline_with_local_exchange_source =
+                    std::make_shared<Pipeline>(context->next_pipe_id(), operators_source_with_local_exchange);
+            fragment_ctx->pipelines().emplace_back(std::move(pipeline_with_local_exchange_source));
+        } else {
+            fragment_ctx->pipelines().back()->add_op_factory(tablet_sink_op);
+        }
     } else if (typeid(*datasink) == typeid(starrocks::ExportSink)) {
-        ExportSink* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
+        auto* export_sink = down_cast<starrocks::ExportSink*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto output_expr = export_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<ExportSinkOperatorFactory>(
@@ -734,7 +798,7 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
                 fragment_ctx);
         fragment_ctx->pipelines().back()->add_op_factory(op);
     } else if (typeid(*datasink) == typeid(starrocks::MysqlTableSink)) {
-        MysqlTableSink* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
+        auto* mysql_table_sink = down_cast<starrocks::MysqlTableSink*>(datasink.get());
         auto dop = fragment_ctx->pipelines().back()->source_operator_factory()->degree_of_parallelism();
         auto output_expr = mysql_table_sink->get_output_expr();
         OpFactoryPtr op = std::make_shared<MysqlTableSinkOperatorFactory>(
@@ -745,5 +809,6 @@ Status FragmentExecutor::_decompose_data_sink_to_operator(RuntimeState* runtime_
 
     return Status::OK();
 }
+DIAGNOSTIC_POP
 
 } // namespace starrocks::pipeline

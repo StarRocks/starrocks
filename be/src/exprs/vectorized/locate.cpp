@@ -202,8 +202,8 @@ ColumnPtr haystack_vector_and_needle_vector(const ColumnPtr& haystack_ptr, const
 ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnPtr haystack = columns[0];
-    ColumnPtr needle = columns[1];
+    const ColumnPtr& haystack = columns[0];
+    const ColumnPtr& needle = columns[1];
     ColumnPtr start_pos = ColumnHelper::create_const_column<TYPE_INT>(1, columns[0]->size());
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
@@ -216,8 +216,8 @@ ColumnPtr StringFunctions::instr(FunctionContext* context, const Columns& column
 ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnPtr haystack = columns[1];
-    ColumnPtr needle = columns[0];
+    const ColumnPtr& haystack = columns[1];
+    const ColumnPtr& needle = columns[0];
     ColumnPtr start_pos = ColumnHelper::create_const_column<TYPE_INT>(1, columns[0]->size());
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
@@ -230,9 +230,9 @@ ColumnPtr StringFunctions::locate(FunctionContext* context, const Columns& colum
 ColumnPtr StringFunctions::locate_pos(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
 
-    ColumnPtr haystack = columns[1];
-    ColumnPtr needle = columns[0];
-    ColumnPtr start_pos = columns[2];
+    const ColumnPtr& haystack = columns[1];
+    const ColumnPtr& needle = columns[0];
+    const ColumnPtr& start_pos = columns[2];
     if (!haystack->is_constant() && needle->is_constant()) {
         return haystack_vector_and_needle_const(haystack, needle, start_pos);
     } else {

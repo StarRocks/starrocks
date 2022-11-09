@@ -216,7 +216,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                     computeNode = nodeMgr.getComputeNode(hbResponse.getBeId());
                 }
                 if (computeNode != null) {
-                    boolean isChanged = computeNode.handleHbResponse(hbResponse);
+                    boolean isChanged = computeNode.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ClientPool.backendPool.clearPool(new TNetworkAddress(computeNode.getHost(), computeNode.getBePort()));
@@ -243,7 +243,7 @@ public class HeartbeatMgr extends LeaderDaemon {
                 FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getBroker(
                         hbResponse.getName(), hbResponse.getHost(), hbResponse.getPort());
                 if (broker != null) {
-                    boolean isChanged = broker.handleHbResponse(hbResponse);
+                    boolean isChanged = broker.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ClientPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));

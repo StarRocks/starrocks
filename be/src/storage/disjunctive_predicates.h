@@ -51,9 +51,9 @@ public:
     ConjunctivePredicates& operator[](size_t idx) { return _preds[idx]; }
 
     Status convert_to(DisjunctivePredicates* dst, const std::vector<FieldType>& new_types, ObjectPool* obj_pool) const {
-        int num_preds = _preds.size();
+        size_t num_preds = _preds.size();
         dst->_preds.resize(num_preds);
-        for (int i = 0; i < num_preds; ++i) {
+        for (size_t i = 0; i < num_preds; ++i) {
             RETURN_IF_ERROR(_preds[i].convert_to(&dst->_preds[i], new_types, obj_pool));
         }
         return Status::OK();

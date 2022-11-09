@@ -34,7 +34,7 @@ public:
     // NOTE: unlike posix file, the file cannot be writen anymore after `sync`ed.
     Status sync() override { return _os->close(); }
 
-    uint64_t size() const { return _bytes_written; }
+    uint64_t size() const override { return _bytes_written; }
 
     const std::string& filename() const override { return _name; }
 

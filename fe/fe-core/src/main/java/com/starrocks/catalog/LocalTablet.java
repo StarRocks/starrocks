@@ -143,11 +143,11 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return delete || !hasBackend;
     }
 
-    public void addReplica(Replica replica, boolean isRestore) {
+    public void addReplica(Replica replica, boolean updateInvertedIndex) {
         synchronized (replicas) {
             if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
                 replicas.add(replica);
-                if (!isRestore) {
+                if (updateInvertedIndex) {
                     GlobalStateMgr.getCurrentInvertedIndex().addReplica(id, replica);
                 }
             }
@@ -155,7 +155,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     public void addReplica(Replica replica) {
-        addReplica(replica, false);
+        addReplica(replica, true);
     }
 
     /**
@@ -590,29 +590,36 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
 
     /**
      * Check colocate table's tablet health
-     * 1. Mismatch:
-     * backends set:       1,2,3
+     * <p>
+     * 1. Mismatch:<p>
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2,5
      * <p>
-     * backends set:       1,2,3
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2
      * <p>
-     * backends set:       1,2,3
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2,4,5
      * <p>
-     * 2. Version incomplete:
+     * 2. Version incomplete:<p>
      * backend matched, but some replica's version is incomplete
      * <p>
-     * 3. Redundant:
-     * backends set:       1,2,3
+     * 3. Redundant:<p>
+     * backends set:       1,2,3<p>
      * tablet replicas:    1,2,3,4
      * <p>
+     * 4. Replica bad:<p>
+     * If a replica is marked bad, we need to migrate it and all the other replicas corresponding to the same bucket
+     * index in the colocate group to another backend, but the backend where the bad replica sits on may still be
+     * available, so the backend set won't be changed by ColocateBalancer, so we need to learn this state and update
+     * the backend set to replace the backend that has the bad replica. In order to be in consistent with the current
+     * logic, we return COLOCATE_MISMATCH not REPLICA_MISSING.
+     * <p></p>
      * No need to check if backend is available. We consider all backends in 'backendsSet' are available,
      * If not, unavailable backends will be relocated by ColocateTableBalancer first.
      */
     public TabletStatus getColocateHealthStatus(long visibleVersion,
                                                 int replicationNum, Set<Long> backendsSet) {
-
         // 1. check if replicas' backends are mismatch
         Set<Long> replicaBackendIds = getBackendIds();
         for (Long backendId : backendsSet) {
@@ -627,6 +634,10 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
             // this kind of replica should be drooped.
             if (!backendsSet.contains(replica.getBackendId())) {
                 continue;
+            }
+
+            if (replica.isBad()) {
+                return TabletStatus.COLOCATE_MISMATCH;
             }
 
             if (replica.getLastFailedVersion() > 0 || replica.getVersion() < visibleVersion) {

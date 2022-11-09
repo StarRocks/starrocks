@@ -439,6 +439,7 @@ public class SchemaTable extends Table {
                                             .column("EXPIRE_TIME", ScalarType.createType(PrimitiveType.DATETIME))
                                             .column("ERROR_CODE", ScalarType.createType(PrimitiveType.BIGINT))
                                             .column("ERROR_MESSAGE", ScalarType.createVarchar(MAX_FIELD_VARCHARLENGTH))
+                                            .column("PROGRESS", ScalarType.createVarchar(64))
                                             .build()))
                     .put("materialized_views",
                             new SchemaTable(

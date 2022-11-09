@@ -105,7 +105,7 @@ bool ObjectColumn<T>::append_strings(const Buffer<starrocks::Slice>& strs) {
 
 template <typename T>
 void ObjectColumn<T>::append_value_multiple_times(const void* value, size_t count) {
-    const Slice* slice = reinterpret_cast<const Slice*>(value);
+    const auto* slice = reinterpret_cast<const Slice*>(value);
     _pool.reserve(_pool.size() + count);
 
     for (size_t i = 0; i < count; ++i) {

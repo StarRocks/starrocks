@@ -40,7 +40,7 @@ namespace starrocks {
 // = 252: the next two byte is length
 // = 253: the next three byte is length
 // = 254: the next eighth byte is length
-static char* pack_vlen(char* packet, uint64_t length) {
+static uint8_t* pack_vlen(uint8_t* packet, uint64_t length) {
     if (length < 251ULL) {
         int1store(packet, length);
         return packet + 1;
@@ -220,7 +220,7 @@ char* MysqlRowBuffer::_escape(char* dst, const char* src, size_t length, char es
 
 void MysqlRowBuffer::_push_string_normal(const char* str, size_t length) {
     char* pos = _resize_extra(9 + length);
-    pos = pack_vlen(pos, length);
+    pos = reinterpret_cast<char*>(pack_vlen(reinterpret_cast<uint8_t*>(pos), length));
     strings::memcpy_inlined(pos, str, length);
     pos += length;
     DCHECK(pos >= _data.data() && pos <= _data.data() + _data.size());

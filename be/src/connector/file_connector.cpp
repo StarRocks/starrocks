@@ -9,8 +9,7 @@
 #include "exec/vectorized/parquet_scanner.h"
 #include "exprs/expr.h"
 
-namespace starrocks {
-namespace connector {
+namespace starrocks::connector {
 using namespace vectorized;
 
 DataSourceProviderPtr FileConnector::create_data_source_provider(vectorized::ConnectorScanNode* scan_node,
@@ -169,5 +168,4 @@ void FileDataSource::_update_counter() {
     COUNTER_UPDATE(_scanner_file_reader_timer, _counter.file_read_ns);
 }
 
-} // namespace connector
-} // namespace starrocks
+} // namespace starrocks::connector

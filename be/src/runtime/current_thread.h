@@ -267,4 +267,17 @@ private:
         TRY_CATCH_ALLOC_SCOPE_END()             \
     } while (0)
 
+#define TRY_CATCH_ALL(result, stmt)                                                      \
+    do {                                                                                 \
+        try {                                                                            \
+            SCOPED_SET_CATCHED(true);                                                    \
+            { result = stmt; }                                                           \
+        } catch (std::runtime_error const& e) {                                          \
+            result = Status::RuntimeError(fmt::format("Runtime error: {}", e.what()));   \
+        } catch (std::exception const& e) {                                              \
+            result = Status::InternalError(fmt::format("Internal error: {}", e.what())); \
+        } catch (...) {                                                                  \
+            result = Status::Unknown("Unknown error");                                   \
+        }                                                                                \
+    } while (0)
 } // namespace starrocks

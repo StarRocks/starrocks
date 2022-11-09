@@ -1,12 +1,12 @@
-# Deploy a Compute Node
+# Deploy a Compute Node [Preview]
 
-A Compute Node (CN) a stateless computing service that does not maintain data itself. It only provides extra computing resources during queries. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
+A compute node (CN) is a stateless computing service that does not maintain data itself. It only provides extra computing resources for queries. This topic describes how to configure and deploy a CN node. You can add multiple CN nodes by repeating the following steps.
 
 ## Principle
 
-The life cycle of SQL statements in StarRocks can be divided into three phases: query parsing, planning, and execution. CN takes some or all of the computation tasks in the execution phase. Its working processing is as follows: first, FE divides the parsed SQL statements into logical execution units, splits the logical execution units into physical execution units according to the data distribution and operator types, and then assigns them to BEs and CNs.
+The lifecycle of an SQL statement in StarRocks can be divided into three phases: query parsing, planning, and execution. CN takes some or all of the computation tasks in the execution phase. It works as follows: First, the FE splits the parsed SQL statements into logical execution units, splits the logical execution units into physical execution units according to data distribution and operator types, and then assigns them to BEs and CNs.
 
-During execution, BEs do the computation tasks before data shuffle, and data read and write. CNs receive the shuffled data from BEs, do part of the computation tasks such as JOIN, and return the results to FEs.
+During query execution, BEs run computation tasks that are prior to data shuffling, and perform data reading and writing. CNs receive the shuffled data from BEs, run part of the computation tasks such as JOIN, and return the results to FEs.
 
 ## Download and decompress the installer
 
@@ -18,9 +18,9 @@ tar -xzvf StarRocks-x.x.x.tar.gz
 
 > Caution
 >
-> Replace the file name in the command as the real file name you downloaded.
+> Replace the file name in the command with the actual name of the file you downloaded.
 
-## Configure CN node
+## Configure a CN node
 
 Navigate to the **StarRocks-x.x.x/be** path.
 
@@ -30,13 +30,13 @@ cd StarRocks-x.x.x/be
 
 > Caution
 >
-> Replace the file name in the command as the real file name you downloaded.
+> Replace the file name in the command with the actual name of the file you downloaded.
 
-Modify the CN node configuration file **conf/cn.conf**. Because the default configuration can be used directly, no configuration item is changed in the following example. If you need to change any configuration item in the production environment, see [Configuration](../administration/Configuration.md) for more instruction, because most of its parameters are inherited from BE.
+Modify the CN configuration file **conf/cn.conf**. Because the default configuration can be used directly to start the cluster, the following example does not change any configuration item. If you need to change a configuration item in the production environment, see [BE configuration items](../administration/Configuration.md#be-configuration-items) for instructions, because most of CN's parameters are inherited from BEs.
 
 ## Add a CN node
 
-Add a CN node to StarRocks cluster via your MySQL client.
+Add a CN node to the StarRocks cluster via your MySQL client.
 
 ```sql
 mysql> ALTER SYSTEM ADD COMPUTE NODE "host:port";
@@ -44,9 +44,9 @@ mysql> ALTER SYSTEM ADD COMPUTE NODE "host:port";
 
 > Caution
 >
-> Parameter `host` must match the pre-specified `priority_networks`, and parameter `port` must match the `heartbeat_service_port` specified in **cn.conf** (default is`9050`).
+> `host` must match the pre-specified `priority_networks`, and `port` must match `heartbeat_service_port` specified in **cn.conf** (defaults to `9050`).
 
-If any problem occur while adding the CN node, you can drop it with the following command.
+If any issue occurs when you add the CN node, you can drop the node by using the following command:
 
 ```sql
 mysql> ALTER SYSTEM DROP COMPUTE NODE "host:port";
@@ -54,19 +54,19 @@ mysql> ALTER SYSTEM DROP COMPUTE NODE "host:port";
 
 > Caution
 >
-> Parameter `host` and `port` must be identical with those when adding the node.
+> `host` and `port` must be the same as those of the CN node you added.
 
 ## Start the CN node
 
-Run the following command to start the CN node.
+Run the following command to start the CN node:
 
 ```shell
-sh bin/start_cn.sh --daemon
+./bin/start_cn.sh --daemon
 ```
 
-## Verify if CN node starts
+## Check whether the CN node starts
 
-You can verify if the CN node is started properly via MySQL client.
+You can check whether the CN node starts properly by via your MySQL client.
 
 ```sql
 SHOW PROC '/compute_nodes'\G
@@ -94,15 +94,15 @@ ClusterDecommissioned: false
 1 row in set (0.01 sec)
 ```
 
-When the field `Alive` is `true`, the CN node is properly started and added to the cluster.
+If `Alive` is `true`, the CN node is properly started and added to the cluster.
 
-If the CN node is not properly added to the cluster, you can check the **log/cn.WARNING** log file to troubleshoot the problem.
+If the CN node is not properly added to the cluster, you can check the **log/cn.WARNING** log file for troubleshooting.
 
-After the Compute Nodes are started properly, you need to set the system variables `prefer_compute_node`, and `use_compute_nodes` to allow them to scale the computing resources out during queries. See [System Variables](../reference/System_variable.md) for more information.
+After CNs are properly started, you need to set the system variables `prefer_compute_node` and `use_compute_nodes` to scale computing resources during queries. For more information, see [System variables](../reference/System_variable.md).
 
-## Stop CN node
+## Stop the CN node
 
-Run the following command to stop the CN node.
+Run the following command to stop the CN node:
 
 ```bash
 ./bin/stop_cn.sh

@@ -123,7 +123,7 @@ Having installed StarRocks, you need to start the FE node. FE is the front layer
 5. Start FE node.
 
   ```Plain
-  sh fe/bin/start_fe.sh --daemon
+  ./fe/bin/start_fe.sh --daemon
   ```
 
 6. Verify if the FE node is started successfully.
@@ -194,7 +194,7 @@ After FE node is started, you need to start the BE node. BE is the executing lay
 4. Start BE node.
 
   ```Plain
-  sh be/bin/start_be.sh --daemon
+  ./be/bin/start_be.sh --daemon
   ```
 
 5. Verify if the BE node is started successfully.
@@ -312,13 +312,13 @@ You can stop the StarRocks cluster by running the following commands.
 1. Stop the FE node.
 
   ```Plain
-  sh fe/bin/stop_fe.sh --daemon
+  ./fe/bin/stop_fe.sh --daemon
   ```
 
 2. Stop the BE node.
 
   ```Plain
-  sh be/bin/stop_be.sh --daemon
+  ./be/bin/stop_be.sh --daemon
   ```
 
 ## Troubleshooting

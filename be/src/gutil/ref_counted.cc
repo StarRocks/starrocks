@@ -12,10 +12,11 @@ namespace starrocks::subtle {
 
 RefCountedBase::RefCountedBase()
 #ifndef NDEBUG
-        : in_dtor_(false)
-#endif
-{
+        : in_dtor_(false) {
 }
+#else
+        = default;
+#endif
 
 RefCountedBase::~RefCountedBase() {
 #ifndef NDEBUG

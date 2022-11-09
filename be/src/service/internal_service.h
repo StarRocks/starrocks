@@ -21,14 +21,10 @@
 
 #pragma once
 
-#include "common/compiler_util.h"
-
-DIAGNOSTIC_PUSH
-DIAGNOSTIC_IGNORE("-Wclass-memaccess")
 #include <bthread/condition_variable.h>
 #include <bthread/mutex.h>
-DIAGNOSTIC_POP
 
+#include "common/compiler_util.h"
 #include "common/status.h"
 #include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"

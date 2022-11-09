@@ -51,7 +51,7 @@ public class PruneWindowColumnsRule extends TransformationRule {
             return Collections.emptyList();
         }
 
-        //If newWindowCall is empty, it will be clipped in PruneEmptyWindowRule,
+        // If newWindowCall is empty, it will be clipped in PruneEmptyWindowRule,
         // so it is directly transmitted requiredOutputColumns here
         if (newWindowCall.isEmpty()) {
             requiredOutputColumns.clear();

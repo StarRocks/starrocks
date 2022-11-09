@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <boost/tokenizer.hpp>
+#include <memory>
 
 #include "column/column_viewer.h"
 #include "common/status.h"
@@ -67,7 +68,7 @@ void ArraySelectorSlice::iterate(vpack::Slice array_slice, std::function<void(vp
 // 3. arr[1:3] select slice of elements
 Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelector>* output) {
     if (index.empty()) {
-        output->reset(new ArraySelectorNone());
+        *output = std::make_unique<ArraySelectorNone>();
         return Status::OK();
     } else if (ArraySelectorSingle::match(index)) {
         StringParser::ParseResult result;
@@ -75,10 +76,10 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
         if (result != StringParser::PARSE_SUCCESS) {
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }
-        output->reset(new ArraySelectorSingle(index_int));
+        *output = std::make_unique<ArraySelectorSingle>(index_int);
         return Status::OK();
     } else if (ArraySelectorWildcard::match(index)) {
-        output->reset(new ArraySelectorWildcard());
+        *output = std::make_unique<ArraySelectorWildcard>();
         return Status::OK();
     } else if (ArraySelectorSlice::match(index)) {
         std::vector<std::string> slices = strings::Split(index, ":");
@@ -96,7 +97,7 @@ Status ArraySelector::parse(const std::string& index, std::unique_ptr<ArraySelec
             return Status::InvalidArgument(strings::Substitute("Invalid json path: $0", index));
         }
 
-        output->reset(new ArraySelectorSlice(left, right));
+        *output = std::make_unique<ArraySelectorSlice>(left, right);
         return Status::OK();
     }
 

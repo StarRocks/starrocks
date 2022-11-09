@@ -4,8 +4,7 @@
 
 #include "util/logging.h"
 
-namespace starrocks {
-namespace pipeline {
+namespace starrocks::pipeline {
 
 static const size_t kBufferedRowSizeScaleFactor = 16;
 
@@ -13,7 +12,7 @@ MultiCastLocalExchanger::MultiCastLocalExchanger(RuntimeState* runtime_state, si
         : _runtime_state(runtime_state),
           _mutex(),
           _consumer_number(consumer_number),
-          _current_accumulated_row_size(0),
+
           _progress(consumer_number),
           _opened_source_opcount(consumer_number) {
     Cell* dummy = new Cell();
@@ -237,5 +236,4 @@ void MultiCastLocalExchangeSinkOperator::update_counter(size_t memory_usage, siz
     _peak_buffer_row_size_counter->set(buffer_row_size);
 }
 
-} // namespace pipeline
-} // namespace starrocks
+} // namespace starrocks::pipeline

@@ -9,12 +9,11 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class StringFunctionConcatTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -277,7 +276,7 @@ TEST_F(StringFunctionConcatTest, concatConstOversizeTest) {
     }
 }
 
-static inline void concat_not_const_test(NullColumnPtr null_col, Columns const& columns, size_t col_idx,
+static inline void concat_not_const_test(const NullColumnPtr& null_col, Columns const& columns, size_t col_idx,
                                          const size_t limit) {
     std::shared_ptr<FunctionContext> context(FunctionContext::create_test_context());
     auto result = StringFunctions::concat(context.get(), columns);
@@ -320,8 +319,8 @@ static inline void concat_not_const_test(NullColumnPtr null_col, Columns const& 
     }
 }
 
-static inline void concat_not_const_test(NullColumnPtr null_col, ColumnPtr col0, ColumnPtr col1, ColumnPtr col2,
-                                         ColumnPtr col3, const size_t limit) {
+static inline void concat_not_const_test(const NullColumnPtr& null_col, const ColumnPtr& col0, const ColumnPtr& col1,
+                                         const ColumnPtr& col2, const ColumnPtr& col3, const size_t limit) {
     concat_not_const_test(null_col, {NullableColumn::create(col0, null_col), col1, col2, col3}, 0, limit);
     /*
     concat_not_const_test(null_col, {col1, NullableColumn::create(col0, null_col), col2, col3}, 1,
@@ -402,8 +401,8 @@ TEST_F(StringFunctionConcatTest, concatNotConstBigOversizeTest) {
     concat_not_const_test(null_col, col0, col1, col2, col3, 0);
 }
 
-static inline void concat_ws_test(NullColumnPtr sep_null_col, NullColumnPtr null_col, ColumnPtr sep,
-                                  Columns const& columns, size_t col_idx, const size_t limit) {
+static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col,
+                                  const ColumnPtr& sep, Columns const& columns, size_t col_idx, const size_t limit) {
     std::shared_ptr<FunctionContext> context(FunctionContext::create_test_context());
     auto result = StringFunctions::concat_ws(context.get(), columns);
     auto union_null_col = FunctionHelper::union_null_column(sep_null_col, null_col);
@@ -447,8 +446,9 @@ static inline void concat_ws_test(NullColumnPtr sep_null_col, NullColumnPtr null
         }
     }
 }
-static inline void concat_ws_test(NullColumnPtr sep_null_col, NullColumnPtr null_col, ColumnPtr sep_col, ColumnPtr col0,
-                                  ColumnPtr col1, ColumnPtr col2, ColumnPtr col3, const size_t limit) {
+static inline void concat_ws_test(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col,
+                                  const ColumnPtr& sep_col, const ColumnPtr& col0, const ColumnPtr& col1,
+                                  const ColumnPtr& col2, const ColumnPtr& col3, const size_t limit) {
     auto nullable_sep_col = NullableColumn::create(sep_col, sep_null_col);
     concat_ws_test(sep_null_col, null_col, sep_col,
                    {nullable_sep_col, NullableColumn::create(col0, null_col), col1, col2, col3}, 1, limit);
@@ -484,8 +484,9 @@ static inline void concat_ws_test(NullColumnPtr sep_null_col, NullColumnPtr null
                    limit);
     */
 }
-void prepare_concat_ws_data(NullColumnPtr sep_null_col, NullColumnPtr null_col, ColumnPtr sep, ColumnPtr col0,
-                            ColumnPtr col1, ColumnPtr col2, ColumnPtr col3) {
+void prepare_concat_ws_data(const NullColumnPtr& sep_null_col, const NullColumnPtr& null_col, const ColumnPtr& sep,
+                            const ColumnPtr& col0, const ColumnPtr& col1, const ColumnPtr& col2,
+                            const ColumnPtr& col3) {
     for (auto i = 0; i < 5; ++i) {
         sep->append_datum(Slice(""));
         sep->append_datum(Slice("x"));
@@ -563,5 +564,4 @@ TEST_F(StringFunctionConcatTest, concatWsBigOversizeTest) {
     prepare_concat_ws_data(sep_null_col, null_col, sep, col0, col1, col2, col3);
     concat_ws_test(sep_null_col, null_col, sep, col0, col1, col2, col3, 30);
 }
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

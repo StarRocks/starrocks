@@ -174,7 +174,7 @@ starrocks_udf::FunctionContext* FunctionContextImpl::create_context(
         RuntimeState* state, MemPool* pool, const starrocks_udf::FunctionContext::TypeDesc& intermediate_type,
         const starrocks_udf::FunctionContext::TypeDesc& return_type,
         const std::vector<starrocks_udf::FunctionContext::TypeDesc>& arg_types, int varargs_buffer_size, bool debug) {
-    starrocks_udf::FunctionContext* ctx = new starrocks_udf::FunctionContext();
+    auto* ctx = new starrocks_udf::FunctionContext();
     ctx->_impl->_state = state;
     ctx->_impl->_mem_pool = pool;
     ctx->_impl->_pool = new FreePool(pool);
@@ -208,7 +208,7 @@ namespace starrocks_udf {
 static const int MAX_WARNINGS = 1000;
 
 FunctionContext* FunctionContext::create_test_context() {
-    FunctionContext* context = new FunctionContext();
+    auto* context = new FunctionContext();
     context->impl()->_debug = true;
     context->impl()->_state = nullptr;
     context->impl()->_pool = new starrocks::FreePool(nullptr);
@@ -292,7 +292,7 @@ void FunctionContext::free(uint8_t* buffer) {
     }
 
     if (_impl->_debug) {
-        std::map<uint8_t*, int>::iterator it = _impl->_allocations.find(buffer);
+        auto it = _impl->_allocations.find(buffer);
 
         if (it != _impl->_allocations.end()) {
             // fill in garbage value into the buffer to increase the chance of detecting misuse

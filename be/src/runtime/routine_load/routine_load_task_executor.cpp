@@ -174,7 +174,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     // convert pb repeated value to vector
     std::vector<std::string> partitions;
     partitions.reserve(request.partitions().size());
-    for (auto p : request.partitions()) {
+    for (const auto& p : request.partitions()) {
         partitions.push_back(p);
     }
 
@@ -183,7 +183,7 @@ Status RoutineLoadTaskExecutor::get_pulsar_partition_backlog(const PPulsarBacklo
     Status st;
     std::shared_ptr<DataConsumer> consumer;
     RETURN_IF_ERROR(_data_consumer_pool.get_consumer(&ctx, &consumer));
-    for (auto p : partitions) {
+    for (const auto& p : partitions) {
         int64_t backlog = 0;
         RETURN_IF_ERROR(std::static_pointer_cast<PulsarDataConsumer>(consumer)->assign_partition(p, &ctx));
         st = std::static_pointer_cast<PulsarDataConsumer>(consumer)->get_partition_backlog(&backlog);

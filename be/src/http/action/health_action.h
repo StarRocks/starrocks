@@ -37,7 +37,7 @@ public:
     void handle(HttpRequest* req) override;
 
 private:
-    ExecEnv* _exec_env;
+    [[maybe_unused]] ExecEnv* _exec_env;
 };
 
 } // end namespace starrocks

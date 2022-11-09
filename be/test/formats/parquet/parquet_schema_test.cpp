@@ -11,8 +11,8 @@ namespace starrocks::parquet {
 
 class ParquetSchemaTest : public testing::Test {
 public:
-    ParquetSchemaTest() {}
-    virtual ~ParquetSchemaTest() {}
+    ParquetSchemaTest() = default;
+    ~ParquetSchemaTest() override = default;
 };
 
 TEST_F(ParquetSchemaTest, EmptySchema) {

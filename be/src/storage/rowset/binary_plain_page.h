@@ -69,10 +69,10 @@ public:
         return (_options.data_page_size != 0) & (_size_estimate > _options.data_page_size);
     }
 
-    size_t add(const uint8_t* vals, size_t count) override {
+    uint32_t add(const uint8_t* vals, uint32_t count) override {
         DCHECK(!_finished);
         const Slice* slices = reinterpret_cast<const Slice*>(vals);
-        for (size_t i = 0; i < count; i++) {
+        for (auto i = 0; i < count; i++) {
             if (!add_slice(slices[i])) {
                 return i;
             }
@@ -120,7 +120,7 @@ public:
         _finished = false;
     }
 
-    size_t count() const override { return _offsets.size(); }
+    uint32_t count() const override { return _offsets.size(); }
 
     uint64_t size() const override { return _size_estimate; }
 
@@ -189,14 +189,15 @@ public:
 
         // Decode trailer
         _num_elems = decode_fixed32_le((const uint8_t*)&_data[_data.get_size() - sizeof(uint32_t)]);
-        _offsets_pos = _data.get_size() - (_num_elems + 1) * sizeof(uint32_t);
+        _offsets_pos =
+                static_cast<uint32_t>(_data.get_size()) - (_num_elems + 1) * static_cast<uint32_t>(sizeof(uint32_t));
 
         _parsed = true;
 
         return Status::OK();
     }
 
-    Status seek_to_position_in_page(size_t pos) override {
+    Status seek_to_position_in_page(uint32_t pos) override {
         DCHECK_LE(pos, _num_elems);
         _cur_idx = pos;
         return Status::OK();
@@ -230,19 +231,19 @@ public:
 
     Status next_batch(const vectorized::SparseRange& range, vectorized::Column* dst) override;
 
-    size_t count() const override {
+    uint32_t count() const override {
         DCHECK(_parsed);
         return _num_elems;
     }
 
-    size_t current_index() const override {
+    uint32_t current_index() const override {
         DCHECK(_parsed);
         return _cur_idx;
     }
 
     EncodingTypePB encoding_type() const override { return PLAIN_ENCODING; }
 
-    Slice string_at_index(size_t idx) const {
+    Slice string_at_index(uint32_t idx) const {
         const uint32_t start_offset = offset(idx);
         uint32_t len = offset(static_cast<int>(idx) + 1) - start_offset;
         return Slice(&_data[start_offset], len);
@@ -284,7 +285,7 @@ private:
     }
 
     uint32_t offset_uncheck(int idx) const {
-        const uint32_t pos = _offsets_pos + idx * sizeof(uint32_t);
+        const uint32_t pos = _offsets_pos + idx * static_cast<uint32_t>(sizeof(uint32_t));
         const uint8_t* const p = reinterpret_cast<const uint8_t*>(&_data[pos]);
         return decode_fixed32_le(p);
     }

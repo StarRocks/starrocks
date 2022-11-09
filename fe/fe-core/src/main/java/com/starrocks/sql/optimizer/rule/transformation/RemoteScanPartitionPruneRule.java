@@ -8,7 +8,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -36,8 +35,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 
-import static com.starrocks.external.PartitionUtil.createPartitionKey;
-import static com.starrocks.external.PartitionUtil.toPartitionValues;
+import static com.starrocks.connector.PartitionUtil.createPartitionKey;
+import static com.starrocks.connector.PartitionUtil.toPartitionValues;
 
 public class RemoteScanPartitionPruneRule extends TransformationRule {
     private static final Logger LOG = LogManager.getLogger(RemoteScanPartitionPruneRule.class);
@@ -94,15 +93,15 @@ public class RemoteScanPartitionPruneRule extends TransformationRule {
 
             List<String> partitionNames = GlobalStateMgr.getCurrentState().getMetadataMgr().listPartitionNames(
                     hmsTable.getCatalogName(), hmsTable.getDbName(), hmsTable.getTableName());
-            context.getDumpInfo().getHMSTable(hmsTable.getCatalogName(), hmsTable.getDbName(),
-                    hmsTable.getTableName()).setPartitionNames(partitionNames);
+            context.getDumpInfo().getHMSTable(hmsTable.getResourceName(), hmsTable.getDbName(),
+                    hmsTable.getTableName()).setPartitionNames(new ArrayList<>());
 
             Map<PartitionKey, Long> partitionKeys = Maps.newHashMap();
             if (!hmsTable.isUnPartitioned()) {
                 long partitionId = 0;
                 for (String partName : partitionNames) {
                     List<String> values = toPartitionValues(partName);
-                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table instanceof HudiTable);
+                    PartitionKey partitionKey = createPartitionKey(values, partitionColumns, table.getType());
                     partitionKeys.put(partitionKey, partitionId++);
                 }
             } else {

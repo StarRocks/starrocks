@@ -152,6 +152,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_PIPELINE_ENGINE = "enable_pipeline_engine";
     public static final String ENABLE_PIPELINE_QUERY_STATISTIC = "enable_pipeline_query_statistic";
 
+    public static final String ENABLE_MV_PLANNER = "enable_mv_planner";
+    public static final String ENABLE_REALTIME_REFRESH_MV = "enable_realtime_mv";
+
     /**
      * Whether to allow the generation of one-phase local aggregation with the local shuffle operator
      * (ScanNode->LocalShuffleNode->OnePhaseAggNode) regardless of the differences between grouping keys
@@ -241,7 +244,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
     public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
-    public static final String ENABLE_REPLICATED_STORAGE = "enable_replicated_storage";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -252,6 +254,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_COLUMN_EXPR_PREDICATE = "enable_column_expr_predicate";
     public static final String ENABLE_EXCHANGE_PASS_THROUGH = "enable_exchange_pass_through";
+    public static final String ENABLE_EXCHANGE_PERF = "enable_exchange_perf";
 
     public static final String SINGLE_NODE_EXEC_PLAN = "single_node_exec_plan";
 
@@ -264,6 +267,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // if the gc of any service is caused, you can set the value to 100 for testing.
     public static final String HIVE_PARTITION_STATS_SAMPLE_SIZE = "hive_partition_stats_sample_size";
 
+    public static final String PIPELINE_SINK_DOP = "pipeline_sink_dop";
     public static final String RUNTIME_FILTER_SCAN_WAIT_TIME = "runtime_filter_scan_wait_time";
     public static final String RUNTIME_FILTER_ON_EXCHANGE_NODE = "runtime_filter_on_exchange_node";
     public static final String ENABLE_MULTI_COLUMNS_ON_GLOBAL_RUNTIME_FILTER =
@@ -278,14 +282,23 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_QUERY_DEBUG_TRACE = "enable_query_debug_trace";
 
+    public static final String INTERPOLATE_PASSTHROUGH = "interpolate_passthrough";
+
     public static final String PARSE_TOKENS_LIMIT = "parse_tokens_limit";
 
+    public static final String ENABLE_SORT_AGGREGATE = "enable_sort_aggregate";
+
     public static final String ENABLE_SCAN_BLOCK_CACHE = "enable_scan_block_cache";
+    public static final String ENABLE_POPULATE_BLOCK_CACHE = "enable_populate_block_cache";
+
 
     public static final String ENABLE_QUERY_CACHE = "enable_query_cache";
     public static final String QUERY_CACHE_FORCE_POPULATE = "query_cache_force_populate";
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
+    public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+    public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(ENABLE_SPILLING)
@@ -305,6 +318,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_PIPELINE, alias = ENABLE_PIPELINE_ENGINE, show = ENABLE_PIPELINE_ENGINE)
     private boolean enablePipelineEngine = true;
+
+    @VarAttr(name = ENABLE_MV_PLANNER)
+    private boolean enableMVPlanner = false;
+    @VarAttr(name = ENABLE_REALTIME_REFRESH_MV)
+    private boolean enableRealtimeRefreshMV = false;
 
     @VarAttr(name = ENABLE_PIPELINE_QUERY_STATISTIC)
     private boolean enablePipelineQueryStatistic = true;
@@ -548,7 +566,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enablePredicateReorder = false;
 
     @VariableMgr.VarAttr(name = ENABLE_FILTER_UNUSED_COLUMNS_IN_SCAN_STAGE)
-    private boolean enableFilterUnusedColumnsInScanStage = false;
+    private boolean enableFilterUnusedColumnsInScanStage = true;
 
     @VariableMgr.VarAttr(name = CBO_MAX_REORDER_NODE_USE_EXHAUSTIVE)
     private int cboMaxReorderNodeUseExhaustive = 4;
@@ -600,13 +618,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int newPlannerAggStage = 0;
 
     @VariableMgr.VarAttr(name = TRANSMISSION_COMPRESSION_TYPE)
-    private String transmissionCompressionType = "LZ4";
+    private String transmissionCompressionType = "NO_COMPRESSION";
+
+    @VariableMgr.VarAttr(name = TRANSMISSION_ENCODE_LEVEL)
+    private int transmissionEncodeLevel = 7;
 
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
-
-    @VariableMgr.VarAttr(name = ENABLE_REPLICATED_STORAGE)
-    private boolean enableReplicatedStorage = false;
 
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
@@ -636,6 +654,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PASS_THROUGH, flag = VariableMgr.INVISIBLE)
     private boolean enableExchangePassThrough = true;
 
+    @VariableMgr.VarAttr(name = ENABLE_EXCHANGE_PERF, flag = VariableMgr.INVISIBLE)
+    private boolean enableExchangePerf = false;
+
     @VariableMgr.VarAttr(name = ALLOW_DEFAULT_PARTITION, flag = VariableMgr.INVISIBLE)
     private boolean allowDefaultPartition = false;
 
@@ -648,6 +669,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = HIVE_PARTITION_STATS_SAMPLE_SIZE)
     private int hivePartitionStatsSampleSize = 3000;
 
+    @VariableMgr.VarAttr(name = PIPELINE_SINK_DOP)
+    private int pipelineSinkDop = 0;
+
     @VariableMgr.VarAttr(name = JOIN_IMPLEMENTATION_MODE_V2, alias = JOIN_IMPLEMENTATION_MODE)
     private String joinImplementationMode = "auto"; // auto, merge, hash, nestloop
 
@@ -656,6 +680,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = ENABLE_QUERY_DEBUG_TRACE, flag = VariableMgr.INVISIBLE)
     private boolean enableQueryDebugTrace = false;
+
+    @VariableMgr.VarAttr(name = INTERPOLATE_PASSTHROUGH, flag = VariableMgr.INVISIBLE)
+    private boolean interpolatePassthrough = true;
 
     @VarAttr(name = STATISTIC_COLLECT_PARALLEL)
     private int statisticCollectParallelism = 1;
@@ -674,8 +701,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = PARSE_TOKENS_LIMIT)
     private int parseTokensLimit = 3500000;
 
+    @VarAttr(name = ENABLE_SORT_AGGREGATE)
+    private boolean enableSortAggregate = false;
+
+    public boolean isEnableSortAggregate() {
+        return enableSortAggregate;
+    }
+
+    public void setEnableSortAggregate(boolean enableSortAggregate) {
+        this.enableSortAggregate = enableSortAggregate;
+    }
+    
     @VariableMgr.VarAttr(name = ENABLE_SCAN_BLOCK_CACHE)
     private boolean useScanBlockCache = false;
+
+    @VariableMgr.VarAttr(name = ENABLE_POPULATE_BLOCK_CACHE)
+    private boolean enablePopulateBlockCache = true;
 
     public boolean getUseScanBlockCache() {
         return useScanBlockCache;
@@ -692,6 +733,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
+
+    @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
+    private int nestedMvRewriteMaxLevel = 3;
+    
+    public boolean getEnablePopulateBlockCache() {
+        return enablePopulateBlockCache;
+    }
 
     public void setCboCTEMaxLimit(int cboCTEMaxLimit) {
         this.cboCTEMaxLimit = cboCTEMaxLimit;
@@ -751,6 +799,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public int getHivePartitionStatsSampleSize() {
         return hivePartitionStatsSampleSize;
+    }
+
+    public int getPipelineSinkDop() {
+        return pipelineSinkDop;
+    }
+
+    public void setPipelineSinkDop(int dop) {
+        this.pipelineSinkDop = dop;
     }
 
     public long getMaxExecMemByte() {
@@ -922,7 +978,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enablePredicateReorder = true;
     }
 
-    public boolean isAbleFilterUnusedColumnsInScanStage() {
+    public boolean isEnableFilterUnusedColumnsInScanStage() {
         return enableFilterUnusedColumnsInScanStage;
     }
 
@@ -1058,6 +1114,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableDeliverBatchFragments;
     }
 
+    public boolean isMVPlanner() {
+        return enableMVPlanner;
+    }
+
+    public void setMVPlanner(boolean enable) {
+        this.enableMVPlanner = enable;
+    }
+
+    public boolean isEnableRealtimeRefreshMV() {
+        return enableRealtimeRefreshMV;
+    }
+
+    public void setEnableRealtimeRefreshMv(boolean enable) {
+        this.enableRealtimeRefreshMV = enable;
+    }
+
     public boolean isEnablePipelineEngine() {
         return enablePipelineEngine;
     }
@@ -1170,6 +1242,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableExchangePassThrough;
     }
 
+    public boolean isEnableExchangePerf() {
+        return enableExchangePerf;
+    }
+
     public boolean isAllowDefaultPartition() {
         return allowDefaultPartition;
     }
@@ -1257,16 +1333,20 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return loadTransmissionCompressionType;
     }
 
+    public boolean isInterpolatePassthrough() {
+        return interpolatePassthrough;
+    }
+
+    public void setInterpolatePassthrough(boolean value) {
+        this.interpolatePassthrough = value;
+    }
+
     public int getParseTokensLimit() {
         return parseTokensLimit;
     }
 
     public void setParseTokensLimit(int parseTokensLimit) {
         this.parseTokensLimit = parseTokensLimit;
-    }
-
-    public boolean getEnableReplicatedStorage() {
-        return enableReplicatedStorage;
     }
 
     public boolean isEnableQueryCache() {
@@ -1287,6 +1367,18 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
+    }
+
+    public int getNestedMvRewriteMaxLevel() {
+        return nestedMvRewriteMaxLevel;
+    }
+
+    // 1 means the mvs directly based on base table
+    public void setNestedMvRewriteMaxLevel(int nestedMvRewriteMaxLevel) {
+        if (nestedMvRewriteMaxLevel <= 0) {
+            nestedMvRewriteMaxLevel = 1;
+        }
+        this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
     }
 
     // Serialize to thrift object
@@ -1325,12 +1417,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             tResult.setTransmission_compression_type(compressionType);
         }
 
+        tResult.setTransmission_encode_level(transmissionEncodeLevel);
+
         TCompressionType loadCompressionType = CompressionUtils.findTCompressionByName(loadTransmissionCompressionType);
         if (loadCompressionType != null) {
             tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
-
-        tResult.setEnable_replicated_storage(enableReplicatedStorage);
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
         final int global_runtime_filter_wait_timeout = 20;

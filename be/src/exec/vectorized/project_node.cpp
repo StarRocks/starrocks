@@ -151,7 +151,7 @@ Status ProjectNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
                 // Note: we must create a new column every time here,
                 // because result_columns[i] is shared_ptr
                 ColumnPtr new_column = ColumnHelper::create_column(_expr_ctxs[i]->root()->type(), false);
-                ConstColumn* const_column = down_cast<ConstColumn*>(result_columns[i].get());
+                auto* const_column = down_cast<ConstColumn*>(result_columns[i].get());
                 new_column->append(*const_column->data_column(), 0, 1);
                 new_column->assign((*chunk)->num_rows(), 0);
                 result_columns[i] = std::move(new_column);

@@ -138,6 +138,7 @@ void GroupReader::close() {
 Status GroupReader::_init_column_readers() {
     ColumnReaderOptions& opts = _column_reader_opts;
     opts.timezone = _param.timezone;
+    opts.case_sensitive = _param.case_sensitive;
     opts.chunk_size = _param.chunk_size;
     opts.stats = _param.stats;
     opts.sb_stream = _param.shared_buffered_stream;
@@ -229,8 +230,14 @@ void GroupReader::_collect_field_io_range(const ParquetField& field,
     // and it may not be equal to col_idx_in_chunk.
     // 3. For array type, the physical_column_index is 0, we need to iterate the children and
     // collect their io ranges.
-    if (field.type.type == TYPE_ARRAY) {
+    if (field.type.type == PrimitiveType::TYPE_ARRAY || field.type.type == PrimitiveType::TYPE_STRUCT) {
         for (auto& child : field.children) {
+            _collect_field_io_range(child, ranges, end_offset);
+        }
+    } else if (field.type.type == PrimitiveType::TYPE_MAP) {
+        // ParquetFiled Map -> Map<Struct<key,value>>
+        DCHECK(field.children[0].type.type == TYPE_STRUCT);
+        for (auto& child : field.children[0].children) {
             _collect_field_io_range(child, ranges, end_offset);
         }
     } else {
@@ -429,7 +436,7 @@ Status GroupReader::_read(const std::vector<int>& read_columns, size_t* row_coun
     return Status::OK();
 }
 
-Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, vectorized::ChunkPtr chunk,
+Status GroupReader::_lazy_skip_rows(const std::vector<int>& read_columns, const vectorized::ChunkPtr& chunk,
                                     size_t chunk_size) {
     auto& ctx = _column_reader_opts.context;
     if (ctx->rows_to_skip == 0) {

@@ -1536,6 +1536,7 @@ public class SubqueryTest extends PlanTestBase {
                 "     limit: 2");
     }
 
+    @Test
     public void testSubqueryElimination() throws Exception {
         {
             // Two tables
@@ -1755,5 +1756,18 @@ public class SubqueryTest extends PlanTestBase {
             String plan = getFragmentPlan(sql);
             assertNotContains(plan, "ANALYTIC");
         }
+    }
+
+    @Test
+    public void testNestSubquery() throws Exception {
+        String sql = "select * from t0 where exists (select * from t1 where t0.v1 in (select v7 from t2));";
+        assertExceptionMessage(sql, "Unsupported complex nested in-subquery");
+
+        sql = "select * from t0 where exists (select * from t1 where t0.v1 = (select v7 from t2));";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "10:HASH JOIN\n" +
+                "  |  join op: LEFT SEMI JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 10: v7");
     }
 }

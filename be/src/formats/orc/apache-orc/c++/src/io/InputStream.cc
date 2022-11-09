@@ -96,7 +96,7 @@ bool SeekableArrayInputStream::Next(const void** buffer, int* size) {
 
 void SeekableArrayInputStream::BackUp(int count) {
     if (count >= 0) {
-        uint64_t unsignedCount = static_cast<uint64_t>(count);
+        auto unsignedCount = static_cast<uint64_t>(count);
         if (unsignedCount <= blockSize && unsignedCount <= position) {
             position -= unsignedCount;
         } else {
@@ -107,7 +107,7 @@ void SeekableArrayInputStream::BackUp(int count) {
 
 bool SeekableArrayInputStream::Skip(int count) {
     if (count >= 0) {
-        uint64_t unsignedCount = static_cast<uint64_t>(count);
+        auto unsignedCount = static_cast<uint64_t>(count);
         if (unsignedCount + position <= length) {
             position += unsignedCount;
             return true;
@@ -179,7 +179,7 @@ void SeekableFileInputStream::BackUp(int signedCount) {
     if (signedCount < 0) {
         throw std::logic_error("can't backup negative distances");
     }
-    uint64_t count = static_cast<uint64_t>(signedCount);
+    auto count = static_cast<uint64_t>(signedCount);
     if (pushBack > 0) {
         throw std::logic_error("can't backup unless we just called Next");
     }
@@ -194,7 +194,7 @@ bool SeekableFileInputStream::Skip(int signedCount) {
     if (signedCount < 0) {
         return false;
     }
-    uint64_t count = static_cast<uint64_t>(signedCount);
+    auto count = static_cast<uint64_t>(signedCount);
     position = std::min(position + count, length);
     pushBack = 0;
     return position < length;

@@ -31,6 +31,10 @@ public class ExecuteAsStmtTest {
                 globalStateMgr.getAuth();
                 minTimes = 0;
                 result = auth;
+
+                globalStateMgr.isUsingNewPrivilege();
+                minTimes = 0;
+                result = false;
             }
         };
 
