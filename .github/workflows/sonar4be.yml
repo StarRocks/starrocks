@@ -25,7 +25,6 @@ jobs:
       - name: set up
         if: steps.changes.outputs.be == 'true'
         run: |
-          sudo rm -rf ../starrocks/*
           time scp jenkins@ci01:~/userContent/be-build-$PR_NUMBER.tar.gz .
           tar xzf be-build-$PR_NUMBER.tar.gz
           workdir=$(pwd)
