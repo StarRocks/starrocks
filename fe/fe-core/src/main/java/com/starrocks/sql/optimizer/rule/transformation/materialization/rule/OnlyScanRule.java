@@ -34,7 +34,7 @@ public class OnlyScanRule extends SingleTableRewriteBaseRule {
             return false;
         }
         ScalarOperator predicate = input.getOp().getPredicate();
-        return predicate == null ? false : true;
+        return predicate != null;
     }
 
     public static OnlyScanRule getInstance() {

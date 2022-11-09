@@ -25,9 +25,9 @@ public class EquivalenceClasses {
         if (s1 != null && s2 != null) {
             Set<ColumnRefOperator> shortSet = s1.size() < s2.size() ? s1 : s2;
             Set<ColumnRefOperator> longSet = s1.size() < s2.size() ? s2 : s1;
+            longSet.addAll(shortSet);
             for (ColumnRefOperator columnRefOperator : shortSet) {
-                longSet.add(columnRefOperator);
-                columnToEquivalenceClass.put(columnRefOperator, s2);
+                columnToEquivalenceClass.put(columnRefOperator, longSet);
             }
         } else if (s1 != null) {
             s1.add(right);

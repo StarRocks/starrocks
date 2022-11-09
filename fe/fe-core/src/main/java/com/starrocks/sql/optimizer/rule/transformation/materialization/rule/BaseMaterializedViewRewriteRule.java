@@ -15,16 +15,13 @@ import java.util.List;
 
 public abstract class BaseMaterializedViewRewriteRule extends TransformationRule {
 
-    public BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
+    protected BaseMaterializedViewRewriteRule(RuleType type, Pattern pattern) {
         super(type, pattern);
     }
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (context.getCandidateMvs().isEmpty()) {
-            return false;
-        }
-        return true;
+        return !context.getCandidateMvs().isEmpty();
     }
 
     @Override
@@ -36,7 +33,7 @@ public abstract class BaseMaterializedViewRewriteRule extends TransformationRule
             mvContext.setOptimizerContext(context);
             MaterializedViewRewriter rewriter = getMaterializedViewRewrite(mvContext);
             List<OptExpression> rewritten = rewriter.rewrite();
-            if (rewritten != null) {
+            if (rewritten != null && !rewritten.isEmpty()) {
                 results.addAll(rewritten);
             }
         }

@@ -34,6 +34,7 @@ public class LineageFactory {
     }
 
     private class LineageVisitor extends OptExpressionVisitor<Void, Void> {
+        @Override
         public Void visit(OptExpression optExpression, Void context) {
             if (!(optExpression.getOp() instanceof LogicalOperator)) {
                 return null;

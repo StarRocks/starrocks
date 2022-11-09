@@ -97,6 +97,7 @@ public class MvRewriteOptimizationTest {
         testSingleTableRangePredicateRewrite();
         testMultiMvsForSingleTable();
         testNestedMvOnSingleTable();
+        testSingleTableResidualPredicateRewrite();
     }
 
     public void testSingleTableEqualPredicateRewrite() throws Exception {
@@ -271,6 +272,16 @@ public class MvRewriteOptimizationTest {
         String plan12 = getFragmentPlan(query12);
         PlanTestBase.assertNotContains(plan12, "mv_3");
         dropMv("test", "mv_3");
+    }
+
+    public void testSingleTableResidualPredicateRewrite() throws Exception {
+        createAndRefreshMv("test", "mv_1",
+                "create materialized view mv_1 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where name like \"%abc%\" and salary * deptno > 100");
+        String query = "select empid, deptno, name, salary from emps where salary * deptno > 100 and name like \"%abc%\"";
+        String plan = getFragmentPlan(query);
+        PlanTestBase.assertContains(plan, "mv_1");
+        dropMv("test", "mv_1");
     }
 
     public void testMultiMvsForSingleTable() throws Exception {

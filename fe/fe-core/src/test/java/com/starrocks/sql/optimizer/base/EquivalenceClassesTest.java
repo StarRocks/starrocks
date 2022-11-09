@@ -37,5 +37,15 @@ public class EquivalenceClassesTest {
         ec.addEquivalence(columnRef5, columnRef6);
         ec.addEquivalence(columnRef5, columnRef7);
         Assert.assertEquals(ec.getEquivalenceClass(columnRef6), ec.getEquivalenceClass(columnRef7));
+
+        EquivalenceClasses ec2 = new EquivalenceClasses();
+        ec2.addEquivalence(columnRef1, columnRef2);
+        ec2.addEquivalence(columnRef1, columnRef3);
+
+        ec2.addEquivalence(columnRef5, columnRef6);
+        ec2.addEquivalence(columnRef5, columnRef7);
+        ec2.addEquivalence(columnRef1, columnRef6);
+        Assert.assertEquals(ec2.getEquivalenceClass(columnRef1), ec2.getEquivalenceClass(columnRef5));
+        Assert.assertEquals(6, ec2.getEquivalenceClass(columnRef1).size());
     }
 }

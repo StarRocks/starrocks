@@ -847,7 +847,8 @@ public class Utils {
                     return false;
                 }
                 for (ScalarOperator child : predicate.getChildren()) {
-                    if (!child.accept(this, null)) {
+                    Boolean ret = !child.accept(this, null);
+                    if (!Boolean.TRUE.equals(ret)) {
                         return false;
                     }
                 }
@@ -856,13 +857,9 @@ public class Utils {
 
             @Override
             public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
-                if (predicate.getBinaryType().isEqual()
+                return predicate.getBinaryType().isEqual()
                         && predicate.getChild(0).isColumnRef()
-                        && predicate.getChild(1).isColumnRef()) {
-                    return true;
-                } else {
-                    return false;
-                }
+                        && predicate.getChild(1).isColumnRef();
             }
         };
 

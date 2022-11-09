@@ -84,14 +84,12 @@ public class MvNormalizePredicateRule extends NormalizePredicateRule {
     // should maintain sequence for case:
     // a like "%hello%" and (b * c = 100 or b * c = 200)
     // (b * c = 200 or b * c = 100) and a like "%hello%"
+    @Override
     public ScalarOperator visitCompoundPredicate(CompoundPredicateOperator predicate,
                                                  ScalarOperatorRewriteContext context) {
-        Set<ScalarOperator> after = Sets.newTreeSet(new Comparator<ScalarOperator>() {
-            @Override
-            public int compare(ScalarOperator o1, ScalarOperator o2) {
-                return o1.toString().compareTo(o2.toString());
-            }
-        });
+        Comparator<ScalarOperator> byToString =
+                (ScalarOperator o1, ScalarOperator o2) -> o1.toString().compareTo(o2.toString());
+        Set<ScalarOperator> after = Sets.newTreeSet(byToString);
         if (predicate.isAnd()) {
             List<ScalarOperator> before = Utils.extractConjuncts(predicate);
             after.addAll(before);
