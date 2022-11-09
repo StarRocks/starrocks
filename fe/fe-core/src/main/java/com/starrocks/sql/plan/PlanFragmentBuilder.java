@@ -1307,7 +1307,7 @@ public class PlanFragmentBuilder {
             return sourceFragment;
         }
 
-        static class AggregateExprInfo {
+        private static class AggregateExprInfo {
             public final ArrayList<Expr> groupExpr;
             public final ArrayList<FunctionCallExpr> aggregateExpr;
             public final ArrayList<Expr> partitionExpr;

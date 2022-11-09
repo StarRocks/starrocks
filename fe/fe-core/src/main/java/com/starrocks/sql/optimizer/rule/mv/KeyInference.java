@@ -12,7 +12,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
-import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalProjectOperator;
@@ -73,24 +72,16 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         return res;
     }
 
-    private KeyPropertySet visitTable(OlapTable olapTable, PhysicalOperator scan, Projection projection,
+    private KeyPropertySet visitTable(OlapTable olapTable, PhysicalOperator scan,
                                       List<ColumnRefOperator> outputColumns,
                                       Map<ColumnRefOperator, Column> columnMap) {
-        List<ColumnRefOperator> keyColumnRefs;
-        if (projection == null) {
-            keyColumnRefs = outputColumns;
-        } else {
-            // TODO(murphy) support monotonic project expression
-            keyColumnRefs = projection.getOutputColumns();
-        }
-
         // If the table contains unique key and output the whole unique-keys
         List<Column> tableKeyColumns = olapTable.getKeyColumns();
-        Set<Column> keyRefs = keyColumnRefs.stream().map(columnMap::get).collect(Collectors.toSet());
+        Set<Column> keyRefs = outputColumns.stream().map(columnMap::get).collect(Collectors.toSet());
         boolean unique = olapTable.getKeysType().equals(KeysType.PRIMARY_KEYS) &&
                 keyRefs.containsAll(tableKeyColumns);
 
-        KeyProperty key = KeyProperty.of(new ColumnRefSet(keyColumnRefs), unique);
+        KeyProperty key = KeyProperty.of(new ColumnRefSet(outputColumns), unique);
         KeyPropertySet res = new KeyPropertySet();
         res.addKey(key);
         return res;
@@ -103,7 +94,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         Preconditions.checkState(table.isOlapTable());
         OlapTable olapTable = (OlapTable) table;
 
-        return visitTable(olapTable, scan, scan.getProjection(), scan.getOutputColumns(), scan.getColRefToColumnMetaMap());
+        return visitTable(olapTable, scan, scan.getRealOutputColumns(), scan.getColRefToColumnMetaMap());
     }
 
     @Override
@@ -114,7 +105,7 @@ public class KeyInference extends OptExpressionVisitor<KeyInference.KeyPropertyS
         OlapTable olapTable = (OlapTable) table;
 
         KeyPropertySet res =
-                visitTable(olapTable, scan, scan.getProjection(), scan.getOutputColumns(), scan.getColRefToColumnMetaMap());
+                visitTable(olapTable, scan, scan.getOutputColumns(), scan.getColRefToColumnMetaMap());
         scan.setKeyPropertySet(res);
         return res;
     }

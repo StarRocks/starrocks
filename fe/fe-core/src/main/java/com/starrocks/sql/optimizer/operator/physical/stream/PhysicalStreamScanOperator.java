@@ -8,7 +8,6 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
@@ -35,21 +34,7 @@ public class PhysicalStreamScanOperator extends PhysicalStreamOperator {
         this.predicate = predicate;
         this.projection = projection;
         if (this.projection != null) {
-            ColumnRefSet usedColumns = new ColumnRefSet();
-            for (ScalarOperator scalarOperator : this.projection.getColumnRefMap().values()) {
-                usedColumns.union(scalarOperator.getUsedColumns());
-            }
-            for (ScalarOperator scalarOperator : this.projection.getCommonSubOperatorMap().values()) {
-                usedColumns.union(scalarOperator.getUsedColumns());
-            }
-
-            ImmutableList.Builder<ColumnRefOperator> outputBuilder = ImmutableList.builder();
-            for (ColumnRefOperator columnRefOperator : colRefToColumnMetaMap.keySet()) {
-                if (usedColumns.contains(columnRefOperator)) {
-                    outputBuilder.add(columnRefOperator);
-                }
-            }
-            outputColumns = outputBuilder.build();
+            outputColumns = projection.getOutputColumns();
         } else {
             outputColumns = ImmutableList.copyOf(colRefToColumnMetaMap.keySet());
         }
