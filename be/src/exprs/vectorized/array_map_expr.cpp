@@ -31,6 +31,7 @@ inline bool offsets_equal(const UInt32Column::Ptr& array1, const UInt32Column::P
 
 // The input array column maybe nullable, so first remove the wrap of nullable property.
 // The result of lambda expressions do not change the offsets of the current array and the null map.
+// NOTE the return column must be of the return type.
 ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
     std::vector<ColumnPtr> inputs;
     NullColumnPtr input_null_map = nullptr;
@@ -45,7 +46,9 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
         ColumnPtr child_col = EVALUATE_NULL_IF_ERROR(context, _children[i], chunk);
         // the column is a null literal.
         if (child_col->only_null()) {
-            return child_col;
+            auto res = ColumnHelper::create_column(type(), true);
+            res->append_nulls(chunk->num_rows());
+            return res;
         }
         // no optimization for const columns.
         child_col = ColumnHelper::unpack_and_duplicate_const_column(child_col->size(), child_col);
@@ -79,7 +82,12 @@ ColumnPtr ArrayMapExpr::evaluate(ExprContext* context, Chunk* chunk) {
 
     ColumnPtr column = nullptr;
     if (input_array->elements_column()->size() == 0) { // arrays may be null or empty
-        column = input_array->elements_column();
+        auto res = ColumnHelper::create_column(type(), false);
+        auto array_col = std::dynamic_pointer_cast<ArrayColumn>(res);
+        if (array_col == nullptr) {
+            throw std::runtime_error("The return type of array_map is not array type.");
+        }
+        column = array_col->elements_column();
     } else {
         // construct a new chunk to evaluate the lambda expression.
         auto cur_chunk = std::make_shared<vectorized::Chunk>();

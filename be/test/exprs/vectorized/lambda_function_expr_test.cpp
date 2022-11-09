@@ -504,6 +504,11 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 ASSERT_TRUE(result->get(0).get_array().empty());
                 ASSERT_TRUE(result->get(1).get_array().empty());
                 ASSERT_TRUE(result->get(2).get_array().empty());
+                if (j == 1) { // array<int> -> array<bool>
+                    auto col = std::dynamic_pointer_cast<NullableColumn>(result);
+                    auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
+                    EXPECT_EQ(1, array_col->elements_column()->type_size()); // bool
+                }
             }
 
             Expr::close(expr_ctxs, &_runtime_state);
