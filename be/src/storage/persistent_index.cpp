@@ -2659,7 +2659,7 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
         _flushed = true;
         RETURN_IF_ERROR(_flush_l0());
     } else {
-        _dump_snapshot |= _l0->file_size() > config::flush_l0_max_file_size;
+        _dump_snapshot |= _l0->file_size() > config::l0_max_file_size;
     }
     // for case1 and case2
     if (_flushed) {

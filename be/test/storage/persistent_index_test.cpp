@@ -495,9 +495,9 @@ PARALLEL_TEST(PersistentIndexTest, test_fixlen_mutable_index_wal) {
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 }
 
-PARALLEL_TEST(PersistentIndexTest, test_flush_l0_max_file_size) {
-    int64_t flush_l0_max_file_size = config::flush_l0_max_file_size;
-    config::flush_l0_max_file_size = 200000;
+PARALLEL_TEST(PersistentIndexTest, test_l0_max_file_size) {
+    int64_t l0_max_file_size = config::l0_max_file_size;
+    config::l0_max_file_size = 200000;
     FileSystem* fs = FileSystem::Default();
     const std::string kPersistentIndexDir = "./PersistentIndexTest_test_flush_l0_max_file_size";
     const std::string kIndexFile = "./PersistentIndexTest_test_flush_l0_max_file_size/index.l0.0.0";
@@ -534,6 +534,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l0_max_file_size) {
     std::vector<IndexValue> old_values(N);
     PersistentIndex index(kPersistentIndexDir);
     auto one_time_num = N / 4;
+    // do snapshot twice, when cannot do flush_l0, which mean index_file checker works
     for (auto i = 0; i < 2; ++i) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
@@ -541,9 +542,10 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l0_max_file_size) {
                                old_values.data() + one_time_num * i));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
-        ASSERT_TRUE(!index_meta.l0_meta().snapshot().dumped_shard_idxes().empty());
+        ASSERT_TRUE(index_meta.l0_meta().wals().empty());
     }
 
+    // do flush_l0,
     for (auto i = 2; i < 3; ++i) {
         ASSERT_OK(index.load(index_meta));
         ASSERT_OK(index.prepare(EditVersion(i + 1, 0)));
@@ -554,6 +556,7 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l0_max_file_size) {
         ASSERT_TRUE(index_meta.l0_meta().snapshot().dumped_shard_idxes().empty());
     }
 
+    // do snapshot, when cannot do merge_compaction, which mean index_file checker works
     auto loaded_num = one_time_num * 3;
     one_time_num /= 10;
     for (auto i = 3; i < 4; ++i) {
@@ -563,12 +566,12 @@ PARALLEL_TEST(PersistentIndexTest, test_flush_l0_max_file_size) {
                                old_values.data() + loaded_num));
         ASSERT_OK(index.commit(&index_meta));
         ASSERT_OK(index.on_commited());
-        ASSERT_TRUE(!index_meta.l0_meta().snapshot().dumped_shard_idxes().empty());
+        ASSERT_TRUE(index_meta.l0_meta().wals().empty());
     }
 
     ASSERT_TRUE(fs::remove_all(kPersistentIndexDir).ok());
 
-    config::flush_l0_max_file_size = flush_l0_max_file_size;
+    config::l0_max_file_size = l0_max_file_size;
 }
 
 PARALLEL_TEST(PersistentIndexTest, test_small_varlen_mutable_index_snapshot) {
