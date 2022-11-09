@@ -46,12 +46,12 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 `url` 中的参数如下表所述。
 
-| **参数名称**  | **参数说明**                                                 |
-| ------------- | ------------------------------------------------------------ |
-| fe_host       | 指定 StarRocks 集群中 FE 的 IP 地址。<br>说明：如果您直接提交导入作业给某一个 BE 节点，则需要传入该 BE 的 IP 地址。 |
-| fe_http_port  | 指定 StarRocks 集群中 FE 的 HTTP 端口号。 默认端口号为 `8030`。<br>说明：如果您直接提交导入作业给某一指定的 BE 节点，则需要传入该 BE 的 HTTP 端口号。默认端口号为 `8040`。 |
-| database_name | 指定目标 StarRocks 表所在的数据库的名称。                    |
-| table_name    | 指定目标 StarRocks 表的名称。                                |
+| 参数名称      | 是否必须 | 参数说明                                                     |
+| ------------- | -------- | ------------------------------------------------------------ |
+| fe_host       | 是       | 指定 StarRocks 集群中 FE 的 IP 地址。 说明：如果您直接提交导入作业给某一个 BE 节点，则需要传入该 BE 的 IP 地址。 |
+| fe_http_port  | 是       | 指定 StarRocks 集群中 FE 的 HTTP 端口号。 默认端口号为 8030。 说明：如果您直接提交导入作业给某一指定的 BE 节点，则需要传入该 BE 的 HTTP 端口号。默认端口号为 8040。 |
+| database_name | 是       | 指定目标 StarRocks 表所在的数据库的名称。                    |
+| table_name    | 是       | 指定目标 StarRocks 表的名称。                                |
 
 ### `data_desc`
 
