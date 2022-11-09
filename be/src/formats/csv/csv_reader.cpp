@@ -134,6 +134,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
     // 将filed_start初始化为最大值，表示未进入START状态
     size_t filed_start = std::string::npos;
     size_t parsed_start = _buff.position_offset();
+    bool is_enclose_field = false;
     Status status = Status::OK();
     while (true) {
         // 到了一行的行尾,或者字段尾部，此次不再读新的数据
@@ -196,6 +197,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                 filed_start = _buff.position_offset();
                 if (*(_buff.position()) != _enclose) {
                     curState = ENCLOSE;
+                    is_enclose_field = true;
                     break;
                 } else {
                     // ""something
@@ -304,8 +306,14 @@ Status CSVReader::next_record(FieldOffsets* fields) {
 
         case DELIMITER:
             // push field
-            fields->emplace_back(filed_start, _buff.position_offset() - _column_separator_length - filed_start);
+            if (is_enclose_field) {
+                // enclose字段要去除字段最后的enclose character
+                fields->emplace_back(filed_start, _buff.position_offset() - _column_separator_length - filed_start - 1);
+            } else {
+                fields->emplace_back(filed_start, _buff.position_offset() - _column_separator_length - filed_start);
+            }
             curState = START;
+            is_enclose_field = false;
             break;
 
     newline_label:
@@ -313,17 +321,23 @@ Status CSVReader::next_record(FieldOffsets* fields) {
             _parsed_bytes += _buff.position_offset() - parsed_start;
             // push line
             // 如果未发生异常，那么将行分隔符从字段中去除，发生异常，不做修饰了。
-            if (status.ok()) {
-                // 空行
-                if (!(fields->size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0)) {
-                    fields->emplace_back(filed_start, _buff.position_offset() - _row_delimiter_length - filed_start);
+            if (status.ok() || status.is_end_of_file()) {
+                // 跳过空行
+                if (fields->size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0) {
+                    curState = START;
+                    is_enclose_field = false;
+                    return status;
                 }
-            } else {
                 if (filed_start != std::string::npos) {
-                    fields->emplace_back(filed_start, _buff.position_offset() - filed_start);
+                    if (is_enclose_field) {
+                        fields->emplace_back(filed_start, _buff.position_offset() - _row_delimiter_length - filed_start - 1);
+                    } else {
+                        fields->emplace_back(filed_start, _buff.position_offset() - _row_delimiter_length - filed_start);
+                    }
                 }
             }
             curState = START;
+            is_enclose_field = false;
             return status;
         default:
             return Status::NotSupported("Not supported state when csv parsing");

@@ -579,7 +579,7 @@ TEST_F(CSVScannerTest, test_trim_space) {
     EXPECT_EQ("ee", chunk->get(4)[1].get_slice());
 }
 
-TEST_F(CSVScannerTest, test_ENCLOSE_ESCAPE) {
+TEST_F(CSVScannerTest, test_ENCLOSE) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR)};
 
     std::vector<TBrokerRangeDesc> ranges;
