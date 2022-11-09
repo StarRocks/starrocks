@@ -13,10 +13,11 @@ namespace starrocks::vectorized {
 
 struct JniScannerProfile {
     RuntimeProfile::Counter* rows_read_counter = nullptr;
-    RuntimeProfile::Counter* io_timer = nullptr;
     RuntimeProfile::Counter* io_counter = nullptr;
-    RuntimeProfile::Counter* fill_chunk_timer = nullptr;
+    RuntimeProfile::Counter* scan_ranges = nullptr;
     RuntimeProfile::Counter* open_timer = nullptr;
+    RuntimeProfile::Counter* io_timer = nullptr;
+    RuntimeProfile::Counter* fill_chunk_timer = nullptr;
 };
 
 class JniScanner : public HdfsScanner {
@@ -27,6 +28,7 @@ public:
     ~JniScanner() override { finalize(); }
 
     Status do_open(RuntimeState* runtime_state) override;
+    void do_update_counter(HdfsScanProfile* profile) override;
     void do_close(RuntimeState* runtime_state) noexcept override;
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
     Status do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) override;
