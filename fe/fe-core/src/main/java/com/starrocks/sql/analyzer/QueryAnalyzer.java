@@ -147,7 +147,7 @@ public class QueryAnalyzer {
 
                 /*
                  *  Because the analysis of CTE is sensitive to order
-                 *  the latter CTE can call the previous resolved CTE,
+                 *  the later CTE can call the previous resolved CTE,
                  *  and the previous CTE can rewrite the existing table name.
                  *  So here will save an increasing AnalyzeState to add cte scope
                  */
