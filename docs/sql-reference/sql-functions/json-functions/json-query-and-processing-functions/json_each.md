@@ -6,7 +6,7 @@ Expands the outermost elements of a JSON object into a set of key-value pairs he
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 json_each(json_object_expr)
 ```
 

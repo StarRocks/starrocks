@@ -6,7 +6,7 @@ Select the columns that are not involved in the aggregate operation in the aggre
 
 ## Syntax
 
-```plain text
+```Haskell
 ANY_VALUE(expr)
 ```
 

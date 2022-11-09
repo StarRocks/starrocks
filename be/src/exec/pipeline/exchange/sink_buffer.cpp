@@ -171,9 +171,15 @@ int64_t SinkBuffer::_network_time() {
     return max;
 }
 
-void SinkBuffer::cancel_one_sinker() {
+void SinkBuffer::cancel_one_sinker(RuntimeState* const state) {
     if (--_num_uncancelled_sinkers == 0) {
         _is_finishing = true;
+    }
+    if (state != nullptr) {
+        LOG(INFO) << fmt::format(
+                "fragment_instance_id {} -> {}, _num_uncancelled_sinkers {}, _is_finishing {}, _num_remaining_eos {}",
+                print_id(_fragment_ctx->fragment_instance_id()), print_id(state->fragment_instance_id()),
+                _num_uncancelled_sinkers, _is_finishing, _num_remaining_eos);
     }
 }
 

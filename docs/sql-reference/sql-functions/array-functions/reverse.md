@@ -6,7 +6,7 @@ Reverses the order in which the elements of a string or array are arranged.
 
 ## Syntax
 
-```SQL
+```Haskell
 reverse(param)
 ```
 

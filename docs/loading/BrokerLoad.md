@@ -22,6 +22,10 @@ Broker Load supports the following data file formats:
 
 - ORC
 
+> **NOTE**
+>
+> For CSV data, you can use a UTF-8 string, such as a comma (,), tab, or pipe (|), whose length does not exceed 50 bytes as a text delimiter.
+
 ## Supported storage systems
 
 Broker Load supports the following storage systems:
@@ -155,7 +159,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 #### Load data from Google GCS
 
@@ -180,7 +186,9 @@ WITH BROKER "mybroker"
 )
 ```
 
-> Note: S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
+> **NOTE**
+>
+> S3A is used for data loads from Amazon S3. Therefore, the file paths that you specify must start with the prefix `s3a://`.
 
 ### Query data
 

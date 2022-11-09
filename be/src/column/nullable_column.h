@@ -213,6 +213,7 @@ public:
     const NullColumnPtr& null_column() const { return _null_column; }
 
     size_t null_count() const;
+    size_t null_count(size_t offset, size_t count) const;
 
     Datum get(size_t n) const override {
         if (_has_null && _null_column->get_data()[n]) {
