@@ -951,6 +951,36 @@ public class LowCardinalityTest extends PlanTestBase {
                 "TGlobalDict(columnId:20, strings:[6D 6F 63 6B], ids:[1]), " +
                 "TGlobalDict(columnId:21, strings:[6D 6F 63 6B], ids:[1]), " +
                 "TGlobalDict(columnId:22, strings:[6D 6F 63 6B], ids:[1])])");
+        // the fragment on the top don't have to send global dicts
+        sql = "select upper(ST_S_ADDRESS),\n" +
+                "    upper(ST_S_COMMENT)\n" +
+                "from (\n" +
+                "        select ST_S_ADDRESS, ST_S_COMMENT\n" +
+                "        from (\n" +
+                "                select l.S_ADDRESS as ST_S_ADDRESS,\n" +
+                "                    l.S_COMMENT ST_S_COMMENT,\n" +
+                "                    l.S_SUPPKEY S_SUPPKEY,\n" +
+                "                    l.S_NATIONKEY S_NATIONKEY\n" +
+                "                from supplier l\n" +
+                "                    join [shuffle] supplier m on l.S_SUPPKEY = m.S_SUPPKEY\n" +
+                "                order by l.S_ADDRESS\n" +
+                "                limit 10\n" +
+                "        ) star join [shuffle] supplier r on star.S_NATIONKEY = r.S_NATIONKEY\n" +
+                "        union select 1,2\n" +
+                "    ) sys";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  20:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 30: S_ADDRESS, 31: S_COMMENT\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "  |  \n" +
+                "  |----19:EXCHANGE\n" +
+                "  |    \n" +
+                "  16:EXCHANGE");
+        assertContains(plan, "Decode");
+        plan = getThriftPlan(sql);
+        assertNotContains(plan.split("\n")[1],"query_global_dicts");
     }
 
     @Test

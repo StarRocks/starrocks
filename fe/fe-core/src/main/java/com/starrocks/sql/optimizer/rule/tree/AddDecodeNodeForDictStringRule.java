@@ -160,13 +160,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             this.stringColumnIdToDictColumnIds.putAll(other.stringColumnIdToDictColumnIds);
             this.stringFunctions.putAll(other.stringFunctions);
             this.disableDictOptimizeColumns = other.disableDictOptimizeColumns;
-            if (globalDicts != other.globalDicts) {
-                for (Pair<Integer, ColumnDict> dict : other.globalDicts) {
-                    if (!this.globalDicts.contains(dict)) {
-                        this.globalDicts.add(dict);
-                    }
-                }
-            }
+            Preconditions.checkState(globalDicts == other.globalDicts);
             return this;
         }
     }
