@@ -87,9 +87,6 @@ public class AnalyzeSetVariableTest {
         setStmt = (SetStmt) analyzeSuccess(sql);
         Assert.assertEquals(2, setStmt.getSetVars().size());
 
-        sql = "set @var = cast(\"a\" as json)";
-        analyzeFail(sql, "Can't set variable with type JSON");
-
         sql = "set @var = [1,2,3]";
         analyzeFail(sql, "Can't set variable with type ARRAY");
 

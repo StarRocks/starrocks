@@ -36,15 +36,22 @@ public class ResourcePEntryObject implements PEntryObject {
         this.name = name;
     }
 
+    /**
+     * if the current resource matches other resource, including fuzzy matching.
+     *
+     * this(hive0), other(hive0) -> true
+     * this(hive0), other(ALL) -> true
+     * this(ALL), other(hive0) -> false
+     */
     @Override
     public boolean match(Object obj) {
         if (!(obj instanceof ResourcePEntryObject)) {
             return false;
         }
-        if (name == null) {
+        ResourcePEntryObject other = (ResourcePEntryObject) obj;
+        if (other.name == null) {
             return true;
         }
-        ResourcePEntryObject other = (ResourcePEntryObject) obj;
         return other.name.equals(name);
     }
 

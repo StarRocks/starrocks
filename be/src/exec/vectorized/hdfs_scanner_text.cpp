@@ -92,20 +92,24 @@ Status HdfsScannerCSVReader::_fill_buffer() {
     ASSIGN_OR_RETURN(s.size, _file->read(s.data, s.size));
     _offset += s.size;
     _buff.add_limit(s.size);
-
     if (s.size == 0) {
         size_t n = _buff.available();
         _should_stop_scan = true;
+        // if there is no linger data in buff at all, then we don't need to add a row delimiter. Otherwise we will add a new record.
+        // For example, a single column table like "a\nb\nc\n". if we add a trailing row delimiter, then there will be a "" at last.
+        if (n == 0) return Status::EndOfFile("");
+
         // Has reached the end of file but still no record delimiter found, which
         // is valid, according the RFC, add the record delimiter ourself, ONLY IF we have space.
         // But if we don't have any space, which means a single csv record size has exceed buffer max size.
-        if (n < _row_delimiter_length || _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
+        if (n >= _row_delimiter_length && _buff.find(_row_delimiter, n - _row_delimiter_length) == nullptr) {
             if (_buff.free_space() >= _row_delimiter_length) {
                 for (char ch : _row_delimiter) {
                     _buff.append(ch);
                 }
             } else {
-                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()));
+                return Status::InternalError("CSV line length exceed limit " + std::to_string(_buff.capacity()) +
+                                             " when padding row delimiter");
             }
         }
     }
@@ -238,9 +242,6 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         } else if (!status.ok()) {
             LOG(WARNING) << "Status is not ok " << status.get_error_msg();
             return status;
-        } else if (record.empty()) {
-            // always skip blank lines.
-            continue;
         }
 
         fields.clear();

@@ -154,4 +154,12 @@ public class SetExecutorTest {
         tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
         tesrUserVariableImp(new StringLiteral("xxx"), ScalarType.createVarcharType(10));
     }
+
+    @Test
+    public void testJSONVariable() throws Exception {
+        String json = "'{\"xxx\" : 1}'";
+        Type type = Type.JSON;
+        String sql = String.format("set @var = cast(%s as %s)", json, type.toSql());
+        UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+    }
 }

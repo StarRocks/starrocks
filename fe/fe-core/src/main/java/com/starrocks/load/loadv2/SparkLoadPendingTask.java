@@ -372,18 +372,9 @@ public class SparkLoadPendingTask extends LoadTask {
 
                         Object keyValue;
                         if (literalExpr instanceof DateLiteral) {
-                            DateLiteral dateLiteral = (DateLiteral) literalExpr;
-                            if (dateLiteral.getType().isDate()) {
-                                keyValue = dateLiteral.getYear() * 16 * 32L
-                                        + dateLiteral.getMonth() * 32
-                                        + dateLiteral.getDay();
-                            } else if (dateLiteral.getType().isDatetime()) {
-                                keyValue = dateLiteral.getDoubleValue();
-                            } else {
-                                throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
-                            }
+                            keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
                         } else {
-                            keyValue = literalExpr.getDoubleValue();
+                            keyValue = literalExpr.getRealObjectValue();
                         }
 
                         startKeys.add(keyValue);
@@ -400,18 +391,9 @@ public class SparkLoadPendingTask extends LoadTask {
 
                         Object keyValue;
                         if (literalExpr instanceof DateLiteral) {
-                            DateLiteral dateLiteral = (DateLiteral) literalExpr;
-                            if (dateLiteral.getType().isDate()) {
-                                keyValue = dateLiteral.getYear() * 16 * 32L
-                                        + dateLiteral.getMonth() * 32
-                                        + dateLiteral.getDay();
-                            } else if (dateLiteral.getType().isDatetime()) {
-                                keyValue = dateLiteral.getDoubleValue();
-                            } else {
-                                throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
-                            }
+                            keyValue = convertDateLiteralToNumber((DateLiteral) literalExpr);
                         } else {
-                            keyValue = literalExpr.getDoubleValue();
+                            keyValue = literalExpr.getRealObjectValue();
                         }
                         endKeys.add(keyValue);
                     }
@@ -598,6 +580,22 @@ public class SparkLoadPendingTask extends LoadTask {
 
         if (functionName.equalsIgnoreCase("bitmap_dict") && !isLoadFromTable) {
             throw new LoadException("Bitmap global dict should load data from hive table");
+        }
+    }
+
+    // This is to be compatible with Spark Load Job formats for Date type.
+    // Because the historical version is serialized and deserialized with a special hash number for DateLiteral,
+    // special processing is also done here for DateLiteral to keep the historical version compatible.
+    // The deserialized code is in "SparkDpp.createPartitionRangeKeys"
+    public static Object convertDateLiteralToNumber(DateLiteral dateLiteral) {
+        if (dateLiteral.getType().isDate()) {
+            return (dateLiteral.getYear() * 16 * 32L
+                    + dateLiteral.getMonth() * 32
+                    + dateLiteral.getDay());
+        } else if (dateLiteral.getType().isDatetime()) {
+            return dateLiteral.getLongValue();
+        } else {
+            throw new StarRocksPlannerException("Invalid date type: " + dateLiteral.getType(), ErrorType.INTERNAL_ERROR);
         }
     }
 }
