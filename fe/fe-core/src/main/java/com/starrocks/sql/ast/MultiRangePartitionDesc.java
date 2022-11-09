@@ -30,6 +30,7 @@ public class MultiRangePartitionDesc extends PartitionDesc {
     private Long step;
     private String timeUnit;
     private final ImmutableSet<TimestampArithmeticExpr.TimeUnit> supportedTimeUnitType = ImmutableSet.of(
+            TimestampArithmeticExpr.TimeUnit.HOUR,
             TimestampArithmeticExpr.TimeUnit.DAY,
             TimestampArithmeticExpr.TimeUnit.WEEK,
             TimestampArithmeticExpr.TimeUnit.MONTH,
@@ -161,6 +162,10 @@ public class MultiRangePartitionDesc extends PartitionDesc {
             PartitionValue lowerPartitionValue = new PartitionValue(beginTime.format(beginDateTimeFormat));
 
             switch (timeUnitType) {
+                case HOUR:
+                    partitionName = partitionPrefix + beginTime.format(DateUtils.HOUR_FORMATTER);
+                    beginTime = beginTime.plusHours(timeInterval);
+                    break;
                 case DAY:
                     partitionName = partitionPrefix + beginTime.format(DateUtils.DATEKEY_FORMATTER);
                     beginTime = beginTime.plusDays(timeInterval);

@@ -6,7 +6,7 @@ Sorts the elements of an array in ascending order.
 
 ## Syntax
 
-```SQL
+```Haskell
 array_sort(array)
 ```
 

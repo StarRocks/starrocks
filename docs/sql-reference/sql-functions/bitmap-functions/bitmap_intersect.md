@@ -1,6 +1,6 @@
 # bitmap_intersect
 
-## description
+## Description
 
 Aggregation function, used to calculate the bitmap intersection after grouping. Common usage scenarios, such as calculating user retention rate.
 
@@ -12,7 +12,7 @@ BITMAP BITMAP_INTERSECT(BITMAP value)
 
 Enter a set of bitmap values, find the intersection of this set of bitmap values, and return the result.
 
-## example
+## Example
 
 Table structure
 

@@ -91,10 +91,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "tableName")
         private String tableName;
 
-        public BaseTableInfo(long dbId, long tableId) {
+        public BaseTableInfo(long dbId, String dbName, long tableId) {
             this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
             this.dbId = dbId;
+            this.dbName = dbName;
             this.tableId = tableId;
+        }
+
+        public BaseTableInfo(long dbId, long tableId) {
+            this(dbId, null, tableId);
         }
 
         public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
@@ -418,9 +423,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 .getBaseTableVisibleVersionMap()
                 .computeIfAbsent(baseTable.getId(), k -> Maps.newHashMap());
         Set<String> result = Sets.newHashSet();
-        // check whether there are partitions added
+        // check whether there are partitions added and have data
         for (String partitionName : baseTable.getPartitionNames()) {
-            if (!baseTableVisibleVersionMap.containsKey(partitionName)) {
+            if (!baseTableVisibleVersionMap.containsKey(partitionName)
+                    && baseTable.getPartition(partitionName).getVisibleVersion() != 1) {
                 result.add(partitionName);
             }
         }
@@ -481,7 +487,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (baseTableIds != null) {
                 // for compatibility
                 for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, tableId));
+                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
                 }
             } else {
                 active = false;
@@ -630,6 +636,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)
                     .append("\" = \"");
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)).append("\"");
+        }
+
+        // partition refresh number
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
         }
 
         sb.append("\n)");
