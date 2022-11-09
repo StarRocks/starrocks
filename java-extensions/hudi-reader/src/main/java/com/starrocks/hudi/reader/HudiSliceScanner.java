@@ -57,7 +57,7 @@ public class HudiSliceScanner extends ConnectorScanner {
         this.fetchSize = fetchSize;
         this.basePath = params.get("base_path");
         this.hiveColumnNames = params.get("hive_column_names");
-        this.hiveColumnTypes = params.get("hive_column_types").split(":");
+        this.hiveColumnTypes = params.get("hive_column_types").split("#");
         this.requiredFields = params.get("required_fields").split(",");
         this.instantTime = params.get("instant_time");
         if (params.get("delta_file_paths").length() == 0) {

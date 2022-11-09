@@ -111,7 +111,7 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
         Assert.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
                 "_hoodie_partition_path,_hoodie_file_name,col1,col2", params.get(HUDI_TABLE_COLUMN_NAMES));
-        Assert.assertEquals("string:string:string:string:string:bigint:int", params.get(HUDI_TABLE_COLUMN_TYPES));
+        Assert.assertEquals("string#string#string#string#string#bigint#int", params.get(HUDI_TABLE_COLUMN_TYPES));
     }
 
     @Test
