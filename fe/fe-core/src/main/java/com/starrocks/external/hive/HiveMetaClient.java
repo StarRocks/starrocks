@@ -58,8 +58,11 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;
 
+import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -132,10 +135,15 @@ public class HiveMetaClient {
                 //LOG.warn("use new HiveConf");
                 //LOG.warn("use HiveConf");
                 HiveConf hiveConf = new HiveConf();
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
-                hiveConf.set("hadoop.security.authentication", "kerberos");
+                try {
+                    hiveConf.addResource(
+                            new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "hivemetastore-site.xml"));
+                    hiveConf.addResource(new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "hive-site.xml"));
+                    hiveConf.addResource(new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "core-site.xml"));
+                } catch (FileNotFoundException e) {
+                    LOG.warn(e.getMessage());
+                }
+                    hiveConf.set("hadoop.security.authentication", "kerberos");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
