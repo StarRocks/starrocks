@@ -23,7 +23,7 @@ Our community strictly adheres to the [code of conduct](https://github.com/StarR
 
 # Community roles
 
-![img](../assets/contribute.png)
+![img](../assets/contri-1.png)
 
 Everyone is encouraged to participate in the StarRocks project. Anyone can make an impact by simply being involved in the discussions about new features, project roadmap, architecture, and even reporting issues you are facing. 
 
