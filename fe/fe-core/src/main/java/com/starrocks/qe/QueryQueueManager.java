@@ -168,7 +168,6 @@ public class QueryQueueManager {
         }
     }
 
-    // For test.
     public void maybeNotify() {
         try {
             lock.lock();
