@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - branch-2.1
+    paths:
+      - 'fe/**.java'
+      - 'fe/**.xml'
   pull_request:
     paths:
       - 'fe/**.java'
