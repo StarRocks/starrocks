@@ -188,8 +188,6 @@ StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 
 |  not in   |  bool.must_not + terms   |
 |  esquery   |  ES Query DSL   |
 
-表 1 ：支持的谓词下推列表
-
 <br/>
 
 ### 查询示例
