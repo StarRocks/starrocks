@@ -135,9 +135,9 @@ public class HiveMetaClient {
                 HiveConf hiveConf = new HiveConf();
                 try {
                     hiveConf.addResource(
-                            new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "hivemetastore-site.xml"));
-                    hiveConf.addResource(new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "hive-site.xml"));
-                    hiveConf.addResource(new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "core-site.xml"));
+                            new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml"));
+                    hiveConf.addResource(new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml"));
+                    hiveConf.addResource(new FileInputStream(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml"));
                 } catch (FileNotFoundException e) {
                     LOG.warn(e.getMessage());
                 }
