@@ -138,6 +138,24 @@ ALTER SYSTEM MODIFY BACKEND HOST "<be_ip>" TO "<be_hostname>";
 >
 > 为 BE 节点启用 FQDN 访问后，您无需重启该 BE 节点。
 
+## 回滚
+
+如需将已启用 FQDN 访问的 StarRocks 集群回滚到不支持 FQDN 访问的早期版本，您必须首先将集群中的所有节点修改为 IP 地址访问。 您可以参考[旧集群启用 FQDN 访问](#旧集群启用-fqdn-访问)中的操作步骤，并将其中的 SQL 命令更改为以下命令：
+
+- 为 FE 节点启用 IP 地址访问：
+
+```SQL
+ALTER SYSTEM MODIFY FRONTEND HOST "<fe_hostname>" TO "<fe_ip>";
+```
+
+- 为 BE 节点启用 IP 地址访问：
+
+```SQL
+ALTER SYSTEM MODIFY BACKEND HOST "<be_hostname>" TO "<be_ip>";
+```
+
+修改完成后，您需要重启集群使修改生效。
+
 ## 常见问题
 
 **问：在为 FE 节点启用 FQDN 访问时返回错误：“required 1 replica. But none were active with this master”。该如何处理？**
