@@ -192,11 +192,9 @@ public class Optimizer {
         context = new OptimizerContext(memo, columnRefFactory, connectContext);
         context.setTraceInfo(new OptimizerTraceInfo(connectContext.getQueryId()));
 
-        // process materialized views
-        // TODO: add session variable
-        if (Config.enable_experimental_mv && !optimizerConfig.isRuleBased()) {
-            // TODO: register materialized views
-            // register materialized views
+        if (Config.enable_experimental_mv
+                && connectContext.getSessionVariable().isEnableMaterializedViewRewrite()
+                && !optimizerConfig.isRuleBased()) {
             registerMaterializedViews(logicOperatorTree, connectContext);
         }
     }
@@ -357,6 +355,12 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.INTERSECT_REWRITE);
         ruleRewriteIterative(tree, rootTaskContext, new RemoveAggregationFromAggTable());
 
+        if (!optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)
+                && sessionVariable.isEnableMaterializedViewRewrite()
+                && sessionVariable.isEnableRuleBasedMaterializedViewRewrite()) {
+            // now add single table materialized view rewrite rules in rule based rewrite phase to boost optimization
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.SINGLE_TABLE_MV_REWRITE);
+        }
         return tree.getInputs().get(0);
     }
 

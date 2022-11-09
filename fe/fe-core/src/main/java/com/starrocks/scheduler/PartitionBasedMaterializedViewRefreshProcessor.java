@@ -595,6 +595,7 @@ public class PartitionBasedMaterializedViewRefreshProcessor extends BaseTaskRunP
                 .setDb(ctx.getDatabase());
         ctx.getPlannerProfile().reset();
         ctx.setThreadLocalInfo();
+        ctx.getSessionVariable().setEnableMaterializedViewRewrite(false);
         String definition = mvContext.getDefinition();
         InsertStmt insertStmt =
                 (InsertStmt) SqlParser.parse(definition, ctx.getSessionVariable()).get(0);
