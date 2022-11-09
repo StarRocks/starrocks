@@ -157,9 +157,9 @@ INTO TABLE <table_name>
   - 如果使用 Kerberos 认证，需要指定如下配置：
 
     ```Plain
-    "hadoop.security.authentication" = "kerberos"
-    "kerberos_principal = "nn/zelda1@ZELDA.COM"
-    "kerberos_keytab = "/keytab/hive.keytab"
+    "hadoop.security.authentication" = "kerberos",
+    "kerberos_principal = "nn/zelda1@ZELDA.COM",
+    "kerberos_keytab = "/keytab/hive.keytab",
     "kerberos_keytab_content = "YWFhYWFh"
     ```
 
@@ -171,24 +171,35 @@ INTO TABLE <table_name>
     | kerberos_keytab         | 用于指定 Kerberos 的 Key Table（简称为“keytab”）文件的路径。该文件必须在 Broker 所在服务器上。 |
     | kerberos_keytab_content | 用于指定 Kerberos 中 keytab 文件的内容经过 Base64 编码之后的内容。该参数跟 `kerberos_keytab` 参数二选一配置。 |
 
+   注：使用 kerberos 认证时，需要修改 Broker 服务的 start_broker.sh 启动脚本，在文件 42 行附近修改如下信息让 Broker 服务读取 krb5.conf 文件信息。  
+   `/etc/krb5.conf` 文件路径根据实际情况进行修改，Broker 进程需要有权限读取该文件。  
+   部署多个 Broker 节点时，每个节点均需要修改如下信息，重启后生效。  
+
+    ```Plain
+    export JAVA_OPTS="-Dlog4j2.formatMsgNoLookups=true -Xmx1024m -Dfile.encoding=UTF-8 -Djava.security.krb5.conf=/etc/krb5.conf"
+    ```
+
 - HA 配置
 
-  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点。HA 配置示例如下：
+  可以为 HDFS 集群中的 NameNode 节点配置 HA 机制，从而确保发生 NameNode 节点切换时，StarRocks 能够自动识别新切换到的 NameNode 节点。  
+  目前 Broker 节点有两种方案可以读取到 Hdfs 节点信息，第一种方式是将 `hdfs-site.xml` 文件放在每个 Broker 节点的 `{deploy}/conf` 目录下，Broker 进程重启时会将 `{deploy_dir}/conf/` 目录添加到 CLASSPATH 环境变量的方式读取文件信息。  
+  另一种是在 Broker load 任务创建时增加如下 HA 配置：
 
   ```Plain
-  "dfs.nameservices" = "my_ha"
-  "dfs.ha.namenodes.my_ha" = "my_nn"
-  "dfs.namenode.rpc-address.my_ha.my_nn" = "<hdfs_host>:<hdfs_port>"
+  "dfs.nameservices" = "ha_cluster",
+  "dfs.ha.namenodes.ha_cluster" = "ha_n1,ha_n2",
+  "dfs.namenode.rpc-address.ha_cluster.ha_n1" = "<hdfs_host>:<hdfs_port>",
+  "dfs.namenode.rpc-address.ha_cluster.ha_n2" = "<hdfs_host>:<hdfs_port>",
   "dfs.client.failover.proxy.provider" = "org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider"
   ```
 
-  上述配置中的参数说明如下表所述。
+  上述配置中的参数说明如下表所述：
 
   | **参数名称**                         | **参数说明**                                                 |
-  | ------------------------------------ | ------------------------------------------------------------ |
-  | dfs.nameservices                   | 自定义 HDFS 集群的名称。                                     |
-  | dfs.ha.namenodes.xxx              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔。其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-  | dfs.namenode.rpc-address.xxx.nn    | 指定 NameNode 的 RPC 地址信息。其中 `nn` 表示 `dfs.ha.namenodes.xxx`  中自定义的 NameNode 的名称。 |
+  | ------------------------------------------------------- | --------------------------- |
+  | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
+  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  </br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+  | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  </br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
   | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
 #### Amazon S3
