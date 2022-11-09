@@ -115,7 +115,7 @@ public class QueryQueueManager {
         }
 
         long startMs = System.currentTimeMillis();
-        long timeoutMs = startMs + GlobalVariable.getQueryQueuePendingTimeoutSecond() * 1000L;
+        long timeoutMs;
         PendingQueryInfo info = new PendingQueryInfo(connectCtx, lock, coord);
 
         try {
@@ -131,6 +131,7 @@ public class QueryQueueManager {
             pendingQueryInfoMap.put(info.connectCtx, info);
 
             while (enableCheckQueue(coord) && !canRunMore()) {
+                timeoutMs = startMs + GlobalVariable.getQueryQueuePendingTimeoutSecond() * 1000L;
                 long currentMs = System.currentTimeMillis();
                 if (currentMs >= timeoutMs) {
                     throw new UserException("Pending timeout");
