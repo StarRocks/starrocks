@@ -30,6 +30,7 @@
 
 #include "agent/master_info.h"
 #include "common/object_pool.h"
+#include "exec/pipeline/fragment_executor.h"
 #include "gen_cpp/DataSinks_types.h"
 #include "gen_cpp/FrontendService.h"
 #include "gen_cpp/HeartbeatService.h"
@@ -751,7 +752,7 @@ void FragmentMgr::debug(std::stringstream& ss) {
  * 2. build TExecPlanFragmentParams
  */
 Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, const TUniqueId& fragment_instance_id,
-                                                std::vector<TScanColumnDesc>* selected_columns) {
+                                                std::vector<TScanColumnDesc>* selected_columns, TUniqueId* query_id) {
     const std::string& opaqued_query_plan = params.opaqued_query_plan;
     std::string query_plan_info;
     // base64 decode query plan
@@ -774,6 +775,8 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
             << " deserialize error, should not be modified after returned StarRocks FE processed";
         return Status::InvalidArgument(msg.str());
     }
+
+    *query_id = t_query_plan_info.query_id;
 
     // set up desc tbl
     DescriptorTbl* desc_tbl = nullptr;
@@ -819,6 +822,8 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     exec_fragment_params.protocol_version = (InternalServiceVersion::type)0;
     exec_fragment_params.__set_fragment(t_query_plan_info.plan_fragment);
     exec_fragment_params.__set_desc_tbl(t_query_plan_info.desc_tbl);
+    exec_fragment_params.__set_backend_num(1);
+    exec_fragment_params.__set_pipeline_dop(1);
 
     // assign the param used for executing of PlanFragment-self
     TPlanFragmentExecParams fragment_exec_params;
@@ -856,6 +861,9 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     }
     per_node_scan_ranges.insert(std::make_pair((::starrocks::TPlanNodeId)0, scan_ranges));
     fragment_exec_params.per_node_scan_ranges = per_node_scan_ranges;
+    // set a mock sender id
+    fragment_exec_params.__set_sender_id(0);
+    fragment_exec_params.__set_instances_number(1);
     exec_fragment_params.__set_params(fragment_exec_params);
     // batch_size for one RowBatch
     TQueryOptions query_options;
@@ -866,7 +874,12 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     exec_fragment_params.__set_query_options(query_options);
     VLOG_ROW << "external exec_plan_fragment params is "
              << apache::thrift::ThriftDebugString(exec_fragment_params).c_str();
-    return exec_plan_fragment(exec_fragment_params);
+    pipeline::FragmentExecutor fragment_executor;
+    auto status = fragment_executor.prepare(ExecEnv::GetInstance(), exec_fragment_params, exec_fragment_params);
+    if (status.ok()) {
+        return fragment_executor.execute(ExecEnv::GetInstance());
+    }
+    return status.is_duplicate_rpc_invocation() ? Status::OK(): status;
 }
 
 } // namespace starrocks

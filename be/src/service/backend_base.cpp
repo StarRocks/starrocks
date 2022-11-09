@@ -139,6 +139,7 @@ void BackendServiceBase::finish_stream_load_channel(TStatus& t_status, const TSt
  * 2. FragmentMgr#exec_plan_fragment
  */
 void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenParams& params) {
+    LOG(INFO) << "invoke BackendServiceBase::open_scanner";
     TStatus t_status;
     TUniqueId fragment_instance_id = generate_uuid();
     std::shared_ptr<ScanContext> p_context;
@@ -146,6 +147,7 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     p_context->fragment_instance_id = fragment_instance_id;
     p_context->offset = 0;
     p_context->last_access_time = time(nullptr);
+    // @TODO set query id
     if (params.__isset.keep_alive_min) {
         p_context->keep_alive_min = params.keep_alive_min;
     } else {
@@ -154,7 +156,7 @@ void BackendServiceBase::open_scanner(TScanOpenResult& result_, const TScanOpenP
     std::vector<TScanColumnDesc> selected_columns;
     // start the scan procedure
     Status exec_st =
-            _exec_env->fragment_mgr()->exec_external_plan_fragment(params, fragment_instance_id, &selected_columns);
+            _exec_env->fragment_mgr()->exec_external_plan_fragment(params, fragment_instance_id, &selected_columns, &(p_context->query_id));
     exec_st.to_thrift(&t_status);
     //return status
     // t_status.status_code = TStatusCode::OK;
