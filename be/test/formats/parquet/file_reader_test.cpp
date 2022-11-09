@@ -62,6 +62,7 @@ private:
                                       std::vector<ExprContext*>* conjunct_ctxs);
 
     static vectorized::ChunkPtr _create_chunk();
+    static vectorized::ChunkPtr _create_multi_page_chunk();
     static vectorized::ChunkPtr _create_struct_chunk();
     static vectorized::ChunkPtr _create_required_array_chunk();
     static vectorized::ChunkPtr _create_chunk_for_partition();
@@ -99,20 +100,20 @@ private:
 
     // Description: A parquet file contains multiple pages
     //
-    // c1      c2      c3      c4
-    // -------------------------------------------
-    // 0       10      a       2022-07-12 03:52:14
-    // 1       11      a       2022-07-12 03:52:14
-    // 2       12      a       2022-07-12 03:52:14
-    // 3       13      c       2022-07-12 03:52:14
-    // 4       14      c       2022-07-12 03:52:14
-    // 5       15      c       2022-07-12 03:52:14
-    // 6       16      a       2022-07-12 03:52:14
+    // c1      c2      c3      c4                       c5
+    // -------------------------------------------------------------------------
+    // 0       10      a       2022-07-12 03:52:14  {"e": 0, "f": 10, "g": 20}
+    // 1       11      a       2022-07-12 03:52:14  {"e": 1, "f": 11, "g": 21}
+    // 2       12      a       2022-07-12 03:52:14  {"e": 2, "f": 12, "g": 22}
+    // 3       13      c       2022-07-12 03:52:14  {"e": 3, "f": 13, "g": 23}
+    // 4       14      c       2022-07-12 03:52:14  {"e": 4, "f": 14, "g": 24}
+    // 5       15      c       2022-07-12 03:52:14  {"e": 5, "f": 15, "g": 25}
+    // 6       16      a       2022-07-12 03:52:14  {"e": 6, "f": 16, "g": 26}
     // ...    ...     ...      ...
-    // 4092   4102     a       2022-07-12 03:52:14
-    // 4093   4103     a       2022-07-12 03:52:14
-    // 4094   4104     a       2022-07-12 03:52:14
-    // 4095   4105     a       2022-07-12 03:52:14
+    // 4092   4102     a       2022-07-12 03:52:14  {"e": 4092, "f": 4102, "g": 4112}
+    // 4093   4103     a       2022-07-12 03:52:14  {"e": 4093, "f": 4103, "g": 4113}
+    // 4094   4104     a       2022-07-12 03:52:14  {"e": 4094, "f": 4104, "g": 4114}
+    // 4095   4105     a       2022-07-12 03:52:14  {"e": 4095, "f": 4105, "g": 4115}
     std::string _file3_path = "./be/test/exec/test_data/parquet_scanner/file_reader_test.parquet3";
 
     // Description: A complex parquet file contains contains struct, array and uppercase columns
@@ -343,6 +344,7 @@ HdfsScannerContext* FileReaderTest::_create_file3_base_context() {
             {"c2", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_BIGINT)},
             {"c3", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
             {"c4", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_DATETIME)},
+            {"c5", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR)},
             {""},
     };
     ctx->tuple_desc = create_tuple_descriptor(&_pool, slot_descs);
@@ -550,6 +552,16 @@ vectorized::ChunkPtr FileReaderTest::_create_chunk() {
     _append_column_for_chunk(PrimitiveType::TYPE_BIGINT, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     _append_column_for_chunk(PrimitiveType::TYPE_DATETIME, &chunk);
+    return chunk;
+}
+
+vectorized::ChunkPtr FileReaderTest::_create_multi_page_chunk() {
+    vectorized::ChunkPtr chunk = std::make_shared<vectorized::Chunk>();
+    _append_column_for_chunk(PrimitiveType::TYPE_INT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_BIGINT, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_DATETIME, &chunk);
+    _append_column_for_chunk(PrimitiveType::TYPE_VARCHAR, &chunk);
     return chunk;
 }
 
@@ -790,7 +802,7 @@ TEST_F(FileReaderTest, TestMultiFilterWithMultiPage) {
     ASSERT_NE(conjunct_ctxs_by_slot.find(0), conjunct_ctxs_by_slot.end());
 
     // get next
-    auto chunk = _create_chunk();
+    auto chunk = _create_multi_page_chunk();
     status = file_reader->get_next(&chunk);
     ASSERT_TRUE(status.ok());
     ASSERT_EQ(2, chunk->num_rows());
@@ -819,7 +831,7 @@ TEST_F(FileReaderTest, TestOtherFilterWithMultiPage) {
 
     // get next
     while (!status.is_end_of_file()) {
-        auto chunk = _create_chunk();
+        auto chunk = _create_multi_page_chunk();
         status = file_reader->get_next(&chunk);
         if (!status.ok()) {
             break;

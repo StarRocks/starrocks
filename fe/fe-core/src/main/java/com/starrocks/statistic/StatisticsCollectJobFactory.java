@@ -3,7 +3,6 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -70,8 +69,7 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties) {
         if (columns == null || columns.isEmpty()) {
-            columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
-                    .collect(Collectors.toList());
+            columns = StatisticUtils.getCollectibleColumns(table);
         }
 
         if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {

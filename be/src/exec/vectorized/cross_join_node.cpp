@@ -19,6 +19,7 @@
 #include "exec/pipeline/pipeline_builder.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/literal.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "glog/logging.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
@@ -36,6 +37,8 @@ static bool _support_join_type(TJoinOp::type join_type) {
     case TJoinOp::LEFT_OUTER_JOIN:
     case TJoinOp::RIGHT_OUTER_JOIN:
     case TJoinOp::FULL_OUTER_JOIN:
+    case TJoinOp::LEFT_SEMI_JOIN:
+    case TJoinOp::LEFT_ANTI_JOIN:
         return true;
     default:
         return false;
@@ -49,6 +52,9 @@ Status CrossJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     }
     if (tnode.__isset.nestloop_join_node) {
         _join_op = tnode.nestloop_join_node.join_op;
+        if (!state->enable_pipeline_engine() && _join_op != TJoinOp::CROSS_JOIN && _join_op != TJoinOp::INNER_JOIN) {
+            return Status::NotSupported("non-pipeline engine only support CROSS JOIN");
+        }
         if (!_support_join_type(_join_op)) {
             std::string type_string = starrocks::to_string(_join_op);
             return Status::NotSupported("nestloop join not supoort: " + type_string);
