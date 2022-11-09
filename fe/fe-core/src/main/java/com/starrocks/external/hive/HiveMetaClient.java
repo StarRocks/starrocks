@@ -128,43 +128,43 @@ public class HiveMetaClient {
             if (!DLF_HIVE_METASTORE.equalsIgnoreCase(conf.get(HIVE_METASTORE_TYPE))) {
                 // hiveClient = RetryingMetaStoreClient.getProxy(conf, dummyHookLoader,
                 //         HiveMetaStoreThriftClient.class.getName());
-                LOG.warn("use HiveMetaStoreClient");
-                LOG.warn("use new HiveConf");
-                LOG.warn("use HiveConf");
-                HiveConf hiveConf = new HiveConf();
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
-                hiveConf.set("hadoop.security.authentication", "kerberos");
-                LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
-                LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
-                LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
+                //LOG.warn("use HiveMetaStoreClient");
+                //LOG.warn("use new HiveConf");
+                //LOG.warn("use HiveConf");
+                //HiveConf hiveConf = new HiveConf();
+                //hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
+                //hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
+                //hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
+                //hiveConf.set("hadoop.security.authentication", "kerberos");
+                //LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
+                //LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
+                //LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
+                //
+                //String zookeeperDefaultLoginContextName = "Client";
+                //String zookeeperServerPrincipalKey = "zookeeper.server.principal";
+                //String zookeeperDefaultServerPrincipal = "zookeeper/hadoop";
+                //
+                //String krb5File = null;
+                //String userKeytabFile = null;
+                //// 设置安全认证的用户名，其中"xxx"指代安全认证的用户名，例如安全认证的用户名为user，则USER_NAME为user
+                //String userName = "star";
+                //
+                //userKeytabFile = StarRocksFE.STARROCKS_HOME_DIR  + "/conf/user.keytab";
+                //krb5File = StarRocksFE.STARROCKS_HOME_DIR  + "/conf/krb5.conf";
+                //LOG.warn(krb5File);
+                //LOG.warn(userKeytabFile);
+                //try {
+                //    System.setProperty("java.security.krb5.conf", krb5File);
+                //    LoginUtil.setJaasConf(zookeeperDefaultLoginContextName, userName, userKeytabFile);
+                //    LoginUtil.setZookeeperServerPrincipal(zookeeperServerPrincipalKey,
+                //            zookeeperDefaultServerPrincipal);
+                //    LoginUtil.login(userName, userKeytabFile, krb5File, new Configuration());
+                //    LOG.warn("login successful...");
+                //} catch (IOException e) {
+                //    LOG.warn(e.getMessage());
+                //}
 
-                String zookeeperDefaultLoginContextName = "Client";
-                String zookeeperServerPrincipalKey = "zookeeper.server.principal";
-                String zookeeperDefaultServerPrincipal = "zookeeper/hadoop";
-
-                String krb5File = null;
-                String userKeytabFile = null;
-                // 设置安全认证的用户名，其中"xxx"指代安全认证的用户名，例如安全认证的用户名为user，则USER_NAME为user
-                String userName = "star";
-
-                userKeytabFile = StarRocksFE.STARROCKS_HOME_DIR  + "/conf/user.keytab";
-                krb5File = StarRocksFE.STARROCKS_HOME_DIR  + "/conf/krb5.conf";
-                LOG.warn(krb5File);
-                LOG.warn(userKeytabFile);
-                try {
-                    System.setProperty("java.security.krb5.conf", krb5File);
-                    LoginUtil.setJaasConf(zookeeperDefaultLoginContextName, userName, userKeytabFile);
-                    LoginUtil.setZookeeperServerPrincipal(zookeeperServerPrincipalKey,
-                            zookeeperDefaultServerPrincipal);
-                    LoginUtil.login(userName, userKeytabFile, krb5File, new Configuration());
-                    LOG.warn("login successful...");
-                } catch (IOException e) {
-                    LOG.warn(e.getMessage());
-                }
-
-                hiveClient = new HiveMetaStoreClient(hiveConf);
+                hiveClient = new HiveMetaStoreClient(conf);
                 try {
                     List<String> res = hiveClient.getAllDatabases();
                     LOG.warn("I got it...");
