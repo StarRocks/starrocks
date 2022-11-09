@@ -20,9 +20,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.DataInputStream;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
@@ -91,7 +93,7 @@ public class AuthUpgraderTest {
         ctx.setQualifiedUser(user.getQualifiedUser());
         try {
             PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(badSql, ctx), ctx);
-            Assert.fail();
+            Assert.fail(badSql + " should fail");
         } catch (Exception e) {
             System.err.println("got exception as expect: " + e.getMessage());
             Assert.assertTrue(e.getMessage().contains(expectError));
@@ -303,5 +305,163 @@ public class AuthUpgraderTest {
             ctx.setCurrentUserIdentity(createUserByRole("oneUsageResourceRole"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
         }
+    }
+
+    @Test
+    public void testNodeAdmin() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user nodeuser",
+                "GRANT node_priv on *.* to nodeuser",
+                "create role noderole",
+                "GRANT node_priv on *.* to role noderole",
+                "create user noderesourceuser",
+                "GRANT node_priv on resource * to noderesourceuser",
+                "create role noderesourcerole",
+                "GRANT node_priv on resource * to role noderesourcerole",
+                "create user adminuser",
+                "GRANT admin_priv on *.* to adminuser",
+                "create role adminrole",
+                "GRANT admin_priv on *.* to role adminrole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            for (String name : Arrays.asList("node", "noderesource")) {
+                ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(name + "user", "%"));
+                Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.SystemAction.NODE));
+                ctx.setCurrentUserIdentity(createUserByRole(name + "role"));
+                Assert.assertTrue(PrivilegeManager.checkSystemAction(ctx, PrivilegeType.SystemAction.NODE));
+            }
+
+            UserIdentity user = createUserByRole("adminrole");
+            String createResourceStmt = "create external resource 'hive0' PROPERTIES(" +
+                    "\"type\"  =  \"hive\", \"hive.metastore.uris\"  =  \"thrift://127.0.0.1:9083\")";
+            checkPrivilegeAsUser(user,
+                    "select * from db1.tbl1",
+                    "select * from db0.tbl0",
+                    createResourceStmt);
+            user = createUserByRole("adminrole");
+            checkPrivilegeAsUser(user,
+                    "select * from db1.tbl1",
+                    "select * from db0.tbl0",
+                    createResourceStmt);
+        }
+    }
+
+    // for test GRANT
+    private UtFrameUtils.PseudoImage initGrantImage(String name, String grantPattern) throws Exception {
+        String user = name + "_user";
+        String role = name + "_role";
+        return executeAndUpgrade(
+                true,
+                "create user " + user,
+                "GRANT grant_priv on " + grantPattern + " to " + user,
+                "GRANT select_priv on db0.* to " + user,
+                "GRANT select_priv on db1.tbl1 to " + user,
+                "GRANT usage_priv on resource hive0 to " + user,
+                "create role " + role,
+                "GRANT grant_priv on " + grantPattern + " to role " + role,
+                "GRANT select_priv on db0.* to role " + role,
+                "GRANT select_priv on db1.tbl1 to role " + role,
+                "GRANT usage_priv on resource hive0 to role " + role);
+    }
+
+    // for test GRANT
+    private void checkGrant(
+            UtFrameUtils.PseudoImage image,
+            String name,
+            List<String> allowGrantSQLs,
+            List<String> denyGrantSQLs) throws Exception {
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            UserIdentity user1 = UserIdentity.createAnalyzedUserIdentWithIp(name + "_user", "%");
+            UserIdentity user2 = createUserByRole(name + "_role");
+            for (UserIdentity user : Arrays.asList(user1, user2)) {
+                checkPrivilegeAsUser(
+                        user,
+                        "select * from db1.tbl1",
+                        "select * from db0.tbl0");
+                checkBadPrivilegeAsUser(
+                        user,
+                        "select * from db1.tbl0",
+                        "SELECT command denied to user '" + user.getQualifiedUser());
+                ctx.setCurrentUserIdentity(user);
+                Assert.assertTrue(
+                        PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+
+                for (String sql : allowGrantSQLs) {
+                    checkPrivilegeAsUser(user, sql);
+                }
+                for (String sql : denyGrantSQLs) {
+                    checkBadPrivilegeAsUser(
+                            user, sql,
+                            "Access denied; you need (at least one of) the GRANT privilege(s) for this operation");
+                }
+            }
+        }
+    }
+
+    @Test
+    public void testGlobalGrant() throws Exception {
+        UtFrameUtils.PseudoImage image = initGrantImage("global_grant", "*.*");
+        List<String> allows = Arrays.asList(
+                "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "GRANT USAGE ON resource 'hive0' TO role public");
+        checkGrant(image, "global_grant", allows, new ArrayList<>());
+    }
+
+    @Test
+    public void testDbGrant() throws Exception {
+        UtFrameUtils.PseudoImage image = initGrantImage("db_grant", "db0.*");
+        List<String> allows = Arrays.asList(
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public");
+        List<String> denies = Arrays.asList(
+                "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "GRANT SELECT ON db1.tbl1 TO role public");
+        checkGrant(image, "db_grant", allows, denies);
+    }
+
+    @Test
+    public void testTblGrant() throws Exception {
+        UtFrameUtils.PseudoImage image = initGrantImage("table_grant", "db1.tbl1");
+        List<String> allows = Arrays.asList(
+                "GRANT SELECT ON db1.tbl1 TO role public");
+        List<String> denies = Arrays.asList(
+                "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public");
+        checkGrant(image, "table_grant", allows, denies);
+    }
+
+    @Test
+    public void testResourceGrant() throws Exception {
+        UtFrameUtils.PseudoImage image = initGrantImage("resource_grant", "resource hive0");
+        List<String> allows = Arrays.asList(
+                "GRANT USAGE ON resource 'hive0' TO role public");
+        List<String> denies = Arrays.asList(
+                "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
+                "GRANT SELECT ON db1.tbl1 TO role public");
+        checkGrant(image, "resource_grant", allows, denies);
+    }
+
+    @Test
+    public void testResourceGlobal() throws Exception {
+        UtFrameUtils.PseudoImage image = initGrantImage("resource_global_grant", "resource *");
+        List<String> allows = Arrays.asList(
+                "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "GRANT USAGE ON resource 'hive0' TO role public");
+        checkGrant(image, "resource_global_grant", allows, new ArrayList<>());
     }
 }
