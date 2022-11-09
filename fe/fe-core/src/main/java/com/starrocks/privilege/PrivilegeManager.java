@@ -627,7 +627,7 @@ public class PrivilegeManager {
             PEntryObject dbObject = manager.provider.generateObject(
                     PrivilegeType.DATABASE.name(), Arrays.asList(db), manager.globalStateMgr);
             short dbTypeId = manager.analyzeType(PrivilegeType.DATABASE.name());
-            if (manager.provider.checkAnyAction(dbTypeId, dbObject, collection)) {
+            if (manager.provider.searchObject(dbTypeId, dbObject, collection)) {
                 return true;
             }
             // 2. check for any action in any table in this db
@@ -638,7 +638,7 @@ public class PrivilegeManager {
                     db,
                     manager.globalStateMgr);
             short tableTypeId = manager.analyzeType(PrivilegeType.TABLE.name());
-            return manager.provider.checkAnyAction(tableTypeId, allTableInDbObject, collection);
+            return manager.provider.searchObject(tableTypeId, allTableInDbObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
             return false;
@@ -655,7 +655,7 @@ public class PrivilegeManager {
             PEntryObject tableObject = manager.provider.generateObject(
                     PrivilegeType.TABLE.name(), Arrays.asList(db, table), manager.globalStateMgr);
             short tableTypeId = manager.analyzeType(PrivilegeType.TABLE.name());
-            return manager.provider.checkAnyAction(tableTypeId, tableObject, collection);
+            return manager.provider.searchObject(tableTypeId, tableObject, collection);
         } catch (PrivilegeException e) {
             LOG.warn("caught exception when check any on db {}", db, e);
             return false;

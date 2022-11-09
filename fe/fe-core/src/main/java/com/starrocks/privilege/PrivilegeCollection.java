@@ -194,12 +194,16 @@ public class PrivilegeCollection {
         return false;
     }
 
-    public boolean checkAnyAction(short type, PEntryObject object) {
+    public boolean searchObject(short type, PEntryObject object) {
         List<PrivilegeEntry> privilegeEntryList = typeToPrivilegeEntryList.get(type);
         if (privilegeEntryList == null) {
             return false;
         }
         for (PrivilegeEntry privilegeEntry : privilegeEntryList) {
+            // 1. objectMatch(object, privilegeEntry.object):
+            //    checking if db1.table1 exists for a user that's granted with `ALL tables in db1` will return true
+            // 2. objectMatch(privilegeEntry.object, object):
+            //    checking if any table in db1 exists for a user that's granted with `db1.table1` will return true
             if (objectMatch(object, privilegeEntry.object) || objectMatch(privilegeEntry.object, object)) {
                 return true;
             }
