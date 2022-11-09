@@ -54,18 +54,6 @@ WrapperField* WrapperField::create(const TabletColumn& column, uint32_t len) {
     return new WrapperField(rep, variable_len, is_string_type);
 }
 
-WrapperField* WrapperField::create_by_type(const FieldType& type, int32_t var_length) {
-    Field* rep = FieldFactory::create_by_type(type);
-    if (rep == nullptr) {
-        return nullptr;
-    }
-    bool is_string_type =
-            (type == OLAP_FIELD_TYPE_CHAR || type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
-             type == OLAP_FIELD_TYPE_OBJECT || type == OLAP_FIELD_TYPE_PERCENTILE || type == OLAP_FIELD_TYPE_JSON);
-    auto wrapper = new WrapperField(rep, var_length, is_string_type);
-    return wrapper;
-}
-
 WrapperField::WrapperField(Field* rep, size_t variable_len, bool is_string_type)
         : _rep(rep), _is_string_type(is_string_type), _var_length(0) {
     size_t fixed_len = _rep->size();
