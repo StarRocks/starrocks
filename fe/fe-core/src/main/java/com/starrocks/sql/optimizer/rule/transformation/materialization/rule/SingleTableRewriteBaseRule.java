@@ -35,7 +35,7 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
             }
             // sort expressions based on statistics output row count
             Collections.sort(expressions, (expression1, expression2) -> {
-                if (expression1.getStatistics() == null && expression1.getStatistics() == null) {
+                if (expression1.getStatistics() == null && expression2.getStatistics() == null) {
                     return 0;
                 } else if (expression1.getStatistics() == null) {
                     return -1;
