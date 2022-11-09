@@ -53,7 +53,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -738,43 +737,6 @@ public class Utils {
         for (OptExpression child : root.getInputs()) {
             getAllPredicates(child, predicates);
         }
-    }
-
-    // split predicate into three parts: equal columns predicates, range predicates, and residual predicates
-    public static PredicateSplit splitPredicate(ScalarOperator predicate) {
-        if (predicate == null) {
-            return PredicateSplit.of(null, null, null);
-        }
-        List<ScalarOperator> predicateConjuncts = Utils.extractConjuncts(predicate);
-        List<ScalarOperator> columnEqualityPredicates = Lists.newArrayList();
-        List<ScalarOperator> rangePredicates = Lists.newArrayList();
-        List<ScalarOperator> residualPredicates = Lists.newArrayList();
-        for (ScalarOperator scalarOperator : predicateConjuncts) {
-            if (scalarOperator instanceof BinaryPredicateOperator) {
-                BinaryPredicateOperator binary = (BinaryPredicateOperator) scalarOperator;
-                ScalarOperator leftChild = scalarOperator.getChild(0);
-                ScalarOperator rightChild = scalarOperator.getChild(1);
-                if (binary.getBinaryType().isEqual()) {
-                    if (leftChild.isColumnRef() && rightChild.isColumnRef()) {
-                        columnEqualityPredicates.add(scalarOperator);
-                    } else if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                        rangePredicates.add(scalarOperator);
-                    } else {
-                        residualPredicates.add(scalarOperator);
-                    }
-                } else if (binary.getBinaryType().isRange()) {
-                    if (leftChild.isColumnRef() && rightChild.isConstantRef()) {
-                        rangePredicates.add(scalarOperator);
-                    } else {
-                        residualPredicates.add(scalarOperator);
-                    }
-                }
-            } else {
-                residualPredicates.add(scalarOperator);
-            }
-        }
-        return PredicateSplit.of(Utils.compoundAnd(columnEqualityPredicates), Utils.compoundAnd(rangePredicates),
-                Utils.compoundAnd(residualPredicates));
     }
 
     public static ScalarOperator canonizePredicate(ScalarOperator predicate) {

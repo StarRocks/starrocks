@@ -84,7 +84,7 @@ public class MaterializedViewRewriter {
             queryPredicate = Utils.compoundAnd(queryConjuncts);
             queryPredicate = queryColumnRefRewriter.rewrite(queryPredicate.clone());
         }
-        final PredicateSplit queryPredicateSplit = Utils.splitPredicate(queryPredicate);
+        final PredicateSplit queryPredicateSplit = PredicateSplit.splitPredicate(queryPredicate);
         EquivalenceClasses queryEc = createEquivalenceClasses(queryPredicateSplit.getEqualPredicates());
 
         // should get all query tables
@@ -125,7 +125,7 @@ public class MaterializedViewRewriter {
             mvPredicate = Utils.compoundAnd(mvConjuncts);
             mvPredicate = mvColumnRefRewriter.rewrite(mvPredicate.clone());
         }
-        final PredicateSplit mvPredicateSplit = Utils.splitPredicate(mvPredicate);
+        final PredicateSplit mvPredicateSplit = PredicateSplit.splitPredicate(mvPredicate);
 
         Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns =
                 getRelationIdToColumns(materializationContext.getQueryRefFactory());

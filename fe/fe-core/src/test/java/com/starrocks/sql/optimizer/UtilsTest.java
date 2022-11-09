@@ -8,7 +8,6 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
@@ -25,12 +24,10 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.statistic.StatsConstants;
 import com.starrocks.utframe.StarRocksAssert;
@@ -373,36 +370,6 @@ public class UtilsTest {
                 Utils.compoundOr(binaryPredicate, binaryPredicate4));
         OptExpression joinExpr6 = OptExpression.create(joinOperator5, scanExpr, scanExpr2);
         Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr6));
-    }
-
-    @Test
-    public void testSplitPredicate() {
-        ScalarOperator predicate = null;
-        PredicateSplit split = Utils.splitPredicate(predicate);
-        Assert.assertNotNull(split);
-        Assert.assertNull(split.getEqualPredicates());
-        Assert.assertNull(split.getRangePredicates());
-        Assert.assertNull(split.getResidualPredicates());
-
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
-        ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
-        BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef2);
-        BinaryPredicateOperator binaryPredicate2 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, columnRef1, ConstantOperator.createInt(1));
-
-        List<ScalarOperator> arguments = Lists.newArrayList();
-        arguments.add(columnRef1);
-        arguments.add(columnRef2);
-        CallOperator callOperator = new CallOperator(FunctionSet.SUM, Type.INT, arguments);
-        BinaryPredicateOperator binaryPredicate3 = new BinaryPredicateOperator(
-                BinaryPredicateOperator.BinaryType.GE, callOperator, ConstantOperator.createInt(1));
-        ScalarOperator andPredicate = Utils.compoundAnd(binaryPredicate, binaryPredicate2, binaryPredicate3);
-        PredicateSplit result = Utils.splitPredicate(andPredicate);
-        Assert.assertEquals(binaryPredicate, result.getEqualPredicates());
-        Assert.assertEquals(binaryPredicate2, result.getRangePredicates());
-        Assert.assertEquals(binaryPredicate3, result.getResidualPredicates());
     }
 
     @Test
