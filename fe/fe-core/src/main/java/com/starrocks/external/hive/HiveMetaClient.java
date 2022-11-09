@@ -171,9 +171,8 @@ public class HiveMetaClient {
                     for (String r : res) {
                         LOG.warn(r);
                     }
-                } catch (TException e) {
-                    LOG.warn("don't get...");
-                    LOG.warn(e.getMessage());
+                } catch (Exception e) {
+                    LOG.warn("xxxxxxx, msg：", e);
                     throw new MetaException("I don't get database...");
                 }
 
