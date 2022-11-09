@@ -2,11 +2,13 @@ name: FE Sonar Build
 on:
   push:
     branches:
-      - branch-2.3
+      - main
     paths:
       - 'fe/**.java'
       - 'fe/**.xml'
   pull_request:
+    branches:
+      - main
     paths:
       - 'fe/**.java'
       - 'fe/**.xml'
