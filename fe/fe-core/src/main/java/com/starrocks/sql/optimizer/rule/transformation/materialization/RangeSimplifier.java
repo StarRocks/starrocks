@@ -128,7 +128,7 @@ public class RangeSimplifier {
         }
     }
 
-    boolean isScalarForColumns(ScalarOperator predicate, int columnId) {
+    private boolean isScalarForColumns(ScalarOperator predicate, int columnId) {
         BinaryPredicateOperator binary = (BinaryPredicateOperator) predicate;
         ColumnRefOperator targetColumn = (ColumnRefOperator) binary.getChild(0);
         if (targetColumn.getId() == columnId) {
@@ -138,7 +138,7 @@ public class RangeSimplifier {
         }
     }
 
-    boolean isSingleValueRange(Range range) {
+    private boolean isSingleValueRange(Range range) {
         // 3 <= range <= 3
         return range.hasLowerBound()
                 && range.hasUpperBound()

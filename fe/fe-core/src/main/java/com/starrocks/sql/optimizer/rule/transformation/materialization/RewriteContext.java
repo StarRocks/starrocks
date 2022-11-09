@@ -16,7 +16,7 @@ import java.util.Set;
 public class RewriteContext {
     private final OptExpression queryExpression;
     private final PredicateSplit queryPredicateSplit;
-    private final EquivalenceClasses queryEc;
+    private final EquivalenceClasses queryEquivalenceClasses;
     // key is table relation id
     private final Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns;
     private final ColumnRefFactory queryRefFactory;
@@ -26,7 +26,7 @@ public class RewriteContext {
     private final PredicateSplit mvPredicateSplit;
     private final Map<Integer, List<ColumnRefOperator>> mvRelationIdToColumns;
     private final ColumnRefFactory mvRefFactory;
-    private EquivalenceClasses queryBasedViewEc;
+    private EquivalenceClasses queryBasedViewEquivalenceClasses;
     private final ReplaceColumnRefRewriter mvColumnRefRewriter;
 
     private final Map<ColumnRefOperator, ColumnRefOperator> outputMapping;
@@ -35,7 +35,7 @@ public class RewriteContext {
 
     public RewriteContext(OptExpression queryExpression,
                           PredicateSplit queryPredicateSplit,
-                          EquivalenceClasses queryEc,
+                          EquivalenceClasses queryEquivalenceClasses,
                           Map<Integer, List<ColumnRefOperator>> queryRelationIdToColumns,
                           ColumnRefFactory queryRefFactory,
                           ReplaceColumnRefRewriter queryColumnRefRewriter,
@@ -48,7 +48,7 @@ public class RewriteContext {
                           Set<ColumnRefOperator> queryColumnSet) {
         this.queryExpression = queryExpression;
         this.queryPredicateSplit = queryPredicateSplit;
-        this.queryEc = queryEc;
+        this.queryEquivalenceClasses = queryEquivalenceClasses;
         this.queryRelationIdToColumns = queryRelationIdToColumns;
         this.queryRefFactory = queryRefFactory;
         this.queryColumnRefRewriter = queryColumnRefRewriter;
@@ -77,8 +77,8 @@ public class RewriteContext {
         return queryPredicateSplit;
     }
 
-    public EquivalenceClasses getQueryEc() {
-        return queryEc;
+    public EquivalenceClasses getQueryEquivalenceClasses() {
+        return queryEquivalenceClasses;
     }
 
     public Map<Integer, List<ColumnRefOperator>> getQueryRelationIdToColumns() {
@@ -105,12 +105,12 @@ public class RewriteContext {
         return mvRefFactory;
     }
 
-    public EquivalenceClasses getQueryBasedViewEc() {
-        return queryBasedViewEc;
+    public EquivalenceClasses getQueryBasedViewEquivalenceClasses() {
+        return queryBasedViewEquivalenceClasses;
     }
 
-    public void setQueryBasedViewEc(EquivalenceClasses queryBasedViewEc) {
-        this.queryBasedViewEc = queryBasedViewEc;
+    public void setQueryBasedViewEquivalenceClasses(EquivalenceClasses queryBasedViewEquivalenceClasses) {
+        this.queryBasedViewEquivalenceClasses = queryBasedViewEquivalenceClasses;
     }
 
     public ReplaceColumnRefRewriter getQueryColumnRefRewriter() {

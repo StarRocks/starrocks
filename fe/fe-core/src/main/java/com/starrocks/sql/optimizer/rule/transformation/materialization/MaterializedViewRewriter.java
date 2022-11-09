@@ -20,7 +20,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -91,15 +90,7 @@ public class MaterializedViewRewriter {
         // should get all query tables
         List<Table> queryTables = Utils.getAllTables(queryExpression);
 
-        LogicalProjectOperator mvTopProjection;
-        OptExpression mvExpression;
-        if (materializationContext.getMvExpression().getOp() instanceof LogicalProjectOperator) {
-            mvTopProjection = (LogicalProjectOperator) materializationContext.getMvExpression().getOp();
-            mvExpression = materializationContext.getMvExpression().getInputs().get(0);
-        } else {
-            mvTopProjection = null;
-            mvExpression = materializationContext.getMvExpression();
-        }
+        OptExpression mvExpression = materializationContext.getMvExpression();
         List<Table> mvTables = Utils.getAllTables(mvExpression);
         if (Collections.disjoint(queryTables, mvTables)) {
             // if table lists do not intersect, can not be rewritten
@@ -184,7 +175,7 @@ public class MaterializedViewRewriter {
             ScalarOperator queryBasedViewEqualPredicate = columnRewriter.rewriteViewToQuery(equalPredicates);
             queryBaseViewEc = createEquivalenceClasses(queryBasedViewEqualPredicate);
         }
-        rewriteContext.setQueryBasedViewEc(queryBaseViewEc);
+        rewriteContext.setQueryBasedViewEquivalenceClasses(queryBaseViewEc);
 
         PredicateSplit compensationPredicates = getCompensationPredicates(rewriteContext, true);
         if (compensationPredicates == null
@@ -196,7 +187,7 @@ public class MaterializedViewRewriter {
             ScalarOperator otherPredicates = Utils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
             if (!Utils.isAlwaysTrue(equalPredicates) || !Utils.isAlwaysTrue(otherPredicates)) {
-                Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(
+                Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getColumnRefMap(
                         rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
 
                 if (!Utils.isAlwaysTrue(equalPredicates)) {
@@ -327,7 +318,7 @@ public class MaterializedViewRewriter {
 
     // TODO: consider no-loss type cast
     protected OptExpression viewBasedRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getProjectionMap(
+        Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getColumnRefMap(
                 rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
         // normalize view projection by query relation and ec
         Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
@@ -339,7 +330,7 @@ public class MaterializedViewRewriter {
     protected OptExpression rewriteProjection(RewriteContext rewriteContext,
                                     Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap,
                                     OptExpression targetExpr) {
-        Map<ColumnRefOperator, ScalarOperator> queryMap = Utils.getProjectionMap(
+        Map<ColumnRefOperator, ScalarOperator> queryMap = Utils.getColumnRefMap(
                 rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
         Map<ColumnRefOperator, ScalarOperator> swappedQueryColumnMap = Maps.newHashMap();
         ColumnRewriter columnRewriter = new ColumnRewriter(rewriteContext);
@@ -517,9 +508,12 @@ public class MaterializedViewRewriter {
     // or get compensation predicates of view against query
     private PredicateSplit getCompensationPredicates(RewriteContext rewriteContext, boolean isQueryAgainstView) {
         // 1. equality join subsumption test
-        EquivalenceClasses sourceEc = isQueryAgainstView ? rewriteContext.getQueryEc() : rewriteContext.getQueryBasedViewEc();
-        EquivalenceClasses targetEc = isQueryAgainstView ? rewriteContext.getQueryBasedViewEc() : rewriteContext.getQueryEc();
-        final ScalarOperator compensationEqualPredicate = getCompensationEqualPredicate(sourceEc, targetEc);
+        EquivalenceClasses sourceEquivalenceClasses = isQueryAgainstView ?
+                rewriteContext.getQueryEquivalenceClasses() : rewriteContext.getQueryBasedViewEquivalenceClasses();
+        EquivalenceClasses targetEquivalenceClasses = isQueryAgainstView ?
+                rewriteContext.getQueryBasedViewEquivalenceClasses() : rewriteContext.getQueryEquivalenceClasses();
+        final ScalarOperator compensationEqualPredicate =
+                getCompensationEqualPredicate(sourceEquivalenceClasses, targetEquivalenceClasses);
         if (compensationEqualPredicate == null) {
             // means source equal predicates cannot be rewritten by target
             return null;
@@ -570,7 +564,7 @@ public class MaterializedViewRewriter {
             ScalarOperator swappedSrcPu = columnRewriter.rewriteByQueryEc(canonizedSrcPu);
             ScalarOperator swappedTargetPu = columnRewriter.rewriteViewToQueryWithQueryEc(canonizedTargetPu);
 
-            compensationPu = Utils.splitOr(swappedSrcPu, swappedTargetPu);
+            compensationPu = Utils.getCompensationPredicateForDisjunctive(swappedSrcPu, swappedTargetPu);
             if (compensationPu == null) {
                 compensationPu = getCompensationResidualPredicate(swappedSrcPu, swappedTargetPu);
                 if (compensationPu == null) {
@@ -630,19 +624,22 @@ public class MaterializedViewRewriter {
     // here do the equality join subsumption test
     // if targetEc is not contained in sourceEc, return null
     // if sourceEc equals targetEc, return true literal
-    private ScalarOperator getCompensationEqualPredicate(EquivalenceClasses sourceEc, EquivalenceClasses targetEc) {
-        if (sourceEc.getEquivalenceClasses().isEmpty() && targetEc.getEquivalenceClasses().isEmpty()) {
+    private ScalarOperator getCompensationEqualPredicate(EquivalenceClasses sourceEquivalenceClasses,
+                                                         EquivalenceClasses targetEquivalenceClasses) {
+        if (sourceEquivalenceClasses.getEquivalenceClasses().isEmpty()
+                && targetEquivalenceClasses.getEquivalenceClasses().isEmpty()) {
             return ConstantOperator.createBoolean(true);
         }
-        if (sourceEc.getEquivalenceClasses().isEmpty() && !targetEc.getEquivalenceClasses().isEmpty()) {
+        if (sourceEquivalenceClasses.getEquivalenceClasses().isEmpty()
+                && !targetEquivalenceClasses.getEquivalenceClasses().isEmpty()) {
             // targetEc must not be contained in sourceEc, just return null
             return null;
         }
-        final List<Set<ColumnRefOperator>> sourceEcs = sourceEc.getEquivalenceClasses();
-        final List<Set<ColumnRefOperator>> targetEcs = targetEc.getEquivalenceClasses();
+        final List<Set<ColumnRefOperator>> sourceEquivalenceClassesList = sourceEquivalenceClasses.getEquivalenceClasses();
+        final List<Set<ColumnRefOperator>> targetEquivalenceClassesList = targetEquivalenceClasses.getEquivalenceClasses();
         // it is a mapping from source to target
         // it may be 1 to n
-        final Multimap<Integer, Integer> mapping = computeECMapping(sourceEcs, targetEcs);
+        final Multimap<Integer, Integer> mapping = computeECMapping(sourceEquivalenceClassesList, targetEquivalenceClassesList);
         if (mapping == null) {
             // means that the targetEc can not be contained in sourceEc
             // it means Equijoin subsumption test fails
@@ -651,11 +648,11 @@ public class MaterializedViewRewriter {
         // compute compensation equality predicate
         // if targetEc equals sourceEc, return true literal, so init to true here
         ScalarOperator compensation = ConstantOperator.createBoolean(true);
-        for (int i = 0; i < sourceEcs.size(); i++) {
+        for (int i = 0; i < sourceEquivalenceClassesList.size(); i++) {
             if (!mapping.containsKey(i)) {
                 // it means that the targeEc do not have the corresponding mapping ec
                 // we should all equality predicates between each column in ec into compensation
-                Iterator<ColumnRefOperator> it = sourceEcs.get(i).iterator();
+                Iterator<ColumnRefOperator> it = sourceEquivalenceClassesList.get(i).iterator();
                 ScalarOperator first = it.next();
                 while (it.hasNext()) {
                     ScalarOperator equalPredicate = BinaryPredicateOperator.eq(first, it.next());
@@ -664,9 +661,9 @@ public class MaterializedViewRewriter {
             } else {
                 // remove columns exists in target and add remain equality predicate in source into compensation
                 for (int j : mapping.get(i)) {
-                    Set<ScalarOperator> difference = Sets.newHashSet(sourceEcs.get(i));
-                    difference.removeAll(targetEcs.get(j));
-                    Iterator<ColumnRefOperator> it = targetEcs.get(j).iterator();
+                    Set<ScalarOperator> difference = Sets.newHashSet(sourceEquivalenceClassesList.get(i));
+                    difference.removeAll(targetEquivalenceClassesList.get(j));
+                    Iterator<ColumnRefOperator> it = targetEquivalenceClassesList.get(j).iterator();
                     ScalarOperator targetFirst = it.next();
                     for (ScalarOperator remain : difference) {
                         ScalarOperator equalPredicate = BinaryPredicateOperator.eq(remain, targetFirst);
@@ -681,14 +678,14 @@ public class MaterializedViewRewriter {
 
     // check whether each target equivalence classes is contained in source equivalence classes.
     // if any of target equivalence class cannot be contained, return null
-    private Multimap<Integer, Integer> computeECMapping(List<Set<ColumnRefOperator>> sourceEcs,
-                                                        List<Set<ColumnRefOperator>> targetEcs) {
+    private Multimap<Integer, Integer> computeECMapping(List<Set<ColumnRefOperator>> sourceEquivalenceClassesList,
+                                                        List<Set<ColumnRefOperator>> targetEquivalenceClassesList) {
         Multimap<Integer, Integer> mapping = ArrayListMultimap.create();
-        for (int i = 0; i < targetEcs.size(); i++) {
-            final Set<ColumnRefOperator> targetSet = targetEcs.get(i);
+        for (int i = 0; i < targetEquivalenceClassesList.size(); i++) {
+            final Set<ColumnRefOperator> targetSet = targetEquivalenceClassesList.get(i);
             boolean contained = false;
-            for (int j = 0; j < sourceEcs.size(); j++) {
-                final Set<ColumnRefOperator> srcSet = sourceEcs.get(j);
+            for (int j = 0; j < sourceEquivalenceClassesList.size(); j++) {
+                final Set<ColumnRefOperator> srcSet = sourceEquivalenceClassesList.get(j);
                 // targetSet is converted into the same relationId, so just use containAll
                 if (srcSet.containsAll(targetSet)) {
                     mapping.put(j, i);

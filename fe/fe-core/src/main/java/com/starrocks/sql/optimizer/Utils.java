@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
@@ -67,7 +68,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collection;
-import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -794,51 +794,23 @@ public class Utils {
     }
 
     public static boolean isAlwaysFalse(ScalarOperator predicate) {
-        if (predicate instanceof ConstantOperator) {
-            ConstantOperator constant = (ConstantOperator) predicate;
-            if (constant.getType() == Type.BOOLEAN && constant.getBoolean() == false) {
-                return true;
-            }
-        } else if (predicate instanceof CompoundPredicateOperator) {
-            CompoundPredicateOperator compound = (CompoundPredicateOperator) predicate;
-            if (compound.isAnd()) {
-                return isAlwaysFalse(compound.getChild(0)) || isAlwaysFalse(compound.getChild(1));
-            } else if (compound.isOr()) {
-                return isAlwaysFalse(compound.getChild(0)) && isAlwaysFalse(compound.getChild(1));
-            } else if (compound.isNot()) {
-                return isAlwaysTrue(predicate.getChild(0));
-            }
-        }
-        return false;
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        return ConstantOperator.FALSE.equals(rewriter.rewrite(predicate,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES));
     }
 
     public static boolean isAlwaysTrue(ScalarOperator predicate) {
-        if (predicate instanceof ConstantOperator) {
-            ConstantOperator constant = (ConstantOperator) predicate;
-            if (constant.getType() == Type.BOOLEAN && constant.getBoolean() == true) {
-                return true;
-            }
-        } else if (predicate instanceof CompoundPredicateOperator) {
-            CompoundPredicateOperator compound = (CompoundPredicateOperator) predicate;
-            if (compound.isAnd()) {
-                return isAlwaysTrue(compound.getChild(0)) && isAlwaysTrue(compound.getChild(1));
-            } else if (compound.isOr()) {
-                return isAlwaysTrue(compound.getChild(0)) || isAlwaysTrue(compound.getChild(1));
-            } else if (compound.isNot()) {
-                return isAlwaysFalse(predicate.getChild(0));
-            }
-        }
-        return false;
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        return ConstantOperator.TRUE.equals(rewriter.rewrite(predicate,
+                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES));
     }
 
-    public static ScalarOperator splitOr(ScalarOperator src, ScalarOperator target) {
+    public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
         int srcLength = srcItems.size();
         int targetLength = targetItems.size();
-        for (ScalarOperator item : srcItems) {
-            removeAll(targetItems, item);
-        }
+        targetItems.removeAll(srcItems);
         if (targetItems.isEmpty() && srcLength == targetLength) {
             // it is the same, so return true constant
             return ConstantOperator.createBoolean(true);
@@ -847,16 +819,6 @@ public class Utils {
             return src;
         } else {
             return null;
-        }
-    }
-
-    public static void removeAll(List<ScalarOperator> scalars, ScalarOperator predicate) {
-        Iterator<ScalarOperator> iter = scalars.iterator();
-        while (iter.hasNext()) {
-            ScalarOperator current = iter.next();
-            if (current.equals(predicate)) {
-                iter.remove();
-            }
         }
     }
 
@@ -884,39 +846,63 @@ public class Utils {
         if (predicate == null) {
             return false;
         }
-        if (predicate instanceof BinaryPredicateOperator) {
-            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) predicate;
-            if (binaryPredicate.getBinaryType().isEqual()
-                    && binaryPredicate.getChild(0).isColumnRef()
-                    && binaryPredicate.getChild(1).isColumnRef()) {
+
+        ScalarOperatorVisitor<Boolean, Void> checkVisitor = new ScalarOperatorVisitor<Boolean, Void>() {
+            @Override
+            public Boolean visit(ScalarOperator scalarOperator, Void context) {
+                return false;
+            }
+
+            @Override
+            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+                if (!predicate.isAnd()) {
+                    return false;
+                }
+                for (ScalarOperator child : predicate.getChildren()) {
+                    if (!child.accept(this, null)) {
+                        return false;
+                    }
+                }
                 return true;
             }
-        }
-        return false;
+
+            @Override
+            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                if (predicate.getBinaryType().isEqual()
+                        && predicate.getChild(0).isColumnRef()
+                        && predicate.getChild(1).isColumnRef()) {
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+        };
+
+        return predicate.accept(checkVisitor, null);
     }
 
-    public static Map<ColumnRefOperator, ScalarOperator> getProjectionMap(
+    public static Map<ColumnRefOperator, ScalarOperator> getColumnRefMap(
             OptExpression expression, ColumnRefFactory refFactory) {
-        Map<ColumnRefOperator, ScalarOperator> projectionMap;
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap;
         if (expression.getOp().getProjection() != null) {
-            projectionMap = expression.getOp().getProjection().getColumnRefMap();
+            columnRefMap = expression.getOp().getProjection().getColumnRefMap();
         } else {
-            projectionMap = Maps.newHashMap();
+            columnRefMap = Maps.newHashMap();
             if (expression.getOp() instanceof LogicalAggregationOperator) {
                 LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
                 Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
                         java.util.function.Function.identity(),
                         java.util.function.Function.identity()));
-                projectionMap.putAll(keyMap);
-                projectionMap.putAll(agg.getAggregations());
+                columnRefMap.putAll(keyMap);
+                columnRefMap.putAll(agg.getAggregations());
             } else {
                 ColumnRefSet refSet = expression.getOutputColumns();
                 for (int columnId : refSet.getColumnIds()) {
                     ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
-                    projectionMap.put(columnRef, columnRef);
+                    columnRefMap.put(columnRef, columnRef);
                 }
             }
         }
-        return projectionMap;
+        return columnRefMap;
     }
 }

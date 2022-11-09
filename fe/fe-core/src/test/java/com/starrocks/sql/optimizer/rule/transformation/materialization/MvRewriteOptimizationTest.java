@@ -283,7 +283,18 @@ public class MvRewriteOptimizationTest {
         String query = "select empid, length(name), (salary + 1) * 2 from emps where empid < 3 and salary > 110";
         String plan = getFragmentPlan(query);
         PlanTestBase.assertContains(plan, "mv_");
+        dropMv("test", "mv_1");
+        dropMv("test", "mv_2");
 
+        createAndRefreshMv("test", "mv_1",
+                "create materialized view mv_1 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where empid < 5");
+        createAndRefreshMv("test", "mv_2",
+                "create materialized view mv_2 distributed by hash(empid)" +
+                        " as select empid, deptno, name, salary from emps where empid < 5 and salary > 100");
+        String query1 = "select empid, length(name), (salary + 1) * 2 from emps where empid < 5 and salary > 110";
+        String plan2 = getFragmentPlan(query1);
+        PlanTestBase.assertContains(plan2, "mv_");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
     }

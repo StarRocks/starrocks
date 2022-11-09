@@ -55,33 +55,29 @@ public class ColumnRewriter {
 
     private class ColumnRewriteVisitor extends ScalarOperatorVisitor<ScalarOperator, Void> {
         private boolean enableRelationRewrite;
-        private boolean enableEcRewrite;
+        private boolean enableEquivalenceClassesRewrite;
 
         private Map<Integer, Integer> srcToDstRelationIdMapping;
         private ColumnRefFactory srcRefFactory;
-        private ColumnRefFactory dstRefFactory;
-        private Map<Integer, List<ColumnRefOperator>> srcRelationIdToColumns;
         private Map<Integer, List<ColumnRefOperator>> dstRelationIdToColumns;
-        private EquivalenceClasses ec;
+        private EquivalenceClasses equivalenceClasses;
 
         public ColumnRewriteVisitor(RewriteContext rewriteContext, boolean enableRelationRewrite, boolean viewToQuery,
-                                    boolean enableEcRewrite, boolean useQueryEc) {
+                                    boolean enableEquivalenceClassesRewrite, boolean useQueryEquivalenceClasses) {
             this.enableRelationRewrite = enableRelationRewrite;
-            this.enableEcRewrite = enableEcRewrite;
+            this.enableEquivalenceClassesRewrite = enableEquivalenceClassesRewrite;
 
             if (enableRelationRewrite) {
                 srcToDstRelationIdMapping = viewToQuery ? rewriteContext.getQueryToMvRelationIdMapping().inverse()
                         : rewriteContext.getQueryToMvRelationIdMapping();
                 srcRefFactory = viewToQuery ? rewriteContext.getMvRefFactory() : rewriteContext.getQueryRefFactory();
-                dstRefFactory = viewToQuery ? rewriteContext.getQueryRefFactory() : rewriteContext.getMvRefFactory();
-                srcRelationIdToColumns = viewToQuery ? rewriteContext.getMvRelationIdToColumns()
-                        : rewriteContext.getQueryRelationIdToColumns();
                 dstRelationIdToColumns = viewToQuery ? rewriteContext.getQueryRelationIdToColumns()
                         : rewriteContext.getMvRelationIdToColumns();
             }
 
-            if (enableEcRewrite) {
-                ec = useQueryEc ? rewriteContext.getQueryEc() : rewriteContext.getQueryBasedViewEc();
+            if (enableEquivalenceClassesRewrite) {
+                equivalenceClasses = useQueryEquivalenceClasses ?
+                        rewriteContext.getQueryEquivalenceClasses() : rewriteContext.getQueryBasedViewEquivalenceClasses();
             }
         }
 
@@ -125,8 +121,8 @@ public class ColumnRewriter {
                     LOG.warn("can not find column ref:%s in target relation:%d", columnRef, targetRelationId);
                 }
             }
-            if (enableEcRewrite && ec != null) {
-                Set<ColumnRefOperator> equalities = ec.getEquivalenceClass(result);
+            if (enableEquivalenceClassesRewrite && equivalenceClasses != null) {
+                Set<ColumnRefOperator> equalities = equivalenceClasses.getEquivalenceClass(result);
                 if (equalities != null) {
                     // equalities can not be empty.
                     // and for every item in equalities, the equalities is the same.

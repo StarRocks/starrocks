@@ -329,6 +329,7 @@ public class UtilsTest {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         ColumnRefOperator columnRef1 = columnRefFactory.create("col1", Type.INT, false);
         ColumnRefOperator columnRef2 = columnRefFactory.create("col2", Type.INT, false);
+        ColumnRefOperator columnRef3 = columnRefFactory.create("col3", Type.INT, false);
         BinaryPredicateOperator binaryPredicate = new BinaryPredicateOperator(
                 BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef2);
 
@@ -355,6 +356,23 @@ public class UtilsTest {
         Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr2));
         OptExpression joinExpr3 = OptExpression.create(joinOperator, scanExpr, joinExpr2);
         Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr3));
+
+        LogicalJoinOperator joinOperator3 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                Utils.compoundAnd(binaryPredicate, binaryPredicate2));
+        OptExpression joinExpr4 = OptExpression.create(joinOperator3, scanExpr, scanExpr2);
+        Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr4));
+
+        BinaryPredicateOperator binaryPredicate4 = new BinaryPredicateOperator(
+                BinaryPredicateOperator.BinaryType.EQ, columnRef1, columnRef3);
+        LogicalJoinOperator joinOperator4 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                Utils.compoundAnd(binaryPredicate, binaryPredicate4));
+        OptExpression joinExpr5 = OptExpression.create(joinOperator4, scanExpr, scanExpr2);
+        Assert.assertTrue(Utils.isAllEqualInnerJoin(joinExpr5));
+
+        LogicalJoinOperator joinOperator5 = new LogicalJoinOperator(JoinOperator.INNER_JOIN,
+                Utils.compoundOr(binaryPredicate, binaryPredicate4));
+        OptExpression joinExpr6 = OptExpression.create(joinOperator5, scanExpr, scanExpr2);
+        Assert.assertFalse(Utils.isAllEqualInnerJoin(joinExpr6));
     }
 
     @Test
@@ -428,15 +446,15 @@ public class UtilsTest {
     }
 
     @Test
-    public void testSplitOr() {
+    public void testGetCompensationPredicateForDisjunctive() {
         ConstantOperator alwaysTrue = ConstantOperator.TRUE;
         ConstantOperator alwaysFalse = ConstantOperator.createBoolean(false);
         CompoundPredicateOperator compound = new CompoundPredicateOperator(
                 CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysTrue);
-        Assert.assertEquals(alwaysTrue, Utils.splitOr(alwaysTrue, compound));
-        Assert.assertEquals(alwaysFalse, Utils.splitOr(alwaysFalse, compound));
-        Assert.assertEquals(null, Utils.splitOr(compound, alwaysFalse));
-        Assert.assertEquals(alwaysTrue, Utils.splitOr(compound, compound));
+        Assert.assertEquals(alwaysTrue, Utils.getCompensationPredicateForDisjunctive(alwaysTrue, compound));
+        Assert.assertEquals(alwaysFalse, Utils.getCompensationPredicateForDisjunctive(alwaysFalse, compound));
+        Assert.assertEquals(null, Utils.getCompensationPredicateForDisjunctive(compound, alwaysFalse));
+        Assert.assertEquals(alwaysTrue, Utils.getCompensationPredicateForDisjunctive(compound, compound));
     }
 
     @Test
