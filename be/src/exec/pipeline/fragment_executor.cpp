@@ -114,7 +114,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
             return Status::DuplicateRpcInvocation("Duplicate invocations of exec_plan_fragment");
         }
     }
-    LOG(INFO) << "new query id: " << print_id(query_id);
+
     _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {

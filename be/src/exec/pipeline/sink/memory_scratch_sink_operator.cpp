@@ -72,11 +72,9 @@ void MemoryScratchSinkOperator::try_to_put_sentinel() {
         if (!_queue->try_put(_pending_result)) {
             return;
         }
-        LOG(INFO) << "put pending result";
         _pending_result.reset();
     }
     if (!_has_put_sentinel && _queue->try_put(nullptr)) {
-        LOG(INFO) << "has put sentinel";
         _has_put_sentinel = true;
     }
 }

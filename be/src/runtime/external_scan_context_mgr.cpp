@@ -100,15 +100,13 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
         }
     }
     if (context != nullptr) {
-        // first cancel the fragment instance, just ignore return status
-        // _exec_env->fragment_mgr()->cancel(context->fragment_instance_id);
         // cancel pipeline
         if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id);query_ctx != nullptr) {
             query_ctx->cancel(Status::Cancelled("user cancelled"));
         }
         // clear the fragment instance's related result queue
         _exec_env->result_queue_mgr()->cancel(context->fragment_instance_id);
-
+        LOG(INFO) << "close scan context: context id [ " << context_id << " ]";
     }
     return Status::OK();
 }
