@@ -46,7 +46,7 @@ public class Statistics {
         if (nonEmpty) {
             totalSize = Math.max(totalSize, 1.0);
         }
-        return Math.pow(totalSize, weight) * outputRowCount;
+        return totalSize * Math.pow(outputRowCount, weight);
     }
 
     public double getComputeSize() {
