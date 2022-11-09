@@ -96,7 +96,7 @@ bool CSVReader::isRowDelimiter(CSVBuffer& buff) {
     }
     return false;
 }
-
+// 希望buffer可以在有数据的时候也能扩容
 // 当剩余的可读取的字节为0时，读取更多数据。
 Status CSVReader::readMore(CSVBuffer& buff) {
     if(buff.available() < 1) {
@@ -366,6 +366,21 @@ Status CSVReader::_expand_buffer() {
     new_buff.add_limit(_buff.available());
     DCHECK_EQ(_storage.data(), new_buff.position());
     DCHECK_EQ(_buff.available(), new_buff.available());
+    _buff = new_buff;
+    return Status::OK();
+}
+
+// _expand_buffer必须保证缓冲区中没有数据才可以扩容buffer，但是我们引入状态机解析器后，这个约束太强了，
+// 引入一个更宽松的buffer扩容函数。
+Status CSVReader::_expand_buffer_loosely() {
+    if (UNLIKELY(_storage.size() >= kMaxBufferSize)) {
+        return Status::InternalError("CSV line length exceed limit " + std::to_string(kMaxBufferSize));
+    }
+    size_t new_capacity = std::min(_storage.size() * 2, kMaxBufferSize);
+    _storage.resize(new_capacity);
+    CSVBuffer new_buff(_storage.data(), _storage.size());
+    new_buff.set_position_offset(_buff.position_offset());
+    new_buff.set_limit_offset(_buff.limit_offset());
     _buff = new_buff;
     return Status::OK();
 }

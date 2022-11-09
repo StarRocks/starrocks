@@ -20,29 +20,41 @@ namespace starrocks::vectorized {
 class CSVBuffer {
 public:
     // Does NOT take the ownership of |buff|.
-    CSVBuffer(char* buff, size_t cap) : _begin(buff), _position(buff), _limit(buff), _end(buff + cap) {}
+    CSVBuffer(char* buff, size_t cap) : _begin(buff), _position_offset(0), _limit_offset(0), _end(buff + cap) {}
 
-    void append(char c) { *_limit++ = c; }
+    void append(char c) { 
+        *(_begin + _limit_offset) = c;
+        _limit_offset++;
+    }
 
     // Returns the number of bytes between the current position and the limit.
-    size_t available() const { return _limit - _position; }
+    size_t available() const { return _limit_offset - _position_offset; }
 
     // Returns the number of elements between the the limit and the end.
-    size_t free_space() const { return _end - _limit; }
+    size_t free_space() const { return _end - _begin - _limit_offset; }
 
     // Returns this buffer's capacity.
     size_t capacity() const { return _end - _begin; }
 
     // 返回已经读取的字节数
-    size_t have_read() const { return _position - _begin; }
+    size_t have_read() const { return _position_offset; }
 
-    // Returns this buffer's read position.
-    char* position() { return _position; }
+    char* position() { return _begin + _position_offset; }
+
+    // Returns this buffer's read position offset.
+    size_t position_offset() {return _position_offset;}
+
+    void set_position_offset(size_t position_offset) {_position_offset = _position_offset;}
 
     // Returns this buffer's write position.
-    char* limit() { return _limit; }
+    char* limit() { return _begin + _limit_offset; }
 
-    void add_limit(size_t n) { _limit += n; }
+    // Returns this buffer's write position offset.
+    size_t limit_offset() { return _limit_offset;}
+
+    void set_limit_offset(size_t limit_offset) {_limit_offset = limit_offset;}
+
+    void add_limit(size_t n) { _limit_offset += n; }
 
     // Finds the first character equal to the given character |c|. Search begins at |pos|.
     // Return: address of the first character of the found character or NULL if no such
@@ -53,23 +65,24 @@ public:
         return (char*)memmem(position() + pos, available() - pos, str.c_str(), str.size());
     }
 
-    void skip(size_t n) { _position += n; }
+    void skip(size_t n) { _position_offset += n; }
+
+    char* base_ptr() {return _begin;}
 
     // 已经读取过的
     // Compacts this buffer.
     // The bytes between the buffer's current position and its limit, if any,
     // are copied to the beginning of the buffer.
     void compact() {
-        size_t n = available();
-        memmove(_begin, _position, available());
-        _limit = _begin + n;
-        _position = _begin;
+        memmove(_begin, _begin + _position_offset, available());
+        _limit_offset -= _position_offset;
+        _position_offset = 0;
     }
 
 private:
     char* _begin;
-    char* _position; // next read position
-    char* _limit;    // next write position
+    size_t _position_offset;
+    size_t _limit_offset;
     char* _end;
 };
 
@@ -147,6 +160,7 @@ protected:
 
 private:
     Status _expand_buffer();
+    Status _expand_buffer_loosely();
 
     size_t _parsed_bytes = 0;
     // 这一个range的总数据是多少
