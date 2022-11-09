@@ -261,6 +261,17 @@ public class PublishVersionDaemon extends LeaderDaemon {
         boolean finished = true;
         long txnId = txnState.getTransactionId();
         for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
+
+            long currentTime = System.currentTimeMillis();
+            long versionTime = partitionCommitInfo.getVersionTime();
+            if (versionTime > 0) {
+                continue;
+            }
+            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
+                finished = false;
+                continue;
+            }
+
             boolean ok = false;
             try {
                 ok = publishPartition(db, tableCommitInfo, partitionCommitInfo, txnState);
@@ -305,14 +316,6 @@ public class PublishVersionDaemon extends LeaderDaemon {
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
                 return true;
-            }
-            long currentTime = System.currentTimeMillis();
-            long versionTime = partitionCommitInfo.getVersionTime();
-            if (versionTime > 0) {
-                return true;
-            }
-            if (versionTime < 0 && currentTime < Math.abs(versionTime) + RETRY_INTERVAL_MS) {
-                return false;
             }
             if (partition.getVisibleVersion() + 1 != txnVersion) {
                 LOG.info("Previous transaction has not finished. txn_id={} partition_version={}, txn_version={}",
