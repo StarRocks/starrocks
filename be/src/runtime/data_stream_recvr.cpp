@@ -102,11 +102,15 @@ Status DataStreamRecvr::create_merger_for_pipeline(RuntimeState* state, const So
             if (out_chunk == nullptr || eos == nullptr) {
                 return q->has_chunk();
             }
+            if (!q->has_chunk()) {
+                return false;
+            }
             vectorized::Chunk* chunk;
             if (q->try_get_chunk(&chunk)) {
                 out_chunk->reset(chunk);
                 return true;
             }
+            *eos = true;
             return false;
         };
         providers.push_back(std::move(provider));
