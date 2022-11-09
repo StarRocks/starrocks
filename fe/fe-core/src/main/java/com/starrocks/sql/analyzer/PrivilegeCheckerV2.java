@@ -51,7 +51,7 @@ public class PrivilegeCheckerV2 {
                                         TableName tableName,
                                         PrivilegeType.TableAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException("external catalog is not supported for now!");
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkTableAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -62,7 +62,7 @@ public class PrivilegeCheckerV2 {
 
     static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException("external catalog is not supported for now!");
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         String db = tableName.getDb();
         if (!PrivilegeManager.checkDbAction(context, db, action)) {

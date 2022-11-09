@@ -517,7 +517,6 @@ public class AuthUpgraderTest {
                     "DELETE SQLBLACKLIST 0",
                     "SHOW SQLBLACKLIST");
         }
-
     }
 
     @Test
@@ -554,5 +553,4 @@ public class AuthUpgraderTest {
             }
         }
     }
-
 }
