@@ -3322,8 +3322,8 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
             }
-            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER))  {
-                List<TableName> tables = PropertyAnalyzer.analyzeDisableRefreshTrigger(properties, materializedView);
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES))  {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
                 StringBuilder tableSb = new StringBuilder();
                 for (int i = 1; i <= tables.size(); i++) {
                     TableName tableName = tables.get(i - 1);
@@ -3337,8 +3337,8 @@ public class LocalMetastore implements ConnectorMetadata {
                     }
                 }
                 materializedView.getTableProperty().getProperties()
-                        .put(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER, tableSb.toString());
-                materializedView.getTableProperty().setDisableRefreshTrigger(tables);
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
             if (!properties.isEmpty()) {
                 // here, all properties should be checked

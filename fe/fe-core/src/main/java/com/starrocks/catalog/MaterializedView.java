@@ -575,8 +575,8 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         if (!isLoadTriggeredRefresh()) {
             return false;
         }
-        List<TableName> disableRefreshTrigger = this.getTableProperty().getDisableRefreshTrigger();
-        for (TableName tables : disableRefreshTrigger) {
+        List<TableName> excludedTriggerTables = this.getTableProperty().getExcludedTriggerTables();
+        for (TableName tables : excludedTriggerTables) {
             if (tables.getDb() == null) {
                 if (tables.getTbl().equals(tableName))  {
                     return false;
@@ -665,10 +665,10 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         }
 
         // disable refresh trigger
-        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER)) {
-            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER)
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
                     .append("\" = \"");
-            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER)).append("\"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
         }
 
         sb.append("\n)");

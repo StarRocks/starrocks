@@ -116,7 +116,7 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
-    public static final String PROPERTIES_DISABLE_REFRESH_TRIGGER  = "disable_refresh_trigger";
+    public static final String PROPERTIES_EXCLUDED_TRIGGER_TABLES = "excluded_trigger_tables";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -235,11 +235,11 @@ public class PropertyAnalyzer {
         return partitionRefreshNumber;
     }
 
-    public static List<TableName> analyzeDisableRefreshTrigger(Map<String, String> properties, MaterializedView mv)
+    public static List<TableName> analyzeExcludedTriggerTables(Map<String, String> properties, MaterializedView mv)
             throws AnalysisException {
         List<TableName> tables = Lists.newArrayList();
-        if (properties != null && properties.containsKey(PROPERTIES_DISABLE_REFRESH_TRIGGER)) {
-            String tableStr = properties.get(PROPERTIES_DISABLE_REFRESH_TRIGGER);
+        if (properties != null && properties.containsKey(PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            String tableStr = properties.get(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults().splitToList(tableStr);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
@@ -250,7 +250,7 @@ public class PropertyAnalyzer {
                             " is not base table of materialized view " + mv.getName());
                 }
             }
-            properties.remove(PROPERTIES_DISABLE_REFRESH_TRIGGER);
+            properties.remove(PROPERTIES_EXCLUDED_TRIGGER_TABLES);
         }
         return tables;
     }

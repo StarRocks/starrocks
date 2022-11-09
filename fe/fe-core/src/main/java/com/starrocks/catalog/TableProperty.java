@@ -73,7 +73,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     // This property only applies to materialized views,
     // Indicates which tables do not listen to auto refresh events when load
-    private List<TableName> disableRefreshTrigger = null;
+    private List<TableName> excludedTriggerTables = null;
 
     private boolean isInMemory = false;
 
@@ -186,19 +186,19 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
-    public TableProperty buildDisableRefreshTrigger() {
-        String disableRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER, null);
+    public TableProperty buildExcludedTriggerTables() {
+        String excludedRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, null);
         List<TableName> tables = Lists.newArrayList();
-        if (disableRefreshConf == null) {
-            disableRefreshTrigger = tables;
+        if (excludedRefreshConf == null) {
+            excludedTriggerTables = tables;
         } else {
             List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
-                    .splitToList(disableRefreshConf);
+                    .splitToList(excludedRefreshConf);
             for (String table : tableList) {
                 TableName tableName = AnalyzerUtils.stringToTableName(table);
                 tables.add(tableName);
             }
-            disableRefreshTrigger = tables;
+            excludedTriggerTables = tables;
         }
         return this;
     }
@@ -275,12 +275,12 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.partitionRefreshNumber = partitionRefreshNumber;
     }
 
-    public List<TableName> getDisableRefreshTrigger() {
-        return disableRefreshTrigger;
+    public List<TableName> getExcludedTriggerTables() {
+        return excludedTriggerTables;
     }
 
-    public void setDisableRefreshTrigger(List<TableName> disableRefreshTrigger) {
-        this.disableRefreshTrigger = disableRefreshTrigger;
+    public void setExcludedTriggerTables(List<TableName> excludedTriggerTables) {
+        this.excludedTriggerTables = excludedTriggerTables;
     }
 
     public boolean isInMemory() {
@@ -351,7 +351,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildWriteQuorum();
         buildPartitionTTL();
         buildPartitionRefreshNumber();
-        buildDisableRefreshTrigger();
+        buildExcludedTriggerTables();
         buildReplicatedStorage();
     }
 }
