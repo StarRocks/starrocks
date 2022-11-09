@@ -616,9 +616,9 @@ public class LowCardinalityTest extends PlanTestBase {
                 "then 'key2' else 'key3' end from supplier";
         plan = getVerboseExplain(sql);
         Assert.assertTrue(plan.contains(" |  9 <-> CASE WHEN DictExpr(10: S_ADDRESS,[<place-holder> = 'key']) " +
-                        "THEN CAST(rand() AS VARCHAR) " +
-                        "WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) " +
-                        "THEN 'key2' ELSE 'key3' END"));
+                "THEN CAST(rand() AS VARCHAR) " +
+                "WHEN DictExpr(10: S_ADDRESS,[<place-holder> = '2']) " +
+                "THEN 'key2' ELSE 'key3' END"));
         Assert.assertFalse(plan.contains("Decode"));
         // test multi low cardinality column input
         sql = "select if(S_ADDRESS = 'key', S_COMMENT, 'y') from supplier";
@@ -862,7 +862,6 @@ public class LowCardinalityTest extends PlanTestBase {
         plan = getVerboseExplain(sql);
         Assert.assertFalse(plan.contains("Decode"));
 
-
         sql = "select count(*) from supplier l " +
                 "join [broadcast] (select max(id_int) as id_int from table_int) r " +
                 "on l.S_ADDRESS = r.id_int where l.S_ADDRESS not like '%key%'";
@@ -930,7 +929,8 @@ public class LowCardinalityTest extends PlanTestBase {
 
         // Decode
         sql = "select max(S_ADDRESS), max(S_COMMENT) from " +
-                "( select l.S_ADDRESS as S_ADDRESS,r.S_COMMENT as S_COMMENT,l.S_SUPPKEY from supplier l join supplier_nullable r " +
+                "( select l.S_ADDRESS as S_ADDRESS,r.S_COMMENT as S_COMMENT,l.S_SUPPKEY from supplier l " +
+                "join supplier_nullable r " +
                 " on l.S_SUPPKEY = r.S_SUPPKEY ) tb group by S_SUPPKEY";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  8:Decode\n" +
@@ -980,7 +980,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  16:EXCHANGE");
         assertContains(plan, "Decode");
         plan = getThriftPlan(sql);
-        assertNotContains(plan.split("\n")[1],"query_global_dicts");
+        assertNotContains(plan.split("\n")[1], "query_global_dicts");
     }
 
     @Test
