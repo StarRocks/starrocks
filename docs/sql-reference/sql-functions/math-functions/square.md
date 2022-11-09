@@ -6,7 +6,7 @@ Calculates the square of a value.
 
 ## Syntax
 
-```SQL
+```Haskell
 square(arg)
 ```
 

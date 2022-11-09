@@ -15,6 +15,7 @@ import com.starrocks.sql.ast.StatementBase;
 
 import java.util.Map;
 
+import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
@@ -49,7 +50,7 @@ public class CatalogAnalyzer {
                 throw new SemanticException("'type' can not be null or empty");
             }
             statement.setCatalogType(catalogType);
-            if (!CreateCatalogStmt.SUPPORTED_CATALOG.contains(catalogType)) {
+            if (!SUPPORT_CONNECTOR_TYPE.contains(catalogType)) {
                 throw new SemanticException("[type : %s] is not supported", catalogType);
             }
             return null;
