@@ -10,6 +10,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
@@ -29,6 +30,7 @@ public class ColumnRefFactory {
     private final List<ColumnRefOperator> columnRefs = Lists.newArrayList();
     private final Map<Integer, Integer> columnToRelationIds = Maps.newHashMap();
     private final Map<ColumnRefOperator, Column> columnRefToColumns = Maps.newHashMap();
+    private final Map<ColumnRefOperator, Table> columnRefToTable = Maps.newHashMap();
 
     public Map<ColumnRefOperator, Column> getColumnRefToColumns() {
         return columnRefToColumns;
@@ -86,8 +88,9 @@ public class ColumnRefFactory {
         return columnRefOperators;
     }
 
-    public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column) {
+    public void updateColumnRefToColumns(ColumnRefOperator columnRef, Column column, Table table) {
         columnRefToColumns.put(columnRef, column);
+        columnRefToTable.put(columnRef, table);
     }
 
     public Column getColumn(ColumnRefOperator columnRef) {
@@ -104,5 +107,13 @@ public class ColumnRefFactory {
 
     public int getNextRelationId() {
         return nextRelationId++;
+    }
+
+    public Map<Integer, Integer> getColumnToRelationIds() {
+        return columnToRelationIds;
+    }
+
+    public Map<ColumnRefOperator, Table> getColumnRefToTable() {
+        return columnRefToTable;
     }
 }
