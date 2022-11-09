@@ -136,6 +136,24 @@ ALTER SYSTEM MODIFY BACKEND HOST "<be_ip>" TO "<be_hostname>";
 >
 > You DO NOT need to restart the BE node after FQDN access is enabled.
 
+## Rollback
+
+To rollback an FQDN access-enabled StarRocks cluster to an earlier version that does not support FQDN access, you must first enable IP address access for all nodes in the cluster. You can refer [Enable FQDN access in an existing cluster](#enable-fqdn-access-in-an-existing-cluster) for the general guidance except that you need to change the SQL commands to the following ones:
+
+- Enable IP address access for an FE node:
+
+```SQL
+ALTER SYSTEM MODIFY FRONTEND HOST "<fe_hostname>" TO "<fe_ip>";
+```
+
+- Enable IP address access for a BE node:
+
+```SQL
+ALTER SYSTEM MODIFY BACKEND HOST "<be_hostname>" TO "<be_ip>";
+```
+
+The modification takes effect after your cluster is successfully restarted.
+
 ## FAQ
 
 **Q: An error occurs when I enable FQDN access for an FE node: "required 1 replica. But none were active with this master". What should I do?**
