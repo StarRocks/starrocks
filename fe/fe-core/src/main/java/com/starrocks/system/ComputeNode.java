@@ -485,17 +485,17 @@ public class ComputeNode implements IComputable, Writable {
             return false;
         }
 
-        if (GlobalVariable.isQueryQueueConcurrencyHardLimitEffective() &&
-                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyHardLimit()) {
+        if (GlobalVariable.isQueryQueueConcurrencyLimitEffective() &&
+                numRunningQueries >= GlobalVariable.getQueryQueueConcurrencyLimit()) {
             return true;
         }
 
-        if (GlobalVariable.isQueryQueueCpuUsedPermilleHardLimitEffective() &&
-                cpuUsedPermille >= GlobalVariable.getQueryQueueCpuUsedPermilleHardLimit()) {
+        if (GlobalVariable.isQueryQueueCpuUsedPermilleLimitEffective() &&
+                cpuUsedPermille >= GlobalVariable.getQueryQueueCpuUsedPermilleLimit()) {
             return true;
         }
 
-        return GlobalVariable.isQueryQueueMemUsedPctHardLimitEffective() &&
-                getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctHardLimit();
+        return GlobalVariable.isQueryQueueMemUsedPctLimitEffective() &&
+                getMemUsedPct() >= GlobalVariable.getQueryQueueMemUsedPctLimit();
     }
 }

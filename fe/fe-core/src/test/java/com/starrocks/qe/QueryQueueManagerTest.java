@@ -42,8 +42,8 @@ public class QueryQueueManagerTest {
     @Before
     public void before() {
         taskQueueEnable = GlobalVariable.isQueryQueueSelectEnable();
-        taskQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyHardLimit();
-        taskQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctHardLimit();
+        taskQueueConcurrencyHardLimit = GlobalVariable.getQueryQueueConcurrencyLimit();
+        taskQueueMemUsedPctHardLimit = GlobalVariable.getQueryQueueMemUsedPctLimit();
         taskQueuePendingTimeoutSecond = GlobalVariable.getQueryQueuePendingTimeoutSecond();
         taskQueueMaxQueuedQueries = GlobalVariable.getQueryQueueMaxQueuedQueries();
     }
@@ -52,8 +52,8 @@ public class QueryQueueManagerTest {
     public void after() {
         // Reset query queue configs.
         GlobalVariable.setQueryQueueSelectEnable(taskQueueEnable);
-        GlobalVariable.setQueryQueueConcurrencyHardLimit(taskQueueConcurrencyHardLimit);
-        GlobalVariable.setQueryQueueMemUsedPctHardLimit(taskQueueMemUsedPctHardLimit);
+        GlobalVariable.setQueryQueueConcurrencyLimit(taskQueueConcurrencyHardLimit);
+        GlobalVariable.setQueryQueueMemUsedPctLimit(taskQueueMemUsedPctHardLimit);
         GlobalVariable.setQueryQueuePendingTimeoutSecond(taskQueuePendingTimeoutSecond);
         GlobalVariable.setQueryQueueMaxQueuedQueries(taskQueueMaxQueuedQueries);
     }
@@ -232,14 +232,14 @@ public class QueryQueueManagerTest {
         };
 
         // Case 1: enable query_queue, but min_concurrency and min_mem_used_pct not effective.
-        GlobalVariable.setQueryQueueConcurrencyHardLimit(0);
-        GlobalVariable.setQueryQueueMemUsedPctHardLimit(0);
-        GlobalVariable.setQueryQueueCpuUsedPermilleHardLimit(0);
+        GlobalVariable.setQueryQueueConcurrencyLimit(0);
+        GlobalVariable.setQueryQueueMemUsedPctLimit(0);
+        GlobalVariable.setQueryQueueCpuUsedPermilleLimit(0);
         Assert.assertTrue(manager.canRunMore());
 
-        GlobalVariable.setQueryQueueConcurrencyHardLimit(3);
-        GlobalVariable.setQueryQueueMemUsedPctHardLimit(0.3);
-        GlobalVariable.setQueryQueueCpuUsedPermilleHardLimit(400);
+        GlobalVariable.setQueryQueueConcurrencyLimit(3);
+        GlobalVariable.setQueryQueueMemUsedPctLimit(0.3);
+        GlobalVariable.setQueryQueueCpuUsedPermilleLimit(400);
         // Case 2: exceed concurrency threshold.
         manager.updateResourceUsage(be2.getId(), 3, 10, 0, 200);
         Assert.assertFalse(manager.canRunMore());

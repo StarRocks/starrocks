@@ -51,9 +51,9 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_INSERT_ENABLE = "query_queue_insert_enable";
     public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
             "query_queue_fresh_resource_usage_interval_ms";
-    public static final String QUERY_QUEUE_CONCURRENCY_HARD_LIMIT = "query_queue_concurrency_hard_limit";
-    public static final String QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT = "query_queue_mem_used_pct_hard_limit";
-    public static final String QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT = "query_queue_cpu_used_permille_hard_limit";
+    public static final String QUERY_QUEUE_CONCURRENCY_LIMIT = "query_queue_concurrency_limit";
+    public static final String QUERY_QUEUE_MEM_USED_PCT_LIMIT = "query_queue_mem_used_pct_limit";
+    public static final String QUERY_QUEUE_CPU_USED_PERMILLE_LIMIT = "query_queue_cpu_used_permille_limit";
     public static final String QUERY_QUEUE_PENDING_TIMEOUT_SECOND = "query_queue_pending_timeout_second";
     public static final String QUERY_QUEUE_MAX_QUEUED_QUERIES = "query_queue_max_queued_queries";
 
@@ -101,8 +101,8 @@ public final class GlobalVariable {
     /**
      * Query will be pending when BE is overloaded, if `queryQueueEnable` is true.
      * <p>
-     * If the number of running queries of any BE `exceeds queryQueueConcurrencyHardLimit`,
-     * or memory usage rate of any BE exceeds `queryQueueMemUsedPctHardLimit`,
+     * If the number of running queries of any BE `exceeds queryQueueConcurrencyLimit`,
+     * or memory usage rate of any BE exceeds `queryQueueMemUsedPctLimit`,
      * the current query will be pending or failed:
      * - if the number of pending queries in this FE exceeds `queryQueueMaxQueuedQueries`,
      * the query will be failed.
@@ -125,14 +125,14 @@ public final class GlobalVariable {
     @VariableMgr.VarAttr(name = QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS, flag = VariableMgr.GLOBAL)
     private static long queryQueueResourceUsageIntervalMs = 5000;
     // Effective iff it is positive.
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_HARD_LIMIT, flag = VariableMgr.GLOBAL)
-    private static int queryQueueConcurrencyHardLimit = 0;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_LIMIT, flag = VariableMgr.GLOBAL)
+    private static int queryQueueConcurrencyLimit = 0;
     // Effective iff it is positive.
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT, flag = VariableMgr.GLOBAL)
-    private static double queryQueueMemUsedPctHardLimit = 0;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_MEM_USED_PCT_LIMIT, flag = VariableMgr.GLOBAL)
+    private static double queryQueueMemUsedPctLimit = 0;
     // Effective iff it is positive.
-    @VariableMgr.VarAttr(name = QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT, flag = VariableMgr.GLOBAL)
-    private static int queryQueueCpuUsedPermilleHardLimit = 0;
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_CPU_USED_PERMILLE_LIMIT, flag = VariableMgr.GLOBAL)
+    private static int queryQueueCpuUsedPermilleLimit = 0;
     @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL)
     private static int queryQueuePendingTimeoutSecond = 300;
     // Unlimited iff it is non-positive.
@@ -171,40 +171,40 @@ public final class GlobalVariable {
         GlobalVariable.queryQueueResourceUsageIntervalMs = queryQueueResourceUsageIntervalMs;
     }
 
-    public static boolean isQueryQueueConcurrencyHardLimitEffective() {
-        return queryQueueConcurrencyHardLimit > 0;
+    public static boolean isQueryQueueConcurrencyLimitEffective() {
+        return queryQueueConcurrencyLimit > 0;
     }
 
-    public static int getQueryQueueConcurrencyHardLimit() {
-        return queryQueueConcurrencyHardLimit;
+    public static int getQueryQueueConcurrencyLimit() {
+        return queryQueueConcurrencyLimit;
     }
 
-    public static void setQueryQueueConcurrencyHardLimit(int queryQueueConcurrencyHardLimit) {
-        GlobalVariable.queryQueueConcurrencyHardLimit = queryQueueConcurrencyHardLimit;
+    public static void setQueryQueueConcurrencyLimit(int queryQueueConcurrencyLimit) {
+        GlobalVariable.queryQueueConcurrencyLimit = queryQueueConcurrencyLimit;
     }
 
-    public static boolean isQueryQueueMemUsedPctHardLimitEffective() {
-        return queryQueueMemUsedPctHardLimit > 0;
+    public static boolean isQueryQueueMemUsedPctLimitEffective() {
+        return queryQueueMemUsedPctLimit > 0;
     }
 
-    public static double getQueryQueueMemUsedPctHardLimit() {
-        return queryQueueMemUsedPctHardLimit;
+    public static double getQueryQueueMemUsedPctLimit() {
+        return queryQueueMemUsedPctLimit;
     }
 
-    public static void setQueryQueueMemUsedPctHardLimit(double queryQueueMemUsedPctHardLimit) {
-        GlobalVariable.queryQueueMemUsedPctHardLimit = queryQueueMemUsedPctHardLimit;
+    public static void setQueryQueueMemUsedPctLimit(double queryQueueMemUsedPctLimit) {
+        GlobalVariable.queryQueueMemUsedPctLimit = queryQueueMemUsedPctLimit;
     }
 
-    public static boolean isQueryQueueCpuUsedPermilleHardLimitEffective() {
-        return queryQueueCpuUsedPermilleHardLimit > 0;
+    public static boolean isQueryQueueCpuUsedPermilleLimitEffective() {
+        return queryQueueCpuUsedPermilleLimit > 0;
     }
 
-    public static int getQueryQueueCpuUsedPermilleHardLimit() {
-        return queryQueueCpuUsedPermilleHardLimit;
+    public static int getQueryQueueCpuUsedPermilleLimit() {
+        return queryQueueCpuUsedPermilleLimit;
     }
 
-    public static void setQueryQueueCpuUsedPermilleHardLimit(int queryQueueCpuUsedPermilleHardLimit) {
-        GlobalVariable.queryQueueCpuUsedPermilleHardLimit = queryQueueCpuUsedPermilleHardLimit;
+    public static void setQueryQueueCpuUsedPermilleLimit(int queryQueueCpuUsedPermilleLimit) {
+        GlobalVariable.queryQueueCpuUsedPermilleLimit = queryQueueCpuUsedPermilleLimit;
     }
 
     public static int getQueryQueuePendingTimeoutSecond() {
