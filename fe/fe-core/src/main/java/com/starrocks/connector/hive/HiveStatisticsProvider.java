@@ -113,7 +113,7 @@ public class HiveStatisticsProvider {
             Table table) {
         long rowNum = tableStats.getCommonStats().getRowNums();
         if (rowNum == -1) {
-            builder.setOutputRowCount(getEstimatedRowCount(table, Lists.newArrayList()));
+            builder.setOutputRowCount(getEstimatedRowCount(table, Lists.newArrayList(new PartitionKey())));
             return builder.build();
         } else {
             builder.setOutputRowCount(rowNum);

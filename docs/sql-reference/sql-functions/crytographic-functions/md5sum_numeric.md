@@ -5,7 +5,7 @@ Calculates the 128-bit checksum of multiple strings. The checksum is represented
 ## Syntax
 
 ```Haskell
-md5sum_numeric(expr,...);
+LARGEINT md5sum_numeric(VARCHAR expr,...);
 ```
 
 ## Parameters
@@ -14,7 +14,7 @@ md5sum_numeric(expr,...);
 
 ## Return value
 
-Returns a checksum of the VARCHAR type. If the input is empty, an error is returned.
+Returns a checksum of the LARGEINT type. If the input is empty, an error is returned.
 
 ## Examples
 

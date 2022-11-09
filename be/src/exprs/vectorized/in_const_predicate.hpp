@@ -214,36 +214,38 @@ public:
         ColumnViewer<Type> viewer(lhs);
         size_t size = viewer.size();
         ColumnBuilder<TYPE_BOOLEAN> builder(size);
+        builder.resize_uninitialized(size);
+
+        uint8_t* null_data = builder.null_column()->get_data().data();
+        memset(null_data, 0x0, size);
         uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
 
         auto update_row = [&](int row) {
             if (viewer.is_null(row)) {
                 if constexpr (equal_null) {
-                    builder.append(1);
+                    output[row] = 1;
                 } else {
-                    builder.append_null();
+                    null_data[row] = 1;
                 }
                 return;
             }
             // find value
             if (check_value_existence<use_array>(viewer.value(row))) {
-                builder.append(1);
+                output[row] = 1;
                 return;
             }
             if constexpr (!null_in_set || equal_null) {
-                builder.append(0);
+                output[row] = 0;
             } else {
-                builder.append_null();
+                null_data[row] = 1;
             }
         };
 
         if (filter != nullptr) {
+            memset(output, 0x0, size);
             for (int row = 0; row < size; ++row) {
                 if (filter[row]) {
                     update_row(row);
-                } else {
-                    // any value will be OK since we don't use it.
-                    builder.append_null();
                 }
             }
         } else {
@@ -256,6 +258,10 @@ public:
             for (int i = 0; i < size; i++) {
                 output[i] = 1 - output[i];
             }
+        }
+
+        if (std::memchr(null_data, 0x1, size) != nullptr) {
+            builder.set_has_null(true);
         }
 
         auto result = builder.build(lhs->is_constant());

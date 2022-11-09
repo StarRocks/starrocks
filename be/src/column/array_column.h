@@ -65,6 +65,9 @@ public:
 
     void append(const Column& src, size_t offset, size_t count) override;
 
+    // Append a single element, which is represented as a column
+    void append_array_element(const Column& elem, size_t null_elem);
+
     void append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
@@ -122,6 +125,8 @@ public:
 
     Datum get(size_t idx) const override;
 
+    std::pair<size_t, size_t> get_element_offset_size(size_t idx) const;
+    size_t get_element_null_count(size_t idx) const;
     size_t get_element_size(size_t idx) const;
 
     bool set_null(size_t idx) override;
