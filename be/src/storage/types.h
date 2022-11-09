@@ -57,20 +57,9 @@ public:
 
     virtual void deep_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
-    virtual void copy_object(void* dest, const void* src, MemPool* mem_pool) const = 0;
-
     // The mem_pool is used to allocate memory for array type.
     // The scalar type can copy the value directly
     virtual void direct_copy(void* dest, const void* src, MemPool* mem_pool) const = 0;
-
-    //convert and deep copy value from other type's source
-    virtual Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const = 0;
-
-    virtual Status convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const {
-        return Status::NotSupported("Not supported function");
-    }
 
     virtual Status from_string(void* buf, const std::string& scan_key) const = 0;
 

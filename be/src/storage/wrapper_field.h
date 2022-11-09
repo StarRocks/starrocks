@@ -31,8 +31,6 @@ namespace starrocks {
 class WrapperField {
 public:
     static WrapperField* create(const TabletColumn& column, uint32_t len = 0);
-    static WrapperField* create_by_type(const FieldType& type) { return create_by_type(type, 0); }
-    static WrapperField* create_by_type(const FieldType& type, int32_t var_length);
 
     WrapperField(Field* rep, size_t variable_len, bool is_string_type);
 
@@ -69,10 +67,6 @@ public:
     void* cell_ptr() const { return _field_buf + 1; }
     void* mutable_cell_ptr() const { return _field_buf + 1; }
     const Field* field() const { return _rep; }
-
-    int cmp(const WrapperField* field) const { return _rep->compare_cell(*this, *field); }
-
-    void copy(const WrapperField* field) { _rep->direct_copy(this, *field); }
 
 private:
     Field* _rep = nullptr;
