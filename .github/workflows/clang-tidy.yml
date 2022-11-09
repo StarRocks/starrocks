@@ -11,18 +11,17 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: pre build
+        run: |
+           sudo rm -rf ../starrocks/*
+    
       - uses: dorny/paths-filter@v2
         id: changes
         with:
           filters: |
             be:
             - 'be/**'
-
-      - name: pre build
-        if: steps.changes.outputs.be == 'true'
-        run: |
-           sudo rm -rf ../starrocks/*
-           
+       
       - uses: actions/checkout@v3
         if: steps.changes.outputs.be == 'true'
         with:
@@ -45,6 +44,5 @@ jobs:
           config_file: .clang-tidy
           
       - name: post build
-        if: steps.changes.outputs.be == 'true'
         run: |
            sudo rm -rf ../starrocks/*
