@@ -11,6 +11,8 @@ import com.starrocks.server.MetadataMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -23,6 +25,8 @@ public class ConnectorMgr {
     private final ReadWriteLock connectorLock = new ReentrantReadWriteLock();
 
     private final MetadataMgr metadataMgr;
+
+    public static final Set<String> SUPPORT_CONNECTOR_TYPE = new HashSet<>();
 
     public ConnectorMgr(MetadataMgr metadataMgr) {
         this.metadataMgr = metadataMgr;
@@ -38,6 +42,7 @@ public class ConnectorMgr {
 
     public void addConnectorFactory(ConnectorFactory connectorFactory) {
         Preconditions.checkNotNull(connectorFactory, "connectorFactory is null");
+        SUPPORT_CONNECTOR_TYPE.add(connectorFactory.name());
         ConnectorFactory existingConnectorFactory = connectorFactories.putIfAbsent(
                 connectorFactory.name(), connectorFactory);
         Preconditions.checkArgument(existingConnectorFactory == null,
