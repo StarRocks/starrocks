@@ -19,13 +19,13 @@ jobs:
             - 'be/**'
 
       - uses: actions/checkout@v3
-        if: steps.changes.outputs.be == 'true'
         with:
           fetch-depth: 2
 
       - name: set up build
         if: steps.changes.outputs.be == 'true'
         run: |
+          sudo rm -rf ../starrocks/*
           time scp jenkins@ci01:~/userContent/be-build-$PR_NUMBER.tar.gz .
           mkdir temp
           tar xzf be-build-$PR_NUMBER.tar.gz -C temp
