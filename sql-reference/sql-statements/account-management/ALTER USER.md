@@ -11,7 +11,7 @@ ALTER USER 命令用于更改用户信息。
 ALTER USER user_identity [auth_option];
 
 -- 参数说明
-user_identity:'user_name'@'host'。
+user_identity:'user_name'@'host'
 
 auth_option: {
 IDENTIFIED BY 'auth_string'
