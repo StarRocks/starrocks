@@ -800,7 +800,8 @@ private:
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
         size_t data_offset = begin_of_not_null - sort_index->begin();
         size_t null_count = data_offset - start;
-        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_data_column), start + null_count, count - null_count);
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_data_column), start + null_count,
+                     count - null_count);
     }
 
     static void _sort_array_column(Column* dest_array_column, std::vector<uint32_t>* sort_index,
