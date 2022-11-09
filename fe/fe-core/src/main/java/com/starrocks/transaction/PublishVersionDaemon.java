@@ -370,22 +370,34 @@ public class PublishVersionDaemon extends LeaderDaemon {
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        db.readLock();
-        try {
-            for (long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
-                Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-                for (MvId mvId : relatedMvs) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
-                    if (materializedView.isLoadTriggeredRefresh()) {
+        for (long tableId : transactionState.getTableIdList()) {
+            Table table;
+            db.readLock();
+            try {
+                table = db.getTable(tableId);
+            } finally {
+                db.readUnlock();
+            }
+            if (table == null) {
+                LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
+                return;
+            }
+            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
+            for (MvId mvId : relatedMvs) {
+                Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
+                mvDb.readLock();
+                try {
+                    MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
+                    if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                db.getFullName(), db.getTable(mvId.getId()).getName(),
+                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(),
                                 Constants.TaskRunPriority.NORMAL.value());
                     }
+                } finally {
+                    mvDb.readUnlock();
                 }
             }
-        } finally {
-            db.readUnlock();
         }
+
     }
 }

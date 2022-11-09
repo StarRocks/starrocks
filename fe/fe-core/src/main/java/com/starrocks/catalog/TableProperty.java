@@ -21,8 +21,11 @@
 
 package com.starrocks.catalog;
 
+import com.clearspring.analytics.util.Lists;
+import com.google.common.base.Splitter;
 import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
@@ -32,6 +35,7 @@ import com.starrocks.lake.StorageInfo;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TWriteQuorumType;
@@ -40,6 +44,7 @@ import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -62,7 +67,13 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // partition time to live number, -1 means no ttl
     private int partitionTTLNumber = INVALID;
 
+    // This property only applies to materialized views
+    // It represents the maximum number of partitions that will be refreshed by a TaskRun refresh
     private int partitionRefreshNumber = INVALID;
+
+    // This property only applies to materialized views,
+    // Indicates which tables do not listen to auto refresh events when load
+    private List<TableName> disableRefreshTrigger = null;
 
     private boolean isInMemory = false;
 
@@ -175,6 +186,23 @@ public class TableProperty implements Writable, GsonPostProcessable {
         return this;
     }
 
+    public TableProperty buildDisableRefreshTrigger() {
+        String disableRefreshConf = properties.getOrDefault(PropertyAnalyzer.PROPERTIES_DISABLE_REFRESH_TRIGGER, null);
+        List<TableName> tables = Lists.newArrayList();
+        if (disableRefreshConf == null) {
+            disableRefreshTrigger = tables;
+        } else {
+            List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults()
+                    .splitToList(disableRefreshConf);
+            for (String table : tableList) {
+                TableName tableName = AnalyzerUtils.stringToTableName(table);
+                tables.add(tableName);
+            }
+            disableRefreshTrigger = tables;
+        }
+        return this;
+    }
+
     public TableProperty buildInMemory() {
         isInMemory = Boolean.parseBoolean(properties.getOrDefault(PropertyAnalyzer.PROPERTIES_INMEMORY, "false"));
         return this;
@@ -247,6 +275,14 @@ public class TableProperty implements Writable, GsonPostProcessable {
         this.partitionRefreshNumber = partitionRefreshNumber;
     }
 
+    public List<TableName> getDisableRefreshTrigger() {
+        return disableRefreshTrigger;
+    }
+
+    public void setDisableRefreshTrigger(List<TableName> disableRefreshTrigger) {
+        this.disableRefreshTrigger = disableRefreshTrigger;
+    }
+
     public boolean isInMemory() {
         return isInMemory;
     }
@@ -315,6 +351,7 @@ public class TableProperty implements Writable, GsonPostProcessable {
         buildWriteQuorum();
         buildPartitionTTL();
         buildPartitionRefreshNumber();
+        buildDisableRefreshTrigger();
         buildReplicatedStorage();
     }
 }

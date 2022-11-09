@@ -21,18 +21,23 @@
 
 package com.starrocks.common.util;
 
+import com.clearspring.analytics.util.Lists;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TStorageFormat;
 import com.starrocks.thrift.TStorageMedium;
@@ -110,8 +115,8 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
-
     public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
+    public static final String PROPERTIES_DISABLE_REFRESH_TRIGGER  = "disable_refresh_trigger";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -228,6 +233,26 @@ public class PropertyAnalyzer {
             properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
         }
         return partitionRefreshNumber;
+    }
+
+    public static List<TableName> analyzeDisableRefreshTrigger(Map<String, String> properties, MaterializedView mv)
+            throws AnalysisException {
+        List<TableName> tables = Lists.newArrayList();
+        if (properties != null && properties.containsKey(PROPERTIES_DISABLE_REFRESH_TRIGGER)) {
+            String tableStr = properties.get(PROPERTIES_DISABLE_REFRESH_TRIGGER);
+            List<String> tableList = Splitter.on(",").omitEmptyStrings().trimResults().splitToList(tableStr);
+            for (String table : tableList) {
+                TableName tableName = AnalyzerUtils.stringToTableName(table);
+                if (mv.containsBaseTable(tableName)) {
+                    tables.add(tableName);
+                } else {
+                    throw new AnalysisException(tableName.toSql() +
+                            " is not base table of materialized view " + mv.getName());
+                }
+            }
+            properties.remove(PROPERTIES_DISABLE_REFRESH_TRIGGER);
+        }
+        return tables;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)
