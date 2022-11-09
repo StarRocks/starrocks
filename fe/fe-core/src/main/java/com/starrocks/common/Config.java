@@ -1118,6 +1118,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int tablet_sched_max_migration_task_sent_once = 1000;
 
+    @ConfField(mutable = true)
+    public static int tablet_checker_partition_batch_num = 500;
+
     @Deprecated
     @ConfField(mutable = true)
     public static int report_queue_size = 100;
