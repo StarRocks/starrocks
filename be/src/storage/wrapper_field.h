@@ -31,8 +31,6 @@ namespace starrocks {
 class WrapperField {
 public:
     static WrapperField* create(const TabletColumn& column, uint32_t len = 0);
-    static WrapperField* create_by_type(const FieldType& type) { return create_by_type(type, 0); }
-    static WrapperField* create_by_type(const FieldType& type, int32_t var_length);
 
     WrapperField(Field* rep, size_t variable_len, bool is_string_type);
 
@@ -60,38 +58,15 @@ public:
         return _rep->from_string(_field_buf + 1, value_string);
     }
 
-    void attach_buf(char* buf) {
-        _field_buf = _owned_buf;
-
-        // set null byte
-        *_field_buf = 0;
-        memcpy(_field_buf + 1, buf, size());
-    }
-
-    void attach_field(char* field) { _field_buf = field; }
-
     bool is_string_type() const { return _is_string_type; }
     char* ptr() const { return _field_buf + 1; }
     size_t size() const { return _rep->size(); }
-    size_t field_size() const { return _rep->field_size(); }
     bool is_null() const { return *reinterpret_cast<bool*>(_field_buf); }
     void set_is_null(bool is_null) { *reinterpret_cast<bool*>(_field_buf) = is_null; }
     void set_null() { *reinterpret_cast<bool*>(_field_buf) = true; }
-    void set_not_null() { *reinterpret_cast<bool*>(_field_buf) = false; }
-    char* nullable_cell_ptr() const { return _field_buf; }
-    void set_to_max() { _rep->set_to_max(_field_buf + 1); }
-    void set_to_min() { _rep->set_to_min(_field_buf + 1); }
-    uint32_t hash_code() const { return _rep->hash_code(*this, 0); }
     void* cell_ptr() const { return _field_buf + 1; }
     void* mutable_cell_ptr() const { return _field_buf + 1; }
     const Field* field() const { return _rep; }
-
-    // should be only called by WrapperField which constructed by RowCursorCell
-    void release_field() { _rep = nullptr; }
-
-    int cmp(const WrapperField* field) const { return _rep->compare_cell(*this, *field); }
-
-    void copy(const WrapperField* field) { _rep->direct_copy(this, *field); }
 
 private:
     Field* _rep = nullptr;
