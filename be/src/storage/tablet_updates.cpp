@@ -1812,6 +1812,10 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
             }
         }
     }
+    if (info->inputs.empty()) {
+        LOG(INFO) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        return Status::OK();
+    }
     // do not reset _last_compaction_time_ms so we can continue doing compaction
     std::sort(info->inputs.begin(), info->inputs.end());
     LOG(INFO) << "update compaction with specified rowsets start tablet:" << _tablet.tablet_id()
