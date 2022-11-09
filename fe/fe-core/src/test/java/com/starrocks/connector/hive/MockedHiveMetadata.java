@@ -340,7 +340,7 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         StorageDescriptor sd = new StorageDescriptor(cols, "", "",  "", false, -1, null, Lists.newArrayList(),
                 Lists.newArrayList(), Maps.newHashMap());
         Table t1 = new Table("t1", "partitioned_db", null, 0, 0, 0,  sd,
-                ImmutableList.of(new FieldSchema("par_col", "string", null)), Maps.newHashMap(),
+                ImmutableList.of(new FieldSchema("par_col", "int", null)), Maps.newHashMap(),
                 null, null, "EXTERNAL_TABLE");
 
         List<String> partitionNames = ImmutableList.of("par_col=0", "par_col=1", "par_col=2");
@@ -444,12 +444,14 @@ public class MockedHiveMetadata implements ConnectorMetadata {
         partitions1.add(new RemoteFileInfo(null, ImmutableList.of(), null));
         partitions1.add(new RemoteFileInfo(null, ImmutableList.of(), null));
         partitions1.add(new RemoteFileInfo(null, ImmutableList.of(), null));
+        partitions1.add(new RemoteFileInfo(null, ImmutableList.of(), null));
+        partitions1.add(new RemoteFileInfo(null, ImmutableList.of(), null));
 
         colNames = cols.stream().map(FieldSchema::getName).collect(Collectors.toList());
         Map<String, ColumnStatistic> columnStatisticMap1;
         columnStatisticMap1 = colNames.stream().collect(Collectors.toMap(Function.identity(),
                 col -> ColumnStatistic.unknown()));
-        columnStatisticMap.put("l_shipdate", partitionColumnStats);
+        columnStatisticMap1.put("l_shipdate", partitionColumnStats);
 
         mockTables.put(lineItemPar.getTableName(), new HiveTableInfo(HiveMetastoreApiConverter.toHiveTable(
                 lineItemPar, MOCKED_HIVE_CATALOG_NAME), partitionNames, (long) rowCount, columnStatisticMap1, partitions1));
