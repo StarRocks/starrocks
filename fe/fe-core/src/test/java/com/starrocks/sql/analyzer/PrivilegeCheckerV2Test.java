@@ -360,13 +360,14 @@ public class PrivilegeCheckerV2Test {
                     "grant ALTER on database " + testDbName + " to test",
                     "revoke ALTER on database " + testDbName + " from test",
                     "Access denied for user 'test' to database '" + testDbName + "'");
-            // Test `use database` | `show create database xxx`: check any privilege on tables under db
-            verifyGrantRevoke(
-                    stmt,
-                    "grant select on " + testDbName + ".tbl1 to test",
-                    "revoke select on " + testDbName + ".tbl1 from test",
-                    "Access denied for user 'test' to database '" + testDbName + "'");
         }
+
+        // Test `use database` : check any privilege on tables under db
+        verifyGrantRevoke(
+                "use " + testDbName + ";",
+                "grant select on " + testDbName + ".tbl1 to test",
+                "revoke select on " + testDbName + ".tbl1 from test",
+                "Access denied for user 'test' to database '" + testDbName + "'");
 
         // Test `recover database xxx`: check DROP on db and CREATE_DATABASE on internal catalog
         // TODO(yiming): check for CREATE_DATABASE on internal catalog after catalog is added

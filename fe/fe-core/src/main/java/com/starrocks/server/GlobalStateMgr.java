@@ -2972,7 +2972,7 @@ public class GlobalStateMgr {
         // So we didn't check UseDbStmt permission in PrivilegeChecker.
         if (CatalogMgr.isInternalCatalog(ctx.getCurrentCatalog())) {
             if (isUsingNewPrivilege()) {
-                if (!PrivilegeManager.checkAnyActionInDb(ctx, dbName)) {
+                if (!PrivilegeManager.checkAnyActionOnOrUnderDb(ctx, dbName)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_DB_ACCESS_DENIED,
                             ctx.getQualifiedUser(), dbName);
                 }

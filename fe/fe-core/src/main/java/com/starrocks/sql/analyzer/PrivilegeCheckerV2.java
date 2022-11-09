@@ -94,7 +94,18 @@ public class PrivilegeCheckerV2 {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
 
-        if (!PrivilegeManager.checkAnyActionInDb(context, dbName)) {
+        if (!PrivilegeManager.checkAnyActionOnDb(context, dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    context.getQualifiedUser(), dbName);
+        }
+    }
+
+    static void checkAnyActionInDbOrUnderDb(ConnectContext context, String catalogName, String dbName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+
+        if (!PrivilegeManager.checkAnyActionOnOrUnderDb(context, dbName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
         }
@@ -215,7 +226,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, statement.getCatalogName(), statement.getDbName());
+            checkAnyActionInDbOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
             return null;
         }
 
