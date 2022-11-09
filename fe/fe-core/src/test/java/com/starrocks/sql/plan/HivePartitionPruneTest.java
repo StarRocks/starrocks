@@ -19,14 +19,14 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
                 "     TABLE: t1\n" +
-                "     PARTITION PREDICATES: 4: par_col = '0'\n" +
+                "     PARTITION PREDICATES: 4: par_col = 0\n" +
                 "     partitions=1/3");
 
         sql = "select * from t1 where par_col = 1 and c1 = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
                 "     TABLE: t1\n" +
-                "     PARTITION PREDICATES: 4: par_col = '1'\n" +
+                "     PARTITION PREDICATES: 4: par_col = 1\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
                 "     partitions=1/3");
@@ -35,9 +35,9 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
                 "     TABLE: t1\n" +
-                "     PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS VARCHAR(1048576))\n" +
+                "     PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
-                "     NO EVAL-PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS VARCHAR(1048576))\n" +
+                "     NO EVAL-PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
                 "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
                 "     partitions=3/3");
 
@@ -45,7 +45,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
                 "     TABLE: t1\n" +
-                "     PARTITION PREDICATES: 4: par_col = '2'\n" +
+                "     PARTITION PREDICATES: 4: par_col = 2\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     MIN/MAX PREDICATES: 5: c1 <= 2, 6: c1 >= 2\n" +
                 "     partitions=1/3");

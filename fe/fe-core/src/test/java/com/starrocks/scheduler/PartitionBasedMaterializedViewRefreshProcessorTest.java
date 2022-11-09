@@ -24,6 +24,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -50,6 +51,7 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Config.enable_experimental_mv = true;
         UtFrameUtils.createMinStarRocksCluster();
         connectContext = UtFrameUtils.createDefaultCtx();
+        ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test")
                 .withTable("CREATE TABLE test.tbl1\n" +
@@ -148,7 +150,17 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
                         "partition by k1\n" +
                         "distributed by hash(k2) buckets 10\n" +
                         "refresh manual\n" +
-                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;");
+                        "as select k1, k2, sum(v1) as total_sum from base group by k1, k2;")
+                .withNewMaterializedView("CREATE MATERIALIZED VIEW `test`.`hive_parttbl_mv`\n" +
+                        "COMMENT \"MATERIALIZED_VIEW\"\n" +
+                        "PARTITION BY (`l_shipdate`)\n" +
+                        "DISTRIBUTED BY HASH(`l_orderkey`) BUCKETS 10\n" +
+                        "REFRESH MANUAL\n" +
+                        "PROPERTIES (\n" +
+                        "\"replication_num\" = \"1\",\n" +
+                        "\"storage_medium\" = \"HDD\"\n" +
+                        ")\n" +
+                        "AS SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` as a;");
     }
 
     @Test
@@ -376,6 +388,44 @@ public class PartitionBasedMaterializedViewRefreshProcessorTest {
         Assert.assertEquals(2, materializedView.getPartition("p202202_202203").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202203_202204").getVisibleVersion());
         Assert.assertEquals(2, materializedView.getPartition("p202204_202205").getVisibleVersion());
+    }
+
+    @Test
+    public void testRangePartitionRefreshWithHiveTable() throws Exception {
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void handleDMLStmt(ExecPlan execPlan, DmlStmt stmt) throws Exception {
+                if (stmt instanceof InsertStmt) {
+                    InsertStmt insertStmt = (InsertStmt) stmt;
+                    TableName tableName = insertStmt.getTableName();
+                    Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+                    OlapTable tbl = ((OlapTable) testDb.getTable(tableName.getTbl()));
+                    for (Partition partition : tbl.getPartitions()) {
+                        if (insertStmt.getTargetPartitionIds().contains(partition.getId())) {
+                            setPartitionVersion(partition, partition.getVisibleVersion() + 1);
+                        }
+                    }
+                }
+            }
+        };
+        Database testDb = GlobalStateMgr.getCurrentState().getDb("test");
+        MaterializedView materializedView = ((MaterializedView) testDb.getTable("hive_parttbl_mv"));
+        HashMap<String, String> taskRunProperties = new HashMap<>();
+        taskRunProperties.put(TaskRun.PARTITION_START, "1998-01-01");
+        taskRunProperties.put(TaskRun.PARTITION_END, "1998-01-03");
+        taskRunProperties.put(TaskRun.FORCE, Boolean.toString(false));
+        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
+        TaskRun taskRun = TaskRunBuilder.newBuilder(task).properties(taskRunProperties).build();
+        taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
+        taskRun.executeTaskRun();
+        Collection<Partition> partitions = materializedView.getPartitions();
+
+        Assert.assertEquals(5, partitions.size());
+        Assert.assertEquals(2, materializedView.getPartition("p19980101").getVisibleVersion());
+        Assert.assertEquals(2, materializedView.getPartition("p19980102").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980103").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980104").getVisibleVersion());
+        Assert.assertEquals(1, materializedView.getPartition("p19980105").getVisibleVersion());
     }
 
     @Test

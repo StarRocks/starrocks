@@ -91,10 +91,15 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         @SerializedName(value = "tableName")
         private String tableName;
 
-        public BaseTableInfo(long dbId, long tableId) {
+        public BaseTableInfo(long dbId, String dbName, long tableId) {
             this.catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
             this.dbId = dbId;
+            this.dbName = dbName;
             this.tableId = tableId;
+        }
+
+        public BaseTableInfo(long dbId, long tableId) {
+            this(dbId, null, tableId);
         }
 
         public BaseTableInfo(String catalogName, String dbName, String tableIdentifier) {
@@ -482,7 +487,7 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             if (baseTableIds != null) {
                 // for compatibility
                 for (long tableId : baseTableIds) {
-                    baseTableInfos.add(new BaseTableInfo(dbId, tableId));
+                    baseTableInfos.add(new BaseTableInfo(dbId, db.getFullName(), tableId));
                 }
             } else {
                 active = false;
