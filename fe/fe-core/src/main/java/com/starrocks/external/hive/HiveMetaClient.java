@@ -172,8 +172,9 @@ public class HiveMetaClient {
                         LOG.warn(r);
                     }
                 } catch (TException e) {
-                    LOG.warn("don't got...");
+                    LOG.warn("don't get...");
                     LOG.warn(e.getMessage());
+                    throw new MetaException("I don't get database...");
                 }
 
 
