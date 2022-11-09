@@ -406,46 +406,6 @@ public class UtilsTest {
     }
 
     @Test
-    public void testIsAlwaysTrueOrFalse() {
-        ConstantOperator alwaysTrue = ConstantOperator.TRUE;
-        Assert.assertTrue(Utils.isAlwaysTrue(alwaysTrue));
-        Assert.assertFalse(Utils.isAlwaysFalse(alwaysTrue));
-        ConstantOperator alwaysFalse = ConstantOperator.createBoolean(false);
-        Assert.assertFalse(Utils.isAlwaysTrue(alwaysFalse));
-        Assert.assertTrue(Utils.isAlwaysFalse(alwaysFalse));
-
-        CompoundPredicateOperator compound = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND, alwaysFalse, alwaysTrue);
-        Assert.assertTrue(Utils.isAlwaysFalse(compound));
-        Assert.assertFalse(Utils.isAlwaysTrue(compound));
-
-        CompoundPredicateOperator compound2 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND, alwaysTrue, alwaysTrue);
-        Assert.assertFalse(Utils.isAlwaysFalse(compound2));
-        Assert.assertTrue(Utils.isAlwaysTrue(compound2));
-
-        CompoundPredicateOperator compound3 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.AND, alwaysFalse, alwaysFalse);
-        Assert.assertTrue(Utils.isAlwaysFalse(compound3));
-        Assert.assertFalse(Utils.isAlwaysTrue(compound3));
-
-        CompoundPredicateOperator compound4 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysTrue);
-        Assert.assertFalse(Utils.isAlwaysFalse(compound4));
-        Assert.assertTrue(Utils.isAlwaysTrue(compound4));
-
-        CompoundPredicateOperator compound5 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.OR, alwaysTrue, alwaysTrue);
-        Assert.assertFalse(Utils.isAlwaysFalse(compound5));
-        Assert.assertTrue(Utils.isAlwaysTrue(compound5));
-
-        CompoundPredicateOperator compound6 = new CompoundPredicateOperator(
-                CompoundPredicateOperator.CompoundType.OR, alwaysFalse, alwaysFalse);
-        Assert.assertTrue(Utils.isAlwaysFalse(compound6));
-        Assert.assertFalse(Utils.isAlwaysTrue(compound6));
-    }
-
-    @Test
     public void testGetCompensationPredicateForDisjunctive() {
         ConstantOperator alwaysTrue = ConstantOperator.TRUE;
         ConstantOperator alwaysFalse = ConstantOperator.createBoolean(false);

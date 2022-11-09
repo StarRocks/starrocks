@@ -793,18 +793,6 @@ public class Utils {
         return rewrite.rewrite(predicate, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
     }
 
-    public static boolean isAlwaysFalse(ScalarOperator predicate) {
-        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-        return ConstantOperator.FALSE.equals(rewriter.rewrite(predicate,
-                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES));
-    }
-
-    public static boolean isAlwaysTrue(ScalarOperator predicate) {
-        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-        return ConstantOperator.TRUE.equals(rewriter.rewrite(predicate,
-                ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES));
-    }
-
     public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
         List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);

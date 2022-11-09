@@ -186,11 +186,11 @@ public class MaterializedViewRewriter {
             ScalarOperator equalPredicates = Utils.canonizePredicate(compensationPredicates.getEqualPredicates());
             ScalarOperator otherPredicates = Utils.canonizePredicate(Utils.compoundAnd(
                     compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
-            if (!Utils.isAlwaysTrue(equalPredicates) || !Utils.isAlwaysTrue(otherPredicates)) {
+            if (!ConstantOperator.TRUE.equals(equalPredicates) || !ConstantOperator.TRUE.equals(otherPredicates)) {
                 Map<ColumnRefOperator, ScalarOperator> viewExprMap = Utils.getColumnRefMap(
                         rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
 
-                if (!Utils.isAlwaysTrue(equalPredicates)) {
+                if (!ConstantOperator.TRUE.equals(equalPredicates)) {
                     Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
                             normalizeAndReverseProjection(viewExprMap, rewriteContext, true);
                     List<ScalarOperator> conjuncts = Utils.extractConjuncts(equalPredicates);
@@ -207,7 +207,7 @@ public class MaterializedViewRewriter {
                     equalPredicates = Utils.compoundAnd(rewrittens);
                 }
 
-                if (!Utils.isAlwaysTrue(otherPredicates)) {
+                if (!ConstantOperator.TRUE.equals(otherPredicates)) {
                     List<ScalarOperator> conjuncts = Utils.extractConjuncts(otherPredicates);
                     // swapped by query ec
                     List<ScalarOperator> swappedConjuncts = conjuncts.stream().map(conjunct -> {
@@ -225,7 +225,7 @@ public class MaterializedViewRewriter {
                 }
             }
             ScalarOperator compensationPredicate = Utils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
-            if (!Utils.isAlwaysTrue(compensationPredicate)) {
+            if (!ConstantOperator.TRUE.equals(compensationPredicate)) {
                 // add filter operator
                 LogicalFilterOperator filter = new LogicalFilterOperator(compensationPredicate);
                 rewrittenExpression = OptExpression.create(filter, rewrittenExpression);
