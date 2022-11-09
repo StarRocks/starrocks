@@ -44,7 +44,7 @@ public:
     // Returns this buffer's read position offset.
     size_t position_offset() {return _position_offset;}
 
-    void set_position_offset(size_t position_offset) {_position_offset = _position_offset;}
+    void set_position_offset(size_t position_offset) {_position_offset = position_offset;}
 
     // Returns this buffer's write position.
     char* limit() { return _begin + _limit_offset; }
@@ -111,6 +111,8 @@ public:
     using Record = Slice;
     using Field = Slice;
     using Fields = std::vector<Field>;
+    using FieldOffset = std::pair<size_t, size_t>;
+    using FieldOffsets = std::vector<FieldOffset>;
 
     CSVReader(const string& row_delimiter, const string& column_separator, bool trim_space, char escape, char enclose)
             : _row_delimiter(row_delimiter),
@@ -128,7 +130,7 @@ public:
 
     Status next_record(Record* record);
 
-    Status next_record(Fields* fields);
+    Status next_record(FieldOffsets* fields);
 
     void set_limit(size_t limit) { _limit = limit; }
 
@@ -139,6 +141,8 @@ public:
     bool isColumnSeparator(CSVBuffer& buff);
 
     Status readMore(CSVBuffer& buff);
+
+    char* buffBasePtr();
 
 protected:
     std::string _row_delimiter;

@@ -239,7 +239,7 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
     Status status;
     CSVReader::Record record;
-    CSVReader::Fields fields;
+    CSVReader::FieldOffsets fields;
 
     int num_columns = chunk->num_columns();
     _column_raw_ptrs.resize(num_columns);
@@ -297,7 +297,8 @@ Status CSVScanner::_parse_csv_v2(Chunk* chunk) {
             if (slot == nullptr) {
                 continue;
             }
-            const Slice& field = fields[j];
+            std::pair<size_t, size_t> field_offset = fields[j];
+            const Slice field(_curr_reader->buffBasePtr() + field_offset.first, field_offset.second);
             options.type_desc = &(slot->type());
             // 此时，field引用的还是buff中的共享内存，直到这一步将数据复制走。所以每读到一条record，我们就可以compact buff了。
             if (!_converters[k]->read_string(_column_raw_ptrs[k], field, options)) {

@@ -33,7 +33,6 @@ static Field trim(const char* value, int len) {
     return Field(value + begin, end - begin + 1);
 }
 
-
 bool CSVReader::isColumnSeparator(CSVBuffer& buff) {
     if (_column_separator_length == 1) {
         if (*(buff.position()) == _column_separator[0]) {
@@ -42,14 +41,17 @@ bool CSVReader::isColumnSeparator(CSVBuffer& buff) {
         }
     } else {
         int i = 0;
-        char* p = _buff.position();
-        while (i < _column_separator_length && p < _buff.limit() && *p == _column_separator[i]) {
+        const char* base_ptr = _buff.base_ptr(); 
+        size_t p = _buff.position_offset();
+        while (i < _column_separator_length && p < _buff.limit_offset() && *(base_ptr+p) == _column_separator[i]) {
             i++;
             p++;
-            if (_buff.limit() - p < 1) {
+            if (_buff.limit_offset() - p < 1) {
                 if (_buff.free_space() == 0) {
-                    if (!_expand_buffer().ok()) {
+                    if (!_expand_buffer_loosely().ok()) {
                         return false;
+                    } else {
+                        base_ptr = _buff.base_ptr();
                     }
                 }
                 if (!_fill_buffer().ok()) {
@@ -74,14 +76,17 @@ bool CSVReader::isRowDelimiter(CSVBuffer& buff) {
     } else {
         // 我们要判断接下来的一段字节流是否是row delimiter
         int i = 0;
-        char* p = _buff.position();
-        while (i < _row_delimiter_length && p < _buff.limit() && *p == _row_delimiter[i]) {
+        const char* base_ptr = _buff.base_ptr(); 
+        size_t p = _buff.position_offset();
+        while (i < _row_delimiter_length && p < _buff.limit_offset() && *(base_ptr+p) == _row_delimiter[i]) {
             i++;
             p++;
-            if (_buff.limit() - p < 1) {
+            if (_buff.limit_offset() - p < 1) {
                 if (_buff.free_space() == 0) {
-                    if (!_expand_buffer().ok()) {
+                    if (!_expand_buffer_loosely().ok()) {
                         return false;
+                    } else {
+                        base_ptr = _buff.base_ptr();
                     }
                 }
                 if (!_fill_buffer().ok()) {
@@ -101,16 +106,23 @@ bool CSVReader::isRowDelimiter(CSVBuffer& buff) {
 Status CSVReader::readMore(CSVBuffer& buff) {
     if(buff.available() < 1) {
         if (buff.free_space() == 0) {
-            return _expand_buffer();
+            Status s = _expand_buffer_loosely();
+            if (!s.ok()) {
+                return s;
+            }
         }
         return _fill_buffer();
     }
     return Status::OK();
 }
 
+char* CSVReader::buffBasePtr() {
+    return _buff.base_ptr();
+}
+
 // 这个函数我们要从状态START开始，读取下一条记录。
 // 重载。
-Status CSVReader::next_record(Fields* fields) {
+Status CSVReader::next_record(FieldOffsets* fields) {
     fields->clear();
     if (_limit > 0 && _parsed_bytes > _limit) {
         return Status::EndOfFile("Reached limit");
@@ -119,8 +131,9 @@ Status CSVReader::next_record(Fields* fields) {
     _buff.compact();
     ParseState curState = START;
     ParseState preState = curState;
-    char* filed_start = nullptr;
-    char* parsed_start = _buff.position();
+    // 将filed_start初始化为最大值，表示未进入START状态
+    size_t filed_start = std::string::npos;
+    size_t parsed_start = _buff.position_offset();
     Status status = Status::OK();
     while (true) {
         // 到了一行的行尾,或者字段尾部，此次不再读新的数据
@@ -147,7 +160,7 @@ Status CSVReader::next_record(Fields* fields) {
                 }
             }
             // 我们记录字段开始的位置
-            filed_start = _buff.position();
+            filed_start = _buff.position_offset();
 
             // newline
             if (isRowDelimiter(_buff)) {
@@ -167,7 +180,7 @@ Status CSVReader::next_record(Fields* fields) {
                 preState = ORDINARY;
                 curState = ESCAPE;
                 _buff.skip(1);
-                filed_start = _buff.position();
+                filed_start = _buff.position_offset();
                 break;
             }
 
@@ -180,7 +193,7 @@ Status CSVReader::next_record(Fields* fields) {
                     curState = NEWLINE;
                     goto newline_label;
                 }
-                filed_start = _buff.position();
+                filed_start = _buff.position_offset();
                 if (*(_buff.position()) != _enclose) {
                     curState = ENCLOSE;
                     break;
@@ -291,23 +304,23 @@ Status CSVReader::next_record(Fields* fields) {
 
         case DELIMITER:
             // push field
-            fields->emplace_back(filed_start, _buff.position() - _column_separator_length - filed_start);
+            fields->emplace_back(filed_start, _buff.position_offset() - _column_separator_length - filed_start);
             curState = START;
             break;
 
     newline_label:
         case NEWLINE:
-            _parsed_bytes += _buff.position() - parsed_start;
+            _parsed_bytes += _buff.position_offset() - parsed_start;
             // push line
             // 如果未发生异常，那么将行分隔符从字段中去除，发生异常，不做修饰了。
             if (status.ok()) {
                 // 空行
-                if (!(fields->size() == 0 && _buff.position() - _row_delimiter_length - filed_start == 0)) {
-                    fields->emplace_back(filed_start, _buff.position() - _row_delimiter_length - filed_start);
+                if (!(fields->size() == 0 && _buff.position_offset() - _row_delimiter_length - filed_start == 0)) {
+                    fields->emplace_back(filed_start, _buff.position_offset() - _row_delimiter_length - filed_start);
                 }
             } else {
-                if (filed_start) {
-                    fields->emplace_back(filed_start, _buff.position() - filed_start);
+                if (filed_start != std::string::npos) {
+                    fields->emplace_back(filed_start, _buff.position_offset() - filed_start);
                 }
             }
             curState = START;
