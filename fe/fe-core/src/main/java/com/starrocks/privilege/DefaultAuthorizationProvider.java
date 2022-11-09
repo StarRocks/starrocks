@@ -152,8 +152,8 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
     }
 
     @Override
-    public boolean checkAnyAction(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
-        return currentPrivilegeCollection.checkAnyAction(type, object);
+    public boolean searchObject(short type, PEntryObject object, PrivilegeCollection currentPrivilegeCollection) {
+        return currentPrivilegeCollection.searchObject(type, object);
     }
 
     @Override

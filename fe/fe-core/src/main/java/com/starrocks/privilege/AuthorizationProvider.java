@@ -74,7 +74,12 @@ public interface AuthorizationProvider {
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
 
-    boolean checkAnyAction(
+    /**
+     * Search if any object in collection matches the specified object
+     * The specified object can be fuzzy-matching object.
+     * For example, `use db1` statement will pass a (db1, ALL) as the object to check if any table exists
+     */
+    boolean searchObject(
             short type,
             PEntryObject object,
             PrivilegeCollection currentPrivilegeCollection);
