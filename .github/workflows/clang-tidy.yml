@@ -13,7 +13,7 @@ jobs:
     steps:
       - name: pre build
         run: |
-           sudo rm -rf ../starrocks/*
+          sudo rm -rf ../starrocks/*
 
       - uses: dorny/paths-filter@v2
         id: changes
@@ -21,7 +21,7 @@ jobs:
           filters: |
             be:
             - 'be/**'
-       
+
       - uses: actions/checkout@v3
         if: steps.changes.outputs.be == 'true'
         with:
@@ -45,4 +45,4 @@ jobs:
           
       - name: post build
         run: |
-           sudo rm -rf ../starrocks/*
+          sudo rm -rf ../starrocks/*
