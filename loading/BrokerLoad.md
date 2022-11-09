@@ -122,12 +122,12 @@ LOAD LABEL test_db.label1
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file1.csv")
     INTO TABLE table1
     COLUMNS TERMINATED BY ","
-    (id, city)
+    (id, name, score)
 
     DATA INFILE("hdfs://<hdfs_host>:<hdfs_port>/user/starrocks/file2.csv")
     INTO TABLE table2
     COLUMNS TERMINATED BY ","
-    (id, name, score)
+   (id, city) 
 )
 WITH BROKER "mybroker"
 (
