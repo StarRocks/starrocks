@@ -223,9 +223,13 @@ FROM data_source
         "property.ssl.ca.location" = "FILE:ca-cert"
         ```
 
-        1.使用 SSL 连接 Kafka 时，需要指定以下参数：
+        4.1 使用SSL连接 Kafka  
+        需要指定以下参数：  
+
+        ```plain text
         "property.security.protocol" = "ssl",
         "property.ssl.ca.location" = "FILE:ca-cert",
+        ```
 
         其中:
         "property.security.protocol" 用于指定连接方式为 SSL。
@@ -241,11 +245,15 @@ FROM data_source
         "property.ssl.key.location" 指定 client 的 private key 的位置。
         "property.ssl.key.password" 指定 client 的 private key 的密码。
 
-        2.使用 SASL 连接 Kafka 时，需要指定以下参数：
+        4.2 使用SASL连接Kafka  
+        需要指定以下参数：
+
+        ```plain text
         "property.security.protocol"="SASL_PLAINTEXT",
         "property.sasl.mechanism"="PLAIN",
         "property.sasl.username"="admin",
         "property.sasl.password"="admin"
+        ```
 
         其中：
         "property.security.protocol" 指定协议为 SASL_PLAINTEXT。
@@ -253,7 +261,7 @@ FROM data_source
         "property.sasl.username" 指定 SASL 的用户名。
         "property.sasl.password" 指定 SASL 的密码。
 
-        3.指定Kafka partition的默认起始offset
+        4.3 指定Kafka partition的默认起始offset  
         如果没有指定`kafka_partitions/kafka_offsets`，默认消费所有分区，此时可以指定`kafka_default_offsets`起始 offset。默认为 `OFFSET_END`，即从末尾开始订阅。
         值为
          1.OFFSET_BEGINNING: 从有数据的位置开始订阅。
@@ -262,6 +270,14 @@ FROM data_source
 
         ```plaintext
         "property.kafka_default_offsets" = "OFFSET_BEGINNING"
+        ```
+
+        4.4 指定Kafka consumer group的group id  
+        如果没有指定`group.id`，StarRocks会根据Routine Load的job name生成一个随机值，具体格式为`{job_name}_{random uuid}`，如`simple_job_0a64fe25-3983-44b2-a4d8-f52d3af4c3e8`。
+         示例：
+
+        ```plaintext
+        "property.group.id" = "group_id_0"
         ```
 
 导入数据格式样例
