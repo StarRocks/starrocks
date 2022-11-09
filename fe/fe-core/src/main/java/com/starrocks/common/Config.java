@@ -1780,7 +1780,6 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean recursive_dir_search_enabled = false;
 
-<<<<<<< HEAD
     /**
      * Number of profile infos reserved by `ProfileManager` for recently executed query.
      * Default value: 500
