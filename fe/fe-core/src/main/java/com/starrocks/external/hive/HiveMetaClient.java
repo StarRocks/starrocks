@@ -58,11 +58,9 @@ import org.apache.logging.log4j.Logger;
 import org.apache.thrift.TException;
 import org.apache.thrift.transport.TTransportException;
 
-import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.net.URI;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -143,7 +141,7 @@ public class HiveMetaClient {
                 } catch (FileNotFoundException e) {
                     LOG.warn(e.getMessage());
                 }
-                    hiveConf.set("hadoop.security.authentication", "kerberos");
+                hiveConf.set("hadoop.security.authentication", "kerberos");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
