@@ -49,6 +49,8 @@ public final class GlobalVariable {
     public static final String QUERY_QUEUE_SELECT_ENABLE = "query_queue_select_enable";
     public static final String QUERY_QUEUE_STATISTIC_ENABLE = "query_queue_statistic_enable";
     public static final String QUERY_QUEUE_INSERT_ENABLE = "query_queue_insert_enable";
+    public static final String QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS =
+            "query_queue_fresh_resource_usage_interval_ms";
     public static final String QUERY_QUEUE_CONCURRENCY_HARD_LIMIT = "query_queue_concurrency_hard_limit";
     public static final String QUERY_QUEUE_MEM_USED_PCT_HARD_LIMIT = "query_queue_mem_used_pct_hard_limit";
     public static final String QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT = "query_queue_cpu_used_permille_hard_limit";
@@ -119,6 +121,9 @@ public final class GlobalVariable {
     private static boolean queryQueueStatisticEnable = false;
     @VariableMgr.VarAttr(name = QUERY_QUEUE_INSERT_ENABLE, flag = VariableMgr.GLOBAL)
     private static boolean queryQueueInsertEnable = false;
+    // Use the resource usage, only when the duration from the last report is within this interval.
+    @VariableMgr.VarAttr(name = QUERY_QUEUE_FRESH_RESOURCE_USAGE_INTERVAL_MS, flag = VariableMgr.GLOBAL)
+    private static long queryQueueResourceUsageIntervalMs = 5000;
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_CONCURRENCY_HARD_LIMIT, flag = VariableMgr.GLOBAL)
     private static int queryQueueConcurrencyHardLimit = 0;
@@ -127,7 +132,7 @@ public final class GlobalVariable {
     private static double queryQueueMemUsedPctHardLimit = 0;
     // Effective iff it is positive.
     @VariableMgr.VarAttr(name = QUERY_QUEUE_CPU_USED_PERMILLE_HARD_LIMIT, flag = VariableMgr.GLOBAL)
-    private static long queryQueueCpuUsedPermilleHardLimit = 0;
+    private static int queryQueueCpuUsedPermilleHardLimit = 0;
     @VariableMgr.VarAttr(name = QUERY_QUEUE_PENDING_TIMEOUT_SECOND, flag = VariableMgr.GLOBAL)
     private static int queryQueuePendingTimeoutSecond = 300;
     // Unlimited iff it is non-positive.
@@ -158,6 +163,14 @@ public final class GlobalVariable {
         GlobalVariable.queryQueueInsertEnable = queryQueueInsertEnable;
     }
 
+    public static long getQueryQueueResourceUsageIntervalMs() {
+        return queryQueueResourceUsageIntervalMs;
+    }
+
+    public static void setQueryQueueResourceUsageIntervalMs(long queryQueueResourceUsageIntervalMs) {
+        GlobalVariable.queryQueueResourceUsageIntervalMs = queryQueueResourceUsageIntervalMs;
+    }
+
     public static boolean isQueryQueueConcurrencyHardLimitEffective() {
         return queryQueueConcurrencyHardLimit > 0;
     }
@@ -186,11 +199,11 @@ public final class GlobalVariable {
         return queryQueueCpuUsedPermilleHardLimit > 0;
     }
 
-    public static double getQueryQueueCpuUsedPermilleHardLimit() {
+    public static int getQueryQueueCpuUsedPermilleHardLimit() {
         return queryQueueCpuUsedPermilleHardLimit;
     }
 
-    public static void setQueryQueueCpuUsedPermilleHardLimit(long queryQueueCpuUsedPermilleHardLimit) {
+    public static void setQueryQueueCpuUsedPermilleHardLimit(int queryQueueCpuUsedPermilleHardLimit) {
         GlobalVariable.queryQueueCpuUsedPermilleHardLimit = queryQueueCpuUsedPermilleHardLimit;
     }
 

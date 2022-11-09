@@ -66,6 +66,8 @@ public class QueryQueueManager {
         return QueryQueueManager.SingletonHolder.INSTANCE;
     }
 
+    private static final long CHECK_INTERVAL_MS = 1000L;
+
     private final ReentrantLock lock = new ReentrantLock();
     private final Map<ConnectContext, PendingQueryInfo> pendingQueryInfoMap = new ConcurrentHashMap<>();
 
@@ -86,31 +88,29 @@ public class QueryQueueManager {
         }
     }
 
-    public boolean updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
+    public void updateResourceUsage(long backendId, int numRunningQueries, long memLimitBytes, long memUsedBytes,
                                        int cpuUsedPermille) {
         Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(backendId);
         if (backend == null) {
             LOG.warn("backend doesn't exist. id: {}", backendId);
-            return false;
+            return;
         }
 
         try {
             lock.lock();
 
-            boolean isChanged =
-                    backend.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-            if (isChanged) {
-                LOG.debug("resource usage from backend {} has changed", backendId);
-                maybeNotifyAfterLock();
-            }
-            return isChanged;
+            backend.updateResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
+            maybeNotifyAfterLock();
         } finally {
             lock.unlock();
         }
     }
 
     public void maybeWait(ConnectContext connectCtx, Coordinator coord) throws UserException, InterruptedException {
-        if (!needCheckQueue(coord) || canRunMore()) {
+        if (!needCheckQueue(coord)) {
+            return;
+        }
+        if (!enableCheckQueue(coord) || canRunMore()) {
             return;
         }
 
@@ -120,7 +120,7 @@ public class QueryQueueManager {
 
         try {
             lock.lock();
-            if (!needCheckQueue(coord) || canRunMore()) {
+            if (!enableCheckQueue(coord) || canRunMore()) {
                 return;
             }
 
@@ -130,16 +130,13 @@ public class QueryQueueManager {
             info.connectCtx.setPending(true);
             pendingQueryInfoMap.put(info.connectCtx, info);
 
-            while (!canRunMore()) {
+            while (enableCheckQueue(coord) && !canRunMore()) {
                 long currentMs = System.currentTimeMillis();
                 if (currentMs >= timeoutMs) {
                     throw new UserException("Pending timeout");
                 }
 
-                boolean timeout = !info.await(timeoutMs - currentMs, TimeUnit.MILLISECONDS);
-                if (timeout) {
-                    throw new UserException("Pending timeout");
-                }
+                info.await(Math.min(timeoutMs - currentMs, CHECK_INTERVAL_MS), TimeUnit.MILLISECONDS);
 
                 if (info.isCancelled) {
                     throw new UserException("Cancelled");
@@ -177,16 +174,8 @@ public class QueryQueueManager {
         }
     }
 
-    public boolean needCheckQueue(Coordinator coord) {
+    public boolean enableCheckQueue(Coordinator coord) {
         if (coord.isLoadType()) {
-            return false;
-        }
-
-        // The queries only using schema meta will never been queued, because a MySQL client will
-        // query schema meta after the connection is established.
-        List<ScanNode> scanNodes = coord.getScanNodes();
-        boolean notNeed = scanNodes.isEmpty() || scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
-        if (notNeed) {
             return false;
         }
 
@@ -203,6 +192,14 @@ public class QueryQueueManager {
         }
 
         return false;
+    }
+
+    public boolean needCheckQueue(Coordinator coord) {
+        // The queries only using schema meta will never been queued, because a MySQL client will
+        // query schema meta after the connection is established.
+        List<ScanNode> scanNodes = coord.getScanNodes();
+        boolean notNeed = scanNodes.isEmpty() || scanNodes.stream().allMatch(SchemaScanNode.class::isInstance);
+        return !notNeed;
     }
 
     public boolean canRunMore() {

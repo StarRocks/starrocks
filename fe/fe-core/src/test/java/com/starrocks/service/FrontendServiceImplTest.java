@@ -234,14 +234,12 @@ public class FrontendServiceImplTest {
         TUpdateResourceUsageRequest request = genUpdateResourceUsageRequest(
                 backendId, numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
 
-        //Notify pending queries, because resource usage is changed.
+        // Notify pending queries.
         impl.updateResourceUsage(request);
         Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
         Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
         Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
         Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
-        // Don't notify, because resource usage isn't changed.
-        impl.updateResourceUsage(request);
         // Don't notify, because this BE doesn't exist.
         request.setBackend_id(/* Not Exist */ 1);
         impl.updateResourceUsage(request);

@@ -106,14 +106,12 @@ public class ReportHandlerTest {
         };
 
         TResourceUsage resourceUsage = genResourceUsage(numRunningQueries, memLimitBytes, memUsedBytes, cpuUsedPermille);
-        // Sync to FE followers and notify pending queries, because resource usage is changed.
+        // Sync to FE followers and notify pending queries.
         ReportHandler.testHandleResourceUsageReport(backendId, resourceUsage);
         Assert.assertEquals(numRunningQueries, backend.getNumRunningQueries());
         Assert.assertEquals(memLimitBytes, backend.getMemLimitBytes());
         Assert.assertEquals(memUsedBytes, backend.getMemUsedBytes());
         Assert.assertEquals(cpuUsedPermille, backend.getCpuUsedPermille());
-        // Don't sync and notify, because resource usage isn't changed.
-        ReportHandler.testHandleResourceUsageReport(backendId, resourceUsage);
         // Don't sync and notify, because this BE doesn't exist.
         ReportHandler.testHandleResourceUsageReport(/* Not Exist */ 1, resourceUsage);
     }

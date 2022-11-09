@@ -98,6 +98,26 @@ public class QueryQueueManagerTest {
         };
     }
 
+    private void mockCoordinatorEnableCheckQueue() {
+        QueryQueueManager manager = QueryQueueManager.getInstance();
+        new Expectations(manager) {
+            {
+                manager.enableCheckQueue((Coordinator) any);
+                result = true;
+            }
+        };
+    }
+
+    private void mockCoordinatorNotEnableCheckQueue() {
+        QueryQueueManager manager = QueryQueueManager.getInstance();
+        new Expectations(manager) {
+            {
+                manager.enableCheckQueue((Coordinator) any);
+                result = false;
+            }
+        };
+    }
+
     @Test
     public void testNotWait() throws UserException, InterruptedException {
         QueryQueueManager manager = QueryQueueManager.getInstance();
@@ -105,14 +125,23 @@ public class QueryQueueManagerTest {
 
         // Case 1: Coordinator needn't check queue.
         mockCoordinatorNotNeedCheckQueue();
+        mockCoordinatorEnableCheckQueue();
         GlobalVariable.setQueryQueueSelectEnable(true);
         manager.maybeWait(connectCtx, coordinator);
         Assert.assertEquals(0, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
         Assert.assertEquals(0, manager.numPendingQueries());
 
-        // Case 2: Coordinator need check queue but resource isn't overloaded.
+        // Case 2: Coordinator doesn't enable to check queue.
         mockCoordinatorNeedCheckQueue();
+        mockCoordinatorNotEnableCheckQueue();
         GlobalVariable.setQueryQueueSelectEnable(true);
+        manager.maybeWait(connectCtx, coordinator);
+        Assert.assertEquals(0, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
+        Assert.assertEquals(0, manager.numPendingQueries());
+
+        // Case 3: Coordinator need check queue but resource isn't overloaded.
+        mockCoordinatorNeedCheckQueue();
+        mockCoordinatorEnableCheckQueue();
         mockCanRunMore();
         manager.maybeWait(connectCtx, coordinator);
         Assert.assertEquals(0, connectCtx.getAuditEventBuilder().build().pendingTimeMs);
@@ -127,6 +156,7 @@ public class QueryQueueManagerTest {
         ConnectContext connectCtx2 = new ConnectContext();
 
         mockCoordinatorNeedCheckQueue();
+        mockCoordinatorEnableCheckQueue();
         mockNotCanRunMore();
 
         // Case 1: Pending timeout.
@@ -134,7 +164,8 @@ public class QueryQueueManagerTest {
         GlobalVariable.setQueryQueuePendingTimeoutSecond(1);
         Thread thread = new Thread(() -> {
             Awaitility.await().atMost(2, TimeUnit.SECONDS).until(() -> {
-                Assert.assertThrows("Pending timeout", UserException.class, () -> manager.maybeWait(connectCtx1, coordinator));
+                Assert.assertThrows("Pending timeout", UserException.class,
+                        () -> manager.maybeWait(connectCtx1, coordinator));
                 return true;
             });
             Assert.assertEquals(0, manager.numPendingQueries());
@@ -193,6 +224,7 @@ public class QueryQueueManagerTest {
                 service.getBackends();
                 result = ImmutableList.of(be1, be2);
             }
+
             {
                 service.getBackend(be2.getId());
                 result = be2;
@@ -231,12 +263,34 @@ public class QueryQueueManagerTest {
     }
 
     @Test
-    public void testCoordinatorNeedCheckQueue(@Mocked SchemaScanNode schemaScanNode,
-                                              @Mocked OlapScanNode olapScanNode,
-                                              @Mocked PlanFragment fragment,
-                                              @Mocked OlapTableSink olapTableSink,
-                                              @Mocked MysqlTableSink mysqlTableSink,
-                                              @Mocked ExportSink exportSink) {
+    public void testNeedCheckQueue(@Mocked SchemaScanNode schemaScanNode,
+                                   @Mocked OlapScanNode olapScanNode) {
+        QueryQueueManager manager = QueryQueueManager.getInstance();
+
+        // 1. ScanNodes is empty.
+        List<ScanNode> scanNodes = new ArrayList<>();
+        new Expectations(coordinator) {
+            {
+                coordinator.getScanNodes();
+                result = scanNodes;
+            }
+        };
+        Assert.assertFalse(manager.needCheckQueue(coordinator));
+
+        // 2. ScanNodes only contain SchemaNode.
+        scanNodes.add(schemaScanNode);
+        Assert.assertFalse(manager.needCheckQueue(coordinator));
+
+        // 3. ScanNodes contain non-SchemaNode.
+        scanNodes.add(olapScanNode);
+        Assert.assertTrue(manager.needCheckQueue(coordinator));
+    }
+
+    @Test
+    public void testEnableCheckQueue(@Mocked PlanFragment fragment,
+                                     @Mocked OlapTableSink olapTableSink,
+                                     @Mocked MysqlTableSink mysqlTableSink,
+                                     @Mocked ExportSink exportSink) {
         QueryQueueManager manager = QueryQueueManager.getInstance();
 
         // 1. Load type.
@@ -246,45 +300,32 @@ public class QueryQueueManagerTest {
                 result = true;
             }
         };
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
-
-        // 2. ScanNodes is empty.
-        List<ScanNode> scanNodes = new ArrayList<>();
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
         new Expectations(coordinator) {
             {
                 coordinator.isLoadType();
                 result = false;
             }
-
-            {
-                coordinator.getScanNodes();
-                result = scanNodes;
-            }
         };
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
 
-        // 3. ScanNodes only contain SchemaNode.
-        scanNodes.add(schemaScanNode);
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
-
-        // 4. Insert to MySQL table.
-        scanNodes.add(olapScanNode);
+        // 2. Insert to MySQL table.
         new Expectations(coordinator, fragment) {
             {
                 coordinator.getFragments();
                 result = ImmutableList.of(fragment);
             }
+
             {
                 fragment.getSink();
                 result = mysqlTableSink;
             }
         };
         GlobalVariable.setQueryQueueInsertEnable(false);
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
         GlobalVariable.setQueryQueueInsertEnable(true);
-        Assert.assertTrue(manager.needCheckQueue(coordinator));
+        Assert.assertTrue(manager.enableCheckQueue(coordinator));
 
-        // 5. Insert to OLAP table.
+        // 3. Insert to OLAP table.
         new Expectations(coordinator, fragment) {
             {
                 fragment.getSink();
@@ -292,11 +333,11 @@ public class QueryQueueManagerTest {
             }
         };
         GlobalVariable.setQueryQueueInsertEnable(false);
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
         GlobalVariable.setQueryQueueInsertEnable(true);
-        Assert.assertTrue(manager.needCheckQueue(coordinator));
+        Assert.assertTrue(manager.enableCheckQueue(coordinator));
 
-        // 6. Query for select.
+        // 4. Query for select.
         PlanNodeId nodeId = new PlanNodeId(0);
         ResultSink queryResultSink = new ResultSink(nodeId, TResultSinkType.MYSQL_PROTOCAL);
         new Expectations(coordinator, fragment) {
@@ -306,11 +347,11 @@ public class QueryQueueManagerTest {
             }
         };
         GlobalVariable.setQueryQueueSelectEnable(false);
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
         GlobalVariable.setQueryQueueSelectEnable(true);
-        Assert.assertTrue(manager.needCheckQueue(coordinator));
+        Assert.assertTrue(manager.enableCheckQueue(coordinator));
 
-        // 7. Query for statistic.
+        // 5. Query for statistic.
         ResultSink statisticResultSink = new ResultSink(nodeId, TResultSinkType.STATISTIC);
         new Expectations(coordinator, fragment) {
             {
@@ -319,11 +360,11 @@ public class QueryQueueManagerTest {
             }
         };
         GlobalVariable.setQueryQueueStatisticEnable(false);
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
         GlobalVariable.setQueryQueueStatisticEnable(true);
-        Assert.assertTrue(manager.needCheckQueue(coordinator));
+        Assert.assertTrue(manager.enableCheckQueue(coordinator));
 
-        // 8. Query for outfile.
+        // 6. Query for outfile.
         ResultSink fileResultSink = new ResultSink(nodeId, TResultSinkType.FILE);
         new Expectations(coordinator, fragment) {
             {
@@ -331,15 +372,15 @@ public class QueryQueueManagerTest {
                 result = fileResultSink;
             }
         };
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
 
-        // 9. Export.
+        // 7. Export.
         new Expectations(coordinator, fragment) {
             {
                 fragment.getSink();
                 result = exportSink;
             }
         };
-        Assert.assertFalse(manager.needCheckQueue(coordinator));
+        Assert.assertFalse(manager.enableCheckQueue(coordinator));
     }
 }

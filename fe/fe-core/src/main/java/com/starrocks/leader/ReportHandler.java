@@ -487,12 +487,10 @@ public class ReportHandler extends Daemon {
     private static void resourceUsageReport(long backendId, TResourceUsage usage) {
         LOG.debug("begin to handle resource usage report from backend {}", backendId);
         long start = System.currentTimeMillis();
-        boolean isChanged = QueryQueueManager.getInstance().updateResourceUsage(
+        QueryQueueManager.getInstance().updateResourceUsage(
                 backendId, usage.getNum_running_queries(), usage.getMem_limit_bytes(), usage.getMem_used_bytes(),
                 usage.getCpu_used_permille());
-        if (isChanged) {
-            GlobalStateMgr.getCurrentState().updateResourceUsage(backendId, usage);
-        }
+        GlobalStateMgr.getCurrentState().updateResourceUsage(backendId, usage);
         LOG.debug("finished to handle resource usage report from backend {}, cost: {} ms",
                 backendId, (System.currentTimeMillis() - start));
     }

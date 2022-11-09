@@ -80,6 +80,7 @@ public class ComputeNode implements IComputable, Writable {
     private volatile long memLimitBytes = 0;
     private volatile long memUsedBytes = 0;
     private volatile int cpuUsedPermille = 0;
+    private volatile long lastUpdateResourceUsageMs = 0;
 
     public ComputeNode() {
         this.host = "";
@@ -294,26 +295,14 @@ public class ComputeNode implements IComputable, Writable {
         return cpuUsedPermille;
     }
 
-    public boolean updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
+    public void updateResourceUsage(int numRunningQueries, long memLimitBytes, long memUsedBytes,
                                        int cpuUsedPermille) {
-        boolean isChanged = false;
-        if (numRunningQueries != this.numRunningQueries) {
-            this.numRunningQueries = numRunningQueries;
-            isChanged = true;
-        }
-        if (memLimitBytes != this.memLimitBytes) {
-            this.memLimitBytes = memLimitBytes;
-            isChanged = true;
-        }
-        if (memUsedBytes != this.memUsedBytes) {
-            this.memUsedBytes = memUsedBytes;
-            isChanged = true;
-        }
-        if (cpuUsedPermille != this.cpuUsedPermille) {
-            this.cpuUsedPermille = cpuUsedPermille;
-            isChanged = true;
-        }
-        return isChanged;
+
+        this.numRunningQueries = numRunningQueries;
+        this.memLimitBytes = memLimitBytes;
+        this.memUsedBytes = memUsedBytes;
+        this.cpuUsedPermille = cpuUsedPermille;
+        this.lastUpdateResourceUsageMs = System.currentTimeMillis();
     }
 
     @Override
@@ -487,6 +476,12 @@ public class ComputeNode implements IComputable, Writable {
 
     public boolean isResourceOverloaded() {
         if (!isAvailable()) {
+            return false;
+        }
+
+        long currentMs = System.currentTimeMillis();
+        if (currentMs - lastUpdateResourceUsageMs > GlobalVariable.getQueryQueueResourceUsageIntervalMs()) {
+            // The resource usage is not fresh enough to decide whether it is overloaded.
             return false;
         }
 
