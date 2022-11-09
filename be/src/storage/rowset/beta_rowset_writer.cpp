@@ -103,7 +103,8 @@ Status BetaRowsetWriter::init() {
 }
 
 StatusOr<RowsetSharedPtr> BetaRowsetWriter::build() {
-    if (_num_rows_written > 0) {
+    if (_num_rows_written > 0 ||
+        (_context.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && _segment_has_deletes.size() > 0)) {
         RETURN_IF_ERROR(_context.env->sync_dir(_context.rowset_path_prefix));
     }
     _rowset_meta->set_num_rows(_num_rows_written);
