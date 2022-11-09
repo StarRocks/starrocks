@@ -809,7 +809,7 @@ public class Utils {
                     return false;
                 }
                 for (ScalarOperator child : predicate.getChildren()) {
-                    Boolean ret = !child.accept(this, null);
+                    Boolean ret = child.accept(this, null);
                     if (!Boolean.TRUE.equals(ret)) {
                         return false;
                     }

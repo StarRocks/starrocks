@@ -8,7 +8,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.rule.RuleType;
-import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 
 import java.util.Collections;
@@ -34,19 +33,10 @@ public abstract class SingleTableRewriteBaseRule extends BaseMaterializedViewRew
                 calculateStatistics(expression, context);
             }
             // sort expressions based on statistics output row count
-            Collections.sort(expressions, (expression1, expression2) -> {
-                if (expression1.getStatistics() == null && expression2.getStatistics() == null) {
-                    return 0;
-                } else if (expression1.getStatistics() == null) {
-                    return -1;
-                } else if (expression2.getStatistics() == null) {
-                    return 1;
-                } else {
-                    Statistics statistics1 = expression1.getStatistics();
-                    Statistics statistics2 = expression2.getStatistics();
-                    return Double.valueOf(statistics1.getOutputRowCount()).compareTo(statistics2.getOutputRowCount());
-                }
-            });
+            Collections.sort(expressions,
+                    (expression1, expression2) ->
+                    Double.valueOf(expression1.getStatistics().getOutputRowCount())
+                            .compareTo(expression2.getStatistics().getOutputRowCount()));
             return expressions.subList(0, 1);
         }
     }
