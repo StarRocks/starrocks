@@ -1,0 +1,19 @@
+# This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
+
+default:
+  outputs:
+    dev:
+      type: starrocks
+      host: <host>
+      port: <port>  # optional
+      schema: <schema>
+      username: <username>
+      password: <password>
+    prod:
+      type: starrocks
+      host: <host>
+      port: <port>  # optional
+      schema: <schema>
+      username: <username>
+      password: <password>
+  target: dev
