@@ -11,6 +11,10 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: pre build
+        run: |
+           sudo rm -rf ../starrocks/*
+           
       - uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -35,3 +39,7 @@ jobs:
           SONAR_TOKEN: ed28a3f7ce16256fb8e607d8f6780da84b5cf6c3
         run: |
           sonar-scanner -Dsonar.organization=starrocks -Dsonar.projectKey=Starrocks_be -Dsonar.cfamily.build-wrapper-output="be/build-wrapper" -Dsonar.host.url="https://sonarcloud.io" -Dsonar.sources="be/src" -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }} -Dsonar.projectBaseDir=. -Dsonar.pullrequest.github.repository=StarRocks/starrocks
+
+      - name: post build
+        run: |
+           sudo rm -rf ../starrocks/*
