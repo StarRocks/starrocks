@@ -166,5 +166,13 @@ public class DistributionPrunerRuleTest {
         OptExpression optExpression = rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory())).get(0);
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());
+
+
+        LogicalOlapScanOperator olapScanOperator = (LogicalOlapScanOperator) optExpression.getOp();
+        LogicalOlapScanOperator newScanOperator = new LogicalOlapScanOperator.Builder()
+                .withOperator(olapScanOperator)
+                .setSelectedTabletId(Lists.newArrayList(1L, 2L, 3L))
+                .build();
+        assertEquals(3, newScanOperator.getSelectedTabletId().size());
     }
 }
