@@ -22,7 +22,6 @@ import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.UserIdentity;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
@@ -85,7 +84,7 @@ public class SetExecutorTest {
     }
 
     @Test
-    public void testNormal() throws UserException, AnalysisException, DdlException {
+    public void testNormal() throws UserException {
         List<SetVar> vars = Lists.newArrayList();
         vars.add(new SetPassVar(new UserIdentity("testUser", "%"), "*88EEBA7D913688E7278E2AD071FDB5E76D76D34B"));
         vars.add(new SetNamesVar("utf8"));
@@ -127,11 +126,43 @@ public class SetExecutorTest {
     public void testUserDefineVariable() throws Exception {
         AnalyzeTestUtil.init();
         ConnectContext context = AnalyzeTestUtil.getConnectContext();
-        String sql = "set @var = cast(1 as boolean)";
+        String sql = "set @var = cast('2020-01-01' as date)";
         SetStmt stmt = (SetStmt) analyzeSuccess(sql);
         SetExecutor executor = new SetExecutor(context, stmt);
         executor.execute();
         UserVariable userVariable = context.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDate());
+        Assert.assertEquals("2020-01-01", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = cast('2020-01-01' as datetime)";
+        stmt = (SetStmt) analyzeSuccess(sql);
+        executor = new SetExecutor(context, stmt);
+        executor.execute();
+        userVariable = context.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDatetime());
+        Assert.assertEquals("2020-01-01 00:00:00", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = cast(10 as largeint)";
+        stmt = (SetStmt) analyzeSuccess(sql);
+        executor = new SetExecutor(context, stmt);
+        executor.execute();
+        userVariable = context.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isLargeint());
+        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = cast(10 as decimal)";
+        stmt = (SetStmt) analyzeSuccess(sql);
+        executor = new SetExecutor(context, stmt);
+        executor.execute();
+        userVariable = context.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
+        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = cast(1 as boolean)";
+        stmt = (SetStmt) analyzeSuccess(sql);
+        executor = new SetExecutor(context, stmt);
+        executor.execute();
+        userVariable = context.getUserVariables("var");
         Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
         BoolLiteral literal = (BoolLiteral) userVariable.getResolvedExpression();
         Assert.assertTrue(literal.getValue());

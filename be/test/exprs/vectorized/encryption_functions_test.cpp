@@ -733,12 +733,18 @@ TEST_F(EncryptionFunctionsTest, md5sumNullTest) {
     }
 }
 
+inline int128_t str_to_int128(const std::string& value) {
+    StringParser::ParseResult parse_res;
+    int128_t result = StringParser::string_to_int<int128_t>(value.data(), value.size(), 10, &parse_res);
+    return result;
+}
+
 TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     Columns columns;
 
     std::string plains[] = {"dorisqq", "1", "324", "2111"};
-    std::string results[] = {"313541553194712735798834777371609380343"};
+    int128_t results[] = {str_to_int128("-26740813726225727664539830060158831113")};
 
     for (auto& j : plains) {
         auto plain = BinaryColumn::create();
@@ -748,10 +754,10 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericTest) {
 
     ColumnPtr result = EncryptionFunctions::md5sum_numeric(ctx.get(), columns);
 
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+        ASSERT_EQ(results[j], v->get_data()[j]);
     }
 }
 
@@ -760,7 +766,7 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
     Columns columns;
 
     std::string plains[] = {"dorisqq", "1", "324", "2111"};
-    std::string results[] = {"313541553194712735798834777371609380343"};
+    int128_t results[] = {str_to_int128("-26740813726225727664539830060158831113")};
 
     for (auto& j : plains) {
         auto plain = BinaryColumn::create();
@@ -778,10 +784,10 @@ TEST_F(EncryptionFunctionsTest, md5sum_numericNullTest) {
 
     ColumnPtr result = EncryptionFunctions::md5sum_numeric(ctx.get(), columns);
 
-    auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+    auto v = ColumnHelper::cast_to<TYPE_LARGEINT>(result);
 
     for (int j = 0; j < sizeof(results) / sizeof(results[0]); ++j) {
-        ASSERT_EQ(results[j], v->get_data()[j].to_string());
+        ASSERT_EQ(results[j], v->get_data()[j]);
     }
 }
 

@@ -45,6 +45,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.catalog.TableProperty.INVALID;
+
+
 public class PropertyAnalyzer {
     private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
     private static final String COMMA_SEPARATOR = ",";
@@ -90,6 +93,8 @@ public class PropertyAnalyzer {
 
     public static final String PROPERTIES_WRITE_QUORUM = "write_quorum";
 
+    public static final String PROPERTIES_REPLICATED_STORAGE = "replicated_storage";
+
     public static final String PROPERTIES_TABLET_TYPE = "tablet_type";
 
     public static final String PROPERTIES_STRICT_RANGE = "strict_range";
@@ -104,8 +109,9 @@ public class PropertyAnalyzer {
     public static final String PROPERTIES_ENABLE_STORAGE_CACHE = "enable_storage_cache";
     public static final String PROPERTIES_STORAGE_CACHE_TTL = "storage_cache_ttl";
     public static final String PROPERTIES_ALLOW_ASYNC_WRITE_BACK = "allow_async_write_back";
-
     public static final String PROPERTIES_PARTITION_TTL_NUMBER  = "partition_ttl_number";
+
+    public static final String PROPERTIES_PARTITION_REFRESH_NUMBER  = "partition_refresh_number";
 
     public static DataProperty analyzeDataProperty(Map<String, String> properties, DataProperty oldDataProperty)
             throws AnalysisException {
@@ -193,7 +199,7 @@ public class PropertyAnalyzer {
     }
 
     public static int analyzePartitionTimeToLive(Map<String, String> properties) throws AnalysisException {
-        int partitionTimeToLive = -1;
+        int partitionTimeToLive = INVALID;
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER)) {
             try {
                 partitionTimeToLive = Integer.parseInt(properties.get(PROPERTIES_PARTITION_TTL_NUMBER));
@@ -201,11 +207,27 @@ public class PropertyAnalyzer {
                 throw new AnalysisException("Partition TTL Number: " + e.getMessage());
             }
             if (partitionTimeToLive <= 0) {
-                throw new AnalysisException("Partition TTL Number should larger than 0.");
+                partitionTimeToLive = INVALID;
             }
             properties.remove(PROPERTIES_PARTITION_TTL_NUMBER);
         }
         return partitionTimeToLive;
+    }
+
+    public static int analyzePartitionRefreshNumber(Map<String, String> properties) throws AnalysisException {
+        int partitionRefreshNumber = -1;
+        if (properties != null && properties.containsKey(PROPERTIES_PARTITION_REFRESH_NUMBER)) {
+            try {
+                partitionRefreshNumber = Integer.parseInt(properties.get(PROPERTIES_PARTITION_REFRESH_NUMBER));
+            } catch (NumberFormatException e) {
+                throw new AnalysisException("Partition Refresh Number: " + e.getMessage());
+            }
+            if (partitionRefreshNumber <= 0) {
+                throw new AnalysisException("Partition Refresh Number should larger than 0.");
+            }
+            properties.remove(PROPERTIES_PARTITION_REFRESH_NUMBER);
+        }
+        return partitionRefreshNumber;
     }
 
     public static Short analyzeReplicationNum(Map<String, String> properties, short oldReplicationNum)

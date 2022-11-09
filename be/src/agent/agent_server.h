@@ -46,6 +46,8 @@ public:
 
     void init_or_die();
 
+    void stop();
+
     void submit_tasks(TAgentResult& agent_result, const std::vector<TAgentTaskRequest>& tasks);
 
     void make_snapshot(TAgentResult& agent_result, const TSnapshotRequest& snapshot_request);

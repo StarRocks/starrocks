@@ -6,7 +6,7 @@ Returns a slice of an array.
 
 ## Syntax
 
-```SQL
+```Haskell
 array_slice(input, offset, length)
 ```
 

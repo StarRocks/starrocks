@@ -6,7 +6,7 @@ Returns the top-level keys from a JSON object as a JSON array, or, if a `path` i
 
 ## Syntax
 
-```SQL
+```Haskell
 json_keys(json_doc[, path])
 ```
 

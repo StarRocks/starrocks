@@ -112,6 +112,18 @@ public class AnalyzeExprTest {
         analyzeFail("select array_map((x,x) -> x+1, [1],[1])");
         analyzeFail("select array_map((x,y) -> x+1)");
         analyzeFail("select array_map((x,x) -> x+1, [1], x ->x+1)");
+        analyzeFail("select array_map()");
+        analyzeFail("select array_map(null)");
+        analyzeFail("select array_map(null, [1])");
+        analyzeFail("select array_map(null, null)");
+        analyzeFail("select array_map([1],null);");
+        analyzeFail("select array_map(1)");
+        analyzeFail("select transform()");
+        analyzeFail("select transform(null)");
+        analyzeFail("select transform(null, [1])");
+        analyzeFail("select transform(null, null)");
+        analyzeFail("select transform([1],null);");
+        analyzeFail("select transform(1)");
     }
 
     @Test

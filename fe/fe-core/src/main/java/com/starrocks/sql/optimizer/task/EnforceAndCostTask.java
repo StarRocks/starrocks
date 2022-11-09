@@ -283,11 +283,8 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
         double leftOutputSize = leftChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex - 1));
         double rightOutputSize = rightChildStats.getOutputSize(groupExpression.getChildOutputColumns(curChildIndex));
 
-        int parallelExecInstance = CostModel.getParallelExecInstanceNum(
-                groupExpression.getGroup().getLogicalProperty().getLeftMostScanTabletsNum());
-        if (leftOutputSize < rightOutputSize * parallelExecInstance * beNum * sv.getBroadcastRightTableScaleFactor()
-                && rightChildStats.getOutputRowCount() >
-                sv.getBroadcastRowCountLimit()) {
+        if (leftOutputSize < rightOutputSize * beNum * sv.getBroadcastRightTableScaleFactor()
+                && rightChildStats.getOutputRowCount() > sv.getBroadcastRowCountLimit()) {
             return false;
         }
         return true;
@@ -307,7 +304,7 @@ public class EnforceAndCostTask extends OptimizerTask implements Cloneable {
                                        List<PhysicalPropertySet> childrenOutputProperties) {
         // re-calculate local cost and update total cost
         curTotalCost -= localCost;
-        localCost = CostModel.calculateCost(groupExpression);
+        localCost = CostModel.calculateCostWithChildrenOutProperty(groupExpression, childrenOutputProperties);
         curTotalCost += localCost;
 
         setSatisfiedPropertyWithCost(outputProperty, childrenOutputProperties);

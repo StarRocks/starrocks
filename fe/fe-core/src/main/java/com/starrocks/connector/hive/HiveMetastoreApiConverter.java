@@ -28,6 +28,8 @@ import org.apache.hudi.common.table.HoodieTableConfig;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
 import org.apache.hudi.common.util.Option;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.List;
@@ -50,6 +52,7 @@ import static org.apache.hadoop.hive.common.StatsSetupConst.TOTAL_SIZE;
 import static org.apache.hadoop.hive.serde2.typeinfo.TypeInfoUtils.getTypeInfoFromTypeString;
 
 public class HiveMetastoreApiConverter {
+    private static final Logger LOG = LogManager.getLogger(HiveMetastoreApiConverter.class);
 
     public static final IdGenerator<ConnectorTableId> CONNECTOR_ID_GENERATOR = ConnectorTableId.createGenerator();
     private static final String SPARK_SQL_SOURCE_PROVIDER = "spark.sql.sources.provider";
@@ -148,7 +151,13 @@ public class HiveMetastoreApiConverter {
         List<FieldSchema> fieldSchemas = getAllFieldSchemas(table);
         List<Column> fullSchema = Lists.newArrayList();
         for (FieldSchema fieldSchema : fieldSchemas) {
-            Type type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
+            Type type;
+            try {
+                type = ColumnTypeConverter.fromHiveType(fieldSchema.getType());
+            } catch (InternalError | Exception e) {
+                LOG.error("Failed to convert hive type {} on {}", fieldSchema.getType(), table.getTableName(), e);
+                type = Type.UNKNOWN_TYPE;
+            }
             Column column = new Column(fieldSchema.getName(), type, true);
             fullSchema.add(column);
         }
@@ -159,8 +168,14 @@ public class HiveMetastoreApiConverter {
         List<Schema.Field> allHudiColumns = hudiSchema.getFields();
         List<Column> fullSchema = Lists.newArrayList();
         for (Schema.Field fieldSchema : allHudiColumns) {
-            Type srType = fromHudiType(fieldSchema.schema());
-            Column column = new Column(fieldSchema.name(), srType, true);
+            Type type;
+            try {
+                type = fromHudiType(fieldSchema.schema());
+            } catch (InternalError | Exception e) {
+                LOG.error("Failed to convert hudi type {}", fieldSchema.schema().getType().getName(), e);
+                type = Type.UNKNOWN_TYPE;
+            }
+            Column column = new Column(fieldSchema.name(), type, true);
             fullSchema.add(column);
         }
         return fullSchema;

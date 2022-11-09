@@ -4,6 +4,11 @@
 
 #include "fs/fs_starlet.h"
 
+DIAGNOSTIC_PUSH
+DIAGNOSTIC_IGNORE("-Wclass-memaccess")
+#include <bvar/bvar.h>
+DIAGNOSTIC_POP
+
 #include <fmt/core.h>
 #include <fslib/configuration.h>
 #include <fslib/file.h>
@@ -25,6 +30,16 @@
 #include "util/string_parser.hpp"
 
 namespace starrocks {
+
+bvar::Adder<int64_t> g_starlet_io_read;       // number of bytes read through Starlet
+bvar::Adder<int64_t> g_starlet_io_write;      // number of bytes wrote through Starlet
+bvar::Adder<int64_t> g_starlet_io_num_reads;  // number of Starlet's read API invocations
+bvar::Adder<int64_t> g_starlet_io_num_writes; // number of Starlet's write API invocations
+
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_read_second("starlet_io_read_bytes_second", &g_starlet_io_read);
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_write_second("starlet_io_write_bytes_second", &g_starlet_io_write);
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_reads_second("starlet_io_read_second", &g_starlet_io_num_reads);
+bvar::PerSecond<bvar::Adder<int64_t>> g_starlet_num_writes_second("starlet_io_write_second", &g_starlet_io_num_writes);
 
 using FileSystemFactory = staros::starlet::fslib::FileSystemFactory;
 using WriteOptions = staros::starlet::fslib::WriteOptions;
@@ -116,11 +131,13 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
-        auto st = (*stream_st)->read(data, count);
-        if (st.ok()) {
-            return *st;
+        auto res = (*stream_st)->read(data, count);
+        if (res.ok()) {
+            g_starlet_io_num_reads << 1;
+            g_starlet_io_read << *res;
+            return *res;
         } else {
-            return to_status(st.status());
+            return to_status(res.status());
         }
     }
 
@@ -140,6 +157,7 @@ public:
     StatusOr<Buffer> get_direct_buffer() override {
         return Status::NotSupported("StarletOutputStream::get_direct_buffer");
     }
+
     StatusOr<Position> get_direct_buffer_and_advance(int64_t size) override {
         return Status::NotSupported("StarletOutputStream::get_direct_buffer_and_advance");
     }
@@ -149,13 +167,26 @@ public:
         if (!stream_st.ok()) {
             return to_status(stream_st.status());
         }
-        return to_status((*stream_st)->write(data, size).status());
+        auto left = size;
+        while (left > 0) {
+            auto* p = static_cast<const char*>(data) + size - left;
+            auto res = (*stream_st)->write(p, left);
+            if (!res.ok()) {
+                return to_status(res.status());
+            }
+            left -= *res;
+        }
+        g_starlet_io_num_writes << 1;
+        g_starlet_io_write << size;
+        return Status::OK();
     }
 
     bool allows_aliasing() const override { return false; }
+
     Status write_aliased(const void* data, int64_t size) override {
         return Status::NotSupported("StarletOutputStream::write_aliased");
     }
+
     Status close() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {

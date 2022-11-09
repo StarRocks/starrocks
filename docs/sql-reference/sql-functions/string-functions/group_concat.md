@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`VARCHAR group_concat(VARCHAR str[, VARCHAR sep])`
+```Haskell
+VARCHAR group_concat(VARCHAR str[, VARCHAR sep])
+```
 
 This is an aggregate function similar to sum(). Group_concat concatenates the data from multiple rows into one string, with the second argument sep being the separator. The second argument can also be omitted. This function usually needs to be used along with group by statement.
 

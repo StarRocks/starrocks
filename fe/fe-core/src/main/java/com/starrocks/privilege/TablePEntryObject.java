@@ -40,7 +40,7 @@ public class TablePEntryObject implements PEntryObject {
             throws PrivilegeException {
         if (allTypes.size() == 1) {
             if (StringUtils.isEmpty(restrictType)
-                    || !restrictType.equals(PrivilegeTypes.DATABASE.toString())
+                    || !restrictType.equals(PrivilegeType.DATABASE.toString())
                     || StringUtils.isEmpty(restrictName)) {
                 throw new PrivilegeException("ALL TABLES must be restricted with database!");
             }
@@ -51,7 +51,7 @@ public class TablePEntryObject implements PEntryObject {
             }
             return new TablePEntryObject(database.getId(), ALL_TABLES_ID);
         } else if (allTypes.size() == 2) {
-            if (!allTypes.get(1).equals(PrivilegeTypes.DATABASE.getPlural())) {
+            if (!allTypes.get(1).equals(PrivilegeType.DATABASE.getPlural())) {
                 throw new PrivilegeException(
                         "ALL TABLES must be restricted with ALL DATABASES instead of ALL " + allTypes.get(1));
             }

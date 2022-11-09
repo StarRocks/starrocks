@@ -95,7 +95,7 @@ public class Auth implements Writable {
     private ResourcePrivTable resourcePrivTable = new ResourcePrivTable();
     private ImpersonateUserPrivTable impersonateUserPrivTable = new ImpersonateUserPrivTable();
 
-    private RoleManager roleManager = new RoleManager();
+    protected RoleManager roleManager = new RoleManager();
     private UserPropertyMgr propertyMgr = new UserPropertyMgr();
 
     private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
@@ -129,14 +129,25 @@ public class Auth implements Writable {
         return userPrivTable;
     }
 
-    public DbPrivTable getDbPrivTable() {
+    protected DbPrivTable getDbPrivTable() {
         return dbPrivTable;
     }
 
-    public TablePrivTable getTablePrivTable() {
+    protected TablePrivTable getTablePrivTable() {
         return tablePrivTable;
     }
 
+    protected ResourcePrivTable getResourcePrivTable() {
+        return resourcePrivTable;
+    }
+
+    protected ImpersonateUserPrivTable getImpersonateUserPrivTable() {
+        return impersonateUserPrivTable;
+    }
+
+    protected UserPropertyMgr getPropertyMgr() {
+        return propertyMgr;
+    }
     /**
      * check if role exist, this function can be used in analyze phrase to validate role
      */
