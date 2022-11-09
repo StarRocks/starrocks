@@ -14,6 +14,7 @@ import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 
 import java.util.Map;
+
 import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
