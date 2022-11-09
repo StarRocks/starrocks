@@ -27,6 +27,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.BrokerDesc;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
@@ -69,6 +70,8 @@ import com.starrocks.load.loadv2.etl.EtlJobConfig.SourceType;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ImportColumnDesc;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.transaction.TransactionState;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -366,7 +369,23 @@ public class SparkLoadPendingTask extends LoadTask {
                     rangeKeyExprs = range.lowerEndpoint().getKeys();
                     for (int i = 0; i < rangeKeyExprs.size(); ++i) {
                         LiteralExpr literalExpr = rangeKeyExprs.get(i);
-                        Object keyValue = literalExpr.getRealValue();
+
+                        Object keyValue;
+                        if (literalExpr instanceof DateLiteral) {
+                            DateLiteral dateLiteral = (DateLiteral) literalExpr;
+                            if (dateLiteral.getType().isDate()) {
+                                keyValue = dateLiteral.getYear() * 16 * 32L
+                                        + dateLiteral.getMonth() * 32
+                                        + dateLiteral.getDay();
+                            } else if (dateLiteral.getType().isDatetime()) {
+                                keyValue = dateLiteral.getDoubleValue();
+                            } else {
+                                throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
+                            }
+                        } else {
+                            keyValue = literalExpr.getDoubleValue();
+                        }
+
                         startKeys.add(keyValue);
                     }
                 }
@@ -378,13 +397,27 @@ public class SparkLoadPendingTask extends LoadTask {
                     rangeKeyExprs = range.upperEndpoint().getKeys();
                     for (int i = 0; i < rangeKeyExprs.size(); ++i) {
                         LiteralExpr literalExpr = rangeKeyExprs.get(i);
-                        Object keyValue = literalExpr.getRealValue();
+
+                        Object keyValue;
+                        if (literalExpr instanceof DateLiteral) {
+                            DateLiteral dateLiteral = (DateLiteral) literalExpr;
+                            if (dateLiteral.getType().isDate()) {
+                                keyValue = dateLiteral.getYear() * 16 * 32L
+                                        + dateLiteral.getMonth() * 32
+                                        + dateLiteral.getDay();
+                            } else if (dateLiteral.getType().isDatetime()) {
+                                keyValue = dateLiteral.getDoubleValue();
+                            } else {
+                                throw new StarRocksPlannerException("Invalid date type: " + type, ErrorType.INTERNAL_ERROR);
+                            }
+                        } else {
+                            keyValue = literalExpr.getDoubleValue();
+                        }
                         endKeys.add(keyValue);
                     }
                 }
 
-                etlPartitions.add(
-                        new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
+                etlPartitions.add(new EtlPartition(partitionId, startKeys, endKeys, isMinPartition, isMaxPartition, bucketNum));
             }
         } else {
             Preconditions.checkState(type == PartitionType.UNPARTITIONED);

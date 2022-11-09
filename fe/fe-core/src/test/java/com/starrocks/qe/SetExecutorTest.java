@@ -19,8 +19,15 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.analysis.DecimalLiteral;
+import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.UserException;
 import com.starrocks.mysql.privilege.Auth;
@@ -28,12 +35,12 @@ import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GlobalVarPersistInfo;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.SetNamesVar;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SetVar;
 import com.starrocks.sql.ast.UserVariable;
+import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -42,8 +49,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.List;
-
-import static com.starrocks.sql.analyzer.AnalyzeTestUtil.analyzeSuccess;
 
 public class SetExecutorTest {
     private ConnectContext ctx;
@@ -121,40 +126,32 @@ public class SetExecutorTest {
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
     }
 
+    public void tesrUserVariableImp(LiteralExpr value, Type type) throws Exception {
+        String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        UserVariable userVariable = ctx.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().matchesType(type));
+        Assert.assertEquals(value.getStringValue(), userVariable.getResolvedExpression().getStringValue());
+        String planFragment = UtFrameUtils.getPlanAndFragment(ctx, "select @var").second.
+                getExplainString(TExplainLevel.NORMAL);
+        Assert.assertTrue(planFragment.contains(value.getStringValue()));
+    }
+
     @Test
     public void testUserDefineVariable() throws Exception {
-        AnalyzeTestUtil.init();
-        ConnectContext context = AnalyzeTestUtil.getConnectContext();
-        String sql = "set @var = cast('2020-01-01' as date)";
-        SetStmt stmt = (SetStmt) analyzeSuccess(sql);
-        SetExecutor executor = new SetExecutor(context, stmt);
-        executor.execute();
-        UserVariable userVariable = context.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDate());
-        Assert.assertEquals("2020-01-01", userVariable.getResolvedExpression().getStringValue());
-
-        sql = "set @var = cast('2020-01-01' as datetime)";
-        stmt = (SetStmt) analyzeSuccess(sql);
-        executor = new SetExecutor(context, stmt);
-        executor.execute();
-        userVariable = context.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDatetime());
-        Assert.assertEquals("2020-01-01 00:00:00", userVariable.getResolvedExpression().getStringValue());
-
-        sql = "set @var = cast(10 as largeint)";
-        stmt = (SetStmt) analyzeSuccess(sql);
-        executor = new SetExecutor(context, stmt);
-        executor.execute();
-        userVariable = context.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isLargeint());
-        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
-
-        sql = "set @var = cast(10 as decimal)";
-        stmt = (SetStmt) analyzeSuccess(sql);
-        executor = new SetExecutor(context, stmt);
-        executor.execute();
-        userVariable = context.getUserVariables("var");
-        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
-        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+        tesrUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.TINYINT);
+        tesrUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.SMALLINT);
+        tesrUserVariableImp(new IntLiteral(1, Type.INT), Type.INT);
+        tesrUserVariableImp(new IntLiteral(1, Type.BIGINT), Type.BIGINT);
+        tesrUserVariableImp(new FloatLiteral(1D, Type.FLOAT), Type.FLOAT);
+        tesrUserVariableImp(new FloatLiteral(1D, Type.DOUBLE), Type.DOUBLE);
+        tesrUserVariableImp(new DateLiteral("2020-01-01", Type.DATE), Type.DATE);
+        tesrUserVariableImp(new DateLiteral("2020-01-01 00:00:00", Type.DATETIME), Type.DATETIME);
+        tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
+        tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
+        tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
+        tesrUserVariableImp(new StringLiteral("xxx"), ScalarType.createVarcharType(10));
     }
 }

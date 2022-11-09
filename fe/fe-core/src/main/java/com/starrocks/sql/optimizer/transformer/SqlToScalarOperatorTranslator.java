@@ -15,7 +15,6 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.CloneExpr;
 import com.starrocks.analysis.CollectionElementExpr;
 import com.starrocks.analysis.CompoundPredicate;
-import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.ExistsPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -75,9 +74,6 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
-import java.math.BigDecimal;
-import java.math.BigInteger;
-import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -548,43 +544,7 @@ public final class SqlToScalarOperatorTranslator {
                 return ConstantOperator.createNull(node.getType());
             }
 
-            Object value = node.getRealValue();
-            Type type = node.getType();
-
-            if (type.isBoolean()) {
-                return ConstantOperator.createBoolean((boolean) value);
-            } else if (type.isTinyint()) {
-                return ConstantOperator.createTinyInt((byte) node.getLongValue());
-            } else if (type.isSmallint()) {
-                return ConstantOperator.createSmallInt((short) node.getLongValue());
-            } else if (type.isInt()) {
-                return ConstantOperator.createInt((int) node.getLongValue());
-            } else if (type.isBigint()) {
-                return ConstantOperator.createBigint(node.getLongValue());
-            } else if (type.isLargeint()) {
-                return ConstantOperator.createLargeInt((BigInteger) value);
-            } else if (type.isFloat()) {
-                return ConstantOperator.createFloat((double) value);
-            } else if (type.isDouble()) {
-                return ConstantOperator.createDouble((double) value);
-            } else if (type.isDate()) {
-                DateLiteral dl = (DateLiteral) node;
-                return ConstantOperator
-                        .createDate(LocalDateTime.of((int) dl.getYear(), (int) dl.getMonth(), (int) dl.getDay(), 0, 0));
-            } else if (type.isDatetime()) {
-                DateLiteral dl = (DateLiteral) node;
-                return ConstantOperator.createDatetime(LocalDateTime
-                        .of((int) dl.getYear(), (int) dl.getMonth(), (int) dl.getDay(), (int) dl.getHour(),
-                                (int) dl.getMinute(), (int) dl.getSecond()));
-            } else if (type.isDecimalOfAnyVersion()) {
-                return ConstantOperator.createDecimal((BigDecimal) value, type);
-            } else if (type.isVarchar()) {
-                return ConstantOperator.createVarchar((String) value);
-            } else if (type.isChar()) {
-                return ConstantOperator.createChar((String) value);
-            } else {
-                throw new UnsupportedOperationException("nonsupport constant type");
-            }
+            return ConstantOperator.createObject(node.getRealObjectValue(), node.getType());
         }
 
         @Override
