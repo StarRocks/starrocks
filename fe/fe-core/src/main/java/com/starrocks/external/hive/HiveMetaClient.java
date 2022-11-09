@@ -133,11 +133,11 @@ public class HiveMetaClient {
                 LOG.warn("use HiveConf");
                 HiveConf hiveConf = new HiveConf();
                 hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
-                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/metastore-site.xml");
+                hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
                 hiveConf.addResource(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
                 hiveConf.set("hadoop.security.authentication", "kerberos");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hive-site.xml");
-                LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/metastore-site.xml");
+                LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/core-site.xml");
                 LOG.warn(StarRocksFE.STARROCKS_HOME_DIR + "/conf/hivemetastore-site.xml");
 
                 String zookeeperDefaultLoginContextName = "Client";
