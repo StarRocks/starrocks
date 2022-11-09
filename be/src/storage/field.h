@@ -73,7 +73,6 @@ public:
 
     size_t size() const { return _type_info->size(); }
     int32_t length() const { return _length; }
-    size_t field_size() const { return size() + 1; }
     size_t index_size() const { return _index_size; }
     const std::string& name() const { return _name; }
 
@@ -83,8 +82,6 @@ public:
     // This function allocate memory from pool, other than allocate_memory
     // reserve memory from continuous memory.
     virtual char* allocate_value(MemPool* pool) const { return (char*)pool->allocate(_type_info->size()); }
-
-    virtual char* allocate_memory(char* cell_ptr, char* variable_ptr) const { return variable_ptr; }
 
     virtual size_t get_variable_len() const { return 0; }
 
@@ -209,9 +206,6 @@ public:
         return ss.str();
     }
 
-    template <typename CellType>
-    uint32_t hash_code(const CellType& cell, uint32_t seed) const;
-
     FieldType type() const { return _type_info->type(); }
     const TypeInfoPtr& type_info() const { return _type_info; }
     bool is_nullable() const { return _is_nullable; }
@@ -298,29 +292,12 @@ protected:
     std::vector<std::unique_ptr<Field>> _sub_fields;
 };
 
-template <typename CellType>
-uint32_t Field::hash_code(const CellType& cell, uint32_t seed) const {
-    bool is_null = cell.is_null();
-    if (is_null) {
-        return HashUtil::hash(&is_null, sizeof(is_null), seed);
-    }
-    return _type_info->hash_code(cell.cell_ptr(), seed);
-}
-
 class CharField : public Field {
 public:
     explicit CharField() {}
     explicit CharField(const TabletColumn& column) : Field(column) {}
 
     size_t get_variable_len() const override { return _length; }
-
-    char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
-        auto slice = (Slice*)cell_ptr;
-        slice->data = variable_ptr;
-        slice->size = _length;
-        variable_ptr += slice->size;
-        return variable_ptr;
-    }
 
     CharField* clone() const override {
         std::unique_ptr<CharField> local = std::make_unique<CharField>();
@@ -344,15 +321,6 @@ public:
 
     size_t get_variable_len() const override { return _length - OLAP_STRING_MAX_BYTES; }
 
-    // minus OLAP_STRING_MAX_BYTES here just for being compatible with old storage format
-    char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
-        auto slice = (Slice*)cell_ptr;
-        slice->data = variable_ptr;
-        slice->size = _length - OLAP_STRING_MAX_BYTES;
-        variable_ptr += slice->size;
-        return variable_ptr;
-    }
-
     VarcharField* clone() const override {
         std::unique_ptr<VarcharField> local = std::make_unique<VarcharField>();
         Field::clone(local.get());
@@ -373,12 +341,6 @@ public:
     explicit BitmapAggField() {}
     explicit BitmapAggField(const TabletColumn& column) : Field(column) {}
 
-    char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
-        auto slice = (Slice*)cell_ptr;
-        slice->data = nullptr;
-        return variable_ptr;
-    }
-
     BitmapAggField* clone() const override {
         std::unique_ptr<BitmapAggField> local = std::make_unique<BitmapAggField>();
         Field::clone(local.get());
@@ -391,12 +353,6 @@ public:
     explicit HllAggField() {}
     explicit HllAggField(const TabletColumn& column) : Field(column) {}
 
-    char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
-        auto slice = (Slice*)cell_ptr;
-        slice->data = nullptr;
-        return variable_ptr;
-    }
-
     HllAggField* clone() const override {
         std::unique_ptr<HllAggField> local = std::make_unique<HllAggField>();
         Field::clone(local.get());
@@ -408,12 +364,6 @@ class PercentileAggField : public Field {
 public:
     PercentileAggField() {}
     explicit PercentileAggField(const TabletColumn& column) : Field(column) {}
-
-    char* allocate_memory(char* cell_ptr, char* variable_ptr) const override {
-        auto slice = (Slice*)cell_ptr;
-        slice->data = nullptr;
-        return variable_ptr;
-    }
 
     PercentileAggField* clone() const override {
         std::unique_ptr<PercentileAggField> local = std::make_unique<PercentileAggField>();
