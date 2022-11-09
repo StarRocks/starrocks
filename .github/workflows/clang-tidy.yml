@@ -19,7 +19,6 @@ jobs:
             - 'be/**'
 
       - uses: actions/checkout@v3
-        if: steps.changes.outputs.be == 'true'
         with:
           fetch-depth: 2
 
