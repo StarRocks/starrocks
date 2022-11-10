@@ -462,7 +462,7 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("cannot find db: xxx"));
         }
 
-        sql = "grant drop on view on view db1.tbl1 to test_user";
+        sql = "grant drop on view db1.tbl1 to test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
