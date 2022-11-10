@@ -2648,19 +2648,21 @@ Status PersistentIndex::commit(PersistentIndexMetaPB* index_meta) {
     // In addition, there may be I/O waste because we append wals firstly and do _flush_l0 or _merge_compaction.
     const auto l0_mem_size = _l0->memory_usage();
     uint64_t l1_file_size = _l1 ? _l1->file_size() : 0;
-    // if l1 is not empty, and l0 memory usage is large enough,
-    if (l1_file_size != 0 && l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
-        _flushed = true;
-        // do l0 l1 merge compaction
-        RETURN_IF_ERROR(_merge_compaction());
-        // if l1 is empty, l0 memory usage is large enough
-    } else if (l1_file_size == 0 && l0_mem_size > kL0SnapshotSizeMax) {
+    // if l1 is not empty,
+    if (l1_file_size != 0) {
+        // and l0 memory usage is large enough,
+        if (l0_mem_size * config::l0_l1_merge_ratio > l1_file_size) {
+            // do l0 l1 merge compaction
+            _flushed = true;
+            RETURN_IF_ERROR(_merge_compaction());
+        }
+        // if l1 is empty, and l0 memory usage is large enough
+    } else if (l0_mem_size > kL0SnapshotSizeMax) {
         // do flush l0
         _flushed = true;
         RETURN_IF_ERROR(_flush_l0());
-    } else {
-        _dump_snapshot |= _l0->file_size() > config::l0_max_file_size;
     }
+    _dump_snapshot |= !_flushed && _l0->file_size() > config::l0_max_file_size;
     // for case1 and case2
     if (_flushed) {
         // update PersistentIndexMetaPB
