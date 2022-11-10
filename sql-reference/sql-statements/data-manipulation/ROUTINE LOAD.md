@@ -389,11 +389,13 @@ FROM KAFKA
 ```
 
 支持两种 JSON 数据格式：
-1）{"category":"a9jadhx","author":"test","price":895}
-2）[
+
+1）`{"category":"a9jadhx","author":"test","price":895}`
+
+2）`[
 {"category":"a9jadhx","author":"test","price":895},
 {"category":"axdfa1","author":"EvelynWaugh","price":1299}
-]
+]`
 
 ### 示例5：指定 `jsonpaths` 导入 JSON 格式数据
 
@@ -441,14 +443,18 @@ FROM KAFKA
 ```
 
 JSON数据格式:
+```
 [
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
 {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
 {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
 ]
+```
 
 说明：
+
 1）如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，则需要将 `strip_outer_array` 设置成 `true`，表示展平数组。
+
 2）如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，在设置 `jsonpaths` 时，ROOT 节点实际上是数组中对象。
 
 ### 示例6：指定根节点 `json_root`
@@ -476,6 +482,7 @@ FROM KAFKA
 ```
 
 JSON 数据格式:
+```
 {
 "RECORDS":[
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
@@ -483,3 +490,4 @@ JSON 数据格式:
 {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
 ]
 }
+```
