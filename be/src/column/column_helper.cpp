@@ -188,6 +188,25 @@ ColumnPtr ColumnHelper::create_const_null_column(size_t chunk_size) {
     return ConstColumn::create(nullable_column, chunk_size);
 }
 
+// expression trees' return column should align return type when some return columns may be different from
+// the required return type. e.g., concat_ws returns col from create_const_null_column(), it's type is Nullable(int8),
+// but required return type is nullable(string), so col need align return type to nullable(string).
+ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows) {
+    ColumnPtr new_column = old_col;
+    if (old_col->only_null()) {
+        new_column = ColumnHelper::create_column(type_desc, true);
+        new_column->append_nulls(num_rows);
+    } else if (old_col->is_constant()) {
+        // Note: we must create a new column every time here,
+        // because result_columns[i] is shared_ptr
+        new_column = ColumnHelper::create_column(type_desc, false);
+        auto* const_column = down_cast<ConstColumn*>(old_col.get());
+        new_column->append(*const_column->data_column(), 0, 1);
+        new_column->assign(num_rows, 0);
+    }
+    return new_column;
+}
+
 ColumnPtr ColumnHelper::create_column(const TypeDescriptor& type_desc, bool nullable) {
     return create_column(type_desc, nullable, false, 0);
 }

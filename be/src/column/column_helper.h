@@ -186,6 +186,11 @@ public:
     // Create an empty column
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable);
 
+    // expression trees' return column should align return type when some return columns may be different from
+    // the required return type. e.g., expr returns col from create_const_null_column(), it's type is Nullable(int8),
+    // but required return type is nullable(string), so col need align return type to nullable(string).
+    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows);
+
     // Create a column with specified size, the column will be resized to size
     static ColumnPtr create_column(const TypeDescriptor& type_desc, bool nullable, bool is_const, size_t size);
 
