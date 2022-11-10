@@ -43,44 +43,44 @@ PARTITION: UNPARTITIONED
 
 RESULT SINK
 
-36:MERGING-EXCHANGE
+38:MERGING-EXCHANGE
 
 PLAN FRAGMENT 1
 OUTPUT EXPRS:
 PARTITION: HASH_PARTITIONED: 69: year
 
 STREAM DATA SINK
-EXCHANGE ID: 36
+EXCHANGE ID: 38
 UNPARTITIONED
 
-35:SORT
+37:SORT
 |  order by: <slot 69> 69: year ASC
 |  offset: 0
 |
-34:Project
+36:Project
 |  <slot 69> : 69: year
 |  <slot 74> : 72: sum / 73: sum
 |
-33:AGGREGATE (merge finalize)
+35:AGGREGATE (merge finalize)
 |  output: sum(72: sum), sum(73: sum)
 |  group by: 69: year
 |
-32:EXCHANGE
+34:EXCHANGE
 
 PLAN FRAGMENT 2
 OUTPUT EXPRS:
-PARTITION: RANDOM
+PARTITION: HASH_PARTITIONED: 21: L_SUPPKEY
 
 STREAM DATA SINK
-EXCHANGE ID: 32
+EXCHANGE ID: 34
 HASH_PARTITIONED: 69: year
 
-31:AGGREGATE (update serialize)
+33:AGGREGATE (update serialize)
 |  STREAMING
 |  output: sum(71: case), sum(70: expr)
 |  group by: 69: year
 |
-30:Project
+32:Project
 |  <slot 69> : year(40: O_ORDERDATE)
 |  <slot 70> : 76: multiply
 |  <slot 71> : if(61: N_NAME = 'IRAN', 76: multiply, 0.0)
@@ -88,39 +88,173 @@ HASH_PARTITIONED: 69: year
 |  <slot 75> : 1.0 - 25: L_DISCOUNT
 |  <slot 76> : 24: L_EXTENDEDPRICE * 75: subtract
 |
-29:HASH JOIN
+31:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
 |  colocate: false, reason:
 |  equal join conjunct: 14: S_NATIONKEY = 60: N_NATIONKEY
 |
-|----28:EXCHANGE
+|----30:EXCHANGE
 |
-26:Project
+28:Project
 |  <slot 14> : 14: S_NATIONKEY
 |  <slot 24> : 24: L_EXTENDEDPRICE
 |  <slot 25> : 25: L_DISCOUNT
 |  <slot 40> : 40: O_ORDERDATE
 |
-25:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+27:HASH JOIN
+|  join op: INNER JOIN (PARTITIONED)
 |  colocate: false, reason:
 |  equal join conjunct: 21: L_SUPPKEY = 11: S_SUPPKEY
 |
-|----24:EXCHANGE
+|----26:EXCHANGE
 |
-22:Project
+24:EXCHANGE
+
+PLAN FRAGMENT 3
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 30
+UNPARTITIONED
+
+29:OlapScanNode
+TABLE: nation
+PREAGGREGATION: ON
+partitions=1/1
+rollup: nation
+tabletRatio=1/1
+cardinality=25
+avgRowSize=29.0
+numNodes=0
+
+PLAN FRAGMENT 4
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 26
+HASH_PARTITIONED: 11: S_SUPPKEY
+
+25:OlapScanNode
+TABLE: supplier
+PREAGGREGATION: ON
+partitions=1/1
+rollup: supplier
+tabletRatio=1/1
+cardinality=1000000
+avgRowSize=8.0
+numNodes=0
+
+PLAN FRAGMENT 5
+OUTPUT EXPRS:
+PARTITION: HASH_PARTITIONED: 37: O_CUSTKEY
+
+STREAM DATA SINK
+EXCHANGE ID: 24
+HASH_PARTITIONED: 21: L_SUPPKEY
+
+23:Project
 |  <slot 21> : 21: L_SUPPKEY
 |  <slot 24> : 24: L_EXTENDEDPRICE
 |  <slot 25> : 25: L_DISCOUNT
 |  <slot 40> : 40: O_ORDERDATE
 |
-21:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
+22:HASH JOIN
+|  join op: INNER JOIN (PARTITIONED)
 |  colocate: false, reason:
 |  equal join conjunct: 37: O_CUSTKEY = 46: C_CUSTKEY
 |
-|----20:EXCHANGE
+|----21:EXCHANGE
 |
+10:EXCHANGE
+
+PLAN FRAGMENT 6
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 21
+HASH_PARTITIONED: 46: C_CUSTKEY
+
+20:Project
+|  <slot 46> : 46: C_CUSTKEY
+|
+19:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 49: C_NATIONKEY = 55: N_NATIONKEY
+|
+|----18:EXCHANGE
+|
+11:OlapScanNode
+TABLE: customer
+PREAGGREGATION: ON
+partitions=1/1
+rollup: customer
+tabletRatio=10/10
+cardinality=15000000
+avgRowSize=12.0
+numNodes=0
+
+PLAN FRAGMENT 7
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 18
+UNPARTITIONED
+
+17:Project
+|  <slot 55> : 55: N_NATIONKEY
+|
+16:HASH JOIN
+|  join op: INNER JOIN (BROADCAST)
+|  colocate: false, reason:
+|  equal join conjunct: 57: N_REGIONKEY = 65: R_REGIONKEY
+|
+|----15:EXCHANGE
+|
+12:OlapScanNode
+TABLE: nation
+PREAGGREGATION: ON
+partitions=1/1
+rollup: nation
+tabletRatio=1/1
+cardinality=25
+avgRowSize=8.0
+numNodes=0
+
+PLAN FRAGMENT 8
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 15
+UNPARTITIONED
+
+14:Project
+|  <slot 65> : 65: R_REGIONKEY
+|
+13:OlapScanNode
+TABLE: region
+PREAGGREGATION: ON
+PREDICATES: 66: R_NAME = 'MIDDLE EAST'
+partitions=1/1
+rollup: region
+tabletRatio=1/1
+cardinality=1
+avgRowSize=29.0
+numNodes=0
+
+PLAN FRAGMENT 9
+OUTPUT EXPRS:
+PARTITION: RANDOM
+
+STREAM DATA SINK
+EXCHANGE ID: 10
+HASH_PARTITIONED: 37: O_CUSTKEY
+
 9:Project
 |  <slot 21> : 21: L_SUPPKEY
 |  <slot 24> : 24: L_EXTENDEDPRICE
@@ -142,131 +276,11 @@ PREDICATES: 40: O_ORDERDATE >= '1995-01-01', 40: O_ORDERDATE <= '1996-12-31'
 partitions=1/1
 rollup: orders
 tabletRatio=10/10
-tabletList=10139,10141,10143,10145,10147,10149,10151,10153,10155,10157
 cardinality=45530146
 avgRowSize=20.0
 numNodes=0
 
-PLAN FRAGMENT 3
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 28
-UNPARTITIONED
-
-27:OlapScanNode
-TABLE: nation
-PREAGGREGATION: ON
-partitions=1/1
-rollup: nation
-tabletRatio=1/1
-tabletList=10185
-cardinality=25
-avgRowSize=29.0
-numNodes=0
-
-PLAN FRAGMENT 4
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 24
-UNPARTITIONED
-
-23:OlapScanNode
-TABLE: supplier
-PREAGGREGATION: ON
-partitions=1/1
-rollup: supplier
-tabletRatio=1/1
-tabletList=10111
-cardinality=1000000
-avgRowSize=8.0
-numNodes=0
-
-PLAN FRAGMENT 5
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 20
-UNPARTITIONED
-
-19:Project
-|  <slot 46> : 46: C_CUSTKEY
-|
-18:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  colocate: false, reason:
-|  equal join conjunct: 49: C_NATIONKEY = 55: N_NATIONKEY
-|
-|----17:EXCHANGE
-|
-10:OlapScanNode
-TABLE: customer
-PREAGGREGATION: ON
-partitions=1/1
-rollup: customer
-tabletRatio=10/10
-tabletList=10162,10164,10166,10168,10170,10172,10174,10176,10178,10180
-cardinality=15000000
-avgRowSize=12.0
-numNodes=0
-
-PLAN FRAGMENT 6
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 17
-UNPARTITIONED
-
-16:Project
-|  <slot 55> : 55: N_NATIONKEY
-|
-15:HASH JOIN
-|  join op: INNER JOIN (BROADCAST)
-|  colocate: false, reason:
-|  equal join conjunct: 57: N_REGIONKEY = 65: R_REGIONKEY
-|
-|----14:EXCHANGE
-|
-11:OlapScanNode
-TABLE: nation
-PREAGGREGATION: ON
-partitions=1/1
-rollup: nation
-tabletRatio=1/1
-tabletList=10185
-cardinality=25
-avgRowSize=8.0
-numNodes=0
-
-PLAN FRAGMENT 7
-OUTPUT EXPRS:
-PARTITION: RANDOM
-
-STREAM DATA SINK
-EXCHANGE ID: 14
-UNPARTITIONED
-
-13:Project
-|  <slot 65> : 65: R_REGIONKEY
-|
-12:OlapScanNode
-TABLE: region
-PREAGGREGATION: ON
-PREDICATES: 66: R_NAME = 'MIDDLE EAST'
-partitions=1/1
-rollup: region
-tabletRatio=1/1
-tabletList=10106
-cardinality=1
-avgRowSize=29.0
-numNodes=0
-
-PLAN FRAGMENT 8
+PLAN FRAGMENT 10
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
@@ -293,12 +307,11 @@ PREAGGREGATION: ON
 partitions=1/1
 rollup: lineitem
 tabletRatio=20/20
-tabletList=10213,10215,10217,10219,10221,10223,10225,10227,10229,10231 ...
 cardinality=600000000
 avgRowSize=36.0
 numNodes=0
 
-PLAN FRAGMENT 9
+PLAN FRAGMENT 11
 OUTPUT EXPRS:
 PARTITION: RANDOM
 
@@ -316,7 +329,6 @@ PREDICATES: 5: P_TYPE = 'ECONOMY ANODIZED STEEL'
 partitions=1/1
 rollup: part
 tabletRatio=10/10
-tabletList=10190,10192,10194,10196,10198,10200,10202,10204,10206,10208
 cardinality=133333
 avgRowSize=33.0
 numNodes=0

@@ -282,7 +282,7 @@ static TExprNode create_int_literal_node(TPrimitiveType::type value_type, int64_
 
 template <typename ValueType>
 static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpcode::type opcode,
-                                        SlotDescriptor* slot_desc, ValueType value_type, TExprNode lit_node) {
+                                        SlotDescriptor* slot_desc, ValueType value_type, const TExprNode& lit_node) {
     TExprNode eq_node;
     eq_node.__set_node_type(TExprNodeType::type::BINARY_PRED);
     eq_node.__set_child_type(value_type);

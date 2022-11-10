@@ -30,11 +30,11 @@ namespace starrocks {
 
 class BufferControlBlockTest : public testing::Test {
 public:
-    BufferControlBlockTest() {}
-    virtual ~BufferControlBlockTest() {}
+    BufferControlBlockTest() = default;
+    ~BufferControlBlockTest() override = default;
 
 protected:
-    virtual void SetUp() {}
+    void SetUp() override {}
 
 private:
 };
@@ -49,7 +49,7 @@ TEST_F(BufferControlBlockTest, add_one_get_one) {
     ASSERT_TRUE(control_block.init().ok());
 
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
-    add_result->result_batch.rows.push_back("hello test");
+    add_result->result_batch.rows.emplace_back("hello test");
     ASSERT_TRUE(control_block.add_batch(add_result).ok());
 
     TFetchDataResult get_result;
@@ -75,7 +75,7 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
 
     ASSERT_TRUE(control_block.cancel().ok());
     std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
-    add_result->result_batch.rows.push_back("hello test");
+    add_result->result_batch.rows.emplace_back("hello test");
     ASSERT_FALSE(control_block.add_batch(add_result).ok());
 
     TFetchDataResult get_result;
@@ -83,10 +83,10 @@ TEST_F(BufferControlBlockTest, get_add_after_cancel) {
 }
 
 void* cancel_thread(void* param) {
-    BufferControlBlock* control_block = static_cast<BufferControlBlock*>(param);
+    auto* control_block = static_cast<BufferControlBlock*>(param);
     sleep(1);
     control_block->cancel();
-    return NULL;
+    return nullptr;
 }
 
 TEST_F(BufferControlBlockTest, add_then_cancel) {
@@ -95,25 +95,25 @@ TEST_F(BufferControlBlockTest, add_then_cancel) {
     ASSERT_TRUE(control_block.init().ok());
 
     pthread_t id;
-    pthread_create(&id, NULL, cancel_thread, &control_block);
+    pthread_create(&id, nullptr, cancel_thread, &control_block);
 
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
-        add_result->result_batch.rows.push_back("hello test1");
-        add_result->result_batch.rows.push_back("hello test2");
+        add_result->result_batch.rows.emplace_back("hello test1");
+        add_result->result_batch.rows.emplace_back("hello test2");
         ASSERT_TRUE(control_block.add_batch(add_result).ok());
     }
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
-        add_result->result_batch.rows.push_back("hello test1");
-        add_result->result_batch.rows.push_back("hello test2");
+        add_result->result_batch.rows.emplace_back("hello test1");
+        add_result->result_batch.rows.emplace_back("hello test2");
         ASSERT_FALSE(control_block.add_batch(add_result).ok());
     }
 
     TFetchDataResult get_result;
     ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 
-    pthread_join(id, NULL);
+    pthread_join(id, nullptr);
 }
 
 TEST_F(BufferControlBlockTest, get_then_cancel) {
@@ -121,25 +121,25 @@ TEST_F(BufferControlBlockTest, get_then_cancel) {
     ASSERT_TRUE(control_block.init().ok());
 
     pthread_t id;
-    pthread_create(&id, NULL, cancel_thread, &control_block);
+    pthread_create(&id, nullptr, cancel_thread, &control_block);
 
     // get block until cancel
     TFetchDataResult get_result;
     ASSERT_FALSE(control_block.get_batch(&get_result).ok());
 
-    pthread_join(id, NULL);
+    pthread_join(id, nullptr);
 }
 
 void* add_thread(void* param) {
-    BufferControlBlock* control_block = static_cast<BufferControlBlock*>(param);
+    auto* control_block = static_cast<BufferControlBlock*>(param);
     sleep(1);
     {
         std::unique_ptr<TFetchDataResult> add_result(new TFetchDataResult());
-        add_result->result_batch.rows.push_back("hello test1");
-        add_result->result_batch.rows.push_back("hello test2");
+        add_result->result_batch.rows.emplace_back("hello test1");
+        add_result->result_batch.rows.emplace_back("hello test2");
         control_block->add_batch(add_result);
     }
-    return NULL;
+    return nullptr;
 }
 
 TEST_F(BufferControlBlockTest, get_then_add) {
@@ -147,7 +147,7 @@ TEST_F(BufferControlBlockTest, get_then_add) {
     ASSERT_TRUE(control_block.init().ok());
 
     pthread_t id;
-    pthread_create(&id, NULL, add_thread, &control_block);
+    pthread_create(&id, nullptr, add_thread, &control_block);
 
     // get block until a batch add
     TFetchDataResult get_result;
@@ -157,14 +157,14 @@ TEST_F(BufferControlBlockTest, get_then_add) {
     ASSERT_STREQ("hello test1", get_result.result_batch.rows[0].c_str());
     ASSERT_STREQ("hello test2", get_result.result_batch.rows[1].c_str());
 
-    pthread_join(id, NULL);
+    pthread_join(id, nullptr);
 }
 
 void* close_thread(void* param) {
-    BufferControlBlock* control_block = static_cast<BufferControlBlock*>(param);
+    auto* control_block = static_cast<BufferControlBlock*>(param);
     sleep(1);
     control_block->close(Status::OK());
-    return NULL;
+    return nullptr;
 }
 
 TEST_F(BufferControlBlockTest, get_then_close) {
@@ -172,7 +172,7 @@ TEST_F(BufferControlBlockTest, get_then_close) {
     ASSERT_TRUE(control_block.init().ok());
 
     pthread_t id;
-    pthread_create(&id, NULL, close_thread, &control_block);
+    pthread_create(&id, nullptr, close_thread, &control_block);
 
     // get block until a batch add
     TFetchDataResult get_result;
@@ -180,7 +180,7 @@ TEST_F(BufferControlBlockTest, get_then_close) {
     ASSERT_TRUE(get_result.eos);
     ASSERT_EQ(0U, get_result.result_batch.rows.size());
 
-    pthread_join(id, NULL);
+    pthread_join(id, nullptr);
 }
 
 } // namespace starrocks

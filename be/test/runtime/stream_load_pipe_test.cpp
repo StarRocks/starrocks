@@ -33,8 +33,8 @@ namespace starrocks {
 
 class StreamLoadPipeTest : public testing::Test {
 public:
-    StreamLoadPipeTest() {}
-    virtual ~StreamLoadPipeTest() {}
+    StreamLoadPipeTest() = default;
+    ~StreamLoadPipeTest() override = default;
     void SetUp() override {}
 };
 

@@ -240,7 +240,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         if (result->only_null()) {
             ASSERT_TRUE(check_overflow);
         } else {
-            ColumnType* decimal_column = (ColumnType*)(ColumnHelper::get_data_column(result.get()));
+            auto* decimal_column = (ColumnType*)(ColumnHelper::get_data_column(result.get()));
             ASSERT_EQ(result_precision, decimal_column->precision());
             ASSERT_EQ(result_scale, decimal_column->scale());
             CppType value = decimal_column->get_data()[0];

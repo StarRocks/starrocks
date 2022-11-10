@@ -84,4 +84,19 @@ void BalancedChunkBuffer::set_finished(int buffer_index) {
     _get_sub_buffer(buffer_index)->clear();
 }
 
+void BalancedChunkBuffer::update_limiter(vectorized::Chunk* chunk) {
+    static constexpr int UPDATE_AVG_ROW_BYTES_FREQUENCY = 8;
+    // Update local counters.
+    LimiterContext& ctx = _limiter_context;
+    ctx.local_sum_row_bytes += chunk->memory_usage();
+    ctx.local_num_rows += chunk->num_rows();
+    ctx.local_max_chunk_rows = std::max(ctx.local_max_chunk_rows, chunk->num_rows());
+
+    if (ctx.local_sum_chunks++ % UPDATE_AVG_ROW_BYTES_FREQUENCY == 0) {
+        _limiter->update_avg_row_bytes(ctx.local_sum_row_bytes, ctx.local_num_rows, ctx.local_max_chunk_rows);
+        ctx.local_sum_row_bytes = 0;
+        ctx.local_num_rows = 0;
+    }
+}
+
 } // namespace starrocks::pipeline

@@ -16,6 +16,7 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -53,6 +54,12 @@ public class RefreshMaterializedViewStatementTest {
         starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
     }
+
+    @AfterClass
+    public static void tearDown() throws Exception {
+        PseudoCluster.getInstance().shutdown(true);
+    }
+
     @Test
     public void testPartitionByAllowedFunctionNoNeedParams() {
         String sql = "REFRESH MATERIALIZED VIEW no_exists;";

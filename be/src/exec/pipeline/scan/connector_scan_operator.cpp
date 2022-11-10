@@ -168,6 +168,9 @@ Status ConnectorChunkSource::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(ChunkSource::prepare(state));
     _runtime_state = state;
     _ck_acc.set_max_size(state->chunk_size());
+    if (config::connector_min_max_predicate_from_runtime_filter_enable) {
+        _data_source->parse_runtime_filters(state);
+    }
     return Status::OK();
 }
 
@@ -218,6 +221,7 @@ Status ConnectorChunkSource::_read_chunk(RuntimeState* state, vectorized::ChunkP
     if (_ck_acc.has_output()) {
         *chunk = std::move(_ck_acc.pull());
         _rows_read += (*chunk)->num_rows();
+        _chunk_buffer.update_limiter(chunk->get());
         return Status::OK();
     }
     _ck_acc.reset();

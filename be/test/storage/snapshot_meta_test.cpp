@@ -29,14 +29,14 @@ public:
         _snapshot_meta.tablet_meta().mutable_updates()->set_next_rowset_id(4);
 
         EditVersionMetaPB* v = _snapshot_meta.tablet_meta().mutable_updates()->add_versions();
-        v->set_creation_time(time(NULL));
+        v->set_creation_time(time(nullptr));
         v->add_rowsets(1);
         v->add_rowsets(2);
         v->add_rowsets(5);
 
         _snapshot_meta.rowset_metas().resize(3);
 
-        _snapshot_meta.rowset_metas()[0].set_creation_time(time(NULL));
+        _snapshot_meta.rowset_metas()[0].set_creation_time(time(nullptr));
         _snapshot_meta.rowset_metas()[0].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
         _snapshot_meta.rowset_metas()[0].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[0].set_rowset_seg_id(1);
@@ -50,7 +50,7 @@ public:
         _snapshot_meta.rowset_metas()[0].set_partition_id(1);
         _snapshot_meta.rowset_metas()[0].set_rowset_state(VISIBLE);
 
-        _snapshot_meta.rowset_metas()[1].set_creation_time(time(NULL));
+        _snapshot_meta.rowset_metas()[1].set_creation_time(time(nullptr));
         _snapshot_meta.rowset_metas()[1].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
         _snapshot_meta.rowset_metas()[1].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[1].set_rowset_seg_id(2);
@@ -64,7 +64,7 @@ public:
         _snapshot_meta.rowset_metas()[1].set_partition_id(1);
         _snapshot_meta.rowset_metas()[1].set_rowset_state(VISIBLE);
 
-        _snapshot_meta.rowset_metas()[2].set_creation_time(time(NULL));
+        _snapshot_meta.rowset_metas()[2].set_creation_time(time(nullptr));
         _snapshot_meta.rowset_metas()[2].set_tablet_id(_snapshot_meta.tablet_meta().tablet_id());
         _snapshot_meta.rowset_metas()[2].set_deprecated_rowset_id(0);
         _snapshot_meta.rowset_metas()[2].set_rowset_seg_id(5);

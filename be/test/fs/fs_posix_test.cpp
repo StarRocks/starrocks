@@ -32,8 +32,8 @@ namespace starrocks {
 
 class PosixFileSystemTest : public testing::Test {
 public:
-    PosixFileSystemTest() {}
-    virtual ~PosixFileSystemTest() {}
+    PosixFileSystemTest() = default;
+    ~PosixFileSystemTest() override = default;
     void SetUp() override { ASSERT_TRUE(fs::create_directories("./ut_dir/fs_posix").ok()); }
     void TearDown() override { ASSERT_TRUE(fs::remove_all("./ut_dir").ok()); }
 };

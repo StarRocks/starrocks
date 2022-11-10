@@ -8,8 +8,8 @@ namespace starrocks::vectorized {
 
 class ColumnHelperTest : public testing::Test {
 public:
-    virtual void SetUp() {}
-    virtual void TearDown() {}
+    void SetUp() override {}
+    void TearDown() override {}
 };
 
 } // namespace starrocks::vectorized

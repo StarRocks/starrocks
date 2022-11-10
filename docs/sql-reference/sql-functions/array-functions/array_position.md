@@ -6,7 +6,7 @@ Obtain the position of an element in an array.
 
 ## Syntax
 
-```SQL
+```Haskell
 array_position(any_array, any_element)
 ```
 

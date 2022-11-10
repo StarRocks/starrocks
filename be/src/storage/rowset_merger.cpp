@@ -290,6 +290,9 @@ private:
                 std::unique_ptr<vector<RowSourceMask>> rowset_source_masks = std::make_unique<vector<RowSourceMask>>();
                 rowsets_source_masks.emplace_back(std::move(rowset_source_masks));
                 entry.source_masks = rowsets_source_masks.back().get();
+            } else if (rowsets_mask_buffer) {
+                std::unique_ptr<vector<RowSourceMask>> rowset_source_masks = std::make_unique<vector<RowSourceMask>>();
+                rowsets_source_masks.emplace_back(std::move(rowset_source_masks));
             }
             entry.order = order++;
             auto st = entry.init();

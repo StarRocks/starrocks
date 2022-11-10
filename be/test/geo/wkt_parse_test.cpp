@@ -27,8 +27,8 @@ namespace starrocks {
 
 class WktParseTest : public testing::Test {
 public:
-    WktParseTest() {}
-    virtual ~WktParseTest() {}
+    WktParseTest() = default;
+    ~WktParseTest() override = default;
 };
 
 TEST_F(WktParseTest, normal) {

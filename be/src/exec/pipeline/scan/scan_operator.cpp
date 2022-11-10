@@ -202,11 +202,21 @@ StatusOr<vectorized::ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
     if (res == nullptr) {
         return nullptr;
     }
-    auto tablet_id = res->owner_info().owner_id();
-    auto is_last_chunk = res->owner_info().is_last_chunk();
+
+    // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
+    auto [tablet_id, is_eos] = _should_emit_eos(res);
     eval_runtime_bloom_filters(res.get());
-    res->owner_info().set_owner_id(tablet_id, is_last_chunk);
+    res->owner_info().set_owner_id(tablet_id, is_eos);
     return res;
+}
+
+std::tuple<int64_t, bool> ScanOperator::_should_emit_eos(const ChunkPtr& chunk) {
+    auto tablet_id = chunk->owner_info().owner_id();
+    auto is_last_chunk = chunk->owner_info().is_last_chunk();
+    if (is_last_chunk && _ticket_checker != nullptr) {
+        is_last_chunk = _ticket_checker->leave(tablet_id);
+    }
+    return {tablet_id, is_last_chunk};
 }
 
 int64_t ScanOperator::global_rf_wait_timeout_ns() const {
@@ -323,10 +333,10 @@ Status ScanOperator::_trigger_next_scan(RuntimeState* state, int chunk_source_in
             SCOPED_SET_TRACE_INFO(driver_id, state->query_id(), state->fragment_instance_id());
             SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(state->instance_mem_tracker());
 
-            [[maybe_unused]] std::string category = "chunk_source_" + std::to_string(chunk_source_index);
-            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
-
             auto& chunk_source = _chunk_sources[chunk_source_index];
+            [[maybe_unused]] std::string category;
+            category = fmt::sprintf("chunk_source_%d_0x%x", get_plan_node_id(), query_trace_ctx.id);
+            QUERY_TRACE_ASYNC_START("io_task", category, query_trace_ctx);
 
             DeferOp timer_defer([chunk_source]() {
                 COUNTER_SET(chunk_source->scan_timer(),
@@ -476,7 +486,7 @@ pipeline::OpFactories decompose_scan_node_to_pipeline(std::shared_ptr<ScanOperat
 
     const auto* morsel_queue_factory = context->morsel_queue_factory_of_source_operator(scan_operator.get());
     scan_operator->set_degree_of_parallelism(morsel_queue_factory->size());
-    scan_operator->set_need_local_shuffle(morsel_queue_factory->need_local_shuffle());
+    scan_operator->set_could_local_shuffle(morsel_queue_factory->could_local_shuffle());
 
     ops.emplace_back(std::move(scan_operator));
 

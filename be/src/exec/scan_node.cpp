@@ -90,7 +90,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
             morsel_queue->num_original_morsels() <= io_parallelism) {
             auto morsel_queue_map = uniform_distribute_morsels(std::move(morsel_queue), scan_dop);
             return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(morsel_queue_map),
-                                                                            /*need_local_shuffle*/ true);
+                                                                            /*could_local_shuffle*/ true);
         } else {
             return std::make_unique<pipeline::SharedMorselQueueFactory>(std::move(morsel_queue), scan_dop);
         }
@@ -109,7 +109,7 @@ StatusOr<pipeline::MorselQueueFactoryPtr> ScanNode::convert_scan_range_to_morsel
         }
 
         return std::make_unique<pipeline::IndividualMorselQueueFactory>(std::move(queue_per_driver_seq),
-                                                                        /*need_local_shuffle*/ false);
+                                                                        /*could_local_shuffle*/ false);
     }
 }
 

@@ -12,12 +12,11 @@
 #include "runtime/time_types.h"
 #include "testutil/function_utils.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class EsFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() {}
+    void SetUp() override {}
 };
 
 TEST_F(EsFunctionsTest, matchTest) {
@@ -40,5 +39,4 @@ TEST_F(EsFunctionsTest, matchTest) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

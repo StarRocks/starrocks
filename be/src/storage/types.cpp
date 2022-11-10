@@ -21,7 +21,6 @@
 
 #include "storage/types.h"
 
-#include "exec/vectorized/join_hash_map.h"
 #include "gutil/strings/numbers.h"
 #include "runtime/datetime_value.h"
 #include "runtime/decimalv2_value.h"
@@ -99,19 +98,8 @@ public:
 
     void deep_copy(void* dest, const void* src, MemPool* mem_pool) const override { _deep_copy(dest, src, mem_pool); }
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
-    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
-        _copy_object(dest, src, mem_pool);
-    }
-
     void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
         _direct_copy(dest, src, mem_pool);
-    }
-
-    //convert and deep copy value from other type's source
-    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
-        return _convert_from(dest, src, src_type, mem_pool);
     }
 
     Status from_string(void* buf, const std::string& scan_key) const override { return _from_string(buf, scan_key); }

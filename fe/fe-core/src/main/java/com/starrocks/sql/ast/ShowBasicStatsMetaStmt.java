@@ -12,6 +12,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.StatisticUtils;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -49,7 +50,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         }
         row.set(1, table.getName());
 
-        long totalCollectColumnsSize = table.getBaseSchema().stream().filter(column -> !column.isAggregated()).count();
+        long totalCollectColumnsSize = StatisticUtils.getCollectibleColumns(table).size();
         if (null != columns && !columns.isEmpty() && (columns.size() != totalCollectColumnsSize)) {
             row.set(2, String.join(",", columns));
         }

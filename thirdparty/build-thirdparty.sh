@@ -328,7 +328,7 @@ build_simdjson() {
     #ref: https://github.com/simdjson/simdjson/blob/master/HACKING.md
     mkdir -p $BUILD_DIR
     cd $BUILD_DIR
-    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" ..
+    $CMAKE_CMD -G "${CMAKE_GENERATOR}" -DCMAKE_CXX_FLAGS="-O3" -DCMAKE_C_FLAGS="-O3" -DSIMDJSON_AVX512_ALLOWED=OFF ..
     $CMAKE_CMD --build .
     mkdir -p $TP_INSTALL_DIR/lib
 
@@ -467,6 +467,8 @@ build_brpc() {
     check_if_source_exist $BRPC_SOURCE
 
     cd $TP_SOURCE_DIR/$BRPC_SOURCE
+    CMAKE_GENERATOR="Unix Makefiles"
+    BUILD_SYSTEM='make'
     ./config_brpc.sh --headers="$TP_INSTALL_DIR/include /usr/include" --libs="$TP_INSTALL_DIR/bin $TP_INSTALL_DIR/lib /usr/lib" --with-glog
     make -j$PARALLEL
     cp -rf output/* ${TP_INSTALL_DIR}/
@@ -958,6 +960,8 @@ build_streamvbyte() {
     cd $BUILD_DIR
     rm -rf CMakeCache.txt CMakeFiles/
 
+    CMAKE_GENERATOR="Unix Makefiles"
+    BUILD_SYSTEM='make'
     $CMAKE_CMD .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX:PATH=$TP_INSTALL_DIR/
 
     make -j$PARALLEL

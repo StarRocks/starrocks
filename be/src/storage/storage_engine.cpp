@@ -109,6 +109,10 @@ StorageEngine::~StorageEngine() {
     if (_s_instance == this) {
         _s_instance = _p_instance;
     }
+#else
+    if (_s_instance != nullptr) {
+        _s_instance = nullptr;
+    }
 #endif
 }
 

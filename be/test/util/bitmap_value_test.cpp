@@ -33,8 +33,7 @@
 #include "udf/udf.h"
 #include "util/phmap/phmap.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 TEST(BitmapValueTest, bitmap_union) {
     BitmapValue empty;
@@ -259,7 +258,7 @@ TEST(BitmapValueTest, Roaring64Map) {
 
     // we can also go in reverse and go from arrays to bitmaps
     uint64_t card1 = r1.cardinality();
-    uint64_t* arr1 = new uint64_t[card1];
+    auto* arr1 = new uint64_t[card1];
     ASSERT_TRUE(arr1 != nullptr);
     r1.toUint64Array(arr1);
     Roaring64Map r1f(card1, arr1);
@@ -304,8 +303,8 @@ TEST(BitmapValueTest, Roaring64Map) {
 
     // we can also iterate the C++ way
     sum = 0;
-    for (Roaring64Map::const_iterator i = t.begin(); i != t.end(); i++) {
-        sum += *i;
+    for (unsigned long i : t) {
+        sum += i;
     }
     ASSERT_EQ(r1_sum, sum);
 }
@@ -407,5 +406,4 @@ TEST(BitmapValueTest, bitmap_xor) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

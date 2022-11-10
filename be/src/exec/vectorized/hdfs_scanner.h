@@ -25,10 +25,11 @@ class RuntimeFilterProbeCollector;
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t num_rows_read = 0;
-    int64_t expr_filter_ns = 0;
     int64_t io_ns = 0;
     int64_t io_count = 0;
     int64_t bytes_read = 0;
+
+    int64_t expr_filter_ns = 0;
     int64_t column_read_ns = 0;
     int64_t column_convert_ns = 0;
     int64_t reader_init_ns = 0;
@@ -50,8 +51,7 @@ struct HdfsScanStats {
 
     int64_t get_cpu_time_ns() const {
         // TODO: make it more accurate
-        return expr_filter_ns + column_convert_ns + level_decode_ns + value_decode_ns + group_dict_filter_ns +
-               group_dict_decode_ns;
+        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns;
     }
 };
 

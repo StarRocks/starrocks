@@ -110,8 +110,7 @@ HdfsScannerParams* HdfsScannerTest::_create_param(const std::string& file, THdfs
 
 void HdfsScannerTest::build_hive_column_names(HdfsScannerParams* params, const TupleDescriptor* tuple_desc) {
     std::vector<std::string>* hive_column_names = _pool.add(new std::vector<std::string>());
-    for (int i = 0; i < tuple_desc->slots().size(); i++) {
-        SlotDescriptor* slot = tuple_desc->slots()[i];
+    for (auto slot : tuple_desc->slots()) {
         hive_column_names->emplace_back(slot->col_name());
     }
     params->hive_column_names = hive_column_names;
@@ -249,7 +248,7 @@ static TExprNode create_datetime_literal_node(TPrimitiveType::type value_type, c
 
 template <typename ValueType>
 static void push_binary_pred_texpr_node(std::vector<TExprNode>& nodes, TExprOpcode::type opcode,
-                                        SlotDescriptor* slot_desc, ValueType value_type, TExprNode lit_node) {
+                                        SlotDescriptor* slot_desc, ValueType value_type, const TExprNode& lit_node) {
     TExprNode eq_node;
     eq_node.__set_node_type(TExprNodeType::type::BINARY_PRED);
     eq_node.__set_child_type(value_type);
@@ -1374,6 +1373,38 @@ TEST_F(HdfsScannerTest, TestParqueTypeMismatchInt96String) {
     // parquet column reader: not supported convert from parquet `INT96` to `VARCHAR`
     EXPECT_TRUE(!status.ok()) << status.get_error_msg();
     scanner->close(_runtime_state);
+}
+
+// =============================================================================
+/* data: we expect to read 3 rows [NULL,"",abc]
+\N
+
+abc
+*/
+// there is no newline at EOF.
+
+TEST_F(HdfsScannerTest, TestCSVSingleColumnNullAndEmpty) {
+    SlotDesc csv_descs[] = {{"user_id", TypeDescriptor::from_primtive_type(PrimitiveType::TYPE_VARCHAR, 22)}, {""}};
+
+    const std::string small_file = "./be/test/exec/test_data/csv_scanner/single_column_null_and_empty.csv";
+    Status status;
+
+    {
+        auto* range = _create_scan_range(small_file, 0, 0);
+        auto* tuple_desc = _create_tuple_desc(csv_descs);
+        auto* param = _create_param(small_file, range, tuple_desc);
+        build_hive_column_names(param, tuple_desc);
+        auto scanner = std::make_shared<HdfsTextScanner>();
+
+        status = scanner->init(_runtime_state, *param);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        status = scanner->open(_runtime_state);
+        ASSERT_TRUE(status.ok()) << status.get_error_msg();
+
+        READ_SCANNER_ROWS(scanner, 3);
+        scanner->close(_runtime_state);
+    }
 }
 
 } // namespace starrocks::vectorized

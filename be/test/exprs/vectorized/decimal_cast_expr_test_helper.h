@@ -246,9 +246,9 @@ void test_cast_all(CastTestCaseArray const& test_cases) {
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_const_null<FromType, ToType>(tc, front_fill_size, rear_fill_size);
         test_cast_simple<FromType, ToType>(tc, front_fill_size, rear_fill_size);
@@ -264,9 +264,9 @@ void test_cast_all_fail(CastTestCaseArray const& test_cases) {
     int i = -1;
     for (auto& tc : test_cases) {
         ++i;
-        std::cout << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
-                  << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
-                  << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
+        VLOG(10) << "fail_test#" << i << ": input_precision=" << std::get<0>(tc) << ", input_scale=" << std::get<1>(tc)
+                 << ", input_value=" << std::get<2>(tc) << ", output_precision=" << std::get<3>(tc)
+                 << ", output_scale=" << std::get<4>(tc) << ", output_value=" << std::get<5>(tc) << std::endl;
 
         test_cast_fail<FromType, ToType, ColumnPackedType::SIMPLE>(tc, front_fill_size, rear_fill_size);
         test_cast_fail<FromType, ToType, ColumnPackedType::CONST_NULL>(tc, front_fill_size, rear_fill_size);

@@ -4,6 +4,8 @@ Calculates the 128-bit checksum of multiple strings. The checksum is represented
 
 If only one string is passed in, the result is the same as that of [md5](md5.md).
 
+Compared to md5(), md5sum() accepts more parameters and therefore, is more efficient in calculating the checksum of multiple files.
+
 ## Syntax
 
 ```Haskell

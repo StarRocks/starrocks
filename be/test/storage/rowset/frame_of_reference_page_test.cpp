@@ -25,6 +25,7 @@
 
 #include <memory>
 
+#include "gutil/int128.h"
 #include "runtime/large_int_value.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
@@ -84,12 +85,10 @@ public:
         ASSERT_TRUE(status.ok());
         ASSERT_EQ(size, size_to_fetch);
 
-        CppType* values = reinterpret_cast<CppType*>(column_block_view.data());
+        auto* values = reinterpret_cast<CppType*>(column_block_view.data());
 
         for (uint i = 0; i < size; i++) {
-            if (src[i] != values[i]) {
-                FAIL() << "Fail at index " << i << " inserted=" << src[i] << " got=" << values[i];
-            }
+            ASSERT_EQ(src[i], values[i]);
         }
 
         // Test Seek within block by ordinal

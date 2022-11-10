@@ -2,8 +2,10 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Range;
 import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.catalog.Column;
@@ -13,9 +15,14 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HivePartitionName;
+import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
+import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -116,5 +123,31 @@ public class PartitionUtilTest {
         } catch (StarRocksConnectorException e) {
             Assert.assertTrue(e.getMessage().contains("Can't find column"));
         }
+    }
+
+    @Test
+    public void testGetPartitionRange(@Mocked Table table) throws AnalysisException {
+        Column partitionColumn = new Column("date", Type.DATE);
+        List<String> partitionNames = ImmutableList.of("date=2022-08-02", "date=2022-08-19", "date=2022-08-21",
+                "date=2022-09-01", "date=2022-10-01", "date=2022-12-02");
+
+        new MockUp<PartitionUtil>() {
+            @Mock
+            public Pair<List<String>, List<Column>> getPartitionNamesAndColumns(Table table) {
+                return Pair.create(partitionNames, ImmutableList.of(partitionColumn));
+            }
+        };
+        new Expectations() {
+            {
+                table.getType();
+                result = Table.TableType.HIVE;
+                minTimes = 0;
+            }
+        };
+
+        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionRange(table, partitionColumn);
+        Assert.assertEquals(partitionMap.size(), partitionNames.size());
+        Assert.assertTrue(partitionMap.containsKey("p20221202"));
+        Assert.assertTrue(partitionMap.get("p20221202").upperEndpoint().isMaxValue());
     }
 }

@@ -27,8 +27,8 @@ namespace starrocks {
 
 class BitMapTest : public testing::Test {
 public:
-    BitMapTest() {}
-    virtual ~BitMapTest() {}
+    BitMapTest() = default;
+    ~BitMapTest() override = default;
 };
 
 TEST_F(BitMapTest, normal) {

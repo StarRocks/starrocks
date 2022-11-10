@@ -112,24 +112,24 @@ OutPut Exchange Id: 26
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
 |
 23:SELECT
-       |  predicates: 20: ps_supplycost = 50: min
-       |  cardinality: 2
-       |  column statistics:
-       |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0027237042377637] ESTIMATE
-       |  * p_mfgr-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
-       |  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 2.0027237042377637] ESTIMATE
-       |  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
-       |  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 2.0027237042377637] ESTIMATE
-       |  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 2.0027237042377637] ESTIMATE
-       |  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 2.0027237042377637] ESTIMATE
-       |  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 2.0027237042377637] ESTIMATE
-       |  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 2.0027237042377637] ESTIMATE
-       |  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377637] ESTIMATE
-       |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
-       |  * min-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377637] ESTIMATE
-       |
-       22:ANALYTIC
-       |  functions: [, min[([20: ps_supplycost, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL64(15,2); args nullable: true; result nullable: true], ]
+|  predicates: 20: ps_supplycost = 50: min
+|  cardinality: 2
+|  column statistics:
+|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 2.0027237042377637] ESTIMATE
+|  * p_mfgr-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
+|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 2.0027237042377637] ESTIMATE
+|  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
+|  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 2.0027237042377637] ESTIMATE
+|  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 2.0027237042377637] ESTIMATE
+|  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 2.0027237042377637] ESTIMATE
+|  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 2.0027237042377637] ESTIMATE
+|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 2.0027237042377637] ESTIMATE
+|  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377637] ESTIMATE
+|  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 2.0027237042377637] ESTIMATE
+|  * min-->[1.0, 1000.0, 0.0, 8.0, 2.0027237042377637] ESTIMATE
+|
+22:ANALYTIC
+|  functions: [, min[([20: ps_supplycost, DECIMAL64(15,2), true]); args: DECIMAL64; result: DECIMAL64(15,2); args nullable: true; result nullable: true], ]
 |  partition by: [1: p_partkey, INT, true]
 |  cardinality: 200000
 |  column statistics:
@@ -149,18 +149,18 @@ OutPut Exchange Id: 26
 21:SORT
 |  order by: [1, INT, true] ASC
 |  offset: 0
-|  cardinality: 80000
+|  cardinality: 200000
 |  column statistics:
-|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 80000.0] ESTIMATE
+|  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 100000.0] ESTIMATE
 |  * p_mfgr-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
-|  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 80000.0] ESTIMATE
-|  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 80000.0] ESTIMATE
-|  * s_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
-|  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 80000.0] ESTIMATE
-|  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 80000.0] ESTIMATE
-|  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 80000.0] ESTIMATE
-|  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 80000.0] ESTIMATE
-|  * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 5.0] ESTIMATE
+|  * s_suppkey-->[1.0, 1000000.0, 0.0, 4.0, 200000.0] ESTIMATE
+|  * s_name-->[-Infinity, Infinity, 0.0, 25.0, 200000.0] ESTIMATE
+|  * s_address-->[-Infinity, Infinity, 0.0, 40.0, 200000.0] ESTIMATE
+|  * s_phone-->[-Infinity, Infinity, 0.0, 15.0, 200000.0] ESTIMATE
+|  * s_acctbal-->[-998.22, 9999.72, 0.0, 8.0, 200000.0] ESTIMATE
+|  * s_comment-->[-Infinity, Infinity, 0.0, 101.0, 200000.0] ESTIMATE
+|  * ps_suppkey-->[1.0, 1000000.0, 0.0, 8.0, 200000.0] ESTIMATE
+|  * ps_supplycost-->[1.0, 1000.0, 0.0, 8.0, 99864.0] ESTIMATE
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 20:EXCHANGE

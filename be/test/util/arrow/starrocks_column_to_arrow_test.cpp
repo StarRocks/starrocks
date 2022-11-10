@@ -118,7 +118,7 @@ struct NullableColumnTester {
     using ColumnType = RunTimeColumnType<PT>;
     using ArrowType = ArrowTypeIdToType<AT>;
     using ArrowArrayType = ArrowTypeIdToArrayType<AT>;
-    static inline void apply(size_t num_rows, std::set<size_t> null_index, const std::vector<CppType>& data,
+    static inline void apply(size_t num_rows, const std::set<size_t>& null_index, const std::vector<CppType>& data,
                              const TypeDescriptor& type_desc) {
         auto chunk = std::make_shared<Chunk>();
         std::vector<PrimitiveType> primitive_types(1, PT);

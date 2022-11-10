@@ -4128,8 +4128,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
         std::unordered_set<int32_t> set_expect = {4, 1};
         std::unordered_set<int32_t> set_actual;
         auto result_array = dest_column->get(2).get_array();
-        for (int i = 0; i < result_array.size(); ++i) {
-            set_actual.insert(result_array[i].get_int32());
+        for (auto& i : result_array) {
+            set_actual.insert(i.get_int32());
         }
         ASSERT_TRUE(set_expect == set_actual);
     }
@@ -4139,11 +4139,11 @@ TEST_F(ArrayFunctionsTest, array_intersect_int_with_not_null) {
         std::unordered_set<int32_t> set_actual;
         size_t null_values = 0;
         auto result_array = dest_column->get(3).get_array();
-        for (int i = 0; i < result_array.size(); ++i) {
-            if (result_array[i].is_null()) {
+        for (auto& i : result_array) {
+            if (i.is_null()) {
                 ++null_values;
             } else {
-                set_actual.insert(result_array[i].get_int32());
+                set_actual.insert(i.get_int32());
             }
         }
         ASSERT_TRUE(set_expect == set_actual);
@@ -4210,8 +4210,8 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
         std::unordered_set<std::string> set_expect = {"4", "1"};
         std::unordered_set<std::string> set_actual;
         auto result_array = dest_column->get(2).get_array();
-        for (int i = 0; i < result_array.size(); ++i) {
-            set_actual.insert(result_array[i].get_slice().to_string());
+        for (auto& i : result_array) {
+            set_actual.insert(i.get_slice().to_string());
         }
         ASSERT_TRUE(set_expect == set_actual);
     }
@@ -4221,11 +4221,11 @@ TEST_F(ArrayFunctionsTest, array_intersect_varchar_with_not_null) {
         std::unordered_set<std::string> set_actual;
         size_t null_values = 0;
         auto result_array = dest_column->get(3).get_array();
-        for (int i = 0; i < result_array.size(); ++i) {
-            if (result_array[i].is_null()) {
+        for (auto& i : result_array) {
+            if (i.is_null()) {
                 ++null_values;
             } else {
-                set_actual.insert(result_array[i].get_slice().to_string());
+                set_actual.insert(i.get_slice().to_string());
             }
         }
         ASSERT_TRUE(set_expect == set_actual);
@@ -4343,11 +4343,11 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable) {
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
-    src_column2->append_datum(DatumArray{(bool)1, (bool)0, (bool)1});
+    src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
     src_column2->append_datum(Datum());
-    src_column2->append_datum(DatumArray{(bool)1, Datum()});
+    src_column2->append_datum(DatumArray{true, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4370,11 +4370,11 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint) {
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
-    src_column2->append_datum(DatumArray{Datum(), (bool)1, (bool)0});
-    src_column2->append_datum(DatumArray{(bool)1});
-    src_column2->append_datum(DatumArray{(bool)0});
+    src_column2->append_datum(DatumArray{Datum(), true, false});
+    src_column2->append_datum(DatumArray{true});
+    src_column2->append_datum(DatumArray{false});
     src_column2->append_datum(DatumArray{Datum()});
-    src_column2->append_datum(DatumArray{(bool)0, Datum()});
+    src_column2->append_datum(DatumArray{false, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4398,11 +4398,11 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_with_nullable_notnull) {
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
-    src_column2->append_datum(DatumArray{Datum(), (bool)1, (bool)0});
-    src_column2->append_datum(DatumArray{(bool)1});
-    src_column2->append_datum(DatumArray{(bool)0});
+    src_column2->append_datum(DatumArray{Datum(), true, false});
+    src_column2->append_datum(DatumArray{true});
+    src_column2->append_datum(DatumArray{false});
     src_column2->append_datum(DatumArray{Datum()});
-    src_column2->append_datum(DatumArray{(bool)0, Datum()});
+    src_column2->append_datum(DatumArray{false, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4425,11 +4425,11 @@ TEST_F(ArrayFunctionsTest, array_filter_tinyint_notnull_nullable) {
     src_column->append_datum(DatumArray{(int8_t)4, (int8_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
-    src_column2->append_datum(DatumArray{(bool)1, (bool)0, (bool)1});
+    src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
     src_column2->append_datum(Datum());
-    src_column2->append_datum(DatumArray{(bool)1, Datum()});
+    src_column2->append_datum(DatumArray{true, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4453,11 +4453,11 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint_with_nullable) {
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
-    src_column2->append_datum(DatumArray{(bool)1, (bool)0, (bool)1});
+    src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
     src_column2->append_datum(Datum());
-    src_column2->append_datum(DatumArray{(bool)1, Datum()});
+    src_column2->append_datum(DatumArray{true, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4480,11 +4480,11 @@ TEST_F(ArrayFunctionsTest, array_filter_bigint) {
     src_column->append_datum(DatumArray{(int64_t)4, (int64_t)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
-    src_column2->append_datum(DatumArray{Datum(), (bool)1});
-    src_column2->append_datum(DatumArray{(bool)1});
-    src_column2->append_datum(DatumArray{(bool)0});
+    src_column2->append_datum(DatumArray{Datum(), true});
+    src_column2->append_datum(DatumArray{true});
+    src_column2->append_datum(DatumArray{false});
     src_column2->append_datum(DatumArray{Datum()});
-    src_column2->append_datum(DatumArray{(bool)0, Datum()});
+    src_column2->append_datum(DatumArray{false, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4508,11 +4508,11 @@ TEST_F(ArrayFunctionsTest, array_filter_double_with_nullable) {
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
-    src_column2->append_datum(DatumArray{(bool)1, (bool)0, (bool)1});
+    src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
     src_column2->append_datum(Datum());
-    src_column2->append_datum(DatumArray{(bool)1, Datum()});
+    src_column2->append_datum(DatumArray{true, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4535,11 +4535,11 @@ TEST_F(ArrayFunctionsTest, array_filter_double) {
     src_column->append_datum(DatumArray{(double)4, (double)1});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
-    src_column2->append_datum(DatumArray{Datum(), (bool)1, (bool)0, (bool)1}); //more one
-    src_column2->append_datum(DatumArray{(bool)1});
-    src_column2->append_datum(DatumArray{(bool)0});
+    src_column2->append_datum(DatumArray{Datum(), true, false, true}); //more one
+    src_column2->append_datum(DatumArray{true});
+    src_column2->append_datum(DatumArray{false});
     src_column2->append_datum(DatumArray{Datum()});
-    src_column2->append_datum(DatumArray{(bool)0, Datum()});
+    src_column2->append_datum(DatumArray{false, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4563,11 +4563,11 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar_with_nullable) {
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, true);
-    src_column2->append_datum(DatumArray{(bool)1, (bool)0, (bool)1});
+    src_column2->append_datum(DatumArray{true, false, true});
     src_column2->append_datum(Datum());
     src_column2->append_datum(DatumArray{});
     src_column2->append_datum(Datum());
-    src_column2->append_datum(DatumArray{(bool)1, Datum()});
+    src_column2->append_datum(DatumArray{true, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});
@@ -4590,11 +4590,11 @@ TEST_F(ArrayFunctionsTest, array_filter_varchar) {
     src_column->append_datum(DatumArray{Slice("4"), Slice("1")});
 
     auto src_column2 = ColumnHelper::create_column(TYPE_ARRAY_BOOLEAN, false);
-    src_column2->append_datum(DatumArray{Datum(), (bool)1, (bool)0, (bool)1}); //more one
-    src_column2->append_datum(DatumArray{(bool)1});
-    src_column2->append_datum(DatumArray{(bool)0});
+    src_column2->append_datum(DatumArray{Datum(), true, false, true}); //more one
+    src_column2->append_datum(DatumArray{true});
+    src_column2->append_datum(DatumArray{false});
     src_column2->append_datum(DatumArray{Datum()});
-    src_column2->append_datum(DatumArray{(bool)0, Datum()});
+    src_column2->append_datum(DatumArray{false, Datum()});
 
     ArrayFilter filter;
     auto dest_column = filter.process(nullptr, {src_column, src_column2});

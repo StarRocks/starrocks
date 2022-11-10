@@ -4,8 +4,7 @@
 
 #include <gtest/gtest.h>
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 TEST(FieldTest, test_construct0) {
     FieldPtr field1 = std::make_shared<Field>(1, "c1", OLAP_FIELD_TYPE_INT, false);
@@ -156,5 +155,4 @@ TEST(FieldTest, test_with_nullable) {
     ASSERT_EQ(10, field2->short_key_length());
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

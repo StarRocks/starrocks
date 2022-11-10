@@ -62,7 +62,8 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanFragmentBuilder;
 import com.starrocks.thrift.TResultSinkType;
-import com.starrocks.thrift.TWriteQuorumType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -79,6 +80,8 @@ public class InsertPlanner {
     // Only for unit test
     public static boolean enableSingleReplicationShuffle = false;
     private boolean shuffleServiceEnable = false;
+
+    private static final Logger LOG = LogManager.getLogger(InsertPlanner.class);
 
     public ExecPlan plan(InsertStmt insertStmt, ConnectContext session) {
         QueryRelation queryRelation = insertStmt.getQueryStatement().getQueryRelation();
@@ -121,6 +124,7 @@ public class InsertPlanner {
 
             Optimizer optimizer = new Optimizer();
             PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns);
+            LOG.info("property" + requiredPropertySet.toString());
             OptExpression optimizedPlan = optimizer.optimize(
                     session,
                     logicalPlan.getRoot(),
@@ -158,10 +162,14 @@ public class InsertPlanner {
             DataSink dataSink;
             if (insertStmt.getTargetTable() instanceof OlapTable) {
                 OlapTable olapTable = (OlapTable) insertStmt.getTargetTable();
-                TWriteQuorumType writeQuorum = olapTable.writeQuorum();
 
                 dataSink = new OlapTableSink((OlapTable) insertStmt.getTargetTable(), olapTuple,
-                        insertStmt.getTargetPartitionIds(), canUsePipeline, writeQuorum);
+                        insertStmt.getTargetPartitionIds(), canUsePipeline, olapTable.writeQuorum(),
+                        olapTable.enableReplicatedStorage());
+                // At present, we only support dop=1 for olap table sink.
+                // because tablet writing needs to know the number of senders in advance
+                // and guaranteed order of data writing
+                // It can be parallel only in some scenes, for easy use 1 dop now.
                 execPlan.getFragments().get(0).setPipelineDop(1);
             } else if (insertStmt.getTargetTable() instanceof MysqlTable) {
                 dataSink = new MysqlTableSink((MysqlTable) insertStmt.getTargetTable());
@@ -404,6 +412,10 @@ public class InsertPlanner {
 
         // No extra distribution property is needed if replication num is 1
         if (!enableSingleReplicationShuffle && table.getDefaultReplicationNum() <= 1) {
+            return new PhysicalPropertySet();
+        }
+
+        if (table.enableReplicatedStorage()) {
             return new PhysicalPropertySet();
         }
 

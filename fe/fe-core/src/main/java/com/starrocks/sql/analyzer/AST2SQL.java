@@ -367,7 +367,14 @@ public class AST2SQL {
             sqlBuilder.append(")");
             if (node.getAlias() != null) {
                 sqlBuilder.append(" ").append(node.getAlias());
+
+                if (node.getColumnNames() != null) {
+                    sqlBuilder.append("(");
+                    sqlBuilder.append(Joiner.on(",").join(node.getColumnNames()));
+                    sqlBuilder.append(")");
+                }
             }
+
             return sqlBuilder.toString();
         }
 
@@ -598,7 +605,19 @@ public class AST2SQL {
         }
 
         public String visitVariableExpr(VariableExpr node, Void context) {
-            return visitExpression(node, context);
+            StringBuilder sb = new StringBuilder();
+            if (node.getSetType() == SetType.USER) {
+                sb.append("@");
+            } else {
+                sb.append("@@");
+                if (node.getSetType() == SetType.GLOBAL) {
+                    sb.append("GLOBAL.");
+                } else {
+                    sb.append("SESSION.");
+                }
+            }
+            sb.append(node.getName());
+            return sb.toString();
         }
 
         @Override

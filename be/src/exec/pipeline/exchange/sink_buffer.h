@@ -81,7 +81,7 @@ public:
 
     // When all the ExchangeSinkOperator shared this SinkBuffer are cancelled,
     // the rest chunk request and EOS request needn't be sent anymore.
-    void cancel_one_sinker();
+    void cancel_one_sinker(RuntimeState* const state);
 
 private:
     using Mutex = bthread::Mutex;

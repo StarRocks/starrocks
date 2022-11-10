@@ -103,7 +103,7 @@ public class CompactionManager {
             // FE's follower nodes may have a different timestamp with the leader node.
             statistics.setNextCompactionTime(System.currentTimeMillis() + delayMs);
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Enable partition to do compaction: {}", statistics);
+                LOG.debug("Enable compaction after {}ms: {}", delayMs, statistics);
             }
         }
     }

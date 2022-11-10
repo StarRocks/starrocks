@@ -512,7 +512,6 @@ Status StoredColumnReader::next_page(size_t records_to_read, ColumnContentType c
     if (_opts.context->filter) {
         dst->append_default(records_to_skip);
         *records_read = records_to_skip;
-        _opts.context->advance(records_to_skip);
     }
     return Status::OK();
 }
@@ -546,6 +545,10 @@ Status StoredColumnReader::_next_selected_page(size_t records_to_read, ColumnCon
             _lazy_load_page_rows(batch_size, content_type, dst);
             _num_values_skip_in_cur_page = 0;
             break;
+        }
+
+        if (_opts.context->filter) {
+            _opts.context->advance(std::min(to_read, remain_values));
         }
         if (to_read < remain_values) {
             _num_values_skip_in_cur_page += to_read;

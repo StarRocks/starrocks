@@ -17,7 +17,7 @@ inline bool PriorityQueue<NUM_PRIORITY, T, Container>::empty() const noexcept {
 template <int NUM_PRIORITY, class T, class Container>
 inline typename PriorityQueue<NUM_PRIORITY, T, Container>::size_type PriorityQueue<NUM_PRIORITY, T, Container>::size()
         const noexcept {
-    size_t sz = 0;
+    std::size_t sz = 0;
     for (const auto& q : _queues) {
         sz += q.size();
     }
