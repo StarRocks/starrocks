@@ -443,7 +443,8 @@ FROM KAFKA
 ```
 
 JSON数据格式:
-```
+
+```plaintext
 [
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
 {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
@@ -482,7 +483,8 @@ FROM KAFKA
 ```
 
 JSON 数据格式:
-```
+
+```plaintext
 {
 "RECORDS":[
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
