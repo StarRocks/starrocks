@@ -239,6 +239,7 @@ import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TRefreshTableRequest;
 import com.starrocks.thrift.TRefreshTableResponse;
+import com.starrocks.thrift.TResourceUsage;
 import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TStorageMedium;
@@ -3187,6 +3188,10 @@ public class GlobalStateMgr {
 
     public void replayTruncateTable(TruncateTableInfo info) {
         localMetastore.replayTruncateTable(info);
+    }
+
+    public void updateResourceUsage(long backendId, TResourceUsage usage) {
+        nodeMgr.updateResourceUsage(backendId, usage);
     }
 
     public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
