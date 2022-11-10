@@ -2038,7 +2038,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 long storageCacheTtlS = 0;
                 try {
                     storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
-                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, 0);
+                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, PropertyAnalyzer.DEFAULT_STORAGE_CACHE_TTL);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
@@ -2048,8 +2048,9 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (!enableStorageCache && storageCacheTtlS != 0) {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
+                // default ttl is 30 days
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = Config.tablet_sched_storage_cooldown_second;
+                    storageCacheTtlS = PropertyAnalyzer.DEFAULT_STORAGE_CACHE_TTL;
                 }
 
                 // set to false if absent
