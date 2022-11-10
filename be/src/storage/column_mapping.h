@@ -24,10 +24,10 @@
 #include <memory>
 
 #include "column/datum.h"
-#include "types/hll.h"
 #include "types/bitmap_value.h"
-#include "util/percentile_value.h"
+#include "types/hll.h"
 #include "util/json.h"
+#include "util/percentile_value.h"
 
 namespace starrocks {
 
