@@ -43,6 +43,8 @@ public:
         _next_header_pos = offset;
     }
 
+    uint64_t get_offset() const { return _offset; }
+
 private:
     IBufferedInputStream* _stream;
     tparquet::PageHeader _cur_header;

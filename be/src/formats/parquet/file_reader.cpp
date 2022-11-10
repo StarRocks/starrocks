@@ -80,6 +80,8 @@ Status FileReader::_parse_footer() {
         }
     }
 
+    _scanner_ctx->stats->page_bytes_read += footer_size + 8;
+
     tparquet::FileMetaData t_metadata;
     // deserialize footer
     RETURN_IF_ERROR(deserialize_thrift_msg(footer_buf + to_read - 8 - footer_size, &footer_size, TProtocolType::COMPACT,
