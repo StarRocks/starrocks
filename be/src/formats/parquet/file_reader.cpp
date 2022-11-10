@@ -413,6 +413,7 @@ Status FileReader::_init_group_readers() {
     param.file = _file;
     param.file_metadata = _file_metadata.get();
     param.case_sensitive = fd_scanner_ctx.case_sensitive;
+    param.cache_key_prefix = fd_scanner_ctx.cache_key_prefix;
 
     // select and create row group readers.
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
@@ -453,7 +454,6 @@ Status FileReader::_init_group_readers() {
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
-        _sb_stream->set_enable_block_cache(fd_scanner_ctx.enable_block_cache);
         param.shared_buffered_stream = _sb_stream.get();
     }
 

@@ -29,6 +29,7 @@ struct ColumnReaderOptions {
     SharedBufferedInputStream* sb_stream = nullptr;
     tparquet::RowGroup* row_group_meta = nullptr;
     ColumnReaderContext* context = nullptr;
+    std::string cache_key_prefix;
 };
 
 class ColumnReader {

@@ -62,6 +62,8 @@ struct GroupReaderParam {
     FileMetaData* file_metadata = nullptr;
 
     bool case_sensitive = false;
+
+    std::string cache_key_prefix;
 };
 
 class GroupReader {

@@ -13,6 +13,7 @@
 #include "io/cache_input_stream.h"
 #include "runtime/descriptors.h"
 #include "runtime/runtime_state.h"
+#include "util/lru_cache.h"
 #include "util/runtime_profile.h"
 
 namespace starrocks::parquet {
@@ -21,6 +22,13 @@ class FileReader;
 namespace starrocks::vectorized {
 
 class RuntimeFilterProbeCollector;
+
+class HdfsScanCache : public ShardedLRUCache {
+public:
+    static void init(size_t capacity);
+    static HdfsScanCache* instance();
+    HdfsScanCache(size_t capacity) : ShardedLRUCache(capacity){};
+};
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
@@ -49,10 +57,7 @@ struct HdfsScanStats {
     // late materialization
     int64_t skip_read_rows = 0;
 
-    int64_t get_cpu_time_ns() const {
-        // TODO: make it more accurate
-        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns;
-    }
+    int64_t get_cpu_time_ns() const;
 };
 
 class HdfsParquetProfile;
@@ -137,6 +142,8 @@ struct HdfsScannerParams {
 
     bool use_block_cache = false;
     bool enable_populate_block_cache = false;
+
+    std::string cache_key_prefix;
 };
 
 struct HdfsScannerContext {
@@ -204,7 +211,7 @@ struct HdfsScannerContext {
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
 
-    bool enable_block_cache = false;
+    std::string cache_key_prefix;
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)

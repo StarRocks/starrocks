@@ -6,7 +6,6 @@
 // #include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "util/thrift_util.h"
-
 namespace starrocks::parquet {
 
 static constexpr size_t kHeaderInitSize = 1024;
@@ -49,6 +48,13 @@ Status PageReader::next_header() {
     _next_header_pos = _offset + _cur_header.compressed_page_size;
     _stream->skip(header_length);
     return Status::OK();
+}
+
+void PageReader::set_cache_header(const tparquet::PageHeader& header, size_t size) {
+    _cur_header = header;
+    _offset += size;
+    _next_header_pos = _offset + _cur_header.compressed_page_size;
+    _stream->skip(size);
 }
 
 Status PageReader::read_bytes(const uint8_t** buffer, size_t size) {

@@ -29,6 +29,8 @@ public:
 
     //
     const tparquet::PageHeader* current_header() const { return &_cur_header; }
+    void set_cache_header(const tparquet::PageHeader& header, size_t size);
+    bool eof() const { return _offset >= _finish_offset; }
 
     // Must call this function ater next_header called. The total read size
     // after one next_header can not exceede the page's compressed_page_size.
@@ -42,6 +44,8 @@ public:
         _offset = offset;
         _next_header_pos = offset;
     }
+
+    uint64_t offset() const { return _offset; }
 
 private:
     IBufferedInputStream* _stream;

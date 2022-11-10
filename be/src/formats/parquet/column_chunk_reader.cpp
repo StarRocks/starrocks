@@ -11,8 +11,11 @@
 #include "formats/parquet/page_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
+#include "gen_cpp/parquet_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "util/stack_util.h"
+#include "util/thrift_util.h"
 
 namespace starrocks::parquet {
 
@@ -85,10 +88,46 @@ Status ColumnChunkReader::skip_page() {
     return Status::OK();
 }
 
+struct PageHeaderCacheValue {
+    tparquet::PageHeader header;
+    size_t size;
+};
+
+void cache_page_header_deleter(const CacheKey& key, void* value) {
+    auto x = (PageHeaderCacheValue*)value;
+    delete x;
+};
+
 Status ColumnChunkReader::_parse_page_header() {
     DCHECK(_page_parse_state == INITIALIZED || _page_parse_state == PAGE_DATA_PARSED);
-    RETURN_IF_ERROR(_page_reader->next_header());
 
+    if (_page_reader->eof()) return Status::EndOfFile("");
+
+    vectorized::HdfsScanCache* cache = vectorized::HdfsScanCache::instance();
+    size_t off = _page_reader->offset();
+
+    // cache = nullptr;
+    if (cache != nullptr) {
+        std::string key = _opts.cache_key_prefix;
+        key += std::to_string(off);
+        Cache::Handle* handle = cache->lookup(key);
+        if (handle != nullptr) {
+            auto value = (PageHeaderCacheValue*)cache->value(handle);
+            _page_reader->set_cache_header(value->header, value->size);
+            cache->release(handle);
+        } else {
+            RETURN_IF_ERROR(_page_reader->next_header());
+            size_t now = _page_reader->offset();
+            size_t size = now - off;
+            auto value = new PageHeaderCacheValue();
+            value->header = *(_page_reader->current_header());
+            value->size = size;
+            // TODO(yan): do we need to handle insert failure ?
+            cache->insert(key, value, size, cache_page_header_deleter);
+        }
+    } else {
+        RETURN_IF_ERROR(_page_reader->next_header());
+    }
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
     if (_page_reader->current_header()->type == tparquet::PageType::DATA_PAGE) {
@@ -125,9 +164,39 @@ void ColumnChunkReader::_reserve_uncompress_buf(size_t size) {
     _uncompressed_buf_capacity = new_capacity;
 }
 
+void cache_page_data_deleter(const CacheKey& key, void* value) {
+    auto x = (uint8_t*)value;
+    free(x);
+};
+
 Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_size, uint32_t uncompressed_size,
                                                          bool is_compressed) {
     RETURN_IF_ERROR(CurrentThread::mem_tracker()->check_mem_limit("read and decompress page"));
+
+    vectorized::HdfsScanCache* cache = vectorized::HdfsScanCache::instance();
+    std::string key = _opts.cache_key_prefix;
+    size_t off = _page_reader->offset();
+    key += std::to_string(off);
+
+    if (cache != nullptr) {
+        Cache::Handle* handle = cache->lookup(key);
+        if (handle != nullptr) {
+            _reserve_uncompress_buf(uncompressed_size);
+            auto cache_data = (uint8_t*)cache->value(handle);
+            memcpy(_uncompressed_buf.get(), cache_data, uncompressed_size);
+            cache->release(handle);
+            _data = Slice(_uncompressed_buf.get(), uncompressed_size);
+
+            if (is_compressed && _compress_codec != nullptr) {
+                _page_reader->skip_bytes(compressed_size);
+            } else {
+                _page_reader->skip_bytes(uncompressed_size);
+            }
+
+            return Status::OK();
+        }
+    }
+
     if (is_compressed && _compress_codec != nullptr) {
         Slice com_slice("", compressed_size);
         RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&com_slice.data, com_slice.size));
@@ -138,6 +207,13 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     } else {
         _data.size = uncompressed_size;
         RETURN_IF_ERROR(_page_reader->read_bytes((const uint8_t**)&_data.data, _data.size));
+    }
+
+    if (cache != nullptr) {
+        auto cache_data = (uint8_t*)malloc(uncompressed_size);
+        memcpy(cache_data, _data.data, _data.size);
+        // TODO(yan): do we need to handle insert failure ?
+        cache->insert(key, cache_data, uncompressed_size, cache_page_data_deleter);
     }
 
     return Status::OK();

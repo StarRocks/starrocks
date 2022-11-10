@@ -41,6 +41,7 @@
 #include "common/logging.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/vectorized/hdfs_scanner.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
 #include "runtime/jdbc_driver_manager.h"
@@ -192,6 +193,9 @@ int main(int argc, char** argv) {
         cache->init(cache_options);
     }
 #endif
+    if (starrocks::config::connector_hdfs_scan_cache_size > 0) {
+        starrocks::vectorized::HdfsScanCache::init(starrocks::config::connector_hdfs_scan_cache_size);
+    }
 
     Aws::SDKOptions aws_sdk_options;
     if (starrocks::config::aws_sdk_logging_trace_enabled) {
