@@ -199,6 +199,9 @@ public class PrivilegeCheckerV2Test {
         sql = "create user tesssst";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
 
+        sql = "drop user test";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
         sql = "alter user test identified by 'asdf'";
         verifyGrantRevoke(sql, grantSql, revokeSql, err);
 
