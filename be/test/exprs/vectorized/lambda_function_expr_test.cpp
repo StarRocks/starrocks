@@ -266,6 +266,13 @@ private:
     ObjectPool _objpool;
 };
 
+TypeDescriptor new_array_type(const TypeDescriptor& child_type) {
+    TypeDescriptor t;
+    t.type = TYPE_ARRAY;
+    t.children.emplace_back(child_type);
+    return t;
+}
+
 // just consider one level, not nested
 // array_map(lambdaFunction(x<type>, lambdaExpr),array<type>)
 TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
@@ -274,8 +281,10 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_normal_array) {
     cur_chunk->append_column(build_int_column(vec_a), 1);
     for (int i = 0; i < 1; ++i) {
         for (int j = 0; j < _lambda_func.size(); ++j) {
-            expr_node.fn.name.function_name = "array_map";
-            ArrayMapExpr array_map_expr(expr_node);
+            expr_node.is_nullable = true;
+            auto array_type = new_array_type(expr_node);
+            array_type.fn.name.function_name = "array_map";
+            ArrayMapExpr array_map_expr(array_type);
             array_map_expr.clear_children();
             array_map_expr.add_child(_lambda_func[j]);
             array_map_expr.add_child(_array_expr[i]);
