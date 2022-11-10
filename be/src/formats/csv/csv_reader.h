@@ -67,6 +67,8 @@ public:
 
     void skip(size_t n) { _position_offset += n; }
 
+    char get_char(size_t p) {return _begin[p];}
+
     char* base_ptr() {return _begin;}
 
     // 已经读取过的
@@ -111,7 +113,8 @@ public:
     using Record = Slice;
     using Field = Slice;
     using Fields = std::vector<Field>;
-    using FieldOffset = std::pair<size_t, size_t>;
+    // start_pos, length, isEscapeField
+    using FieldOffset = std::tuple<size_t, size_t, bool>;
     using FieldOffsets = std::vector<FieldOffset>;
 
     CSVReader(const string& row_delimiter, const string& column_separator, bool trim_space, char escape, char enclose)
@@ -144,6 +147,8 @@ public:
 
     char* buffBasePtr();
 
+    char* escapeDataPtr();
+
 protected:
     std::string _row_delimiter;
     std::string _column_separator;
@@ -156,6 +161,7 @@ protected:
     raw::RawVector<char> _storage;
     // _buff其实就是一个连续的内存，作为存放读到的数据的容器
     CSVBuffer _buff;
+    raw::RawVector<char> _escape_data;
     // TODO(yangzaorang):
     // 引入一个枚举类型用于表示状态机的状态
     // 如何读数据

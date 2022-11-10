@@ -13,6 +13,7 @@
 // limitations under the License.
 
 #include "formats/csv/csv_reader.h"
+#include <unordered_set>
 
 namespace starrocks::vectorized {
 
@@ -120,6 +121,10 @@ char* CSVReader::buffBasePtr() {
     return _buff.base_ptr();
 }
 
+char* CSVReader::escapeDataPtr() {
+    return _escape_data.data();
+}
+
 // 这个函数我们要从状态START开始，读取下一条记录。
 // 重载。
 Status CSVReader::next_record(FieldOffsets* fields) {
@@ -129,12 +134,16 @@ Status CSVReader::next_record(FieldOffsets* fields) {
     }
     // TODO: 每次读一条记录时先做一次compact，这里性能会有问题
     _buff.compact();
+    _escape_data.clear();
+    std::unordered_set<size_t> escape_pos;
     ParseState curState = START;
     ParseState preState = curState;
     // 将filed_start初始化为最大值，表示未进入START状态
     size_t filed_start = std::string::npos;
     size_t parsed_start = _buff.position_offset();
     bool is_enclose_field = false;
+    bool is_escape_field = false;
+    size_t filed_end = 0;
     Status status = Status::OK();
     while (true) {
         // 到了一行的行尾,或者字段尾部，此次不再读新的数据
@@ -180,6 +189,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                 // trick here.
                 preState = ORDINARY;
                 curState = ESCAPE;
+                escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 // filed_start = _buff.position_offset();
                 break;
@@ -250,6 +260,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
             if (*(_buff.position()) == _escape) {
                 preState = curState;
                 curState = ESCAPE;
+                escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 break;
             }
@@ -300,6 +311,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
             if (*(_buff.position()) == _escape) {
                 preState = curState;
                 curState = ESCAPE;
+                escape_pos.insert(_buff.position_offset());
                 _buff.skip(1);
                 break;
             }
@@ -308,13 +320,29 @@ Status CSVReader::next_record(FieldOffsets* fields) {
             break;
 
         case DELIMITER:
+            filed_end = _buff.position_offset();
+            // 字段存在escape，需要将该字段去掉转义符号并复制到单独的存储空间
+            if (escape_pos.size() > 0) {
+                is_escape_field = true;
+                size_t new_filed_start = _escape_data.size();
+                for (size_t i = filed_start; i<_buff.position_offset(); i++) {
+                    if (escape_pos.count(i)) {
+                        continue;
+                    }
+                    _escape_data.push_back(_buff.get_char(i));
+                }
+                escape_pos.clear();
+                filed_start = new_filed_start;
+                filed_end = _escape_data.size();
+            }
             // push field
             if (is_enclose_field) {
                 // enclose字段要去除字段最后的enclose character
-                fields->emplace_back(filed_start, _buff.position_offset() - _column_separator_length - filed_start - 1);
+                fields->emplace_back(filed_start, filed_end - _column_separator_length - filed_start - 1, is_escape_field);
             } else {
-                fields->emplace_back(filed_start, _buff.position_offset() - _column_separator_length - filed_start);
+                fields->emplace_back(filed_start, filed_end - _column_separator_length - filed_start, is_escape_field);
             }
+            is_escape_field = false;
             curState = START;
             is_enclose_field = false;
             break;
@@ -332,14 +360,31 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                     return status;
                 }
                 if (filed_start != std::string::npos) {
+                    filed_end = _buff.position_offset();
+                    // 字段存在escape，需要将该字段去掉转义符号并复制到单独的存储空间
+                    if (escape_pos.size() > 0) {
+                        is_escape_field = true;
+                        size_t new_filed_start = _escape_data.size();
+                        for (size_t i = filed_start; i<_buff.position_offset(); i++) {
+                            if (escape_pos.count(i)) {
+                                continue;
+                            }
+                            _escape_data.push_back(_buff.get_char(i));
+                        }
+                        escape_pos.clear();
+                        filed_start = new_filed_start;
+                        filed_end = _escape_data.size();
+                    }
+
                     if (is_enclose_field) {
-                        fields->emplace_back(filed_start, _buff.position_offset() - _row_delimiter_length - filed_start - 1);
+                        fields->emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start - 1, is_escape_field);
                     } else {
-                        fields->emplace_back(filed_start, _buff.position_offset() - _row_delimiter_length - filed_start);
+                        fields->emplace_back(filed_start, filed_end - _row_delimiter_length - filed_start, is_escape_field);
                     }
                 }
             }
             curState = START;
+            is_escape_field = false;
             is_enclose_field = false;
             return status;
         default:

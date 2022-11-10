@@ -639,16 +639,16 @@ TEST_F(CSVScannerTest, test_ESCAPE) {
     EXPECT_EQ(7, chunk->get(3)[0].get_int32());
     EXPECT_EQ(9, chunk->get(4)[0].get_int32());
 
-    EXPECT_EQ("\\\"aa\\\"", chunk->get(0)[1].get_slice());
-    EXPECT_EQ("bb\\|BB", chunk->get(1)[1].get_slice());
-    EXPECT_EQ("cc\\\nadf,1,3455", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("\"aa\"", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc\nadf,1,3455", chunk->get(2)[1].get_slice());
     EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
-    EXPECT_EQ("\\\\ee", chunk->get(4)[1].get_slice());
+    EXPECT_EQ("\\ee", chunk->get(4)[1].get_slice());
 
-    EXPECT_EQ("abc\\\"", chunk->get(0)[2].get_slice());
+    EXPECT_EQ("abc\"", chunk->get(0)[2].get_slice());
     EXPECT_EQ("", chunk->get(1)[2].get_slice());
     EXPECT_EQ("\"e", chunk->get(2)[2].get_slice());
-    EXPECT_EQ("abc\\|ef\\\ngh", chunk->get(3)[2].get_slice());
+    EXPECT_EQ("abc|ef\ngh", chunk->get(3)[2].get_slice());
     EXPECT_EQ("", chunk->get(4)[2].get_slice());
 }
 
