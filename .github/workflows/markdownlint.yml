@@ -18,11 +18,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: git diff file list
-      id: diff
-      run : echo "files=$(git diff HEAD HEAD^  --name-only -- '*.md')" >> $GITHUB_OUTPUT
+#     - name: git diff file list
+#       id: diff
+#       run : echo "files=$(git diff HEAD HEAD^  --name-only -- '*.md')" >> $GITHUB_OUTPUT
       
     - name: markdown lint
       uses: nosborn/github-action-markdown-cli@v3.2.0
       with:
-        files: ${{ steps.diff.outputs.files }}
+        files: docs # ${{ steps.diff.outputs.files }}
