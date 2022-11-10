@@ -6,38 +6,50 @@
 namespace starrocks::pipeline {
 
 void PipelineDriverPoller::start() {
-    DCHECK(this->_polling_thread.get() == nullptr);
-    auto status = Thread::create(
-            "pipeline", "pipeline_poller", [this]() { run_internal(); }, &this->_polling_thread);
-    if (!status.ok()) {
-        LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
+    _polling_threads.resize(POLLER_NUM);
+    _blocked_drivers.resize(POLLER_NUM);
+    _mutexs.resize(POLLER_NUM);
+    _conds.resize(POLLER_NUM);
+    for (int poller_id = 0; poller_id < POLLER_NUM; ++poller_id) {
+        _mutexs[poller_id] = new std::mutex();
+        _conds[poller_id] = new std::condition_variable();
+        auto status = Thread::create(
+                "pipeline", "pip_poller", [this, poller_id]() { run_internal(poller_id); },
+                &this->_polling_threads[poller_id]);
+        if (!status.ok()) {
+            LOG(FATAL) << "Fail to create PipelineDriverPoller: error=" << status.to_string();
+        }
     }
-    while (!this->_is_polling_thread_initialized.load(std::memory_order_acquire)) {
+    while (this->_is_polling_thread_initialized.load(std::memory_order_acquire) < POLLER_NUM) {
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
 }
 
 void PipelineDriverPoller::shutdown() {
-    if (this->_is_shutdown.load() == false && _polling_thread.get() != nullptr) {
+    if (this->_is_shutdown.load() == false) {
         this->_is_shutdown.store(true, std::memory_order_release);
-        _cond.notify_one();
-        _polling_thread->join();
+        for (int poller_id = 0; poller_id < POLLER_NUM; ++poller_id) {
+            _conds[poller_id]->notify_one();
+            _polling_threads[poller_id]->join();
+            delete _mutexs[poller_id];
+            delete _conds[poller_id];
+        }
     }
 }
 
-void PipelineDriverPoller::run_internal() {
-    this->_is_polling_thread_initialized.store(true, std::memory_order_release);
+void PipelineDriverPoller::run_internal(int32_t poller_id) {
+    this->_is_polling_thread_initialized.fetch_add(1, std::memory_order_release);
     DriverList local_blocked_drivers;
     int spin_count = 0;
     std::vector<DriverRawPtr> ready_drivers;
     while (!_is_shutdown.load(std::memory_order_acquire)) {
         {
-            std::unique_lock<std::mutex> lock(this->_mutex);
-            local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
-            if (local_blocked_drivers.empty() && _blocked_drivers.empty()) {
+            std::unique_lock<std::mutex> lock(*this->_mutexs[poller_id]);
+            local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers[poller_id]);
+            if (local_blocked_drivers.empty() && _blocked_drivers[poller_id].empty()) {
                 std::cv_status cv_status = std::cv_status::no_timeout;
-                while (!_is_shutdown.load(std::memory_order_acquire) && this->_blocked_drivers.empty()) {
-                    cv_status = _cond.wait_for(lock, std::chrono::milliseconds(10));
+                while (!_is_shutdown.load(std::memory_order_acquire) && this->_blocked_drivers[poller_id].empty()) {
+                    cv_status = _conds[poller_id]->wait_for(lock, std::chrono::milliseconds(10));
                 }
                 if (cv_status == std::cv_status::timeout) {
                     continue;
@@ -45,108 +57,72 @@ void PipelineDriverPoller::run_internal() {
                 if (_is_shutdown.load(std::memory_order_acquire)) {
                     break;
                 }
-                local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers);
+                local_blocked_drivers.splice(local_blocked_drivers.end(), _blocked_drivers[poller_id]);
             }
-        }
-
-        if (++_debug_cnt >= 1000) {
-            std::sort(_debug_driver_ready_counts.begin(), _debug_driver_ready_counts.end());
-            std::stringstream ss;
-            int64_t total_ready_counts = 0;
-            for (auto i = 0; i < _debug_driver_ready_counts.size(); i++) {
-                total_ready_counts += _debug_driver_ready_counts[i];
-                if (i == 0) {
-                    ss << _debug_driver_ready_counts[i];
-                } else {
-                    ss << ", " << _debug_driver_ready_counts[i];
-                }
-            }
-            LOG(ERROR) << "traverse time=" << _debug_time / _debug_cnt / 1000
-                       << "us, drivers_size=" << _debug_driver_size / _debug_cnt
-                       << ", empty_driver_queue_times=" << _debug_driver_queue_empty_times
-                       << "\n\t ready_counts=" << ss.str()
-                       << "\n\t avg_ready_counts=" << total_ready_counts / _debug_driver_ready_counts.size();
-
-            _debug_cnt = 0;
-            _debug_time = 0;
-            _debug_driver_size = 0;
-            _debug_driver_queue_empty_times = 0;
-            _debug_driver_ready_counts.clear();
-        }
-        _debug_driver_size += local_blocked_drivers.size();
-        if (_driver_queue->empty()) {
-            _debug_driver_queue_empty_times++;
         }
 
         auto driver_it = local_blocked_drivers.begin();
-        int64_t timer = 0;
-        {
-            SCOPED_RAW_TIMER(&timer);
-            while (driver_it != local_blocked_drivers.end()) {
-                auto* driver = *driver_it;
+        while (driver_it != local_blocked_drivers.end()) {
+            auto* driver = *driver_it;
 
-                if (driver->query_ctx()->is_query_expired()) {
-                    // there are not any drivers belonging to a query context can make progress for an expiration period
-                    // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
-                    // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
-                    //
-                    // If the fragment is expired when the source operator is already pending i/o task,
-                    // The state of driver shouldn't be changed.
-                    LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
-                                 << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
-                    driver->fragment_ctx()->cancel(
-                            Status::TimedOut(fmt::format("Query exceeded time limit of {} seconds",
-                                                         driver->query_ctx()->get_query_expire_seconds())));
-                    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
-                    if (driver->is_still_pending_finish()) {
-                        driver->set_driver_state(DriverState::PENDING_FINISH);
-                        ++driver_it;
-                    } else {
-                        driver->set_driver_state(DriverState::FINISH);
-                        remove_blocked_driver(local_blocked_drivers, driver_it);
-                        ready_drivers.emplace_back(driver);
-                    }
-                } else if (driver->fragment_ctx()->is_canceled()) {
-                    // If the fragment is cancelled when the source operator is already pending i/o task,
-                    // The state of driver shouldn't be changed.
-                    driver->cancel_operators(driver->fragment_ctx()->runtime_state());
-                    if (driver->is_still_pending_finish()) {
-                        driver->set_driver_state(DriverState::PENDING_FINISH);
-                        ++driver_it;
-                    } else {
-                        driver->set_driver_state(DriverState::CANCELED);
-                        remove_blocked_driver(local_blocked_drivers, driver_it);
-                        ready_drivers.emplace_back(driver);
-                    }
-                } else if (driver->pending_finish()) {
-                    if (driver->is_still_pending_finish()) {
-                        ++driver_it;
-                    } else {
-                        // driver->pending_finish() return true means that when a driver's sink operator is finished,
-                        // but its source operator still has pending io task that executed in io threads and has
-                        // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
-                        // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
-                        // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
-                        // FragmentContext is unregistered prematurely.
-                        driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
-                                                                                       : DriverState::FINISH);
-                        remove_blocked_driver(local_blocked_drivers, driver_it);
-                        ready_drivers.emplace_back(driver);
-                    }
-                } else if (driver->is_finished()) {
-                    remove_blocked_driver(local_blocked_drivers, driver_it);
-                    ready_drivers.emplace_back(driver);
-                } else if (driver->is_not_blocked()) {
-                    driver->set_driver_state(DriverState::READY);
-                    remove_blocked_driver(local_blocked_drivers, driver_it);
-                    ready_drivers.emplace_back(driver);
-                } else {
+            if (driver->query_ctx()->is_query_expired()) {
+                // there are not any drivers belonging to a query context can make progress for an expiration period
+                // indicates that some fragments are missing because of failed exec_plan_fragment invocation. in
+                // this situation, query is failed finally, so drivers are marked PENDING_FINISH/FINISH.
+                //
+                // If the fragment is expired when the source operator is already pending i/o task,
+                // The state of driver shouldn't be changed.
+                LOG(WARNING) << "[Driver] Timeout, query_id=" << print_id(driver->query_ctx()->query_id())
+                             << ", instance_id=" << print_id(driver->fragment_ctx()->fragment_instance_id());
+                driver->fragment_ctx()->cancel(Status::TimedOut(fmt::format(
+                        "Query exceeded time limit of {} seconds", driver->query_ctx()->get_query_expire_seconds())));
+                driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+                if (driver->is_still_pending_finish()) {
+                    driver->set_driver_state(DriverState::PENDING_FINISH);
                     ++driver_it;
+                } else {
+                    driver->set_driver_state(DriverState::FINISH);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
                 }
+            } else if (driver->fragment_ctx()->is_canceled()) {
+                // If the fragment is cancelled when the source operator is already pending i/o task,
+                // The state of driver shouldn't be changed.
+                driver->cancel_operators(driver->fragment_ctx()->runtime_state());
+                if (driver->is_still_pending_finish()) {
+                    driver->set_driver_state(DriverState::PENDING_FINISH);
+                    ++driver_it;
+                } else {
+                    driver->set_driver_state(DriverState::CANCELED);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
+                }
+            } else if (driver->pending_finish()) {
+                if (driver->is_still_pending_finish()) {
+                    ++driver_it;
+                } else {
+                    // driver->pending_finish() return true means that when a driver's sink operator is finished,
+                    // but its source operator still has pending io task that executed in io threads and has
+                    // reference to object outside(such as desc_tbl) owned by FragmentContext. So a driver in
+                    // PENDING_FINISH state should wait for pending io task's completion, then turn into FINISH state,
+                    // otherwise, pending tasks shall reference to destructed objects in FragmentContext since
+                    // FragmentContext is unregistered prematurely.
+                    driver->set_driver_state(driver->fragment_ctx()->is_canceled() ? DriverState::CANCELED
+                                                                                   : DriverState::FINISH);
+                    remove_blocked_driver(local_blocked_drivers, driver_it);
+                    ready_drivers.emplace_back(driver);
+                }
+            } else if (driver->is_finished()) {
+                remove_blocked_driver(local_blocked_drivers, driver_it);
+                ready_drivers.emplace_back(driver);
+            } else if (driver->is_not_blocked()) {
+                driver->set_driver_state(DriverState::READY);
+                remove_blocked_driver(local_blocked_drivers, driver_it);
+                ready_drivers.emplace_back(driver);
+            } else {
+                ++driver_it;
             }
         }
-        _debug_time += timer;
-        _debug_driver_ready_counts.push_back(ready_drivers.size());
 
         if (ready_drivers.empty()) {
             spin_count += 1;
@@ -173,10 +149,12 @@ void PipelineDriverPoller::run_internal() {
 }
 
 void PipelineDriverPoller::add_blocked_driver(const DriverRawPtr driver) {
-    std::unique_lock<std::mutex> lock(_mutex);
-    _blocked_drivers.push_back(driver);
+    int64_t cnt = _add_cnt.fetch_add(1);
+    int64_t poller_id = cnt % POLLER_NUM;
+    std::unique_lock<std::mutex> lock(*_mutexs[poller_id]);
+    _blocked_drivers[poller_id].push_back(driver);
     driver->_pending_timer_sw->reset();
-    _cond.notify_one();
+    _conds[poller_id]->notify_one();
 }
 
 void PipelineDriverPoller::remove_blocked_driver(DriverList& local_blocked_drivers, DriverList::iterator& driver_it) {
