@@ -24,7 +24,7 @@ public:
 
     ColumnMapping* get_mutable_column_mapping(size_t column_index);
 
-    SchemaMapping get_schema_mapping() const { return _schema_mapping; }
+    const SchemaMapping& get_schema_mapping() const { return _schema_mapping; }
 
     std::vector<ColumnId>* get_mutable_selected_column_indexs() { return &_selected_column_indexs; }
 
