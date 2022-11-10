@@ -38,12 +38,6 @@ public:
         return _delegate->deep_copy(dest, src, mem_pool);
     }
 
-    // See copy_row_in_memtable() in olap/row.h, will be removed in future.
-    // It is same with deep_copy() for all type except for HLL and OBJECT type
-    void copy_object(void* dest, const void* src, MemPool* mem_pool) const override {
-        return _delegate->copy_object(dest, src, mem_pool);
-    }
-
     void direct_copy(void* dest, const void* src, MemPool* mem_pool) const override {
         _delegate->direct_copy(dest, src, mem_pool);
     }
@@ -100,32 +94,6 @@ public:
         return Status::InvalidArgument("Fail to cast to decimal.");
     }
 
-    //convert and deep copy value from other type's source
-    Status convert_from(void* dest, const void* src, const TypeInfoPtr& src_type, MemPool* mem_pool) const override {
-        switch (src_type->type()) {
-        case OLAP_FIELD_TYPE_CHAR:
-        case OLAP_FIELD_TYPE_VARCHAR: {
-            using SrcType = typename CppTypeTraits<OLAP_FIELD_TYPE_VARCHAR>::CppType;
-            auto src_value = reinterpret_cast<const SrcType*>(src);
-            CppType result;
-            auto fail = DecimalV3Cast::from_string<CppType>(&result, precision(), scale(), src_value->data,
-                                                            src_value->size);
-            if (UNLIKELY(fail)) {
-                return Status::InvalidArgument("Fail to cast to decimal.");
-            }
-            memcpy(dest, &result, sizeof(CppType));
-            return Status::OK();
-        }
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
-            return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
-                              precision(), scale());
-        default:
-            return Status::InvalidArgument("Fail to cast to decimal.");
-        }
-    }
-
     static inline Status to_decimal(FieldType src_type, FieldType dst_type, const Datum& src_datum, Datum& dst_datum,
                                     int src_precision, int src_scale, int dst_precision, int dst_scale) {
 #define TO_DECIMAL_MACRO(n, m)                                                                           \
@@ -159,19 +127,6 @@ public:
 #undef TO_DECIMAL_MACRO
 
         return Status::InvalidArgument("Fail to cast to decimal.");
-    }
-
-    //convert and deep copy value from other type's source
-    Status convert_from(Datum& dest, const Datum& src, const TypeInfoPtr& src_type) const override {
-        switch (src_type->type()) {
-        case OLAP_FIELD_TYPE_DECIMAL32:
-        case OLAP_FIELD_TYPE_DECIMAL64:
-        case OLAP_FIELD_TYPE_DECIMAL128:
-            return to_decimal(src_type->type(), type(), src, dest, src_type->precision(), src_type->scale(),
-                              precision(), scale());
-        default:
-            return Status::InternalError("Fail to cast to decimal.");
-        }
     }
 
     Status from_string(void* buf, const std::string& scan_key) const override {

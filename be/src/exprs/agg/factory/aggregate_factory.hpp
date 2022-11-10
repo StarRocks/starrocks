@@ -10,7 +10,6 @@
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_factory.h"
 #include "exprs/agg/any_value.h"
-#include "exprs/agg/array_agg.h"
 #include "exprs/agg/avg.h"
 #include "exprs/agg/bitmap_intersect.h"
 #include "exprs/agg/bitmap_union.h"
@@ -150,9 +149,6 @@ public:
 
     template <PrimitiveType PT>
     static AggregateFunctionPtr MakePercentileContAggregateFunction();
-
-    template <PrimitiveType PT>
-    static AggregateFunctionPtr MakeArrayAggAggregateFunction();
 
     // Windows functions:
     static AggregateFunctionPtr MakeDenseRankWindowFunction();
@@ -305,11 +301,6 @@ AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
 template <PrimitiveType PT>
 AggregateFunctionPtr AggregateFactory::MakePercentileContAggregateFunction() {
     return std::make_shared<PercentileContAggregateFunction<PT>>();
-}
-
-template <PrimitiveType PT>
-AggregateFunctionPtr AggregateFactory::MakeArrayAggAggregateFunction() {
-    return std::make_shared<ArrayAggAggregateFunction<PT>>();
 }
 
 } // namespace starrocks::vectorized

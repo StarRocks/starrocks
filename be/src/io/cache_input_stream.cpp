@@ -31,6 +31,7 @@ CacheInputStream::CacheInputStream(std::string filename, std::shared_ptr<Seekabl
 #ifdef WITH_BLOCK_CACHE
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     BlockCache* cache = BlockCache::instance();
+    count = std::min(_size - _offset, count);
     const int64_t BLOCK_SIZE = cache->block_size();
     char* p = static_cast<char*>(out);
     char* pe = p + count;
@@ -110,6 +111,7 @@ StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
 StatusOr<int64_t> CacheInputStream::read(void* out, int64_t count) {
     int64_t load_size = std::min(count, _size - _offset);
     RETURN_IF_ERROR(_stream->read_at_fully(_offset, out, load_size));
+    _offset += load_size;
     return load_size;
 }
 #endif

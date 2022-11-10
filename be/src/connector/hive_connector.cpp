@@ -71,6 +71,7 @@ Status HiveDataSource::open(RuntimeState* state) {
         _no_data = true;
         return Status::OK();
     }
+    SCOPED_TIMER(_profile.scan_timer);
     RETURN_IF_ERROR(_init_scanner(state));
     return Status::OK();
 }

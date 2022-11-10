@@ -2,6 +2,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Predicate;
+import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -41,6 +42,7 @@ import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.ParsingException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.List;
@@ -459,6 +461,20 @@ public class AnalyzerUtils {
             throw new SemanticException("Unsupported CTAS transform type: %s", srcType.getPrimitiveType());
         }
         return newType;
+    }
+
+    public static TableName stringToTableName(String qualifiedName) {
+        // Hierarchy: catalog.database.table
+        List<String> parts = Splitter.on(".").omitEmptyStrings().trimResults().splitToList(qualifiedName);
+        if (parts.size() == 3) {
+            return new TableName(parts.get(0), parts.get(1), parts.get(2));
+        } else if (parts.size() == 2) {
+            return new TableName(null, parts.get(0), parts.get(1));
+        } else if (parts.size() == 1) {
+            return new TableName(null, null, parts.get(0));
+        } else {
+            throw new ParsingException("error table name ");
+        }
     }
 
 }
