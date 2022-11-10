@@ -6,6 +6,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.DeleteStmt;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
@@ -130,12 +131,22 @@ public class AnalyzerUtils {
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
             getDB(node.getTableName());
-            return null;
+            return visit(node.getQueryStatement());
         }
 
         @Override
         public Void visitUpdateStatement(UpdateStmt node, Void context) {
             getDB(node.getTableName());
+            //If support DML operations through query results in the future,
+            //need to add the corresponding `visit(node.getQueryStatement())`
+            return null;
+        }
+
+        @Override
+        public Void visitDeleteStatement(DeleteStmt node, Void context) {
+            getDB(node.getTableName());
+            //If support DML operations through query results in the future,
+            //need to add the corresponding `visit(node.getQueryStatement())`
             return null;
         }
 

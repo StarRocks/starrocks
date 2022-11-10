@@ -6,7 +6,7 @@ Checks whether a table contains data that meets specified conditions and returns
 
 ## Syntax
 
-```SQL
+```Haskell
 retention(input)
 ```
 

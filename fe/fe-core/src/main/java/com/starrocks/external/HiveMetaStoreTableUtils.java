@@ -203,7 +203,7 @@ public class HiveMetaStoreTableUtils {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case "STRING":
-                return ScalarType.createDefaultString();
+                return ScalarType.createDefaultExternalTableString();
             case "VARCHAR":
                 return ScalarType.createVarcharType(Utils.getVarcharLength(hiveType));
             case "CHAR":

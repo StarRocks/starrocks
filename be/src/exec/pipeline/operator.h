@@ -126,7 +126,7 @@ public:
 
     // equal to ExecNode::eval_conjuncts(_conjunct_ctxs, chunk), is used to apply in-filters to Operators.
     Status eval_conjuncts_and_in_filters(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,
-                                         vectorized::FilterPtr* filter = nullptr);
+                                         vectorized::FilterPtr* filter = nullptr, bool apply_filter = true);
 
     // Evaluate conjuncts without cache
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, vectorized::Chunk* chunk,

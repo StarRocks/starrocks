@@ -2285,7 +2285,17 @@ StatusOr<std::unique_ptr<ImmutableIndex>> ImmutableIndex::load(std::unique_ptr<R
         dest.key_size = src.key_size();
         dest.value_size = src.value_size();
         dest.nbucket = src.nbucket();
-        dest.data_size = src.data_size();
+        // This is for compatibility, we don't add data_size in shard_info in the rc version
+        // And data_size is added to reslove some bug(https://github.com/StarRocks/starrocks/issues/11868)
+        // However, if we upgrade from rc version, the data_size will be used as default value(0) which will cause
+        // some error in the subsequent logic
+        // So we will use file size as data_size which will cause some of disk space to be wasted, but it is a acceptable
+        // problem. And the wasted disk space will be reclaimed in the subsequent compaction, so it is acceptable
+        if (src.size() != 0 && src.data_size() == 0) {
+            dest.data_size = src.data().size();
+        } else {
+            dest.data_size = src.data_size();
+        }
     }
     size_t nlength = meta.shard_info_size();
     for (size_t i = 0; i < nlength; i++) {
