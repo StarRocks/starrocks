@@ -227,7 +227,7 @@ wget http://172.26.195.68:8045/api/_load_error_log?file=error_log_3a4eb8421f0878
 
 StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列。
+数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列 `col1`、`col2`、`col3`。
 
 如果要把 `example1.csv` 中所有的数据都导入到 `table1` 中，并且要求超时时间最大不超过 100 秒，可以执行如下命令：
 
@@ -243,7 +243,7 @@ curl --location-trusted -u root: -H "label:label1" \
 
 StarRocks 数据库 `test_db` 里的表 `table2` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列。
+数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列 `col1`、`col2`、`col3`。
 
 如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.2`，可以执行如下命令：
 
@@ -277,7 +277,7 @@ curl --location-trusted -u root:  -H "label:label4" \
 
 StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-数据文件 `example4.csv` 也包含三列，按顺序一一对应 `table4` 中的三列。
+数据文件 `example4.csv` 也包含三列，按顺序一一对应 `table4` 中的三列 `col1`、`col2`、`col3`。
 
 如果只想把 `example4.csv` 中第一列的值等于 `20180601` 的数据行导入到 `table4` 中，可以执行如下命令：
 
@@ -297,7 +297,7 @@ curl --location-trusted -u root: -H "label:label2" \
 
 StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-数据文件 `example5.csv` 也包含三列，按顺序一一对应 `table5` 中的三列。
+数据文件 `example5.csv` 也包含三列，按顺序一一对应 `table5` 中的三列 `col1`、`col2`、`col3`。
 
 如果要把 `example5.csv` 中所有的数据都导入到 `table5` 所在的分区 `p1` 和 `p2`，可以执行如下命令：
 
@@ -312,7 +312,7 @@ curl --location-trusted -u root:  -H "label:label5" \
 
 StarRocks 数据库 `test_db` 里的表 `table6` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
 
-数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列。
+数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列 `col1`、`col2`、`col3`。
 
 如果要把 `example6.csv` 中所有的数据导入到 `table6` 中，并且要求进行严格模式的过滤、使用时区 `Africa/Abidjan`，可以执行如下命令：
 
