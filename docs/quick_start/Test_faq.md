@@ -49,5 +49,5 @@
 ### Use profile to analyze query bottlenecks
 
 * To view the query plan, use the command `explain sql`.
-* To enable profile reporting, set `is_report_success = true`.
+* To enable profile reporting, set `enable_profile = true`.
 * To view the current query and profile information, go to `http:FE_IP:FE_HTTP_PORT/queries`.

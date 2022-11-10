@@ -214,7 +214,7 @@ StarRocks supports single node deployment, so you need to configure at least one
 
 You can create a new user account and then set the data permission by granting permissions on the table query to the user.
 
-## Why does the profile fail to display after I set `is_report_success` to `true`?
+## Why does the profile fail to display after I set `enable_profile` to `true`?
 
 The report is only submitted to the leader FE for access.
 
