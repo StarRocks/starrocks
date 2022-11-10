@@ -3140,12 +3140,60 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
             selectList.setOptHints(selectHints);
         }
-        return new SelectRelation(
+
+        SelectRelation resultSelectRelation = new SelectRelation(
                 selectList,
                 from,
                 (Expr) visitIfPresent(context.where),
                 (GroupByClause) visitIfPresent(context.groupingElement()),
                 (Expr) visitIfPresent(context.having));
+
+        // extend Query with QUALIFY to nested queries with filter.
+        if (context.qualifyFunction != null) {
+            resultSelectRelation.setOrderBy(new ArrayList<OrderByElement>());
+
+            // used to indicate nested query, represent thie 'from' part of outer query.
+            SubqueryRelation subqueryRelation = new SubqueryRelation(new QueryStatement(resultSelectRelation));
+
+            // use virtual table name to indicate subquery.
+            TableName qualifyTableName = new TableName(null, "__QUALIFY__TABLE");
+            subqueryRelation.setAlias(qualifyTableName);
+
+            // use virtual item name to indicate column of window function.
+            SelectListItem windowFunction = selectItems.get(selectItems.size() - 1);
+            windowFunction.setAlias("__QUALIFY__VALUE");
+
+            long selectValue = Long.parseLong(context.limit.getText());
+
+            // need delete last item, because It shouldn't appear in result.
+            List<SelectListItem> selectItemsVirtual = new ArrayList<>();
+            selectItemsVirtual.addAll(selectItems);
+            selectItemsVirtual.remove(selectItemsVirtual.size() - 1);
+
+            List<SelectListItem> selectItemsOuter = new ArrayList<>();
+            for (SelectListItem item : selectItemsVirtual) {
+                if (item.getExpr() instanceof SlotRef) {
+                    SlotRef exprRef = (SlotRef) item.getExpr();
+                    String columnName = exprRef.getColumnName();
+                    SlotRef resultSlotRef = new SlotRef(qualifyTableName, columnName);
+                    selectItemsOuter.add(new SelectListItem(resultSlotRef, null));
+                } else {
+                    throw new ParsingException("Can't support result other than column.");
+                }
+            }
+
+            // used to represent result, caused by we use nested query.
+            SelectList selectListOuter = new SelectList(selectItemsOuter, isDistinct);
+
+            // used to construct BinaryPredicate for QUALIFY.
+            IntLiteral rightValue = new IntLiteral(selectValue);
+            SlotRef leftSlotRef = new SlotRef(qualifyTableName, "__QUALIFY__VALUE");
+
+            return new SelectRelation(selectListOuter, subqueryRelation,
+                    new BinaryPredicate(BinaryPredicate.Operator.EQ, leftSlotRef, rightValue), null, null);
+        } else {
+            return resultSelectRelation;
+        }
     }
 
     @Override

@@ -1476,6 +1476,7 @@ limitElement
 querySpecification
     : SELECT setVarHint* setQuantifier? selectItem (',' selectItem)*
       fromClause
+      (QUALIFY qualifyFunction=selectItem '=' limit=INTEGER_VALUE)?
       (WHERE where=expression)?
       (GROUP BY groupingElement)?
       (HAVING having=expression)?
