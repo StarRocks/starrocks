@@ -27,10 +27,10 @@
 
 #include "common/config.h"
 #include "common/status.h"
+#include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
 #include "runtime/thread_resource_mgr.h"
-#include "exec/pipeline/query_context.h"
 
 namespace starrocks {
 

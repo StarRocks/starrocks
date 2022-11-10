@@ -26,9 +26,9 @@
 #include <memory>
 #include <vector>
 
+#include "exec/pipeline/query_context.h"
 #include "runtime/fragment_mgr.h"
 #include "runtime/result_queue_mgr.h"
-#include "exec/pipeline/query_context.h"
 #include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/uid_util.h"
@@ -101,7 +101,7 @@ Status ExternalScanContextMgr::clear_scan_context(const std::string& context_id)
     }
     if (context != nullptr) {
         // cancel pipeline
-        if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id);query_ctx != nullptr) {
+        if (auto query_ctx = _exec_env->query_context_mgr()->get(context->query_id); query_ctx != nullptr) {
             query_ctx->cancel(Status::Cancelled("user cancelled"));
         }
         // clear the fragment instance's related result queue

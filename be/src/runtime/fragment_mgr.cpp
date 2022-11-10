@@ -879,7 +879,7 @@ Status FragmentMgr::exec_external_plan_fragment(const TScanOpenParams& params, c
     if (status.ok()) {
         return fragment_executor.execute(ExecEnv::GetInstance());
     }
-    return status.is_duplicate_rpc_invocation() ? Status::OK(): status;
+    return status.is_duplicate_rpc_invocation() ? Status::OK() : status;
 }
 
 } // namespace starrocks
