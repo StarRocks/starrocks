@@ -7,11 +7,11 @@ import com.google.gson.annotations.SerializedName;
 
 import javax.annotation.Nullable;
 
-class PartitionStatistics {
+public class PartitionStatistics {
     @SerializedName(value = "partition")
     private final PartitionIdentifier partition;
-    @SerializedName(value = "lastCompactionVersion")
-    private PartitionVersion lastCompactionVersion;
+    @SerializedName(value = "compactionVersion")
+    private PartitionVersion compactionVersion;
     @SerializedName(value = "currentVersion")
     private PartitionVersion currentVersion;
     @SerializedName(value = "nextCompactionTime")
@@ -19,54 +19,54 @@ class PartitionStatistics {
     @SerializedName(value = "compactionScore")
     private Quantiles compactionScore;
 
-    PartitionStatistics(PartitionIdentifier partition) {
+    public PartitionStatistics(PartitionIdentifier partition) {
         this.partition = partition;
-        this.lastCompactionVersion = null;
+        this.compactionVersion = null;
         this.nextCompactionTime = 0;
     }
 
-    PartitionIdentifier getPartition() {
+    public PartitionIdentifier getPartition() {
         return partition;
     }
 
-    PartitionVersion getCurrentVersion() {
+    public PartitionVersion getCurrentVersion() {
         return currentVersion;
     }
 
-    void setCurrentVersion(PartitionVersion currentVersion) {
+    public void setCurrentVersion(PartitionVersion currentVersion) {
         this.currentVersion = currentVersion;
     }
 
-    PartitionVersion getLastCompactionVersion() {
-        return lastCompactionVersion;
+    public PartitionVersion getCompactionVersion() {
+        return compactionVersion;
     }
 
-    void setLastCompactionVersion(PartitionVersion value) {
-        lastCompactionVersion = value;
+    public void setCompactionVersion(PartitionVersion value) {
+        compactionVersion = value;
     }
 
-    long getLastCompactionTime() {
-        return getLastCompactionVersion().getCreateTime();
+    public long getLastCompactionTime() {
+        return getCompactionVersion().getCreateTime();
     }
 
-    void setNextCompactionTime(long nextCompactionTime) {
+    public void setNextCompactionTime(long nextCompactionTime) {
         this.nextCompactionTime = nextCompactionTime;
     }
 
-    long getNextCompactionTime() {
+    public long getNextCompactionTime() {
         return nextCompactionTime;
     }
 
-    long getDeltaVersions() {
-        return getCurrentVersion().getVersion() - getLastCompactionVersion().getVersion();
+    public long getDeltaVersions() {
+        return getCurrentVersion().getVersion() - getCompactionVersion().getVersion();
     }
 
-    void setCompactionScore(@Nullable Quantiles compactionScore) {
+    public void setCompactionScore(@Nullable Quantiles compactionScore) {
         this.compactionScore = compactionScore;
     }
 
     @Nullable
-    Quantiles getCompactionScore() {
+    public Quantiles getCompactionScore() {
         return compactionScore;
     }
 

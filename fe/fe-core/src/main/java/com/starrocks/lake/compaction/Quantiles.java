@@ -2,6 +2,7 @@
 
 package com.starrocks.lake.compaction;
 
+import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
 
 import java.util.Collection;
@@ -60,5 +61,10 @@ public class Quantiles implements Comparable<Quantiles> {
             return max > o.max ? 1 : -1;
         }
         return 0;
+    }
+
+    @Override
+    public String toString() {
+        return new Gson().toJson(this);
     }
 }

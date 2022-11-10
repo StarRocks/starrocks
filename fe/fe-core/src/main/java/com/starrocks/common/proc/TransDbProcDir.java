@@ -58,7 +58,6 @@ public class TransDbProcDir implements ProcDirInterface {
             result.addRow(row);
         }
         return result;
-
     }
 
     @Override

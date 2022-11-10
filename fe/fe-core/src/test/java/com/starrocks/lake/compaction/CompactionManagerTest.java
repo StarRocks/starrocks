@@ -4,22 +4,19 @@ package com.starrocks.lake.compaction;
 
 import com.starrocks.common.Config;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.util.Collections;
 import java.util.List;
 
 public class CompactionManagerTest {
-    private CompactionManager compactionManager;
-
-    @Before
-    public void init() {
-        compactionManager = new CompactionManager();
-    }
 
     @Test
     public void testChoosePartitionsToCompact() {
+        Config.lake_compaction_selector = "SimpleSelector";
+        Config.lake_compaction_sorter = "RandomSorter";
+        CompactionManager compactionManager = new CompactionManager();
+
         PartitionIdentifier partition1 = new PartitionIdentifier(1, 2, 3);
         PartitionIdentifier partition2 = new PartitionIdentifier(1, 2, 4);
 
