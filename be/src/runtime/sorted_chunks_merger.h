@@ -4,6 +4,7 @@
 
 #include <queue>
 
+#include "column/column_helper.h"
 #include "exec/vectorized/sorting/merge.h"
 #include "exec/vectorized/sorting/sorting.h"
 #include "runtime/chunk_cursor.h"
@@ -81,6 +82,7 @@ private:
     bool _wait_for_data = false;
 };
 
+// TODO(murphy) refactor it with MergeCursorsCascade
 // Merge sorted chunks in cascade style
 class CascadeChunkMerger {
 public:
@@ -102,6 +104,7 @@ private:
     std::vector<std::unique_ptr<SimpleChunkSortCursor>> _cursors;
 
     std::unique_ptr<MergeCursorsCascade> _merger;
+    ChunkSlice _current_chunk;
 };
 
 } // namespace vectorized

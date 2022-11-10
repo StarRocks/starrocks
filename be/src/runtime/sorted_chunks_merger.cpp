@@ -314,14 +314,19 @@ bool CascadeChunkMerger::is_data_ready() {
 Status CascadeChunkMerger::get_next(ChunkPtr* output, std::atomic<bool>* eos, bool* should_exit) {
     if (_merger->is_eos()) {
         *eos = true;
-        return Status::OK();
-    }
-    ChunkUniquePtr chunk = _merger->try_get_next();
-    if (!chunk) {
         *should_exit = true;
         return Status::OK();
     }
-    *output = ChunkPtr(chunk.release());
+    if (_current_chunk.empty()) {
+        ChunkUniquePtr chunk = _merger->try_get_next();
+        if (!chunk) {
+            *should_exit = true;
+            return Status::OK();
+        }
+        _current_chunk.reset(std::move(chunk));
+    }
+    *output = _current_chunk.cutoff(_state->chunk_size());
+
     return Status::OK();
 }
 
