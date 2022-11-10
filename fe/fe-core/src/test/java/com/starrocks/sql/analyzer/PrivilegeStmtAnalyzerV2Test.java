@@ -442,4 +442,56 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.assertTrue(e.getMessage().contains("cannot find resource: not_exists"));
         }
     }
+
+    @Test
+    public void testViewException() throws Exception {
+        String sql;
+        sql = "grant alter, select on view db1 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have two"));
+        }
+
+        sql = "grant drop, select on view xxx.xx to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find db: xxx"));
+        }
+
+        sql = "grant drop on view on view db1.tbl1 to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find view tbl1 in db db1"));
+        }
+
+        sql = "grant select on ALL views to test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with database"));
+        }
+
+        sql = "revoke select on ALL views IN ALL views IN all databases from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for views"));
+        }
+
+        sql = "revoke select on ALL views IN ALL views from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("ALL VIEWS must be restricted with ALL DATABASES instead of ALL VIEWS"));
+        }
+    }
 }
