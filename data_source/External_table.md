@@ -1059,7 +1059,7 @@ SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE ta
 
 **解决方法**：
 
-建外部表时端口不对，正确的端口是 "port"="9020"，不是9931。
+建外部表时端口不对，正确的端口是 "port"="9020" 。
 
 **提示问题**：
 
