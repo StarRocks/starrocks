@@ -302,18 +302,35 @@ wget http://172.26.195.68:8045/api/_load_error_log?file=error_log_3a4eb8421f0878
 
 将本地文件'testData'中的数据导入到数据库'testDb'中'testTbl'的表，使用 Label 用于去重。指定超时时间为 100 秒。
 
-```bash
-curl --location-trusted -u root -H "label:123" -H "timeout:100" -T testData \
-http://host:port/api/testDb/testTbl/_stream_load
+#### **设置超时时间**
+
+StarRocks 数据库 `test_db` 里的表 `table1` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example1.csv` 也包含三列，按顺序一一对应 `table1` 中的三列 `col1`、`col2`、`col3`。
+
+如果要把 `example1.csv` 中所有的数据都导入到 `table1` 中，并且要求超时时间最大不超过 100 秒，可以执行如下命令：
+
+```Bash
+curl --location-trusted -u root: -H "label:label1" \
+    -H "timeout:100" \
+    -H "max_filter_ratio:0.2" \
+    -T example1.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table1/_stream_load
 ```
 
 ### 对导入数据进行条件筛选
 
 将本地文件'testData'中的数据导入到数据库'testDb'中'testTbl'的表，使用 Label 用于去重, 并且只导入 k1 等于 20180601 的数据。
 
-```bash
-curl --location-trusted -u root -H "label:123" -H "where: k1=20180601" -T testData \
-http://host:port/api/testDb/testTbl/_stream_load
+数据文件 `example2.csv` 也包含三列，按顺序一一对应 `table2` 中的三列 `col1`、`col2`、`col3`。
+
+如果要把 `example2.csv` 中所有的数据都导入到 `table2` 中，并且要求容错率最大不超过 `0.2`，可以执行如下命令：
+
+```Bash
+curl --location-trusted -u root: -H "label:label3" \
+    -H "max_filter_ratio:0.2" \
+    -T example2.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table2/_stream_load
 ```
 
 ### 设置导入任务允许错误率
@@ -331,10 +348,18 @@ http://host:port/api/testDb/testTbl/_stream_load
 
 将本地文件'testData'中的数据导入到数据库'testDb'中'testTbl'的表, 允许 20%的错误率，并且指定文件的列名（用户是 defalut_cluster 中的）。
 
-```bash
-curl --location-trusted -u root  -H "label:123" -H "max_filter_ratio:0.2" \
--H "columns: k2, k1, v1" -T testData \
-http://host:port/api/testDb/testTbl/_stream_load
+StarRocks 数据库 `test_db` 里的表 `table4` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example4.csv` 也包含三列，按顺序一一对应 `table4` 中的三列 `col1`、`col2`、`col3`。
+
+如果只想把 `example4.csv` 中第一列的值等于 `20180601` 的数据行导入到 `table4` 中，可以执行如下命令：
+
+```Bash
+curl --location-trusted -u root: -H "label:label2" \
+    -H "columns: col1, col2，col3]"\
+    -H "where: col1 = 20180601" \
+    -T example4.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
 ```
 
 > **说明**
@@ -343,19 +368,33 @@ http://host:port/api/testDb/testTbl/_stream_load
 
 将本地文件'testData'中的数据导入到数据库'testDb'中'testTbl'的表中的 p1, p2 分区, 允许 20%的错误率。
 
-```bash
-curl --location-trusted -u root  -H "label:123" -H "max_filter_ratio:0.2" \
--H "partitions: p1, p2" -T testData \
-http://host:port/api/testDb/testTbl/_stream_load
+StarRocks 数据库 `test_db` 里的表 `table5` 包含三列，按顺序依次为 `col1`、`col2`、`col3`。
+
+数据文件 `example5.csv` 也包含三列，按顺序一一对应 `table5` 中的三列 `col1`、`col2`、`col3`。
+
+如果要把 `example5.csv` 中所有的数据都导入到 `table5` 所在的分区 `p1` 和 `p2`，可以执行如下命令：
+
+```Bash
+curl --location-trusted -u root:  -H "label:label5" \
+    -H "partitions: p1, p2" \
+    -T example5.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table5/_stream_load
 ```
 
 ### 试用 Streaming 方式导入
 
 使用 streaming 方式导入（用户是 defalut_cluster 中的）。
 
-```sql
-seq 1 10 | awk '{OFS="\t"}{print $1, $1 * 10}' | curl --location-trusted -u root -T - \
-http://host:port/api/testDb/testTbl/_stream_load
+数据文件 `example6.csv` 也包含三列，按顺序一一对应 `table6` 中的三列 `col1`、`col2`、`col3`。
+
+如果要把 `example6.csv` 中所有的数据导入到 `table6` 中，并且要求进行严格模式的过滤、使用时区 `Africa/Abidjan`，可以执行如下命令：
+
+```Bash
+curl --location-trusted -u root: \
+    -H "strict_mode: true" \
+    -H "timezone: Africa/Abidjan" \
+    -T example6.csv -XPUT \
+    http://<fe_host>:<fe_http_port>/api/test_db/table6/_stream_load
 ```
 
 ### 导入数据到含有 HLL 列的表中
