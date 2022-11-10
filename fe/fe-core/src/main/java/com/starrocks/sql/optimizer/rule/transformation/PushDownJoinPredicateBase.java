@@ -117,11 +117,11 @@ public abstract class PushDownJoinPredicateBase extends TransformationRule {
 
         OptExpression root;
         JoinOperator newJoinType = deriveJoinType(join.getJoinType(), newJoinOnPredicate);
-        LogicalJoinOperator nestLoop = new LogicalJoinOperator.Builder().withOperator(join)
+        LogicalJoinOperator newJoinOperator = new LogicalJoinOperator.Builder().withOperator(join)
                 .setJoinType(newJoinType)
                 .setOnPredicate(newJoinOnPredicate)
                 .build();
-        root = OptExpression.create(nestLoop, input.getInputs());
+        root = OptExpression.create(newJoinOperator, input.getInputs());
         if (!join.hasDeriveIsNotNullPredicate()) {
             deriveIsNotNullPredicate(eqConjuncts, root, leftPushDown, rightPushDown);
         }
