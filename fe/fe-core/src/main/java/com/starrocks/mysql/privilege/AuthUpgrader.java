@@ -52,6 +52,8 @@ public class AuthUpgrader {
     private List<PEntryObject> allDatabasesObject;
     private ActionSet selectActionSet;
     private ActionSet createActionSet;
+    private ActionSet dropDbActionSet;
+    private ActionSet alterDbActionSet;
 
     public AuthUpgrader(
             Auth auth,
@@ -112,6 +114,10 @@ public class AuthUpgrader {
                             PrivilegeType.DbAction.CREATE_VIEW.toString(),
                             PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW.toString()
                     ));
+            dropDbActionSet = privilegeManager.analyzeActionSet(dbTypeId,
+                    Arrays.asList(PrivilegeType.DbAction.DROP.toString()));
+            alterDbActionSet = privilegeManager.analyzeActionSet(dbTypeId,
+                    Arrays.asList(PrivilegeType.DbAction.ALTER.toString()));
         } catch (PrivilegeException e) {
             throw new AuthUpgradeUnrecoverableException("should not happen", e);
         }
@@ -276,6 +282,7 @@ public class AuthUpgrader {
                 case USAGE_PRIV:
                 case CREATE_PRIV:
                 case DROP_PRIV:
+                case ALTER_PRIV:
                     upgradeTablePrivileges(DbPrivEntry.ANY_DB, TablePrivEntry.ANY_TBL, privilege, collection, null);
                     break;
 
@@ -316,6 +323,8 @@ public class AuthUpgrader {
                 switch (privilege) {
                     case SELECT_PRIV:
                     case CREATE_PRIV:
+                    case DROP_PRIV:
+                    case ALTER_PRIV:
                         upgradeTablePrivileges(entry.getOrigDb(), TablePrivEntry.ANY_TBL, privilege, collection,
                                 grantPatterns);
                         break;
@@ -491,8 +500,8 @@ public class AuthUpgrader {
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<Map.Entry<TablePattern, PrivBitSet>> iterator;
         Set<Pair<String, String>> grantPatterns = new HashSet<>();
-        // loop twice, the first one is for GRANT_PRIV
 
+        // loop twice, the first one is for GRANT_PRIV
         iterator = tblPatternToPrivs.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<TablePattern, PrivBitSet> entry = iterator.next();
@@ -507,6 +516,7 @@ public class AuthUpgrader {
             }
         }
 
+        // loop twice, the second one is for all privilege except GRANT_PRIV
         iterator = tblPatternToPrivs.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<TablePattern, PrivBitSet> entry = iterator.next();
@@ -517,6 +527,9 @@ public class AuthUpgrader {
                 switch (privilege) {
                     case SELECT_PRIV:
                     case USAGE_PRIV:
+                    case CREATE_PRIV:
+                    case DROP_PRIV:
+                    case ALTER_PRIV:
                         upgradeTablePrivileges(pattern.getQuolifiedDb(), pattern.getTbl(), privilege, collection,
                                 grantPatterns);
                         break;
@@ -546,8 +559,8 @@ public class AuthUpgrader {
             throws PrivilegeException, AuthUpgradeUnrecoverableException {
         Iterator<Map.Entry<ResourcePattern, PrivBitSet>> iterator;
         Set<String> grantPatterns = new HashSet<>();
-        // loop twice, the first one is for GRANT_PRIV
 
+        // loop twice, the first one is for GRANT_PRIV
         iterator = resourcePatternToPrivs.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ResourcePattern, PrivBitSet> entry = iterator.next();
@@ -563,6 +576,7 @@ public class AuthUpgrader {
             }
         }
 
+        // loop twice, the second one is for all privilege except GRANT_PRIV
         iterator = resourcePatternToPrivs.entrySet().iterator();
         while (iterator.hasNext()) {
             Map.Entry<ResourcePattern, PrivBitSet> entry = iterator.next();
@@ -638,13 +652,46 @@ public class AuthUpgrader {
 
             case CREATE_PRIV: {
                 if (db.equals(STAR)) {
+                    // for *.*
                     collection.grant(dbTypeId, createActionSet, allDatabasesObject, isGrant);
                     // TODO(yiming): grant create_database on catalog default_catalog to user_xxx
                 } else {
-                    // db
+                    // for db.*
                     List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeObject(
                             dbTypeStr, Arrays.asList(db)));
                     collection.grant(dbTypeId, createActionSet, objects, isGrant);
+                }
+                break;
+            }
+
+            case DROP_PRIV: {
+                if (db.equals(STAR)) {
+                    // for *.*
+                    collection.grant(dbTypeId, dropDbActionSet, allDatabasesObject, isGrant);
+                } else if (table.equals(STAR)) {
+                    // for db.*
+                    List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeObject(
+                            dbTypeStr, Arrays.asList(db)));
+                    collection.grant(dbTypeId, dropDbActionSet, objects, isGrant);
+                } else {
+                    throw new AuthUpgradeUnrecoverableException(
+                            "drop_priv on table/view/mv level hasn't implemented yet");
+                }
+                break;
+            }
+
+            case ALTER_PRIV: {
+                if (db.equals(STAR)) {
+                    // for *.*
+                    collection.grant(dbTypeId, alterDbActionSet, allDatabasesObject, isGrant);
+                } else if (table.equals(STAR)) {
+                    // for db.*
+                    List<PEntryObject> objects = Arrays.asList(privilegeManager.analyzeObject(
+                            dbTypeStr, Arrays.asList(db)));
+                    collection.grant(dbTypeId, alterDbActionSet, objects, isGrant);
+                } else {
+                    throw new AuthUpgradeUnrecoverableException(
+                            "alter_priv on table/view/mv level hasn't implemented yet");
                 }
                 break;
             }
