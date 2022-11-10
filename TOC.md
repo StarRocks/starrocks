@@ -28,6 +28,10 @@
   + [Flink connector](/loading/Flink-connector-starrocks.md)
   + [DataX writer](/loading/DataX-starrocks-writer.md)
   + [CloudCanal数据导入](/loading/CloudCanal_loading.md)
++ 导出数据
+  + [数据导出](/unloading/Export.md)
+  + [Spark Connector](/unloading/Spark_connector.md)
+  + [Flink Connector](/unloading/Flink_connector.md)
 + 使用StarRocks
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
@@ -316,10 +320,6 @@
     + [黑名单管理](/administration/Blacklist.md)
     + [内存管理](/administration/Memory_management.md)
     + [负载均衡](/administration/Load_balance.md)
-+ 导出数据
-  + [数据导出](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
 + 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
   + 数据迁移
