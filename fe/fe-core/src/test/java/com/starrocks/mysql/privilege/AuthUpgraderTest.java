@@ -414,7 +414,19 @@ public class AuthUpgraderTest {
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
                 "GRANT SELECT ON db1.tbl1 TO role public",
-                "GRANT USAGE ON resource 'hive0' TO role public");
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "grant global_grant_role to global_grant_user",
+                "revoke global_grant_role from global_grant_user",
+                "create user xxx",
+                "drop user global_grant_user",
+                "alter user global_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role global_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "global_grant", allows, new ArrayList<>());
     }
 
@@ -426,7 +438,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT USAGE ON resource 'hive0' TO role public",
-                "GRANT SELECT ON db1.tbl1 TO role public");
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "grant db_grant_role to db_grant_user",
+                "revoke db_grant_role from db_grant_user",
+                "create user xxx",
+                "drop user db_grant_user",
+                "alter user db_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role db_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "db_grant", allows, denies);
     }
 
@@ -438,7 +462,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT USAGE ON resource 'hive0' TO role public",
-                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public");
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
+                "grant table_grant_role to table_grant_user",
+                "revoke table_grant_role from table_grant_user",
+                "create user xxx",
+                "drop user table_grant_user",
+                "alter user table_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role table_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "table_grant", allows, denies);
     }
 
@@ -450,7 +486,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
-                "GRANT SELECT ON db1.tbl1 TO role public");
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "grant resource_grant_role to resource_grant_user",
+                "revoke resource_grant_role from resource_grant_user",
+                "create user xxx",
+                "drop user resource_grant_user",
+                "alter user resource_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role resource_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "resource_grant", allows, denies);
     }
 
@@ -461,7 +509,19 @@ public class AuthUpgraderTest {
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
                 "GRANT SELECT ON db1.tbl1 TO role public",
-                "GRANT USAGE ON resource 'hive0' TO role public");
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "grant resource_global_grant_role to resource_global_grant_user",
+                "revoke resource_global_grant_role from resource_global_grant_user",
+                "create user xxx",
+                "drop user resource_global_grant_user",
+                "alter user resource_global_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role resource_global_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "resource_global_grant", allows, new ArrayList<>());
     }
 }

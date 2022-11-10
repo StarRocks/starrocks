@@ -5,9 +5,9 @@ package com.starrocks.sql.analyzer;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.authentication.AuthenticationManager;
 import com.starrocks.privilege.PrivilegeManager;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.ast.CreateUserStmt;
-import com.starrocks.sql.ast.GrantPrivilegeStmt;
-import com.starrocks.sql.ast.RevokePrivilegeStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -65,15 +65,19 @@ public class PrivilegeCheckerV2Test {
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt);
         testUser2 = createUserStmt.getUserIdent();
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "create role test_role", starRocksAssert.getCtx()), starRocksAssert.getCtx());
     }
 
     private static void verifyGrantRevoke(String sql, String grantSql, String revokeSql, String expectError) throws Exception {
-        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx());
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+            PrivilegeCheckerV2.check(statement, ctx);
             Assert.fail();
         } catch (SemanticException e) {
             System.out.println(e.getMessage());
@@ -81,17 +85,13 @@ public class PrivilegeCheckerV2Test {
         }
 
         ctxToRoot();
-        GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                grantSql, starRocksAssert.getCtx());
-        privilegeManager.grant(grantPrivilegeStmt);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+        PrivilegeCheckerV2.check(statement, ctx);
 
         ctxToRoot();
-        RevokePrivilegeStmt revokePrivilegeStmt = (RevokePrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(
-                revokeSql, starRocksAssert.getCtx());
-        privilegeManager.revoke(revokePrivilegeStmt);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSql, ctx), ctx);
 
         ctxToTestUser();
         try {
@@ -139,7 +139,7 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
-    public void testGrantRevoke() throws Exception {
+    public void testGrantRevokePrivilege() throws Exception {
         verifyGrantRevoke(
                 "grant select on db1.tbl1 to test",
                 "grant select on db1.tbl1 to test with grant option",
@@ -181,5 +181,77 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on all resources to test",
                 "revoke drop on all resources from test",
                 "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+    }
+
+    @Test
+    public void testRoleUserStmts() throws Exception {
+        String grantSql = "grant user_admin to test";
+        String revokeSql = "revoke user_admin from test";
+        String err = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        String sql;
+
+        sql = "grant test_role to test";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "revoke test_role from test";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "create user tesssst";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "drop user test";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "alter user test identified by 'asdf'";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "show roles";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "create role testrole2";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "drop role test_role";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+    }
+
+    @Test
+    public void testShowPrivsForOther() throws Exception {
+        String grantSql = "grant user_admin to test";
+        String revokeSql = "revoke user_admin from test";
+        String err = "Access denied; you need (at least one of) the GRANT privilege(s) for this operation";
+        String sql;
+
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        sql = "show grants for test2";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show grants", ctx), ctx);
+
+        sql = "show authentication for test2";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show authentication", ctx), ctx);
+
+        sql = "SHOW PROPERTY FOR 'test2'";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser("show property", ctx), ctx);
+
+        sql = "set property for 'test2' 'max_user_connections' = '100'";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+        ctxToTestUser();
+        PrivilegeCheckerV2.check(UtFrameUtils.parseStmtWithNewParser(
+                "set property 'max_user_connections' = '100'", ctx), ctx);
+    }
+
+    @Test
+    public void testExecuteAs() throws Exception {
+        verifyGrantRevoke(
+                "EXECUTE AS test2 WITH NO REVERT",
+                "grant impersonate on user test2 to test",
+                "revoke impersonate on user test2 from test",
+                "Access denied; you need (at least one of) the IMPERSONATE privilege(s) for this operation");
     }
 }

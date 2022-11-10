@@ -11,6 +11,7 @@ import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.GrantRoleStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -440,6 +441,22 @@ public class PrivilegeStmtAnalyzerV2Test {
         } catch (Exception e) {
             System.err.println(e.getMessage());
             Assert.assertTrue(e.getMessage().contains("cannot find resource: not_exists"));
+        }
+    }
+
+    @Test
+    public void testExecuteAs() throws Exception {
+        ExecuteAsStmt stmt = (ExecuteAsStmt) UtFrameUtils.parseStmtWithNewParser(
+                "execute as root with no revert", ctx);
+        Assert.assertEquals(UserIdentity.ROOT, stmt.getToUser());
+        Assert.assertFalse(stmt.isAllowRevert());
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser("execute as root", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("`EXECUTE AS` must use with `WITH NO REVERT` for now"));
         }
     }
 }
