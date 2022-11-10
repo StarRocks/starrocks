@@ -22,8 +22,6 @@
 package com.starrocks.mysql;
 
 import com.starrocks.mysql.ssl.SSLChannel;
-import com.starrocks.mysql.ssl.SSLChannelImpClassLoader;
-import com.starrocks.mysql.ssl.Transport;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -31,7 +29,6 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.SocketChannel;
-import javax.net.ssl.SSLContext;
 
 /**
  * This class used to read/write MySQL logical packet.
@@ -134,35 +131,8 @@ public class MysqlChannel {
         }
     }
 
-    public boolean enableSSL(SSLContext sslContext) throws IOException {
-        Transport transport = new Transport() {
-            @Override
-            public int read(ByteBuffer buffer) throws IOException {
-                return realNetRead(buffer);
-            }
-
-            @Override
-            public void write(ByteBuffer buffer) throws IOException {
-                realNetSend(buffer);
-            }
-
-            @Override
-            public void closeTransport() {
-                close();
-            }
-        };
-        Class<? extends SSLChannel> clazz = SSLChannelImpClassLoader.loadSSLChannelImpClazz();
-        if (clazz == null) {
-            LOG.warn("load SSLChannelImp class failed");
-            throw new IOException("load SSLChannelImp class failed");
-        }
-        try {
-            sslChannel = (SSLChannel) clazz.getConstructors()[0].newInstance(sslContext.createSSLEngine(), transport);
-        } catch (Exception e) {
-            LOG.warn("construct SSLChannelImp class failed");
-            throw new IOException("construct SSLChannelImp class failed");
-        }
-        return sslChannel.init();
+    public void setSSLChannel(SSLChannel sslChannel) {
+        this.sslChannel = sslChannel;
     }
 
     protected int readAll(ByteBuffer dstBuf) throws IOException {
@@ -186,7 +156,7 @@ public class MysqlChannel {
         return readLen;
     }
 
-    protected int realNetRead(ByteBuffer dstBuf) throws IOException {
+    public int realNetRead(ByteBuffer dstBuf) throws IOException {
         return channel.read(dstBuf);
     }
 
@@ -253,7 +223,7 @@ public class MysqlChannel {
         isSend = true;
     }
 
-    protected void realNetSend(ByteBuffer buffer) throws IOException {
+    public void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
         long writeLen = channel.write(buffer);
         if (bufLen != writeLen) {

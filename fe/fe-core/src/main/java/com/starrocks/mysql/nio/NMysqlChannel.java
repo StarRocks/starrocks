@@ -49,7 +49,7 @@ public class NMysqlChannel extends MysqlChannel {
     }
 
     @Override
-    protected int realNetRead(ByteBuffer dstBuf) throws IOException {
+    public int realNetRead(ByteBuffer dstBuf) throws IOException {
         return Channels.readBlocking(conn.getSourceChannel(), dstBuf);
     }
 
@@ -60,7 +60,7 @@ public class NMysqlChannel extends MysqlChannel {
      * @throws IOException
      */
     @Override
-    protected void realNetSend(ByteBuffer buffer) throws IOException {
+    public void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
         long writeLen = Channels.writeBlocking(conn.getSinkChannel(), buffer);
         if (bufLen != writeLen) {
