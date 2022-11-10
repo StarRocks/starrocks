@@ -80,6 +80,9 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const Column* arg0 = columns[0].get();
     const Column* arg1 = columns[1].get();
+    if(arg0->only_null()) {
+        return columns[0];
+    }
 
     arg0 = arg0->has_null() || arg0->is_constant() ? arg0 : ColumnHelper::get_data_column(arg0);
     arg1 = arg1->has_null() || arg1->is_constant() ? arg1 : ColumnHelper::get_data_column(arg1);
@@ -113,7 +116,7 @@ ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context
 
 class ArrayRemoveImpl {
 public:
-    static ColumnPtr evaluate(const Column& array, const Column& element) {
+    static ColumnPtr evaluate(const ColumnPtr array, const ColumnPtr element) {
         return _array_remove_generic(array, element);
     }
 
@@ -266,36 +269,36 @@ private:
     }
 
     // array is non-nullable.
-    static ColumnPtr _array_remove_non_nullable(const ArrayColumn& array, const Column& arg) {
+    static ColumnPtr _array_remove_non_nullable(const ArrayColumnPtr& array, const ColumnPtr& arg) {
         bool nullable_element = false;
         bool nullable_target = false;
         bool const_target = false;
         ColumnPtr targets_holder;
 
-        const UInt32Column& offsets = array.offsets();
-        const Column* elements = &array.elements();
-        const Column* targets = &arg;
-        if (auto nullable = dynamic_cast<const NullableColumn*>(elements); nullable != nullptr) {
+        const UInt32Column& offsets = array->offsets();
+        ColumnPtr elements = array->elements_column();
+        ColumnPtr targets = arg;
+        if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(elements); nullable != nullptr) {
             // If this nullable column does NOT contains any NULL, process it as non-nullable column.
             nullable_element = nullable->has_null();
-            elements = nullable->has_null() ? elements : nullable->data_column().get();
+            elements = nullable->has_null() ? elements : nullable->data_column();
         }
-        if (auto nullable = dynamic_cast<const NullableColumn*>(targets); nullable != nullptr) {
+        if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(targets); nullable != nullptr) {
             nullable_target = nullable->has_null();
-            targets = nullable->has_null() ? targets : nullable->data_column().get();
+            targets = nullable->has_null() ? targets : nullable->data_column();
         }
 
         // element: [1,2]; target: NULL
         if (targets->only_null() && !nullable_element) {
-            return ArrayColumn::create(array);
+            return ArrayColumn::create(*array);
         }
 
         // Expand Only-Null column.
         if (targets->only_null()) {
-            auto data = down_cast<const NullableColumn*>(elements)->data_column()->clone_empty();
+            auto data = std::dynamic_pointer_cast<NullableColumn>(elements)->data_column()->clone_empty();
             targets_holder = NullableColumn::create(std::move(data), NullColumn::create());
-            (void)targets_holder->append_nulls(array.size());
-            targets = targets_holder.get();
+            (void)targets_holder->append_nulls(array->size());
+            targets = targets_holder;
             nullable_target = true;
         }
 
@@ -318,23 +321,18 @@ private:
         }
     }
 
-    static ColumnPtr _array_remove_generic(const Column& array, const Column& target) {
-        if (array.only_null()) {
-            auto result = ArrayColumn::create(array.clone_empty(), UInt32Column::create());
-            result->append_nulls(array.size());
-            return result;
+    static ColumnPtr _array_remove_generic(const ColumnPtr& array, const ColumnPtr& target) {
+        if (array->only_null()) {
+            return array;
         }
-        if (auto nullable = dynamic_cast<const NullableColumn*>(&array); nullable != nullptr) {
-            auto array_col = down_cast<const ArrayColumn*>(nullable->data_column().get());
-            auto result = _array_remove_non_nullable(*array_col, target);
+        if (auto nullable = std::dynamic_pointer_cast<NullableColumn>(array); nullable != nullptr) {
+            auto result =
+                    _array_remove_non_nullable(std::dynamic_pointer_cast<ArrayColumn>(nullable->data_column()), target);
             DCHECK_EQ(nullable->size(), result->size());
-            if (!nullable->has_null()) {
-                return result;
-            }
             return NullableColumn::create(std::move(result), nullable->null_column());
         }
 
-        return _array_remove_non_nullable(down_cast<const ArrayColumn&>(array), target);
+        return _array_remove_non_nullable(std::dynamic_pointer_cast<ArrayColumn>(array), target);
     }
 };
 
@@ -454,7 +452,7 @@ ColumnPtr ArrayFunctions::array_remove([[maybe_unused]] FunctionContext* context
     const ColumnPtr& arg0 = columns[0]; // array
     const ColumnPtr& arg1 = columns[1]; // element
 
-    return ArrayRemoveImpl::evaluate(*arg0, *arg1);
+    return ArrayRemoveImpl::evaluate(arg0, arg1);
 }
 
 // If PositionEnabled=true and ReturnType=Int32, it is function array_position and it will return index of elemt if the array contain it or 0 if not contain.
