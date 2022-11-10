@@ -1,19 +1,16 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 
-#include <iostream>
-#include <vector>
+#include <gtest/gtest.h>
 
-#include "MemoryInputStream.hh"
-#include "MemoryOutputStream.hh"
-#include "OrcTest.hh"
-#include "Reader.hh"
-#include "sargs/SearchArgument.hh"
-#include "wrap/gtest-wrapper.h"
+#include <orc/Writer.hh>
 
-namespace orc {
+#include "orc_test_util/MemoryInputStream.hh"
+#include "orc_test_util/MemoryOutputStream.hh"
 
-TEST(TestLazyLoad, TestNormal) {
-    orc::MemoryOutputStream buffer(1024000);
+namespace starrocks::vectorized {
+
+TEST(OrcLazyLoadTest, TestNormal) {
+    MemoryOutputStream buffer(1024000);
     size_t batchSize = 1024;
     size_t batchNum = 128;
 
@@ -49,7 +46,7 @@ TEST(TestLazyLoad, TestNormal) {
     // read data.
     {
         orc::ReaderOptions readerOptions;
-        ORC_UNIQUE_PTR<orc::InputStream> inputStream(new orc::MemoryInputStream(buffer.getData(), buffer.getLength()));
+        ORC_UNIQUE_PTR<orc::InputStream> inputStream(new MemoryInputStream(buffer.getData(), buffer.getLength()));
         ORC_UNIQUE_PTR<orc::Reader> reader = createReader(std::move(inputStream), readerOptions);
 
         orc::RowReaderOptions options;
@@ -85,7 +82,6 @@ TEST(TestLazyLoad, TestNormal) {
                 rr->lazyLoadNext(*batch, batch->numElements);
                 for (size_t i = 0; i < batchSize; i++) {
                     ASSERT_EQ(c0->data[i], index);
-                    // since c1 is lazy loaded, we don't read actual data.
                     ASSERT_EQ(c1->data[i], index * 10);
                     index += 1;
                 }
@@ -96,8 +92,102 @@ TEST(TestLazyLoad, TestNormal) {
     }
 }
 
-TEST(TestLazyLoad, TestWithSearchArgument) {
-    orc::MemoryOutputStream buffer(1024000);
+TEST(OrcLazyLoadTest, TestStructSubField) {
+    MemoryOutputStream buffer(1024000);
+    const size_t batchSize = 1024;
+    const size_t batchNum = 128;
+
+    // prepare data.
+    {
+        orc::WriterOptions writerOptions;
+        // force to make stripe every time.
+        writerOptions.setStripeSize(0);
+        writerOptions.setRowIndexStride(10);
+        ORC_UNIQUE_PTR<orc::Type> schema(orc::Type::buildTypeFromString("struct<c0:int,c1:struct<c11:int,c12:int>>"));
+        ORC_UNIQUE_PTR<orc::Writer> writer = createWriter(*schema, &buffer, writerOptions);
+
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = writer->createRowBatch(batchSize);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* c0 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        auto* c1 = dynamic_cast<orc::StructVectorBatch*>(root->fields[1]);
+        auto* c11 = dynamic_cast<orc::LongVectorBatch*>(c1->fields[0]);
+        auto* c12 = dynamic_cast<orc::LongVectorBatch*>(c1->fields[1]);
+
+        size_t index = 0;
+        for (size_t k = 0; k < batchNum; k++) {
+            for (size_t i = 0; i < batchSize; i++) {
+                c0->data[i] = index;
+                c11->data[i] = index * 5;
+                c12->data[i] = index * 10;
+                index += 1;
+            }
+            c0->numElements = batchSize;
+            c1->numElements = batchSize;
+            c11->numElements = batchSize;
+            c12->numElements = batchSize;
+            root->numElements = batchSize;
+            writer->add(*batch);
+        }
+        writer->close();
+    }
+
+    // read data.
+    {
+        orc::ReaderOptions readerOptions;
+        ORC_UNIQUE_PTR<orc::InputStream> inputStream(new MemoryInputStream(buffer.getData(), buffer.getLength()));
+        ORC_UNIQUE_PTR<orc::Reader> reader = createReader(std::move(inputStream), readerOptions);
+
+        orc::RowReaderOptions options;
+        std::list<uint64_t> include_type{0, 1, 2, 3, 4};
+        // lazy load c0, c12
+        std::list<uint64_t> include_lazy_type{1, 4};
+        options.includeTypes(include_type);
+        options.includeLazyLoadColumnIndexes(include_lazy_type);
+        ORC_UNIQUE_PTR<orc::RowReader> rr = reader->createRowReader(options);
+
+        ORC_UNIQUE_PTR<orc::ColumnVectorBatch> batch = rr->createRowBatch(batchSize);
+        auto* root = dynamic_cast<orc::StructVectorBatch*>(batch.get());
+        auto* c0 = dynamic_cast<orc::LongVectorBatch*>(root->fields[0]);
+        auto* c1 = dynamic_cast<orc::StructVectorBatch*>(root->fields[1]);
+        auto* c11 = dynamic_cast<orc::LongVectorBatch*>(c1->fields[0]);
+        auto* c12 = dynamic_cast<orc::LongVectorBatch*>(c1->fields[1]);
+
+        size_t index = 0;
+        for (size_t k = 0; k < batchNum; k++) {
+            // clear memory.
+            std::memset(c0->data.data(), 0x0, sizeof((c0->data[0])) * batchSize);
+            std::memset(c11->data.data(), 0x0, sizeof((c11->data[0])) * batchSize);
+            std::memset(c12->data.data(), 0x0, sizeof((c12->data[0])) * batchSize);
+
+            orc::RowReader::ReadPosition pos;
+            EXPECT_EQ(rr->next(*batch, &pos), true);
+            EXPECT_EQ(batch->numElements, batchSize);
+
+            if ((k & 0x1) == 0) {
+                for (size_t i = 0; i < batchSize; i++) {
+                    ASSERT_EQ(c0->data[i], 0);
+                    ASSERT_EQ(c11->data[i], index * 5);
+                    ASSERT_EQ(c12->data[i], 0);
+                    index += 1;
+                }
+                rr->lazyLoadSeekTo(pos.row_in_stripe);
+            } else {
+                rr->lazyLoadNext(*batch, batch->numElements);
+                for (size_t i = 0; i < batchSize; i++) {
+                    ASSERT_EQ(c0->data[i], index);
+                    ASSERT_EQ(c11->data[i], index * 5);
+                    ASSERT_EQ(c12->data[i], index * 10);
+                    index += 1;
+                }
+            }
+        }
+
+        EXPECT_EQ(rr->next(*batch), false);
+    }
+}
+
+TEST(OrcLazyLoadTest, TestWithSearchArgument) {
+    MemoryOutputStream buffer(1024000);
     size_t batchSize = 1024;
     size_t batchNum = 2;
     size_t readSize = 256;
@@ -141,7 +231,7 @@ TEST(TestLazyLoad, TestWithSearchArgument) {
         auto sarg = builder->build();
 
         orc::ReaderOptions readerOptions;
-        ORC_UNIQUE_PTR<orc::InputStream> inputStream(new orc::MemoryInputStream(buffer.getData(), buffer.getLength()));
+        ORC_UNIQUE_PTR<orc::InputStream> inputStream(new MemoryInputStream(buffer.getData(), buffer.getLength()));
         ORC_UNIQUE_PTR<orc::Reader> reader = createReader(std::move(inputStream), readerOptions);
 
         orc::RowReaderOptions options;
@@ -194,4 +284,4 @@ TEST(TestLazyLoad, TestWithSearchArgument) {
     }
 }
 
-} // namespace orc
+} // namespace starrocks::vectorized
