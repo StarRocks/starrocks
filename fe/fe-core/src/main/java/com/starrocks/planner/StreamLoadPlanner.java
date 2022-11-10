@@ -25,6 +25,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.TupleDescriptor;
@@ -227,7 +228,7 @@ public class StreamLoadPlanner {
         queryGlobals.setTime_zone(streamLoadTask.getTimezone());
         params.setQuery_globals(queryGlobals);
 
-        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", loadId,
+        LOG.info("load job id: {} tx id {} parallel {} compress {} replicated {} quorum {}", DebugUtil.printId(loadId),
                 streamLoadTask.getTxnId(),
                 queryOptions.getLoad_dop(),
                 queryOptions.getLoad_transmission_compression_type(), destTable.enableReplicatedStorage(),

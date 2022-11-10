@@ -53,7 +53,7 @@ package com.starrocks.jni.connector;
  *                   Row index:  ----row 0---------row 1---------row 2----- ... -
  * Variable length column start address: |    (length of row 0)-bytes    | (length of row 1)-bytes | ... |
  *                                       |                               |
- *                 column start address + offset of row 0    column start address + length of row 1
+ *                 column start address + offset of row 0    column start address + offset of row 1
  */
 public class OffHeapTable {
     public OffHeapColumnVector[] vectors;

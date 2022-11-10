@@ -10,7 +10,7 @@ A Hive catalog is an external catalog, which enables you to query data from Hive
 ## Usage notes
 
 - StarRocks supports querying data files of Hive in the following formats: Parquet, ORC, and CSV.
-- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INT, INTEGER, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
+- StarRocks support querying Hive data in the following types: TINYINT, SMALLINT, DATE, BOOLEAN, INT, BIGINT, TIMESTAMP, STRING, VARCHAR, CHAR, DOUBLE, FLOAT, DECIMAL, and ARRAY. Note that an error occurs if you query Hive data in unsupported data types. The following data types are not supported: INTERVAL, BINARY, MAP, STRUCT, and UNION.
 - You can use the [DESC](../../sql-reference/sql-statements/Utility/DESCRIBE.md) statement to view the schema of a Hive table in StarRocks 2.4 and later versions.
 
 ## Before you begin
@@ -214,7 +214,7 @@ Configure the following parameters in the **$FE_HOME/conf/fe.conf** file of each
 | **Parameter**                      | **Description**                                              |
 | ---------------------------------- | ------------------------------------------------------------ |
 | enable_hms_events_incremental_sync | Whether the automatic incremental update strategy is enabled. Valid values are:<ul><li>`TRUE`: means enabled. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means disabled. </li></ul>|
-| hms_events_polling_interval_ms     | The time interval for StarRocks to read events from Hive metastore. The parameter defaults to `5`. Unit: seconds. |
+| hms_events_polling_interval_ms     | The time interval for StarRocks to read events from Hive metastore. The parameter defaults to `5000`. Unit: milliseconds. |
 | hms_events_batch_size_per_rpc      | The maximum number of events that StarRocks can read at a time. The parameter value defaults to `500`. |
 | enable_hms_parallel_process_evens  | Whether the read events are processed in parallel. Valid values are:<ul><li>`TRUE`: means the events are processed in parallel. The value of the parameter defaults to `TRUE`.</li><li>`FALSE`: means the events are not processed in parallel.</li></ul> |
 | hms_process_events_parallel_num    | The maximum number of events that can be processed in parallel. This parameter defaults to `4`. |

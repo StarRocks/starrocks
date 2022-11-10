@@ -4,7 +4,9 @@ package com.starrocks.sql.optimizer;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -48,6 +50,9 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
@@ -64,6 +69,7 @@ import java.util.BitSet;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -678,7 +684,7 @@ public class Utils {
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        // TODO: disable mv query rewrite rules
+        optimizerConfig.disableRuleSet(RuleSetType.SINGLE_TABLE_MV_REWRITE);
         Optimizer optimizer = new Optimizer(optimizerConfig);
         OptExpression optimizedPlan = optimizer.optimize(
                 connectContext,
@@ -708,5 +714,142 @@ public class Utils {
         };
         expression.getOp().accept(scanCollector, expression, null);
         return scanExprs;
+    }
+
+    // get all predicates within and below root
+    public static List<ScalarOperator> getAllPredicates(OptExpression root) {
+        List<ScalarOperator> predicates = Lists.newArrayList();
+        getAllPredicates(root, predicates);
+        return predicates;
+    }
+
+    private static void getAllPredicates(OptExpression root, List<ScalarOperator> predicates) {
+        Operator operator = root.getOp();
+        if (operator.getPredicate() != null) {
+            predicates.add(root.getOp().getPredicate());
+        }
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            if (joinOperator.getOnPredicate() != null) {
+                predicates.add(joinOperator.getOnPredicate());
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            getAllPredicates(child, predicates);
+        }
+    }
+
+    public static ScalarOperator canonizePredicate(ScalarOperator predicate) {
+        if (predicate == null) {
+            return null;
+        }
+        ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
+        return rewrite.rewrite(predicate, ScalarOperatorRewriter.DEFAULT_REWRITE_SCAN_PREDICATE_RULES);
+    }
+
+    public static ScalarOperator canonizePredicateForRewrite(ScalarOperator predicate) {
+        if (predicate == null) {
+            return null;
+        }
+        ScalarOperatorRewriter rewrite = new ScalarOperatorRewriter();
+        return rewrite.rewrite(predicate, ScalarOperatorRewriter.MV_SCALAR_REWRITE_RULES);
+    }
+
+    public static ScalarOperator getCompensationPredicateForDisjunctive(ScalarOperator src, ScalarOperator target) {
+        List<ScalarOperator> srcItems = Utils.extractDisjunctive(src);
+        List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
+        int srcLength = srcItems.size();
+        int targetLength = targetItems.size();
+        targetItems.removeAll(srcItems);
+        if (targetItems.isEmpty() && srcLength == targetLength) {
+            // it is the same, so return true constant
+            return ConstantOperator.createBoolean(true);
+        } else if (!targetItems.isEmpty()) {
+            // the target has more or item, so return src
+            return src;
+        } else {
+            return null;
+        }
+    }
+
+    public static boolean isAllEqualInnerJoin(OptExpression root) {
+        Operator operator = root.getOp();
+        if (!(operator instanceof LogicalOperator)) {
+            return false;
+        }
+        if (operator instanceof LogicalJoinOperator) {
+            LogicalJoinOperator joinOperator = (LogicalJoinOperator) operator;
+            boolean isEqualPredicate = isColumnEqualPredicate(joinOperator.getOnPredicate());
+            if (joinOperator.getJoinType() != JoinOperator.INNER_JOIN || !isEqualPredicate) {
+                return false;
+            }
+        }
+        for (OptExpression child : root.getInputs()) {
+            if (!isAllEqualInnerJoin(child)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    public static boolean isColumnEqualPredicate(ScalarOperator predicate) {
+        if (predicate == null) {
+            return false;
+        }
+
+        ScalarOperatorVisitor<Boolean, Void> checkVisitor = new ScalarOperatorVisitor<Boolean, Void>() {
+            @Override
+            public Boolean visit(ScalarOperator scalarOperator, Void context) {
+                return false;
+            }
+
+            @Override
+            public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+                if (!predicate.isAnd()) {
+                    return false;
+                }
+                for (ScalarOperator child : predicate.getChildren()) {
+                    Boolean ret = child.accept(this, null);
+                    if (!Boolean.TRUE.equals(ret)) {
+                        return false;
+                    }
+                }
+                return true;
+            }
+
+            @Override
+            public Boolean visitBinaryPredicate(BinaryPredicateOperator predicate, Void context) {
+                return predicate.getBinaryType().isEqual()
+                        && predicate.getChild(0).isColumnRef()
+                        && predicate.getChild(1).isColumnRef();
+            }
+        };
+
+        return predicate.accept(checkVisitor, null);
+    }
+
+    public static Map<ColumnRefOperator, ScalarOperator> getColumnRefMap(
+            OptExpression expression, ColumnRefFactory refFactory) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+        if (expression.getOp().getProjection() != null) {
+            columnRefMap = expression.getOp().getProjection().getColumnRefMap();
+        } else {
+            columnRefMap = Maps.newHashMap();
+            if (expression.getOp() instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
+                Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
+                        java.util.function.Function.identity(),
+                        java.util.function.Function.identity()));
+                columnRefMap.putAll(keyMap);
+                columnRefMap.putAll(agg.getAggregations());
+            } else {
+                ColumnRefSet refSet = expression.getOutputColumns();
+                for (int columnId : refSet.getColumnIds()) {
+                    ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
+                    columnRefMap.put(columnRef, columnRef);
+                }
+            }
+        }
+        return columnRefMap;
     }
 }
