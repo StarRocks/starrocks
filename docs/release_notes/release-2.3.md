@@ -1,5 +1,37 @@
 # StarRocks version 2.3
 
+## 2.3.4
+
+Release date: November 10, 2022
+
+### Improvements
+
+- The error message provides a solution when StarRocks fails to create a Routine Load job because the number of running Routine Load job exceeds the limit. [#12204]( https://github.com/StarRocks/starrocks/pull/12204)
+
+- The query fails when StarRocks queries data from Hive and fails to parse CSV files. [#13013](https://github.com/StarRocks/starrocks/pull/13013)
+
+### Bug Fixes
+
+The following bugs are fixed:
+
+- The query may fail if HDFS files paths contain `()`. [#12660](https://github.com/StarRocks/starrocks/pull/12660)
+
+- The result of ORDER BY ... LIMIT ... OFFSET is incorrect when the subquery contains LIMIT. [#9698](https://github.com/StarRocks/starrocks/issues/9698)
+
+- StarRocks is case-insensitive when querying ORC files. [#12724](https://github.com/StarRocks/starrocks/pull/12724)
+
+- BE may crash when RuntimeFilter is closed without invoking the prepare method. [#12906](https://github.com/StarRocks/starrocks/issues/12906)
+
+- BE may crash because of memory leak. [#12906](https://github.com/StarRocks/starrocks/issues/12906)
+
+- The query result may be incorrect after you add a new column and immediately delete data. [#12907](https://github.com/StarRocks/starrocks/pull/12907)
+
+- BE may crash because of sorting data. [#11185](https://github.com/StarRocks/starrocks/pull/11185)
+
+- If StarRocks and MySQL client are not on the same LAN, the loading job created by using INSERT INTO SELECT can not be terminated successfully by executing KILL only once. [#11879](https://github.com/StarRocks/starrocks/pull/11897)
+
+- The metrics `ScanRows` collected by pipeline engine in audit log may be wrong. [#12185](https://github.com/StarRocks/starrocks/pull/12185)
+
 ## 2.3.3
 
 Release date: September 27, 2022
