@@ -119,6 +119,9 @@ public class MaterializedViewRewriter extends OptExpressionVisitor<OptExpression
         Map<ColumnRefOperator, CallOperator> newAggMap = new HashMap<>(aggregationOperator.getAggregations());
         for (Map.Entry<ColumnRefOperator, CallOperator> kv : aggregationOperator.getAggregations().entrySet()) {
             String functionName = kv.getValue().getFnName();
+            if (kv.getValue().getUsedColumns().isEmpty()) {
+                break;
+            }
             if (functionName.equals(context.aggCall.getFnName())
                     && kv.getValue().getUsedColumns().getFirstId() == context.queryColumnRef.getId()) {
                 if (kv.getValue().getFnName().equals(FunctionSet.COUNT) && !kv.getValue().isDistinct()) {

@@ -181,6 +181,7 @@ public:
         size_t bytes_written = 0;
         RETURN_IF_ERROR(do_writev_at(_fd, _filename, _filesize, data, cnt, &bytes_written));
         _filesize += bytes_written;
+        _pending_sync = true;
         return Status::OK();
     }
 

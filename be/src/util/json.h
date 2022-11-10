@@ -160,6 +160,10 @@ inline vpack::Slice nullJsonSlice() {
     return vpack::Slice::nullSlice();
 }
 
+inline vpack::Slice emptyStringJsonSlice() {
+    return vpack::Slice::emptyStringSlice();
+}
+
 template <class Ret, class Fn>
 inline StatusOr<Ret> JsonValue::callVPack(Fn fn) {
     try {

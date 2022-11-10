@@ -33,7 +33,9 @@ import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public final class QeProcessorImpl implements QeProcessor {
 
@@ -57,6 +59,13 @@ public final class QeProcessorImpl implements QeProcessor {
             return queryInfo.getCoord();
         }
         return null;
+    }
+
+    @Override
+    public List<Coordinator> getCoordinators() {
+        return coordinatorMap.values().stream()
+                .map(QueryInfo::getCoord)
+                .collect(Collectors.toList());
     }
 
     @Override
