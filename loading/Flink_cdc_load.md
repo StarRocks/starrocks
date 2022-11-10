@@ -75,7 +75,7 @@
 2. **下载 [Flink CDC connector](https://github.com/ververica/flink-cdc-connectors/releases)**。本示例的数据源为 MySQL，因此下载 flink-sql-connector-**mysql**-cdc-x.x.x.jar。并且版本需支持对应的 Flink 版本，两者版本支持度，请参见 [Supported Flink Versions](https://ververica.github.io/flink-cdc-connectors/release-2.2/content/about.html#supported-flink-versions)。由于本文使用 Flink  1.14.5，因此可以使用 flink-sql-connector-mysql-cdc-2.2.0.jar。
 
       ```Bash
-      wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.1.1/flink-sql-connector-mysql-cdc-2.2.0.jar
+      wget https://repo1.maven.org/maven2/com/ververica/flink-sql-connector-mysql-cdc/2.2.0/flink-sql-connector-mysql-cdc-2.2.0.jar
       ```
 
 3. **下载 [flink-connector-starrocks](https://search.maven.org/artifact/com.starrocks/flink-connector-starrocks)**，并且其版本需要对应 Flink 的版本。
