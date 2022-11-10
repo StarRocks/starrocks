@@ -13,7 +13,7 @@
   + [数据模型介绍](/table_design/Data_model.md)
   + [数据分布](/table_design/Data_distribution.md)
   + [排序键和前缀索引](/table_design/Sort_key.md)
-+ 数据导入
++ 导入数据
   + [导入总览](/loading/Loading_intro.md)
   + [通过 HTTP PUT 从本地文件系统或流式数据源导入](/loading/StreamLoad.md)
   + [从 HDFS 或外部云存储系统导入](/loading/BrokerLoad.md)
@@ -26,6 +26,10 @@
   + [使用 Apache Flink® 导入](/loading/Flink-connector-starrocks.md)
   + [使用 DataX 导入](/loading/DataX-starrocks-writer.md)
   + [使用 CloudCanal 导入](/loading/CloudCanal_loading.md)
++ 导出数据
+  + [使用 Broker 导出数据](/unloading/Export.md)
+  + [Spark Connector](/unloading/Spark_connector.md)
+  + [Flink Connector](/unloading/Flink_connector.md)
 + 使用StarRocks
   + [CBO 优化器](/using_starrocks/Cost_based_optimizer.md)
   + [物化视图](/using_starrocks/Materialized_view.md)
@@ -409,10 +413,6 @@
   + [系统变量](/reference/System_variable.md)
   + [错误码](/reference/Error_code.md)
   + [系统限制](/reference/System_limit.md)
-+ 导出数据
-  + [使用 Broker 导出数据](/unloading/Export.md)
-  + [Spark Connector](/unloading/Spark_connector.md)
-  + [Flink Connector](/unloading/Flink_connector.md)
 + 常见问题解答
   + [部署运维](/faq/Deploy_faq.md)
   + 数据迁移
