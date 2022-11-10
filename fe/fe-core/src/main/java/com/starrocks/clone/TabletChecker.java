@@ -274,10 +274,12 @@ public class TabletChecker extends LeaderDaemon {
                     for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
                         partitionChecked++;
                         if (partitionChecked % partitionBatchNum == 0) {
+                            LOG.debug("partition checked reached batch value, release lock");
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
                             db.readUnlock();
                             db.readLock();
+                            LOG.debug("checker get lock again");
                             lockStart = System.nanoTime();
                             if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
                                 continue DATABASE;
@@ -329,7 +331,7 @@ public class TabletChecker extends LeaderDaemon {
 
                                 if (statusWithPrio.first == TabletStatus.HEALTHY) {
                                     // Only set last status check time when status is healthy.
-                                    localTablet.setLastStatusCheckTime(start);
+                                    localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                                     continue;
                                 } else if (isPartitionInPrios) {
                                     statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;

@@ -15,8 +15,10 @@ public class DecommissionTest {
     public static void setUp() throws Exception {
         Config.tablet_sched_checker_interval_seconds = 1;
         Config.tablet_sched_repair_delay_factor_second = 1;
+        Config.tablet_checker_partition_batch_num = 1;
         Config.enable_new_publish_mechanism = true;
         Config.drop_backend_after_decommission = false;
+        Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         FeConstants.default_scheduler_interval_millisecond = 5000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(1000);
@@ -38,7 +40,11 @@ public class DecommissionTest {
         final String[] insertSqls = new String[numTable];
         for (int i = 0; i < numTable; i++) {
             tableNames[i] = "test_" + i;
-            createTableSqls[i] = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i]).build();
+            PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i]);
+            if (i % 2 == 0) {
+                sqlBuilder.setColocateGroup("g1");
+            }
+            createTableSqls[i] = sqlBuilder.build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
         }

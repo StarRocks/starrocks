@@ -1406,8 +1406,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                         if (partitionChecked % partitionBatchNum == 0) {
                             lockTotalTime += System.nanoTime() - lockStart;
                             // release lock, so that lock can be acquired by other threads.
+                            LOG.debug("partition checked reached batch value, release lock");
                             db.readUnlock();
                             db.readLock();
+                            LOG.debug("balancer get lock again");
                             lockStart = System.nanoTime();
                             if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
                                 continue DATABASE;
