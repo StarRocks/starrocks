@@ -7,10 +7,13 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.AnalyticExpr;
+import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.GroupingFunctionCallExpr;
+import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.AggregateFunction;
@@ -24,6 +27,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.util.DateUtils;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
@@ -474,6 +478,18 @@ public class AnalyzerUtils {
             return new TableName(null, null, parts.get(0));
         } else {
             throw new ParsingException("error table name ");
+        }
+    }
+
+    public static String parseLiteralExprToDateString(LiteralExpr expr, int offset) {
+        if (expr instanceof DateLiteral) {
+            DateLiteral lowerDate = (DateLiteral) expr;
+            return DateUtils.DATE_FORMATTER.format(lowerDate.toLocalDateTime().plusDays(offset));
+        } else if (expr instanceof IntLiteral) {
+            IntLiteral intLiteral = (IntLiteral) expr;
+            return String.valueOf(intLiteral.getLongValue() + offset);
+        } else {
+            return null;
         }
     }
 

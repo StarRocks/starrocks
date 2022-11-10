@@ -257,8 +257,9 @@ public class DDLStmtExecutor {
         public ShowResultSet visitRefreshMaterializedViewStatement(RefreshMaterializedViewStatement stmt,
                                                                    ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
+                // The priority of manual refresh is higher than that of general refresh
                 context.getGlobalStateMgr().getLocalMetastore()
-                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.NORMAL.value());
+                        .refreshMaterializedView(stmt, Constants.TaskRunPriority.HIGH.value());
             });
             return null;
         }

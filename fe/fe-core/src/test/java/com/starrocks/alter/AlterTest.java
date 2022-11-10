@@ -243,7 +243,7 @@ public class AlterTest {
         }
     }
 
-    private static void refreshMaterializedView(String sql, boolean expectedException) throws Exception {
+    private static void refreshMaterializedView(String sql) throws Exception {
         RefreshMaterializedViewStatement refreshMaterializedViewStatement =
                 (RefreshMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         try {
@@ -251,14 +251,9 @@ public class AlterTest {
                     .refreshMaterializedView(refreshMaterializedViewStatement.getMvName().getDb(),
                             refreshMaterializedViewStatement.getMvName().getTbl(),
                             Constants.TaskRunPriority.LOWEST.value());
-            if (expectedException) {
-                Assert.fail();
-            }
         } catch (Exception e) {
             e.printStackTrace();
-            if (!expectedException) {
-                Assert.fail();
-            }
+            Assert.fail();
         }
     }
 
@@ -418,7 +413,7 @@ public class AlterTest {
                 "as select k1, k2 from test.testTable3;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
-        refreshMaterializedView(alterStmt, false);
+        refreshMaterializedView(alterStmt);
         dropMaterializedView("drop materialized view test.mv1");
     }
 
@@ -448,7 +443,7 @@ public class AlterTest {
                 "as select k1, k2 from test.testTable4;";
         createMaterializedView(sql);
         String alterStmt = "refresh materialized view test.mv1";
-        refreshMaterializedView(alterStmt, false);
+        refreshMaterializedView(alterStmt);
         cancelRefreshMaterializedView("cancel refresh materialized view test.mv1", false);
         dropMaterializedView("drop materialized view test.mv1");
     }
