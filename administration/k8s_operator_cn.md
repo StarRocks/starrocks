@@ -144,7 +144,7 @@ CN 辅助服务是指 **component** 目录下的register、offline，会将 CN �
 
 ## 部署 StarRocks Operator
 
-1. 进入 **starrocks-kubernetes-operator****/deploy** 目录。
+1. 进入 **starrocks-kubernetes-operator/deploy** 目录。
 
     ```Bash
     cd $your_code_path/starrocks-kubernetes-operator/deploy

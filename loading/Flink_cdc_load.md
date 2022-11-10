@@ -19,7 +19,7 @@
 
    Flink SQL 客户端执行导入数据的 SQL 语句（`INSERT INTO SELECT`语句），向 Flink 集群提交一个或者多个长时间运行的 Flink job。Flink集群运行 Flink job ，[Flink cdc connector](https://ververica.github.io/flink-cdc-connectors/master/content/快速上手/build-real-time-data-lake-tutorial-zh.html) 先读取数据库的历史全量数据，然后无缝切换到增量读取，并且发给 flink-starrocks-connector，最后  flink-starrocks-connector  攒微批数据同步至 StarRocks。
 
-   > 注意：
+   > **注意**
    >
    > 仅支持同步 DML，不支持同步 DDL。
 
@@ -92,7 +92,7 @@
 
 4. 将 Flink CDC connector、Flink-connector-starrocks 的 JAR 包 **flink-sql-connector-mysql-cdc-2.2.0.jar**、**1.2.3_flink-1.14_2.11.jar** 移动至 Flink 的 **lib** 目录。
 
-   > **注意**：
+   > **注意**
    >
    > 如果 Flink 已经处于运行状态中，则需要重启 Flink ，加载并生效 JAR 包。
    >
@@ -266,7 +266,7 @@
     ./bin/sql-client.sh -f flink-create.all.sql
     ```
 
-    > 注意：
+    > **注意**
     >
     > - 需要确保 Flink 集群已经启动。可通过命令 `flink/bin/start-cluster.sh` 启动。
     >
@@ -479,7 +479,7 @@ flink.starrocks.sink.properties.strip_outer_array=true
 
 3. 修改文件中的 SQL 语句，将所有的  INSERT INTO 语句调整位置到文件末尾。然后在第一条 INSERT语句的前面加上`EXECUTE STATEMENT SET BEGIN;` 在最后一 INSERT 语句后面加上一行`END;`。
 
-   > 注意：
+   > **注意**
    >
    > CREATE DATABASE、CREATE TABLE  的位置保持不变。
 

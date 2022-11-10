@@ -10,7 +10,9 @@ Routine load 支持 Exactly-Once 语义，能够保证数据不丢不重。
 
 Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
-> 说明：对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
+> **说明**
+>
+> 对于 CSV 格式的数据，StarRocks 支持设置长度最大不超过 50 个字节的 UTF-8 编码字符串作为列分隔符，包括常见的逗号 (,)、Tab 和 Pipe (|)。
 
 ## 基本原理
 
@@ -51,6 +53,8 @@ Routine Load 目前支持从 Kakfa 集群中消费 CSV、JSON 格式的数据。
 
   - **执行导入任务**：Coordinator BE 执行导入任务，消费分区的消息，解析并过滤数据。导入任务需要消费足够多的消息，或者消费足够长时间。消费时间和消费的数据量由 FE 配置项 `max_routine_load_batch_size`、`routine_load_task_consume_second`决定，有关该配置项的更多说明，请参见 [配置参数](../administration/Configuration.md#导入和导出相关动态参数)。然后，Coordinator BE 将消息分发至相关 Executor BE 节点， Executor BE 节点将消息写入磁盘。
 
+    > **说明**
+    >
     > StarRocks 可以通过无认证、SSL 认证、SASL 认证机制连接 Kafka。
 
 - **持续生成新的导入任务，不间断地导入数据**
@@ -152,6 +156,8 @@ FROM KAFKA
 
   更多数据转换的说明，请参见[导入时实现数据转换](./Etl_in_loading.md)。
 
+  > **说明**
+  >
   > 如果 CSV 数据中列的名称、顺序和数量都能与目标表中列完全对应，则无需配置 `COLUMNS` 。
 
 - **增加实际任务并行度 加快导入速度**
@@ -182,7 +188,9 @@ FROM KAFKA
 {"commodity_id": "3", "customer_name": "Antoine de Saint-Exupéry","country": "France","pay_time": 1589191487,"price": 895}
 ```
 
-> 注意：这里每行一个 JSON 对象必须在一个 Kafka 消息中，否则会出现“JSON 解析错误”的问题。
+> **注意**
+>
+> 这里每行一个 JSON 对象必须在一个 Kafka 消息中，否则会出现“JSON 解析错误”的问题。
 
 #### 目标数据库和表
 
@@ -238,6 +246,8 @@ FROM KAFKA
 
   更多数据转换的说明，请参见[导入时实现数据转换](./Etl_in_loading.md)。
 
+  > **说明**
+  >
   > 如果每行一个 JSON 对象中 key 的名称和数量（顺序不需要对应）都能对应目标表中列，则无需配置 `COLUMNS` 。
 
 ## 查看导入作业和任务
@@ -273,7 +283,9 @@ ReasonOfStateChanged:
             OtherMsg: 
 ```
 
-> 注意： StarRocks 只支持查看当前正在运行中的导入作业，不支持查看已经停止和未开始的导入作业。
+> **注意**
+>
+> StarRocks 只支持查看当前正在运行中的导入作业，不支持查看已经停止和未开始的导入作业。
 
 ### 查看导入任务
 
@@ -345,7 +357,9 @@ RESUME ROUTINE LOAD FOR example_tbl2_ordertest2;
 
 例如，当存活 BE 节点数增至 6 个，待消费分区为`"0,1,2,3,4,5,6,7"`时，如果您希望提高实际的导入并行度，则可以通过以下语句，将期望任务并行度`desired_concurrent_number` 增加至 `6`（大于等于存活 BE 节点数），并且调整待消费分区和起始消费位点。
 
-> 说明：由于实际导入并行度由多个参数的最小值决定，此时，您还需要确保 FE 动态参数 `max_routine_load_task_concurrent_num`的值大于或等于 `6`。
+> **说明**
+>
+> 由于实际导入并行度由多个参数的最小值决定，此时，您还需要确保 FE 动态参数 `max_routine_load_task_concurrent_num`的值大于或等于 `6`。
 
 ```SQL
 ALTER ROUTINE LOAD FOR example_tbl2_ordertest2
