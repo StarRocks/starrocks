@@ -67,7 +67,7 @@ public class AuthUpgraderTest {
     }
 
     private void replayUpgrade(UtFrameUtils.PseudoImage image) throws Exception {
-        // pretend it's a old privilege
+        // pretend it's an old privilege
         GlobalStateMgr.getCurrentState().initAuth(false);
         // 1. load image
         ctx = UtFrameUtils.initCtxForNewPrivilege(UserIdentity.ROOT);
@@ -131,14 +131,14 @@ public class AuthUpgraderTest {
             for (int j = 0; j != 2; ++ j) {
                 String createTblStmtStr = "create table db" + i + ".tbl" + j
                         + "(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
-                        +
-                        "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                        + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1)"
+                        + " buckets 3 properties('replication_num' = '1');";
                 starRocksAssert.withTable(createTblStmtStr);
             }
         }
         ctx = starRocksAssert.getCtx();
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
-        Config.ignore_invalid_privilege_authentications = true;
+        Config.ignore_invalid_privilege_authentications = false;
     }
 
     @After
@@ -304,6 +304,47 @@ public class AuthUpgraderTest {
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
             ctx.setCurrentUserIdentity(createUserByRole("oneUsageResourceRole"));
             Assert.assertTrue(PrivilegeManager.checkResourceAction(ctx, "hive0", PrivilegeType.ResourceAction.USAGE));
+        }
+    }
+
+    @Test
+    public void testCreate() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user userWithGlobalCreate",
+                "grant create_priv on *.* to userWithGlobalCreate",
+                "create user userWithResourceAllCreate",
+                "grant create_priv on resource * to userWithResourceAllCreate",
+                "create user userWithDbCreate",
+                "grant create_priv on db1.* to userWithDbCreate");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+
+            // check: grant create_priv on *.*
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithGlobalCreate", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_FUNCTION));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1",
+                    PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+
+            // check: grant create_priv on resource *
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithResourceAllCreate", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_VIEW));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_FUNCTION));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db0",
+                    PrivilegeType.DbAction.CREATE_MATERIALIZED_VIEW));
+
+            // check: grant create_priv on db1.*
+            ctx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp("userWithDbCreate", "%"));
+            Assert.assertTrue(PrivilegeManager.checkDbAction(ctx, "db1", PrivilegeType.DbAction.CREATE_TABLE));
+            Assert.assertFalse(PrivilegeManager.checkDbAction(ctx, "db0", PrivilegeType.DbAction.CREATE_TABLE));
         }
     }
 

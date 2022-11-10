@@ -3309,7 +3309,7 @@ public class GlobalStateMgr {
 
     }
 
-    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoveredException {
+    public void replayAuthUpgrade(AuthUpgradeInfo info) throws AuthUpgrader.AuthUpgradeUnrecoverableException {
         AuthUpgrader upgrader = new AuthUpgrader(auth, authenticationManager, privilegeManager, this);
         upgrader.replayUpgrade(info.getRoleNameToId());
         usingNewPrivilege.set(true);
