@@ -2,7 +2,7 @@
 
 ## 功能
 
-Stream Load 是一种基于 HTTP 协议的同步导入方式，支持将本地文件或数据流导入到 StarRocks 中。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。有关 Stream Load 的应用场景、使用限制、基本原理、以及支持的数据文件格式等信息，请参见[通过 HTTP Push 从本地文件系统或流式数据源导入数据](/loading/StreamLoad.md)。
+Stream Load 是一种基于 HTTP 协议的同步导入方式，支持将本地文件或数据流导入到 StarRocks 中。您提交导入作业以后，StarRocks 会同步地执行导入作业，并返回导入作业的结果信息。您可以通过返回的结果信息来判断导入作业是否成功。有关 Stream Load 的应用场景、使用限制、基本原理、以及支持的数据文件格式等信息，请参见[通过 HTTP Push 从本地文件系统或流式数据源导入数据](../../../loading/StreamLoad.md)。
 
 需要注意的是，Stream Load 操作会同时更新和 StarRocks 原始表相关的物化视图的数据。
 
@@ -78,7 +78,7 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 | file_name    | 是           | 指定待导入数据文件的名称。文件名里可选包含或者不包含扩展名。 |
 | format       | 否           | 指定待导入数据的格式。取值包括 `CSV` 和 `JSON`。默认值：`CSV`。 |
 | partitions   | 否           | 指定要把数据导入哪些分区。如果不指定该参数，则默认导入到 StarRocks 表所在的所有分区中。 |
-| columns      | 否           | 指定待导入数据文件和 StarRocks 表之间的列对应关系。如果待导入数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](/sql-reference/sql-statements/data-manipulation/STREAM%20LOAD.md#列映射)”章节。 |
+| columns      | 否           | 指定待导入数据文件和 StarRocks 表之间的列对应关系。如果待导入数据文件中的列与 StarRocks 表中的列按顺序一一对应，则不需要指定 `columns` 参数。您可以通过 `columns` 参数实现数据转换。例如，要导入一个 CSV 格式的数据文件，文件中有两列，分别可以对应到目标 StarRocks 表的 `id` 和 `city` 两列。如果要实现把数据文件中第一列的数据乘以 100 以后再落入 StarRocks 表的转换，可以指定 `"columns: city,tmp_id, id = tmp_id * 100"`。具体请参见本文“[列映射](#列映射)”章节。 |
 
 #### CSV 适用参数
 
@@ -116,12 +116,12 @@ http://<fe_host>:<fe_http_port>/api/<database_name>/<table_name>/_stream_load
 
 | **参数名称**     | **是否必选** | **参数说明**                                                 |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| label            | 否           | 用于指定导入作业的标签。如果您不指定标签，StarRocks 会自动为导入作业生成一个标签。相同标签的数据无法多次成功导入，这样可以避免一份数据重复导入。有关标签的命名规范，请参见[系统限制](/reference/System_limit.md)。StarRocks 默认保留最近 3 天内成功的导入作业的标签。您可以通过 [FE 配置参数](/administration/Configuration.md#导入和导出相关动态参数) `label_keep_max_second` 设置默认保留时长。 |
+| label            | 否           | 用于指定导入作业的标签。如果您不指定标签，StarRocks 会自动为导入作业生成一个标签。相同标签的数据无法多次成功导入，这样可以避免一份数据重复导入。有关标签的命名规范，请参见[系统限制](../../../reference/System_limit.md)。StarRocks 默认保留最近 3 天内成功的导入作业的标签。您可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `label_keep_max_second` 设置默认保留时长。 |
 | where            | 否           | 用于指定过滤条件。如果指定该参数，StarRocks 会按照指定的过滤条件对转换后的数据进行过滤。只有符合 WHERE 子句中指定的过滤条件的数据才会导入。 |
 | max_filter_ratio | 否           | 用于指定导入作业的最大容错率，即导入作业能够容忍的因数据质量不合格而过滤掉的数据行所占的最大比例。取值范围：`0`~`1`。默认值：`0` 。<br>建议您保留默认值 `0`。这样的话，当导入的数据行中有错误时，导入作业会失败，从而保证数据的正确性。<br>如果希望忽略错误的数据行，可以设置该参数的取值大于 `0`。这样的话，即使导入的数据行中有错误，导入作业也能成功。<br>说明：这里因数据质量不合格而过滤掉的数据行，不包括通过 WHERE 子句过滤掉的数据行。 |
-| timeout          | 否           | 用于导入作业的超时时间。单位：秒。取值范围：1 ~ 259200。默认值：`600`。<br>说明：除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](/administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
+| timeout          | 否           | 用于导入作业的超时时间。单位：秒。取值范围：1 ~ 259200。默认值：`600`。<br>说明：除了 `timeout` 参数可以控制该导入作业的超时时间外，您还可以通过 [FE 配置参数](../../../administration/Configuration.md#导入和导出相关动态参数) `stream_load_default_timeout_second` 来统一控制 Stream Load 导入作业的超时时间。如果指定了`timeout` 参数，则该导入作业的超时时间以 `timeout` 参数为准；如果没有指定 `timeout` 参数，则该导入作业的超时时间以`stream_load_default_timeout_second` 为准。 |
 | strict_mode      | 否           | 用于指定是否开启严格模式。取值范围：`true` 和 `false`。默认值：`false`。`true` 表示开启，`false` 表示关闭。 |
-| timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br>该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](/administration/timezone.md。导入参数 `timezone` 设置的时区对应“[设置时区](/administration/timezone.md)”中所述的会话级时区。 |
+| timezone         | 否           | 用于指定导入作业所使用的时区。默认为东八区 (Asia/Shanghai)。<br>该参数的取值会影响所有导入涉及的、跟时区设置有关的函数所返回的结果。受时区影响的函数有 strftime、alignment_timestamp 和 from_unixtime 等，具体请参见[设置时区](../../../administration/timezone.md)。导入参数 `timezone` 设置的时区对应“[设置时区](../../../administration/timezone.md)”中所述的会话级时区。 |
 | load_mem_limit   | 否           | 导入作业的内存限制，最大不超过 BE 的内存限制。单位：字节。默认内存限制为 2 GB。 |
 
 ## 列映射
@@ -347,7 +347,7 @@ curl --location-trusted -u root: \
 >
 > - 使用 `empty_hll` 函数给导入的数据行在 `table7` 中的第二列补充默认值。
 
-有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](https://docs.starrocks.com/zh-cn/2.3/sql-reference/sql-statements/data-definition/HLL)。
+有关 `hll_hash` 函数和 `hll_empty` 函数的用法，请参见 [HLL](../data-definition/HLL.md)。
 
 #### **导入数据到含有 BITMAP 类型列的表**
 
@@ -372,7 +372,7 @@ curl --location-trusted -u root: \
 >
 > - 使用 `bitmap_empty` 函数给导入的数据行在 `table8` 中的第二列补充默认值。
 
-有关 `to_bitmap` 函数和 `bitmap_empty` 函数的用法，请参见 [to_bitmap](https://docs.starrocks.com/zh-cn/2.3/sql-reference/sql-functions/bitmap-functions/to_bitmap) 和 [bitmap_empty](https://docs.starrocks.com/zh-cn/2.3/sql-reference/sql-functions/bitmap-functions/bitmap_empty)。
+有关 `to_bitmap` 函数和 `bitmap_empty` 函数的用法，请参见 [to_bitmap](../../sql-functions/bitmap-functions/to_bitmap.md) 和 [bitmap_empty](../../sql-functions/bitmap-functions/bitmap_empty.md)。
 
 ### **导入 JSON 格式的数据**
 
