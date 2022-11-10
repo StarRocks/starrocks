@@ -100,7 +100,7 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    static void checkAnyActionOnDbOrUnderDb(ConnectContext context, String catalogName, String dbName) {
+    static void checkAnyActionOnOrUnderDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
@@ -215,7 +215,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-            checkAnyActionOnDbOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
             return null;
         }
 
@@ -308,7 +308,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
-            checkAnyActionOnDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -317,7 +317,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
-            checkAnyActionOnDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -326,7 +326,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
-            checkAnyActionOnDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnOrUnderDb(context, context.getCurrentCatalog(), statement.getDbName());
             return null;
         }
 
