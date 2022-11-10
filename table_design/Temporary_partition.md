@@ -128,7 +128,7 @@ WHERE ...;
 您可以通过以下命令将一个表的正式分区替换为临时分区。
 
 ```sql
-ALTER TABLE table_name REPLACE (partition_name) PARTITION WITH TEMPORARY PARTITION (temporary_partition_name1, ...)
+ALTER TABLE table_name REPLACE PARTITION(partition_name) WITH TEMPORARY PARTITION (temporary_partition_name1, ...)
 PROPERTIES ("key" = "value");
 ```
 
