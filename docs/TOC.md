@@ -32,19 +32,13 @@
   + [Spark connector](./unloading/Spark_connector.md)
   + [Flink connector](./unloading/Flink_connector.md)
 + Query Data Sources
-  + Catalog
-    + [Overview](./data_source/catalog/catalog_overview.md)
-    + [Default catalog](./data_source/catalog/default_catalog.md)
-    + [Hive catalog](./data_source/catalog/hive_catalog.md)
-    + [Iceberg catalog](./data_source/catalog/iceberg_catalog.md)
-    + [Hudi catalog](./data_source/catalog/hudi_catalog.md)
-    + [Query external data](./data_source/catalog/query_external_data.md)
+  + [Use catalogs to manage internal and external data](./data_source/Manage_data.md.md)
   + [External tables](./data_source/External_table.md)
 + Query Acceleration
   + [Gather CBO statistics](./using_starrocks/Cost_based_optimizer.md)
   + [Materialized view](./using_starrocks/Materialized_view.md)
-  + [External tables](./using_starrocks/External_table.md)
-  + [Use catalogs to manage internal and external data](./using_starrocks/Manage_data.md)
+  + [External tables](./data_source/External_table.md)
+  + [Use catalogs to manage internal and external data](./data_source/Manage_data.md)
   + [Colocate Join](./using_starrocks/Colocate_join.md)
   + [Lateral Join](./using_starrocks/Lateral_join.md)
   + [Bitmap indexing](./using_starrocks/Bitmap_index.md)

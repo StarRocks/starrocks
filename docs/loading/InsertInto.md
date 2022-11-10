@@ -2,7 +2,7 @@
 
 This topic describes how to load data into StarRocks by using a DML statement - INSERT.
 
-Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax to test a function or a DEMO. You can also insert data defined by the results of a query on an internal or an [external table](../using_starrocks/External_table.md) to build mathematical models for small-scale datasets or back up your data in HDFS.
+Similar to MySQL and many other database management systems, StarRocks supports loading data to an internal table with INSERT command. You can insert one or more rows with the VALUES syntax to test a function or a DEMO. You can also insert data defined by the results of a query on an internal or an [external table](../data_source/External_table.md) to build mathematical models for small-scale datasets or back up your data in HDFS.
 
 ## Precautions
 

@@ -91,5 +91,5 @@ To learn more about the data ingestion methods of StarRocks, see [Ingestion Over
 You can also learn how to:
 
 - Perform [ETL when loading](../loading/Etl_in_loading.md).
-- Create an [external table](../using_starrocks/External_table.md) to access external data sources.
+- Create an [external table](../data_source/External_table.md) to access external data sources.
 - [Analyze the query plan](../administration/Query_planning.md) to learn how to optimize the query performance.
