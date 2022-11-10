@@ -202,8 +202,8 @@ static int real_port = 0;
 
 class MockESServerTest : public testing::Test {
 public:
-    MockESServerTest() {}
-    ~MockESServerTest() override {}
+    MockESServerTest() = default;
+    ~MockESServerTest() override = default;
 
     static void SetUpTestCase() {
         mock_es_server = new EvHttpServer(0);

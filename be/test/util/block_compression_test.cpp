@@ -48,8 +48,8 @@ static std::string random_string(int len) {
 
 class BlockCompressionTest : public testing::Test {
 public:
-    BlockCompressionTest() {}
-    virtual ~BlockCompressionTest() {}
+    BlockCompressionTest() = default;
+    ~BlockCompressionTest() override = default;
 };
 
 static std::string generate_str(size_t len) {
@@ -236,7 +236,7 @@ void benchmark_single_slice_compression(starrocks::CompressionTypePB type, std::
     auto st = get_block_compression_codec(type, &codec);
     ASSERT_TRUE(st.ok());
 
-    std::string orig = str;
+    const std::string& orig = str;
     Slice orig_slices(orig);
 
     size_t total_size = orig.size();

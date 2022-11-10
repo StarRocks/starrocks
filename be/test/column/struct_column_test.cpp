@@ -233,7 +233,7 @@ TEST(StructColumnTest, test_reset_column) {
     column->reset_column();
 
     ASSERT_EQ(0, column->size());
-    for (auto subfield : column->fields()) {
+    for (const auto& subfield : column->fields()) {
         ASSERT_EQ(0, subfield->size());
     }
 }

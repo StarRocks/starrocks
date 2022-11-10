@@ -64,7 +64,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import static com.starrocks.catalog.TableProperty.NO_TTL;
+import static com.starrocks.catalog.TableProperty.INVALID;
 
 /**
  * This class is used to periodically add or drop partition on an olapTable which specify dynamic partition properties
@@ -433,7 +433,7 @@ public class DynamicPartitionScheduler extends LeaderDaemon {
             }
 
             int ttlNumber = olapTable.getTableProperty().getPartitionTTLNumber();
-            if (Objects.equals(ttlNumber, NO_TTL)) {
+            if (Objects.equals(ttlNumber, INVALID)) {
                 iterator.remove();
                 LOG.warn("database={}, table={} have no ttl. remove it from scheduler", dbId, tableId);
                 continue;

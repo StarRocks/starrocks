@@ -76,7 +76,7 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.isPartitionPresent(getHivePartitionKey());
+        return cache.isPartitionPresent(getHivePartitionName());
     }
 
     @Override
@@ -92,9 +92,9 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
     @Override
     protected void process() throws MetastoreNotificationException {
         if (!existInCache()) {
-            LOG.warn("Partition [Catalog: [{}], Table: [{}.{}]. Partition values: [{}] ] " +
-                            "doesn't exist in cache on event id [{}]", catalogName,
-                    getDbName(), getTblName(), getHivePartitionKey().getPartitionValues(), getEventId());
+            LOG.warn("Partition [Catalog: [{}], Table: [{}.{}]. Partition name: [{}] ] " +
+                            "doesn't exist in cache on event id [{}]",
+                    catalogName, dbName, tblName, getHivePartitionName(), getEventId());
             return;
         }
 
@@ -110,9 +110,9 @@ public class AlterPartitionEvent extends MetastoreTableEvent {
             HiveCommonStats hiveCommonStats = toHiveCommonStats(partitionAfter.getParameters());
 
             LOG.info("Start to process ALTER_PARTITION event on [{}.{}.{}.{}]. Partition:[{}], HiveCommonStats:[{}]",
-                    catalogName, dbName, tblName, getHivePartitionKey(), partition, hiveCommonStats);
+                    catalogName, dbName, tblName, getHivePartitionName(), partition, hiveCommonStats);
 
-            cache.refreshPartitionByEvent(getHivePartitionKey(), hiveCommonStats, partition);
+            cache.refreshPartitionByEvent(getHivePartitionName(), hiveCommonStats, partition);
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

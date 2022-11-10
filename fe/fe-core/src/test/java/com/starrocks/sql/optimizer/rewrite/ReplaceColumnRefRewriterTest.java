@@ -53,6 +53,12 @@ public class ReplaceColumnRefRewriterTest {
         BinaryPredicateOperator result = new BinaryPredicateOperator(BinaryPredicateOperator.BinaryType.EQ, columnRef3,
                 ConstantOperator.createInt(1));
         Assert.assertEquals(result, rewritten);
+
+        Map<ColumnRefOperator, ScalarOperator> operatorMap2 = Maps.newHashMap();
+        operatorMap.put(columnRef1, columnRef1);
+        ReplaceColumnRefRewriter rewriter2 = new ReplaceColumnRefRewriter(operatorMap2, true);
+        ScalarOperator result2 = rewriter2.rewrite(columnRef1);
+        Assert.assertEquals(columnRef1, result2);
     }
 
     ColumnRefOperator createColumnRef(int id) {

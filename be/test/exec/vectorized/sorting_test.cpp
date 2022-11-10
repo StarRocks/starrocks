@@ -22,7 +22,7 @@
 
 namespace starrocks::vectorized {
 
-static ColumnPtr build_sorted_column(TypeDescriptor type_desc, int slot_index, int32_t start, int32_t count,
+static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int slot_index, int32_t start, int32_t count,
                                      int32_t step) {
     DCHECK_EQ(TYPE_INT, type_desc.type);
 
@@ -74,8 +74,8 @@ TEST_P(MergeTestFixture, merge_sorter_chunks_two_way) {
     for (int i = 0; i < total_columns; i++) {
         ColumnPtr col = ColumnHelper::create_column(type_desc, false);
         auto& data = sorting_data[i];
-        for (int j = 0; j < data.size(); j++) {
-            col->append_datum(Datum(data[j]));
+        for (int j : data) {
+            col->append_datum(Datum(j));
         }
         if (i < total_columns / 2) {
             left_rows = data.size();
@@ -226,8 +226,8 @@ TEST(SortingTest, sorted_runs) {
     ChunkPtr chunk = std::make_shared<Chunk>(Columns{col1, col2}, slot_map);
 
     SortedRuns runs;
-    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
-    runs.chunks.push_back(SortedRun(chunk, chunk->columns()));
+    runs.chunks.emplace_back(chunk, chunk->columns());
+    runs.chunks.emplace_back(chunk, chunk->columns());
 
     ASSERT_EQ(2, runs.num_chunks());
     ASSERT_EQ(200, runs.num_rows());

@@ -330,7 +330,7 @@ PARALLEL_TEST(JsonColumnTest, test_column_builder) {
             // unwrap nullable column
             Column* unwrapped = ColumnHelper::get_data_column(copy.get());
 
-            JsonColumn* json_column_ptr = down_cast<JsonColumn*>(unwrapped);
+            auto* json_column_ptr = down_cast<JsonColumn*>(unwrapped);
             ASSERT_EQ(1, json_column_ptr->size());
             ASSERT_EQ(0, json_column_ptr->compare_at(0, 0, *column, 0));
         }

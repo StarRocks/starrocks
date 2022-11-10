@@ -22,6 +22,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
+import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.PartitionValue;
 import org.apache.hadoop.fs.Path;
@@ -113,18 +114,21 @@ public class PartitionUtil {
         return FileUtils.makePartName(partitionColumnNames, partitionValues);
     }
 
-    public static String toHivePartitionName(Map<String, String> partitionColNameToValue) {
+    public static String toHivePartitionName(List<String> partitionColNames, Map<String, String> partitionColNameToValue) {
         int i = 0;
         StringBuilder name = new StringBuilder();
-        for (Map.Entry<String, String> entry : partitionColNameToValue.entrySet()) {
+        for (String partitionColName : partitionColNames) {
             if (i++ > 0) {
                 name.append(Path.SEPARATOR);
             }
-            String partitionColName = entry.getKey();
-            String partitionValue = entry.getValue();
+            String partitionValue = partitionColNameToValue.get(partitionColName);
+            if (partitionValue == null) {
+                throw new StarRocksConnectorException("Can't find column {} in {}", partitionColName, partitionColNameToValue);
+            }
             name.append(escapePathName(partitionColName.toLowerCase(Locale.ROOT)));
             name.append('=');
             name.append(escapePathName(partitionValue.toLowerCase(Locale.ROOT)));
+
         }
         return name.toString();
     }
@@ -171,7 +175,7 @@ public class PartitionUtil {
     // [NULL,1992-01-01,1992-01-02,1992-01-03]
     //               ||
     //               \/
-    // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, 9999-12-31)
+    // [0000-01-01, 1992-01-01),[1992-01-01, 1992-01-02),[1992-01-02, 1992-01-03),[1993-01-03, MAX_VALUE)
     public static Map<String, Range<PartitionKey>> getPartitionRange(Table table, Column partitionColumn)
             throws AnalysisException {
         Map<String, Range<PartitionKey>> partitionRangeMap = new LinkedHashMap<>();
@@ -216,8 +220,7 @@ public class PartitionUtil {
         }
         if (lastPartitionName != null) {
             partitionRangeMap.put(lastPartitionName, Range.closedOpen(lastPartitionKey,
-                    PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue(
-                                    LiteralExpr.createMaxValue(partitionColumn.getType()).getStringValue())),
+                    PartitionKey.createPartitionKey(ImmutableList.of(PartitionValue.MAX_VALUE),
                             ImmutableList.of(partitionColumn))));
         }
         return partitionRangeMap;

@@ -1644,6 +1644,23 @@ public class OlapTable extends Table implements GsonPostProcessable {
         tableProperty.buildEnablePersistentIndex();
     }
 
+    public Boolean enableReplicatedStorage() {
+        if (tableProperty != null) {
+            return tableProperty.enableReplicatedStorage();
+        }
+        return false;
+    }
+
+    public void setEnableReplicatedStorage(boolean enableReplicatedStorage) {
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(new HashMap<>());
+        }
+        tableProperty
+                .modifyTableProperties(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE,
+                        Boolean.valueOf(enableReplicatedStorage).toString());
+        tableProperty.buildReplicatedStorage();
+    }
+
     public TWriteQuorumType writeQuorum() {
         if (tableProperty != null) {
             return tableProperty.writeQuorum();
@@ -1892,8 +1909,8 @@ public class OlapTable extends Table implements GsonPostProcessable {
         // drop all temp partitions of this table, so that there is no temp partitions in recycle bin,
         // which make things easier.
         dropAllTempPartitions();
-        for (long mvId : getRelatedMaterializedViews()) {
-            Table tmpTable = db.getTable(mvId);
+        for (MvId mvId : getRelatedMaterializedViews()) {
+            Table tmpTable = db.getTable(mvId.getId());
             if (tmpTable != null) {
                 MaterializedView mv = (MaterializedView) tmpTable;
                 mv.setActive(false);

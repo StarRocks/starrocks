@@ -6,6 +6,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.connector.hive.CacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
+import org.apache.hadoop.hive.metastore.api.FieldSchema;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.DropPartitionMessage;
 import org.apache.logging.log4j.LogManager;
@@ -13,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.connector.PartitionUtil.toHivePartitionName;
 import static com.starrocks.connector.hive.events.MetastoreEventType.DROP_PARTITION;
@@ -41,7 +43,10 @@ public class DropPartitionEvent extends MetastoreTableEvent {
             Preconditions.checkNotNull(droppedPartition);
             this.droppedPartition = droppedPartition;
             hivePartitionNames.clear();
-            hivePartitionNames.add(HivePartitionName.of(dbName, tblName, toHivePartitionName(droppedPartition)));
+            List<String> partitionColNames = hmsTbl.getPartitionKeys().stream()
+                    .map(FieldSchema::getName).collect(Collectors.toList());
+            hivePartitionNames.add(HivePartitionName.of(
+                    dbName, tblName, toHivePartitionName(partitionColNames, droppedPartition)));
         } catch (Exception ex) {
             throw new MetastoreNotificationException(
                     debugString("Could not parse drop event message. "), ex);
@@ -80,7 +85,7 @@ public class DropPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected boolean existInCache() {
-        return cache.isPartitionPresent(getHivePartitionKey());
+        return cache.isPartitionPresent(getHivePartitionName());
     }
 
     @Override
@@ -90,10 +95,17 @@ public class DropPartitionEvent extends MetastoreTableEvent {
 
     @Override
     protected void process() throws MetastoreNotificationException {
+        if (!existInCache()) {
+            LOG.warn("Partition [Catalog: [{}], Table: [{}.{}]. Partition name: [{}] ] " +
+                            "doesn't exist in cache on event id [{}]",
+                    catalogName, dbName, tblName, getHivePartitionName(), getEventId());
+            return;
+        }
+
         try {
             LOG.info("Start to process DROP_PARTITION event on {}.{}.{}.{}",
-                    catalogName, dbName, tblName, getHivePartitionKey());
-            cache.invalidatePartition(getHivePartitionKey());
+                    catalogName, dbName, tblName, getHivePartitionName());
+            cache.invalidatePartition(getHivePartitionName());
         } catch (Exception e) {
             LOG.error("Failed to process {} event, event detail msg: {}",
                     getEventType(), metastoreNotificationEvent, e);

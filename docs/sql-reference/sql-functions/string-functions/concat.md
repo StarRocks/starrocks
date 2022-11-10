@@ -4,7 +4,9 @@
 
 ### Syntax
 
-`VARCHAR concat(VARCHAR,...)`
+```Haskell
+VARCHAR concat(VARCHAR,...)
+```
 
 This function combines multiple strings. If any of the parameter value is NULL, it will return NULL.
 

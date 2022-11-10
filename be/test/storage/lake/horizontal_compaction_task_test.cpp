@@ -180,7 +180,7 @@ TEST_F(DuplicateKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
-    ASSERT_OK(task->execute());
+    ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize * 3, read(version));
@@ -335,7 +335,7 @@ TEST_F(UniqueKeyHorizontalCompactionTest, test1) {
     _txn_id++;
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
-    ASSERT_OK(task->execute());
+    ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize, read(version));
@@ -514,7 +514,7 @@ TEST_F(UniqueKeyHorizontalCompactionWithDeleteTest, test_base_compaction_with_de
     }
 
     ASSIGN_OR_ABORT(auto task, _tablet_manager->compact(_tablet_metadata->id(), version, _txn_id));
-    ASSERT_OK(task->execute());
+    ASSERT_OK(task->execute(nullptr));
     ASSERT_OK(_tablet_manager->publish_version(_tablet_metadata->id(), version, version + 1, &_txn_id, 1));
     version++;
     ASSERT_EQ(kChunkSize - 4, read(version));

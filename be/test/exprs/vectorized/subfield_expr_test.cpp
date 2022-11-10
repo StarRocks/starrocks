@@ -21,7 +21,7 @@ public:
     ColumnPtr _column;
 };
 
-std::unique_ptr<Expr> create_subfield_expr(const TypeDescriptor& type, const std::string used_subfield_name) {
+std::unique_ptr<Expr> create_subfield_expr(const TypeDescriptor& type, const std::string& used_subfield_name) {
     TExprNode node;
     node.__set_node_type(TExprNodeType::SUBFIELD_EXPR);
     node.__set_is_nullable(true);
@@ -57,10 +57,10 @@ private:
 TEST_F(SubfieldExprTest, subfield_test) {
     TypeDescriptor struct_type;
     struct_type.type = PrimitiveType::TYPE_STRUCT;
-    struct_type.children.push_back(TypeDescriptor(PrimitiveType::TYPE_INT));
-    struct_type.field_names.push_back("id");
-    struct_type.children.push_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
-    struct_type.field_names.push_back("name");
+    struct_type.children.emplace_back(PrimitiveType::TYPE_INT);
+    struct_type.field_names.emplace_back("id");
+    struct_type.children.emplace_back(PrimitiveType::TYPE_VARCHAR);
+    struct_type.field_names.emplace_back("name");
     struct_type.selected_fields.push_back(true);
     struct_type.selected_fields.push_back(true);
 
@@ -104,10 +104,10 @@ TEST_F(SubfieldExprTest, subfield_test) {
 TEST_F(SubfieldExprTest, subfield_null_test) {
     TypeDescriptor struct_type;
     struct_type.type = PrimitiveType::TYPE_STRUCT;
-    struct_type.children.push_back(TypeDescriptor(PrimitiveType::TYPE_INT));
-    struct_type.field_names.push_back("id");
-    struct_type.children.push_back(TypeDescriptor(PrimitiveType::TYPE_VARCHAR));
-    struct_type.field_names.push_back("name");
+    struct_type.children.emplace_back(PrimitiveType::TYPE_INT);
+    struct_type.field_names.emplace_back("id");
+    struct_type.children.emplace_back(PrimitiveType::TYPE_VARCHAR);
+    struct_type.field_names.emplace_back("name");
     struct_type.selected_fields.push_back(true);
     struct_type.selected_fields.push_back(true);
     {

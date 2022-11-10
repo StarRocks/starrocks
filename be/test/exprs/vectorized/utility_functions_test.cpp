@@ -13,12 +13,11 @@
 #include "util/random.h"
 #include "util/time.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class UtilityFunctionsTest : public ::testing::Test {
 public:
-    void SetUp() {}
+    void SetUp() override {}
 };
 
 TEST_F(UtilityFunctionsTest, versionTest) {
@@ -113,5 +112,4 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
     }
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

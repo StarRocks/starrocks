@@ -37,6 +37,12 @@ public class CostEstimate {
                 left.networkCost + right.networkCost);
     }
 
+    public CostEstimate multiplyBy(double factor) {
+        return new CostEstimate(cpuCost * factor,
+                memoryCost * factor,
+                networkCost * factor);
+    }
+
     public static boolean isZero(CostEstimate costEstimate) {
         return costEstimate.cpuCost == 0 && costEstimate.memoryCost == 0 && costEstimate.networkCost == 0;
     }
@@ -59,5 +65,10 @@ public class CostEstimate {
 
     public static CostEstimate of(double cpuCost, double memoryCost, double networkCost) {
         return new CostEstimate(cpuCost, memoryCost, networkCost);
+    }
+
+    @Override
+    public String toString() {
+        return String.format("[cpuCost: %f. memoryCost: %f. networkCost: %f.]", cpuCost, memoryCost, networkCost);
     }
 }

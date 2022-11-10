@@ -18,6 +18,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.events.MetastoreNotificationFetchException;
 import org.apache.hadoop.hive.metastore.api.NotificationEventResponse;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.jetbrains.annotations.NotNull;
 
 import java.util.List;
@@ -35,6 +37,8 @@ import static com.google.common.util.concurrent.MoreExecutors.newDirectExecutorS
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 public class CachingHiveMetastore implements IHiveMetastore {
+    private static final Logger LOG = LogManager.getLogger(CachingHiveMetastore.class);
+
     public static final long NEVER_CACHE = 0;
     public static final long NEVER_EVICT = -1;
     public static final long NEVER_REFRESH = -1;
@@ -322,6 +326,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         try {
             return cache.getUnchecked(key);
         } catch (UncheckedExecutionException e) {
+            LOG.error("Error occurred when loading cache", e);
             throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
             throw e;
         }
@@ -331,6 +336,7 @@ public class CachingHiveMetastore implements IHiveMetastore {
         try {
             return cache.getAll(keys);
         } catch (ExecutionException | UncheckedExecutionException e) {
+            LOG.error("Error occurred when loading cache", e);
             throwIfInstanceOf(e.getCause(), StarRocksConnectorException.class);
             throwIfUnchecked(e);
             throw new UncheckedExecutionException(e);

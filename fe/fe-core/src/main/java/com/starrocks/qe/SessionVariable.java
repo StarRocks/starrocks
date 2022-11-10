@@ -244,7 +244,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // higher compression ratio may be chosen to use more CPU and make the overall query time lower.
     public static final String TRANSMISSION_COMPRESSION_TYPE = "transmission_compression_type";
     public static final String LOAD_TRANSMISSION_COMPRESSION_TYPE = "load_transmission_compression_type";
-    public static final String ENABLE_REPLICATED_STORAGE = "enable_replicated_storage";
 
     public static final String RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT = "runtime_join_filter_push_down_limit";
     public static final String ENABLE_GLOBAL_RUNTIME_FILTER = "enable_global_runtime_filter";
@@ -298,6 +297,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+
+    public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -626,9 +630,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = LOAD_TRANSMISSION_COMPRESSION_TYPE)
     private String loadTransmissionCompressionType = "NO_COMPRESSION";
 
-    @VariableMgr.VarAttr(name = ENABLE_REPLICATED_STORAGE)
-    private boolean enableReplicatedStorage = false;
-
     @VariableMgr.VarAttr(name = RUNTIME_JOIN_FILTER_PUSH_DOWN_LIMIT)
     private long runtimeJoinFilterPushDownLimit = 1024000;
 
@@ -736,7 +737,19 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = QUERY_CACHE_ENTRY_MAX_ROWS)
     private long queryCacheEntryMaxRows = 409600;
-    
+
+    @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
+    private int nestedMvRewriteMaxLevel = 3;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
+    private boolean enableMaterializedViewUnionRewrite = true;
+
+    @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableRuleBasedMaterializedViewRewrite = true;
+
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
     }
@@ -1349,10 +1362,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.parseTokensLimit = parseTokensLimit;
     }
 
-    public boolean getEnableReplicatedStorage() {
-        return enableReplicatedStorage;
-    }
-
     public boolean isEnableQueryCache() {
         return isEnablePipelineEngine() && enableQueryCache;
     }
@@ -1371,6 +1380,42 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isQueryCacheForcePopulate() {
         return queryCacheForcePopulate;
+    }
+
+    public int getNestedMvRewriteMaxLevel() {
+        return nestedMvRewriteMaxLevel;
+    }
+
+    public boolean isEnableMaterializedViewRewrite() {
+        return enableMaterializedViewRewrite;
+    }
+
+    public void setEnableMaterializedViewRewrite(boolean enableMaterializedViewRewrite) {
+        this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewUnionRewrite() {
+        return enableMaterializedViewUnionRewrite;
+    }
+
+    public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
+        this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
+    }
+
+    // 1 means the mvs directly based on base table
+    public void setNestedMvRewriteMaxLevel(int nestedMvRewriteMaxLevel) {
+        if (nestedMvRewriteMaxLevel <= 0) {
+            nestedMvRewriteMaxLevel = 1;
+        }
+        this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
+    }
+
+    public boolean isEnableRuleBasedMaterializedViewRewrite() {
+        return enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
+        this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
     }
 
     // Serialize to thrift object
@@ -1415,8 +1460,6 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         if (loadCompressionType != null) {
             tResult.setLoad_transmission_compression_type(loadCompressionType);
         }
-
-        tResult.setEnable_replicated_storage(enableReplicatedStorage);
 
         tResult.setRuntime_join_filter_pushdown_limit(runtimeJoinFilterPushDownLimit);
         final int global_runtime_filter_wait_timeout = 20;

@@ -49,7 +49,7 @@ public abstract class MetastoreTableEvent extends MetastoreEvent {
     /**
      * According to the current processing method, each event only needs to process one {@link HivePartitionName}.
      */
-    protected HivePartitionName getHivePartitionKey() {
+    protected HivePartitionName getHivePartitionName() {
         return hivePartitionNames.get(0);
     }
 }

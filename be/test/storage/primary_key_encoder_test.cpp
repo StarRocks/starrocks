@@ -4,6 +4,8 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+
 #include "column/chunk.h"
 #include "column/datum.h"
 #include "column/schema.h"
@@ -24,7 +26,7 @@ static unique_ptr<vectorized::Schema> create_key_schema(const vector<FieldType>&
         fields.emplace_back(fd);
         sort_key_idxes[i] = i;
     }
-    return unique_ptr<vectorized::Schema>(new vectorized::Schema(std::move(fields), PRIMARY_KEYS, sort_key_idxes));
+    return std::make_unique<vectorized::Schema>(std::move(fields), PRIMARY_KEYS, sort_key_idxes);
 }
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {

@@ -6,7 +6,7 @@ Queries an element that can be located by the `json_path` expression in a JSON o
 
 ## Syntax
 
-```Plain%20Text
+```Haskell
 json_object_expr -> json_path
 ```
 

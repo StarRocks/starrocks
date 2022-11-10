@@ -21,6 +21,7 @@
 
 package com.starrocks.analysis;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.cluster.ClusterNamespace;
@@ -130,6 +131,10 @@ public class TableName implements Writable, GsonPreProcessable, GsonPostProcessa
 
     public boolean isEmpty() {
         return tbl.isEmpty();
+    }
+
+    public String getCatalogAndDb() {
+        return Joiner.on(".").skipNulls().join(catalog, db);
     }
 
     /**

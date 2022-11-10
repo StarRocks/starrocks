@@ -61,6 +61,7 @@ import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -1525,8 +1526,8 @@ public class LocalMetastore implements ConnectorMetadata {
             }
             tabletIdSet = olapTable.dropPartition(db.getId(), partitionName, clause.isForceDrop());
             try {
-                for (Long mvId : olapTable.getRelatedMaterializedViews()) {
-                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+                for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+                    MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
                     if (materializedView != null && materializedView.isLoadTriggeredRefresh()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
                                 db.getFullName(), materializedView.getName(), Constants.TaskRunPriority.NORMAL.value());
@@ -2122,6 +2123,10 @@ public class LocalMetastore implements ConnectorMetadata {
         } catch (AnalysisException e) {
             throw new DdlException(e.getMessage());
         }
+
+        // replicated storage
+        olapTable.setEnableReplicatedStorage(
+                PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE, false));
 
         TTabletType tabletType = TTabletType.TABLET_TYPE_DISK;
         try {
@@ -3225,7 +3230,7 @@ public class LocalMetastore implements ConnectorMetadata {
             if (asyncRefreshContext.getTimeUnit() == null) {
                 // asyncRefreshContext's timeUnit is null means this task's type is EVENT_TRIGGERED
                 Map<TableName, Table> tableNameTableMap = AnalyzerUtils.collectAllTable(stmt.getQueryStatement());
-                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isOlapTable())) {
+                if (tableNameTableMap.values().stream().anyMatch(table -> !table.isLocalTable())) {
                     throw new DdlException("Materialized view which type is ASYNC need to specify refresh interval for " +
                             "external table");
                 }
@@ -3310,6 +3315,30 @@ public class LocalMetastore implements ConnectorMetadata {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER))  {
+                int number = PropertyAnalyzer.analyzePartitionRefreshNumber(properties);
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
+                materializedView.getTableProperty().setPartitionRefreshNumber(number);
+            }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES))  {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+                StringBuilder tableSb = new StringBuilder();
+                for (int i = 1; i <= tables.size(); i++) {
+                    TableName tableName = tables.get(i - 1);
+                    if (tableName.getDb() == null) {
+                        tableSb.append(tableName.getTbl());
+                    } else {
+                        tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+                    }
+                    if (i != tables.size()) {
+                        tableSb.append(",");
+                    }
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
             }
             if (!properties.isEmpty()) {
                 // here, all properties should be checked
@@ -3408,7 +3437,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 for (MaterializedView.BaseTableInfo baseTableInfo : baseTableInfos) {
                     Table baseTable = baseTableInfo.getTable();
                     if (baseTable != null) {
-                        baseTable.removeRelatedMaterializedView(table.getId());
+                        MvId mvId = new MvId(db.getId(), table.getId());
+                        baseTable.removeRelatedMaterializedView(mvId);
                     }
                 }
             }
@@ -3544,8 +3574,8 @@ public class LocalMetastore implements ConnectorMetadata {
     }
 
     private void disableMaterializedView(Database db, OlapTable olapTable) {
-        for (long mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) db.getTable(mvId);
+        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
+            MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
             if (mv != null) {
                 mv.setActive(false);
             } else {
@@ -3874,6 +3904,23 @@ public class LocalMetastore implements ConnectorMetadata {
         editLog.logModifyWriteQuorum(info);
     }
 
+    // The caller need to hold the db write lock
+    public void modifyTableReplicatedStorage(Database db, OlapTable table, Map<String, String> properties) {
+        Preconditions.checkArgument(db.isWriteLockHeldByCurrentThread());
+        TableProperty tableProperty = table.getTableProperty();
+        if (tableProperty == null) {
+            tableProperty = new TableProperty(properties);
+            table.setTableProperty(tableProperty);
+        } else {
+            tableProperty.modifyTableProperties(properties);
+        }
+        tableProperty.buildReplicatedStorage();
+
+        ModifyTablePropertyOperationLog info =
+                new ModifyTablePropertyOperationLog(db.getId(), table.getId(), properties);
+        editLog.logModifyReplicatedStorage(info);
+    }
+
     public void modifyTableMeta(Database db, OlapTable table, Map<String, String> properties,
                                 TTabletMetaType metaType) {
         if (metaType == TTabletMetaType.INMEMORY) {
@@ -3882,6 +3929,8 @@ public class LocalMetastore implements ConnectorMetadata {
             modifyTableEnablePersistentIndexMeta(db, table, properties);
         } else if (metaType == TTabletMetaType.WRITE_QUORUM) {
             modifyTableWriteQuorum(db, table, properties);
+        } else if (metaType == TTabletMetaType.REPLICATED_STORAGE) {
+            modifyTableReplicatedStorage(db, table, properties);
         }
     }
 
@@ -4335,11 +4384,11 @@ public class LocalMetastore implements ConnectorMetadata {
             editLog.logTruncateTable(info);
 
             // refresh mv
-            Set<Long> relatedMvs = olapTable.getRelatedMaterializedViews();
-            for (long mvId : relatedMvs) {
-                MaterializedView materializedView = (MaterializedView) db.getTable(mvId);
+            Set<MvId> relatedMvs = olapTable.getRelatedMaterializedViews();
+            for (MvId mvId : relatedMvs) {
+                MaterializedView materializedView = (MaterializedView) db.getTable(mvId.getId());
                 if (materializedView.isLoadTriggeredRefresh()) {
-                    refreshMaterializedView(db.getFullName(), db.getTable(mvId).getName(),
+                    refreshMaterializedView(db.getFullName(), db.getTable(mvId.getId()).getName(),
                             Constants.TaskRunPriority.NORMAL.value());
                 }
             }

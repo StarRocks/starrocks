@@ -8,12 +8,11 @@
 #include "exprs/vectorized/mock_vectorized_expr.h"
 #include "exprs/vectorized/string_functions.h"
 
-namespace starrocks {
-namespace vectorized {
+namespace starrocks::vectorized {
 
 class StringFunctionSubstrTest : public ::testing::Test {
 public:
-    void SetUp() {
+    void SetUp() override {
         expr_node.opcode = TExprOpcode::ADD;
         expr_node.child_type = TPrimitiveType::INT;
         expr_node.node_type = TExprNodeType::BINARY_PRED;
@@ -134,7 +133,7 @@ TEST_F(StringFunctionSubstrTest, substrConstASCIITest) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->size(), 2);
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
@@ -182,7 +181,7 @@ TEST_F(StringFunctionSubstrTest, substrConstZhTest) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -265,7 +264,7 @@ TEST_F(StringFunctionSubstrTest, substrConstUtf8Test) {
         state->pos = offset;
         state->len = len;
         ColumnPtr result = StringFunctions::substring(ctx.get(), columns);
-        BinaryColumn* binary = down_cast<BinaryColumn*>(result.get());
+        auto* binary = down_cast<BinaryColumn*>(result.get());
         ASSERT_EQ(binary->get_slice(0).to_string(), expect);
         ASSERT_EQ(binary->get_slice(1).to_string(), "");
     }
@@ -439,8 +438,8 @@ static void test_left_and_right_not_const(
     columns.push_back(len_col);
     ColumnPtr left_result = StringFunctions::left(context.get(), columns);
     ColumnPtr right_result = StringFunctions::right(context.get(), columns);
-    BinaryColumn* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
-    BinaryColumn* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
+    auto* binary_left_result = down_cast<BinaryColumn*>(left_result.get());
+    auto* binary_right_result = down_cast<BinaryColumn*>(right_result.get());
     ASSERT_TRUE(binary_left_result != nullptr);
     ASSERT_TRUE(binary_right_result != nullptr);
     const auto size = cases.size();
@@ -549,7 +548,7 @@ TEST_F(StringFunctionSubstrTest, leftAndRightNotConstUtf8Test) {
 }
 
 static void test_left_and_right_const(
-        ColumnPtr str_col,
+        const ColumnPtr& str_col,
         std::vector<std::tuple<int, std::vector<std::string>, std::vector<std::string>>> const& cases) {
     for (auto& c : cases) {
         auto [len, left_expect, right_expect] = c;
@@ -650,7 +649,7 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
     }
     Columns columns{str_col, off_col, len_col};
     auto result = StringFunctions::substring(context.get(), columns);
-    BinaryColumn* binary_result = down_cast<BinaryColumn*>(result.get());
+    auto* binary_result = down_cast<BinaryColumn*>(result.get());
     const auto size = cases.size();
     ASSERT_TRUE(binary_result != nullptr);
     ASSERT_EQ(binary_result->size(), size);
@@ -813,5 +812,4 @@ TEST_F(StringFunctionSubstrTest, substrNotConstUtf8Test) {
     test_substr_not_const(cases);
 }
 
-} // namespace vectorized
-} // namespace starrocks
+} // namespace starrocks::vectorized

@@ -4,7 +4,10 @@
 #include "column/column_builder.h"
 #include "column/column_hash.h"
 #include "column/column_viewer.h"
+#include "column/json_column.h"
+#include "column/type_traits.h"
 #include "exprs/vectorized/function_helper.h"
+#include "runtime/primitive_type.h"
 #include "udf/udf.h"
 #include "util/orlp/pdqsort.h"
 #include "util/phmap/phmap.h"
@@ -21,7 +24,7 @@ public:
             return _array_distinct<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_distinct<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -463,7 +466,7 @@ public:
             return _array_overlap<phmap::flat_hash_set<CppType, Hash128WithSeed<PhmapSeed1>>>(columns);
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, StdHash<CppType>>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_overlap<phmap::flat_hash_set<CppType, SliceHash>>(columns);
         } else {
             assert(false);
@@ -569,7 +572,7 @@ public:
                 return phmap_mix_with_seed<sizeof(size_t), PhmapSeed1>()(hash_128(PhmapSeed1, cpp_type_value.value));
             } else if constexpr (pt_is_fixedlength<PT>) {
                 return phmap_mix<sizeof(size_t)>()(std::hash<CppType>()(cpp_type_value.value));
-            } else if constexpr (pt_is_binary<PT>) {
+            } else if constexpr (pt_is_string<PT>) {
                 return crc_hash_64(cpp_type_value.value.data, static_cast<int32_t>(cpp_type_value.value.size),
                                    CRC_HASH_SEED1);
             } else {
@@ -591,7 +594,7 @@ public:
         } else if constexpr (pt_is_fixedlength<PT>) {
             return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             return _array_intersect<phmap::flat_hash_set<CppTypeWithOverlapTimes, CppTypeWithOverlapTimesHash<PT>,
                                                          CppTypeWithOverlapTimesEqual>>(columns);
         } else {
@@ -760,6 +763,13 @@ private:
         pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
     }
 
+    // For JSON type
+    static void _sort_column(std::vector<uint32_t>* sort_index, const JsonColumn& src_column, size_t offset,
+                             size_t count) {
+        auto less_fn = [&](uint32_t l, uint32_t r) -> bool { return src_column.compare_at(l, r, src_column, -1) < 0; };
+        pdqsort(false, sort_index->begin() + offset, sort_index->begin() + offset + count, less_fn);
+    }
+
     static void _sort_item(std::vector<uint32_t>* sort_index, const Column& src_column,
                            const UInt32Column& offset_column, size_t index) {
         const auto& offsets = offset_column.get_data();
@@ -770,7 +780,7 @@ private:
             return;
         }
 
-        _sort_column(sort_index, src_column, start, count);
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_column), start, count);
     }
 
     static void _sort_nullable_item(std::vector<uint32_t>* sort_index, const Column& src_data_column,
@@ -790,7 +800,8 @@ private:
                 std::partition(sort_index->begin() + start, sort_index->begin() + start + count, null_first_fn);
         size_t data_offset = begin_of_not_null - sort_index->begin();
         size_t null_count = data_offset - start;
-        _sort_column(sort_index, src_data_column, start + null_count, count - null_count);
+        _sort_column(sort_index, down_cast<const RunTimeColumnType<PT>&>(src_data_column), start + null_count,
+                     count - null_count);
     }
 
     static void _sort_array_column(Column* dest_array_column, std::vector<uint32_t>* sort_index,
@@ -900,11 +911,22 @@ private:
         }
     }
 
+    static void _reverse_json_column(Column* column, const Buffer<uint32_t>& array_offsets, size_t chunk_size) {
+        auto json_column = down_cast<JsonColumn*>(column);
+        auto& pool = json_column->get_pool();
+        for (size_t i = 0; i < chunk_size; i++) {
+            std::reverse(pool.begin() + array_offsets[i], pool.begin() + array_offsets[i + 1]);
+        }
+        json_column->reset_cache();
+    }
+
     static void _reverse_data_column(Column* column, const Buffer<uint32_t>& offsets, size_t chunk_size) {
         if constexpr (pt_is_fixedlength<PT>) {
             _reverse_fixed_column(column, offsets, chunk_size);
-        } else if constexpr (pt_is_binary<PT>) {
+        } else if constexpr (pt_is_string<PT>) {
             _reverse_binary_column(column, offsets, chunk_size);
+        } else if constexpr (pt_is_json<PT>) {
+            _reverse_json_column(column, offsets, chunk_size);
         } else {
             assert(false);
         }

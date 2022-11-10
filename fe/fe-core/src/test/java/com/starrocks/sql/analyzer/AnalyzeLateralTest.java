@@ -1,7 +1,11 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Inc.
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.sql.ast.QueryRelation;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.utframe.UtFrameUtils;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -40,6 +44,35 @@ public class AnalyzeLateralTest {
                 "Table function must be used with lateral join");
 
         analyzeFail("select * from t0,unnest(bitmap_to_array(bitmap_union(to_bitmap(v1))))",
-                "UNNEST clause cannot contain aggregations");
+                "Table Function clause cannot contain aggregations");
+    }
+
+    @Test
+    public void testUpperCase() {
+        analyzeSuccess("select v1,t.* from tarray, UNNEST(v3) t");
+        analyzeSuccess("select * from tarray, UNNEST(v3, ['a', 'b', 'c']) as t(unnest_1, unnest_2)");
+    }
+
+    @Test
+    public void testVarArgs() {
+        analyzeSuccess("select * from tarray, unnest(v3) as t(unnest_1)");
+        analyzeSuccess("select unnest_1 from tarray, unnest(v3) as t(unnest_1)");
+        analyzeSuccess("select t.unnest_1 from tarray, unnest(v3) as t(unnest_1)");
+        analyzeFail("select t.unnest_2 from tarray, unnest(v3) as t(unnest_1)");
+
+        analyzeSuccess("select t.unnest_1 from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1, unnest_2)");
+        StatementBase stmt =
+                analyzeSuccess("select * from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1, unnest_2)");
+        QueryRelation queryRelation = ((QueryStatement) stmt).getQueryRelation();
+        Assert.assertEquals("[v1, v2, v3, v4, unnest_1, unnest_2]", queryRelation.getColumnOutputNames().toString());
+
+        analyzeFail("select * from tarray, unnest(v3, ['a', 'b', 'c']) as t(unnest_1)",
+                "table t has 1 columns available but 2 columns specified");
+        analyzeFail("select * from tarray, unnest(v3) as t(unnest_1, unnest_2)",
+                "table t has 2 columns available but 1 columns specified");
+
+        analyzeFail("select * from tarray, unnest(null, null) as t(unnest_1, unnest_2)", "Unknown table function");
+        analyzeFail("select * from tarray, unnest(v3, null) as t(unnest_1, unnest_2)", "Unknown table function");
+        analyzeFail("select * from tarray, unnest(null, v3) as t(unnest_1, unnest_2)", "Unknown table function");
     }
 }

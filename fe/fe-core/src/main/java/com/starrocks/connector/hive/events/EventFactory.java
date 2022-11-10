@@ -16,7 +16,7 @@ public interface EventFactory {
      * Generates a {@link MetastoreEvent} representing {@link NotificationEvent}
      *
      * @param hmsEvent  the event as received from Hive Metastore.
-     * @param metaCache the cached instance of this event that needs to be updated.
+     * @param cacheProcessor the cache update process instance to update catalog level cache.
      * @return {@link MetastoreEvent} representing hmsEvent.
      * @throws MetastoreNotificationException If the hmsEvent information cannot be parsed.
      */

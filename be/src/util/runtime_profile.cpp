@@ -21,7 +21,6 @@
 
 #include "util/runtime_profile.h"
 
-#include <boost/date_time/posix_time/posix_time_types.hpp>
 #include <boost/thread/thread_time.hpp>
 #include <iomanip>
 #include <iostream>
@@ -38,6 +37,7 @@
 #include "util/monotime.h"
 #include "util/pretty_printer.h"
 #include "util/thread.h"
+#include "util/time.h"
 
 namespace starrocks {
 
@@ -930,10 +930,9 @@ RuntimeProfile::PeriodicCounterUpdateState::~PeriodicCounterUpdateState() {
 
 void RuntimeProfile::periodic_counter_update_loop() {
     while (!_s_periodic_counter_update_state._done) {
-        boost::system_time before_time = boost::get_system_time();
+        auto before_time = MonotonicMillis();
         SleepFor(MonoDelta::FromMilliseconds(config::periodic_counter_update_period_ms));
-        boost::posix_time::time_duration elapsed = boost::get_system_time() - before_time;
-        int elapsed_ms = elapsed.total_milliseconds();
+        int64_t elapsed_ms = MonotonicMillis() - before_time;
 
         std::lock_guard<std::mutex> l(_s_periodic_counter_update_state.lock);
 

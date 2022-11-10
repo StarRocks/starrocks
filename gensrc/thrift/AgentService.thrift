@@ -285,7 +285,8 @@ enum TTabletMetaType {
     PARTITIONID,
     INMEMORY,
     ENABLE_PERSISTENT_INDEX,
-    WRITE_QUORUM
+    WRITE_QUORUM,
+    REPLICATED_STORAGE
 }
 
 struct TTabletMetaInfo {

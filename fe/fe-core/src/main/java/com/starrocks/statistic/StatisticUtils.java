@@ -7,6 +7,8 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.ColumnDef;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.analysis.UserIdentity;
+import com.starrocks.catalog.AggregateType;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Partition;
@@ -28,6 +30,7 @@ import org.apache.logging.log4j.Logger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -235,5 +238,21 @@ public class StatisticUtils {
                     type.toSql(), statistic, e.getMessage()));
             return Optional.empty();
         }
+    }
+
+    // Get all the columns in the table that can be collected.
+    // The list will only contain aggregated and non-aggregated columns of the "replace" type.
+    // This is because in aggregate type tables, metric columns generally do not participate in predicate.
+    // Collecting these columns is not meaningful but time-consuming, so we exclude them.
+    public static List<String> getCollectibleColumns(Table table) {
+        List<String> columns = new ArrayList<>();
+        for (Column column : table.getBaseSchema()) {
+            if (!column.isAggregated()) {
+                columns.add(column.getName());
+            } else if (column.getAggregationType().equals(AggregateType.REPLACE)) {
+                columns.add(column.getName());
+            }
+        }
+        return columns;
     }
 }

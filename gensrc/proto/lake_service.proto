@@ -20,6 +20,8 @@ message PublishVersionRequest {
 
 message PublishVersionResponse {
     repeated int64 failed_tablets = 1;
+    // Mapping from tablet id to compaction score.
+    map<int64, double> compaction_scores = 2;
 }
 
 message AbortTxnRequest {
@@ -47,6 +49,11 @@ message CompactRequest {
 
 message CompactResponse {
     repeated int64 failed_tablets = 1;
+    optional int64 execution_time = 2; // ms
+    optional int64 num_input_bytes = 3;
+    optional int64 num_input_rows = 4;
+    optional int64 num_output_bytes = 5;
+    optional int64 num_output_rows = 6;
 }
 
 message DropTableRequest {
@@ -153,6 +160,17 @@ message RestoreSnapshotsResponse {
     optional int32 pad = 1;
 }
 
+message CheckCompactionRequest {
+    // Calculate the compaction score for each of the following tablets
+    repeated int64 tablet_ids = 1;
+    optional int64 version = 2;
+}
+
+message CheckCompactionResponse {
+    // Mapping from tablet id to copmaction score
+    map<int64, double> compaction_scores = 1;
+}
+
 service LakeService {
     rpc publish_version(PublishVersionRequest) returns (PublishVersionResponse);
     rpc publish_log_version(PublishLogVersionRequest) returns (PublishLogVersionResponse);
@@ -166,5 +184,6 @@ service LakeService {
     rpc unlock_tablet_metadata(UnlockTabletMetadataRequest) returns (UnlockTabletMetadataResponse);
     rpc upload_snapshots(UploadSnapshotsRequest) returns (UploadSnapshotsResponse);
     rpc restore_snapshots(RestoreSnapshotsRequest) returns (RestoreSnapshotsResponse);
+    rpc check_compaction(CheckCompactionRequest) returns (CheckCompactionResponse);
 }
 

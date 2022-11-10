@@ -20,4 +20,6 @@ public enum RuleSetType {
     COLLECT_CTE,
     INLINE_CTE,
     INTERSECT_REWRITE,
+    SINGLE_TABLE_MV_REWRITE,
+    NUM_RULE_SET;
 }

@@ -56,6 +56,7 @@ import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.persist.AlterRoutineLoadJobOperationLog;
 import com.starrocks.persist.AlterUserInfo;
 import com.starrocks.persist.AlterViewInfo;
+import com.starrocks.persist.AuthUpgradeInfo;
 import com.starrocks.persist.BackendIdsUpdateInfo;
 import com.starrocks.persist.BackendTabletsInfo;
 import com.starrocks.persist.BatchDropInfo;
@@ -279,6 +280,10 @@ public class JournalEntity implements Writable {
             }
             case OperationType.OP_CHANGE_MATERIALIZED_VIEW_REFRESH_SCHEME:
                 data = ChangeMaterializedViewRefreshSchemeLog.read(in);
+                isRead = true;
+                break;
+            case OperationType.OP_ALTER_MATERIALIZED_VIEW_PROPERTIES:
+                data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
                 break;
             case OperationType.OP_RENAME_MATERIALIZED_VIEW:
@@ -580,6 +585,7 @@ public class JournalEntity implements Writable {
             case OperationType.OP_SET_FORBIT_GLOBAL_DICT:
             case OperationType.OP_MODIFY_REPLICATION_NUM:
             case OperationType.OP_MODIFY_WRITE_QUORUM:
+            case OperationType.OP_MODIFY_REPLICATED_STORAGE:
             case OperationType.OP_MODIFY_ENABLE_PERSISTENT_INDEX: {
                 data = ModifyTablePropertyOperationLog.read(in);
                 isRead = true;
@@ -738,6 +744,11 @@ public class JournalEntity implements Writable {
             case OperationType.OP_DROP_ROLE_V2:
             case OperationType.OP_UPDATE_ROLE_PRIVILEGE_V2: {
                 data = RolePrivilegeCollectionInfo.read(in);
+                isRead = true;
+                break;
+            }
+            case OperationType.OP_AUTH_UPGRDE_V2: {
+                data = AuthUpgradeInfo.read(in);
                 isRead = true;
                 break;
             }

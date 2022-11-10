@@ -109,12 +109,20 @@ public class PrivilegeStmtAnalyzerV2Test {
         sql = "grant ALL on db1.tbl0, db1.tbl0 to test_user with grant option";
         Assert.assertNotNull(UtFrameUtils.parseStmtWithNewParser(sql, ctx));
 
+        sql = "revoke select on tttable db1.tbl0 from test_user";
+        try {
+            UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("cannot find type TTTABLE in"));
+        }
+
         sql = "revoke select on database db1 from test_user";
         try {
             UtFrameUtils.parseStmtWithNewParser(sql, ctx);
             Assert.fail();
         } catch (Exception e) {
-            Assert.assertTrue(e.getMessage().contains("invalid action SELECT for DATABASE"));
+            Assert.assertTrue(e.getMessage().contains("cannot find action SELECT in"));
         }
 
         sql = "grant insert on table dbx to test_user";
@@ -402,6 +410,36 @@ public class PrivilegeStmtAnalyzerV2Test {
             Assert.fail();
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("cannot grant/revoke system privilege"));
+        }
+    }
+
+    @Test
+    public void testResourceException() throws Exception {
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on all resources in all databases to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid ALL statement for resource! only support ON ALL RESOURCES"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on resource db.resource to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("invalid object tokens, should have one"));
+        }
+
+        try {
+            UtFrameUtils.parseStmtWithNewParser(
+                    "grant alter on resource 'not_exists' to test_user", ctx);
+            Assert.fail();
+        } catch (Exception e) {
+            System.err.println(e.getMessage());
+            Assert.assertTrue(e.getMessage().contains("cannot find resource: not_exists"));
         }
     }
 }

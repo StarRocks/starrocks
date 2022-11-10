@@ -120,7 +120,7 @@ TEST(BytesTest, test_alloc_without_init) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_malloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -146,7 +146,7 @@ TEST(BytesTest, test_hook_malloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_realloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     void* new_ptr;
@@ -184,7 +184,7 @@ TEST(BytesTest, test_hook_realloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_calloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -216,7 +216,7 @@ TEST(BytesTest, test_hook_calloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_memalign) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -244,7 +244,7 @@ TEST(BytesTest, test_hook_memalign) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_aligned_alloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -272,7 +272,7 @@ TEST(BytesTest, test_hook_aligned_alloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_valloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -298,7 +298,7 @@ TEST(BytesTest, test_hook_valloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_pvalloc) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr;
     int before;
@@ -324,7 +324,7 @@ TEST(BytesTest, test_hook_pvalloc) {
 
 // NOLINTNEXTLINE
 TEST(BytesTest, test_hook_posix_memalign) {
-    srand((int)time(NULL));
+    srand((int)time(nullptr));
 
     void* ptr = nullptr;
     int before;

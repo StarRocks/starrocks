@@ -352,7 +352,9 @@ fromRollup
 
 createTableAsSelectStatement
     : CREATE TABLE (IF NOT EXISTS)? qualifiedName
-        ('(' identifier (',' identifier)* ')')? comment?
+        ('(' identifier (',' identifier)* ')')?
+        keyDesc?
+        comment?
         partitionDesc?
         distributionDesc?
         properties?
@@ -492,7 +494,7 @@ dropMaterializedViewStatement
     ;
 
 alterMaterializedViewStatement
-    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause)
+    : ALTER MATERIALIZED VIEW mvName=qualifiedName (refreshSchemeDesc | tableRenameClause | modifyTablePropertiesClause)
     ;
 
 refreshMaterializedViewStatement
@@ -1432,7 +1434,7 @@ unsupportedStatement
 // ------------------------------------------- Query Statement ---------------------------------------------------------
 
 queryStatement
-    : explainDesc? queryRelation outfile?;
+    : (explainDesc | optimizerTrace) ? queryRelation outfile?;
 
 queryRelation
     : withClause? queryNoWith
@@ -1809,6 +1811,10 @@ restoreTableDesc
 
 explainDesc
     : (DESC | DESCRIBE | EXPLAIN) (LOGICAL | VERBOSE | COSTS)?
+    ;
+
+optimizerTrace
+    : TRACE OPTIMIZER
     ;
 
 partitionDesc

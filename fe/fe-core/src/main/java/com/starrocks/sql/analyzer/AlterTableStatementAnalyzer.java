@@ -170,6 +170,15 @@ public class AlterTableStatementAnalyzer {
                 }
                 clause.setNeedTableStable(false);
                 clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
+            } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE)) {
+                if (!properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("true") &&
+                        !properties.get(PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE).equalsIgnoreCase("false")) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR,
+                            "Property " + PropertyAnalyzer.PROPERTIES_REPLICATED_STORAGE +
+                                    " must be bool type(false/true)");
+                }
+                clause.setNeedTableStable(false);
+                clause.setOpType(AlterOpType.MODIFY_TABLE_PROPERTY_SYNC);
             } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_TABLET_TYPE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Alter tablet type not supported");
             } else {

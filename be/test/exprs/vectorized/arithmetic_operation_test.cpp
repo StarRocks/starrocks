@@ -54,7 +54,7 @@ TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
         auto& s_expect_quotient = std::get<2>(tc);
         int64_t dividend = 0;
         DecimalV3Cast::from_string<int64_t>(&dividend, 7, 2, s_dividend.c_str(), s_dividend.size());
-        int128_t quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
+        auto quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
         auto s_actual_quotient = DecimalV3Cast::to_string<int128_t>(quotient, 38, 8);
         ASSERT_EQ(s_expect_quotient, s_actual_quotient);
     }
@@ -65,7 +65,7 @@ TEST_F(ArithmeticOperationTest, test_decimal_div_integer) {
         auto& s_expect_quotient = std::get<2>(tc);
         int128_t dividend = 0;
         DecimalV3Cast::from_string<int128_t>(&dividend, 7, 2, s_dividend.c_str(), s_dividend.size());
-        int128_t quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
+        auto quotient = decimal_div_integer<int128_t>(int128_t(dividend), int128_t(divisor), 2);
         auto s_actual_quotient = DecimalV3Cast::to_string<int128_t>(quotient, 38, 8);
         ASSERT_EQ(s_expect_quotient, s_actual_quotient);
     }

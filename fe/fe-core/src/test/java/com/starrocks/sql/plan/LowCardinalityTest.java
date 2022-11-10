@@ -1158,12 +1158,41 @@ public class LowCardinalityTest extends PlanTestBase {
 
     @Test
     public void testAssignWrongNullableProperty() throws Exception {
-        String sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) " +
+        String sql;
+        String plan;
+
+        sql = "SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) " +
                 "FROM supplier UNION SELECT S_ADDRESS, Dense_rank() OVER ( ORDER BY S_SUPPKEY) FROM supplier;";
-        String plan = getCostExplain(sql);
+        plan = getCostExplain(sql);
         // No need for low-card optimization for
         // SCAN->DECODE->SORT
         Assert.assertFalse(plan.contains("Decode"));
+
+        // window function with full order by
+        sql = "select rank() over (order by S_ADDRESS) as rk from supplier_nullable";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  4:ANALYTIC\n" +
+                "  |  functions: [, rank(), ]\n" +
+                "  |  order by: 3 ASC\n" +
+                "  |  window: RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  3:Decode\n" +
+                "  |  <dict id 10> : <string id 3>");
+
+        // Decode node under sort node
+        sql = "select S_ADDRESS, S_COMMENT from (select S_ADDRESS, " +
+                "S_COMMENT from supplier_nullable order by S_COMMENT limit 10) tb where S_ADDRESS = 'SS' order by S_ADDRESS ";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  5:SORT\n" +
+                "  |  order by: <slot 3> 3 ASC\n" +
+                "  |  offset: 0\n" +
+                "  |  \n" +
+                "  4:SELECT\n" +
+                "  |  predicates: 3 = 'SS'\n" +
+                "  |  \n" +
+                "  3:Decode\n" +
+                "  |  <dict id 9> : <string id 3>\n" +
+                "  |  <dict id 10> : <string id 7>");
     }
 
     @Test

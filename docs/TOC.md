@@ -30,7 +30,11 @@
   + [Continuously load data from Apache Flink®](./loading/Flink-connector-starrocks.md)
   + [Change data through loading](./loading/Load_to_Primary_Key_tables.md)
   + [Transform data at loading](./loading/Etl_in_loading.md)
-+ Data Source
++ Data Unloading
+  + [Overview of data unloading](./unloading/Export.md)
+  + [Spark connector](./unloading/Spark_connector.md)
+  + [Flink connector](./unloading/Flink_connector.md)
++ Query Data Sources
   + Catalog
     + [Overview](./data_source/catalog/catalog_overview.md)
     + [Default catalog](./data_source/catalog/default_catalog.md)
@@ -108,10 +112,13 @@
       + [ADMIN SHOW CONFIG](./sql-reference/sql-statements/Administration/ADMIN%20SHOW%20CONFIG.md)
       + [ADMIN SHOW REPLICA DISTRIBUTION](./sql-reference/sql-statements/Administration/ADMIN%20SHOW%20REPLICA%20DISTRIBUTION.md)
       + [ADMIN SHOW REPLICA STATUS](./sql-reference/sql-statements/Administration/ADMIN%20SHOW%20REPLICA%20STATUS.md)
+      + [ALTER RESOURCE GROUP](/sql-reference/sql-statements/Administration/ALTER%20RESOURCE%20GROUP.md)
       + [ALTER SYSTEM](./sql-reference/sql-statements/Administration/ALTER%20SYSTEM.md)
       + [CANCEL DECOMMISSION](./sql-reference/sql-statements/Administration/CANCEL%20DECOMMISSION.md)
       + [CREATE FILE](./sql-reference/sql-statements/Administration/CREATE%20FILE.md)
+      + [CREATE RESOURCE GROUP](/sql-reference/sql-statements/Administration/CREATE%20RESOURCE%20GROUP.md)
       + [DROP FILE](./sql-reference/sql-statements/Administration/DROP%20FILE.md)
+      + [DROP RESOURCE GROUP](/sql-reference/sql-statements/Administration/DROP%20RESOURCE%20GROUP.md)
       + [INSTALL PLUGIN](./sql-reference/sql-statements/Administration/INSTALL%20PLUGIN.md)
       + [SHOW BACKENDS](./sql-reference/sql-statements/Administration/SHOW%20BACKENDS.md)
       + [SHOW BROKER](./sql-reference/sql-statements/Administration/SHOW%20BROKER.md)
@@ -121,6 +128,7 @@
       + [SHOW INDEX](./sql-reference/sql-statements/Administration/SHOW%20INDEX.md)
       + [SHOW PLUGINS](./sql-reference/sql-statements/Administration/SHOW%20PLUGINS.md)
       + [SHOW PROCESSLIST](./sql-reference/sql-statements/Administration/SHOW%20PROCESSLIST.md)
+      + [SHOW RESOURCE GROUP](/sql-reference/sql-statements/Administration/SHOW%20RESOURCE%20GROUP.md)
       + [SHOW TABLE STATUS](./sql-reference/sql-statements/Administration/SHOW%20TABLE%20STATUS.md)
       + [SHOW FILE](./sql-reference/sql-statements/Administration/SHOW%20FILE.md)
       + [UNINSTALL PLUGIN](./sql-reference/sql-statements/Administration/UNINSTALL%20PLUGIN.md)
@@ -245,6 +253,7 @@
       + [current_timestamp](./sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [curtime](./sql-reference/sql-functions/date-time-functions/curtime.md)
       + [now](./sql-reference/sql-functions/date-time-functions/now.md)
+      + [date](./sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](./sql-reference/sql-functions/date-time-functions/date_add.md)
       + [date_sub](./sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_format](./sql-reference/sql-functions/date-time-functions/date_format.md)
@@ -419,6 +428,8 @@
       + [sha2](./sql-reference/sql-functions/crytographic-functions/sha2.md)
       + [sm3](./sql-reference/sql-functions/crytographic-functions/sm3.md)
     + Math Functions
+      + [greatest](./sql-reference/sql-functions/math-functions/greatest.md)
+      + [least](./sql-reference/sql-functions/math-functions/least.md)
       + [rand](./sql-reference/sql-functions/math-functions/rand.md)
       + [square](./sql-reference/sql-functions/math-functions/square.md)
     + Utility Functions
@@ -431,10 +442,6 @@
   + [System variables](./reference/System_variable.md)
   + [Error code](./reference/Error_code.md)
   + [System limits](./reference/System_limit.md)
-+ Data Unloading
-  + [Overview of data unloading](./unloading/Export.md)
-  + [Spark connector](./unloading/Spark_connector.md)
-  + [Flink connector](./unloading/Flink_connector.md)
 + FAQ
   + [Deploy](./faq/Deploy_faq.md)
   + Data Migration
@@ -454,8 +461,10 @@
   + [SSB Benchmark](./benchmarking/SSB_Benchmarking.md)
   + [TPC-H Benchmark](./benchmarking/TPC-H_Benchmarking.md)
 + Developers
+  + [Contribute to StarRocks](./developers/How%20to%20Contribute.md)
   + Development Environment
     + [IDEA](./developers/development-environment/IDEA.md)
+    + [Build_StarRocks_on_Ubuntu](./developers/build-starrocks/build_starrocks_on_ubuntu.md)
   + Trace Tools
     + [Trace](./developers/trace-tools/Trace.md)
 + Release Notes
