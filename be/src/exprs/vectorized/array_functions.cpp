@@ -80,7 +80,7 @@ static ColumnPtr do_array_append(const Column& elements, const UInt32Column& off
 ColumnPtr ArrayFunctions::array_append([[maybe_unused]] FunctionContext* context, const Columns& columns) {
     const Column* arg0 = columns[0].get();
     const Column* arg1 = columns[1].get();
-    if(arg0->only_null()) {
+    if (arg0->only_null()) {
         return columns[0];
     }
 
