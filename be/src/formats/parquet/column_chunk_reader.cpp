@@ -177,15 +177,23 @@ Status ColumnChunkReader::_read_and_decompress_page_data(uint32_t compressed_siz
     std::string key = _opts.cache_key_prefix;
     size_t off = _page_reader->offset();
     key += std::to_string(off);
+    bool zero_copy = config::connector_parquet_page_cache_zero_copy;
 
     if (cache != nullptr) {
         Cache::Handle* handle = cache->lookup(key);
         if (handle != nullptr) {
-            _reserve_uncompress_buf(uncompressed_size);
-            auto cache_data = (uint8_t*)cache->value(handle);
-            memcpy(_uncompressed_buf.get(), cache_data, uncompressed_size);
-            cache->release(handle);
-            _data = Slice(_uncompressed_buf.get(), uncompressed_size);
+            if (zero_copy) {
+                // make sure this cache is not freed.
+                auto cache_data = (uint8_t*)cache->value(handle);
+                cache->release(handle);
+                _data = Slice(cache_data, uncompressed_size);
+            } else {
+                _reserve_uncompress_buf(uncompressed_size);
+                auto cache_data = (uint8_t*)cache->value(handle);
+                memcpy(_uncompressed_buf.get(), cache_data, uncompressed_size);
+                cache->release(handle);
+                _data = Slice(_uncompressed_buf.get(), uncompressed_size);
+            }
 
             if (is_compressed && _compress_codec != nullptr) {
                 _page_reader->skip_bytes(compressed_size);

@@ -759,6 +759,7 @@ CONF_Bool(connector_chunk_source_accumulate_chunk_enable, "true");
 CONF_Bool(connector_dynamic_chunk_buffer_limiter_enable, "true");
 CONF_Bool(connector_min_max_predicate_from_runtime_filter_enable, "true");
 CONF_Int64(connector_hdfs_scan_cache_size, "0");
+CONF_Bool(connector_parquet_page_cache_zero_copy, "false");
 
 // Enable output trace logs in aws-sdk-cpp for diagnosis purpose.
 // Once logging is enabled in your application, the SDK will generate log files in your current working directory
