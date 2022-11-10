@@ -92,7 +92,11 @@ public class ExportSink extends DataSink {
         FsBroker broker = GlobalStateMgr.getCurrentState().getBrokerMgr().getAnyBroker(brokerDesc.getName());
         if (broker != null) {
             tExportSink.addToBroker_addresses(new TNetworkAddress(broker.ip, broker.port));
+        } else {
+            // make be fail to exec Export job but not crash.
+            tExportSink.addToBroker_addresses(new TNetworkAddress("", -1));
         }
+
         tExportSink.setUse_broker(brokerDesc.hasBroker());
         tExportSink.setHdfs_write_buffer_size_kb(Config.hdfs_write_buffer_size_kb);
         if (!brokerDesc.hasBroker()) {
