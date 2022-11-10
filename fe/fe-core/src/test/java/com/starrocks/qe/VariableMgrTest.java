@@ -88,7 +88,7 @@ public class VariableMgrTest {
         SessionVariable var = VariableMgr.newSessionVariable();
         Assert.assertEquals(2147483648L, var.getMaxExecMemByte());
         Assert.assertEquals(300, var.getQueryTimeoutS());
-        Assert.assertEquals(false, var.isReportSucc());
+        Assert.assertEquals(false, var.isEnableProfile());
         Assert.assertEquals(32L, var.getSqlMode());
         Assert.assertEquals(true, var.isInnodbReadOnly());
 
@@ -97,7 +97,7 @@ public class VariableMgrTest {
         for (List<String> row : rows) {
             if (row.get(0).equalsIgnoreCase("exec_mem_limit")) {
                 Assert.assertEquals("2147483648", row.get(1));
-            } else if (row.get(0).equalsIgnoreCase("is_report_success")) {
+            } else if (row.get(0).equalsIgnoreCase("enable_profile")) {
                 Assert.assertEquals("false", row.get(1));
             } else if (row.get(0).equalsIgnoreCase("query_timeout")) {
                 Assert.assertEquals("300", row.get(1));

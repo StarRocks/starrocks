@@ -144,7 +144,7 @@ Status FragmentExecutor::_prepare_fragment_ctx(const UnifiedExecPlanFragmentPara
     _fragment_ctx->set_fragment_instance_id(fragment_instance_id);
     _fragment_ctx->set_fe_addr(coord);
 
-    if (query_options.__isset.is_report_success && query_options.is_report_success) {
+    if (query_options.__isset.enable_profile && query_options.enable_profile) {
         _fragment_ctx->set_report_profile();
     }
     if (query_options.__isset.pipeline_profile_level) {
