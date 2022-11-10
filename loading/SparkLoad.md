@@ -123,7 +123,7 @@ PROPERTIES 是 Spark 资源相关参数，如下：
 * `spark.hadoop.yarn.resourcemanager.hostname.rm-id`: 对于每个 rm-id，指定 resource manager 对应的主机名。
 * `spark.hadoop.yarn.resourcemanager.address.rm-id`: 对于每个 rm-id，指定 host: port 以供客户端提交作业。
 
-   其他参数为可选，参考 [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)
+   其他参数为可选，参考 [Spark Configuration](http://spark.apache.org/docs/latest/configuration.html)。
 
 * `working_dir`: ETL 使用的目录。spark 作为 ETL 资源使用时必填。例如：hdfs://host: port/tmp/starrocks。
 * `broker`: broker 名字。spark 作为 ETL 资源使用时必填。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
@@ -239,7 +239,7 @@ PROPERTIES
 
 **示例 3**：上游数据源是 hive 表的情况
 
-* step 1: 新建 hive 资源
+* step 1: 新建 hive 资源。
 
     ~~~sql
     CREATE EXTERNAL RESOURCE hive0
@@ -250,7 +250,7 @@ PROPERTIES
     );
     ~~~
 
-* step 2: 新建 hive 外部表
+* step 2: 新建 hive 外部表。
 
     ~~~sql
     CREATE EXTERNAL TABLE hive_t1
@@ -403,7 +403,7 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 ### Spark 程序导入
 
-完整 spark load 导入示例，参考 github 上的 demo: [sparkLoad2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md)
+完整 spark load 导入示例，参考 github 上的 demo: [sparkLoad2StarRocks](https://github.com/StarRocks/demo/blob/master/docs/03_sparkLoad2StarRocks.md)。
 
 ---
 
