@@ -205,16 +205,19 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                     _buff.skip(1);
                     status = readMore(_buff);
                     if (!status.ok()) {
+                        is_enclose_field = true;
                         curState = NEWLINE;
                         goto newline_label;
                     }                    // ""rowseperator
                     if (isRowDelimiter(_buff)) {
+                        is_enclose_field = true;
                         curState = NEWLINE;
                         break;
                     }
                     
                     // delimiter
                     if (isColumnSeparator(_buff)) {
+                        is_enclose_field = true;
                         curState = DELIMITER;
                         break;
                     }

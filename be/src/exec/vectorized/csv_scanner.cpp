@@ -54,6 +54,7 @@ Status CSVScanner::ScannerCSVReader::_fill_buffer() {
             }
         }
         if (n == 0) {
+            _buff.skip(_row_delimiter_length);    
             // Has reached the end of file and the buffer is empty.
             return Status::EndOfFile(_file->filename());
         }

@@ -593,19 +593,23 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
     ASSERT_TRUE(st.ok()) << st.to_string();
 
     ChunkPtr chunk = scanner->get_next().value();
-    EXPECT_EQ(5, chunk->num_rows());
+    EXPECT_EQ(6, chunk->num_rows());
 
     EXPECT_EQ(1, chunk->get(0)[0].get_int32());
     EXPECT_EQ(3, chunk->get(1)[0].get_int32());
     EXPECT_EQ(5, chunk->get(2)[0].get_int32());
     EXPECT_EQ(7, chunk->get(3)[0].get_int32());
     EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+    EXPECT_EQ(11, chunk->get(5)[0].get_int32());
+
 
     EXPECT_EQ("aa", chunk->get(0)[1].get_slice());
-    EXPECT_EQ("bb", chunk->get(1)[1].get_slice());
-    EXPECT_EQ("cc", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("bb|BB", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc\nadf,1,3455", chunk->get(2)[1].get_slice());
     EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
-    EXPECT_EQ("ee", chunk->get(4)[1].get_slice());
+    EXPECT_EQ("\"ee", chunk->get(4)[1].get_slice());
+    EXPECT_EQ("", chunk->get(5)[1].get_slice());
+
 }
 
 TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
