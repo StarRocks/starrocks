@@ -11,11 +11,6 @@
 
 namespace starrocks::vectorized {
 
-int64_t HdfsScanStats::get_cpu_time_ns() const {
-    // TODO: make it more accurate
-    return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns - io_ns;
-}
-
 class CountedSeekableInputStream : public io::SeekableInputStreamWrapper {
 public:
     explicit CountedSeekableInputStream(const std::shared_ptr<io::SeekableInputStream>& stream,
