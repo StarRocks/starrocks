@@ -181,7 +181,7 @@ Status CSVReader::next_record(FieldOffsets* fields) {
                 preState = ORDINARY;
                 curState = ESCAPE;
                 _buff.skip(1);
-                filed_start = _buff.position_offset();
+                // filed_start = _buff.position_offset();
                 break;
             }
 

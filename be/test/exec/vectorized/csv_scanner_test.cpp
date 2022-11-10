@@ -617,6 +617,41 @@ TEST_F(CSVScannerTest, test_ENCLOSE) {
     EXPECT_EQ("ab", chunk->get(5)[2].get_slice());
 }
 
+TEST_F(CSVScannerTest, test_ESCAPE) {
+    std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_VARCHAR), TypeDescriptor(TYPE_VARCHAR)};
+
+    std::vector<TBrokerRangeDesc> ranges;
+    TBrokerRangeDesc range;
+    range.__set_num_of_columns_from_file(3);
+    range.__set_path("./be/test/exec/test_data/csv_scanner/csv_file18");
+    ranges.push_back(range);
+
+    auto scanner = create_csv_scanner(types, ranges, "\n", "|", 0, true);
+    Status st = scanner->open();
+    ASSERT_TRUE(st.ok()) << st.to_string();
+
+    ChunkPtr chunk = scanner->get_next().value();
+    EXPECT_EQ(5, chunk->num_rows());
+
+    EXPECT_EQ(1, chunk->get(0)[0].get_int32());
+    EXPECT_EQ(3, chunk->get(1)[0].get_int32());
+    EXPECT_EQ(5, chunk->get(2)[0].get_int32());
+    EXPECT_EQ(7, chunk->get(3)[0].get_int32());
+    EXPECT_EQ(9, chunk->get(4)[0].get_int32());
+
+    EXPECT_EQ("\\\"aa\\\"", chunk->get(0)[1].get_slice());
+    EXPECT_EQ("bb\\|BB", chunk->get(1)[1].get_slice());
+    EXPECT_EQ("cc\\\nadf,1,3455", chunk->get(2)[1].get_slice());
+    EXPECT_EQ("dd", chunk->get(3)[1].get_slice());
+    EXPECT_EQ("\\\\ee", chunk->get(4)[1].get_slice());
+
+    EXPECT_EQ("abc\\\"", chunk->get(0)[2].get_slice());
+    EXPECT_EQ("", chunk->get(1)[2].get_slice());
+    EXPECT_EQ("\"e", chunk->get(2)[2].get_slice());
+    EXPECT_EQ("abc\\|ef\\\ngh", chunk->get(3)[2].get_slice());
+    EXPECT_EQ("", chunk->get(4)[2].get_slice());
+}
+
 TEST_F(CSVScannerTest, test_file_not_ended_with_record_delimiter) {
     std::vector<TypeDescriptor> types{TypeDescriptor(TYPE_INT), TypeDescriptor(TYPE_INT)};
 
