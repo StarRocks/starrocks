@@ -198,8 +198,8 @@ INTO TABLE <table_name>
   | **参数名称**                         | **参数说明**                                                 |
   | ------------------------------------------------------- | --------------------------- |
   | dfs.nameservices                  | 自定义 HDFS 集群的名称。                                     |
-  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  </br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
-  | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  </br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
+  | dfs.ha.namenodes.XXX              | 自定义 NameNode 的名称，多个名称以逗号 (,) 分隔，双引号内不允许出现空格。  <br>其中 `xxx` 为 `dfs.nameservices` 中自定义的HDFS 服务的名称。 |
+  | dfs.namenode.rpc-address.XXX.NN    | 指定 NameNode 的 RPC 地址信息。  <br>其中 `NN` 表示 `dfs.ha.namenodes.XXX` 中自定义 NameNode 的名称。 |
   | dfs.client.failover.proxy.provider | 指定客户端连接的 NameNode 的提供者，默认为 `org.apache.hadoop.hdfs.server.namenode.ha.ConfiguredFailoverProxyProvider`。 |
 
 #### Amazon S3
