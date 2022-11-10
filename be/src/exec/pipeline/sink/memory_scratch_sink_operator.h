@@ -68,7 +68,7 @@ public:
 
     ~MemoryScratchSinkOperatorFactory() override = default;
 
-    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) {
+    OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<MemoryScratchSinkOperator>(this, _id, _plan_node_id, driver_sequence, _output_expr_ctxs,
                                                            _arrow_schema, _queue);
     }
