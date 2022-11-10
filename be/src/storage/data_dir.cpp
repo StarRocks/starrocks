@@ -355,6 +355,14 @@ Status DataDir::get_shard(uint64_t* shard) {
     std::string shard_path = shard_path_stream.str();
     if (!FileUtils::check_exist(shard_path)) {
         RETURN_IF_ERROR(FileUtils::create_dir(shard_path));
+        if (config::sync_tablet_meta) {
+            std::string data_path = _path + DATA_PREFIX;
+            Status st = FileUtils::sync_dir(data_path, Env::Default());
+            if (!st.ok()) {
+                LOG(WARNING) << "Fail to sync " << data_path << ": " << st.to_string();
+                return st;
+            }
+        }
     }
 
     *shard = next_shard;

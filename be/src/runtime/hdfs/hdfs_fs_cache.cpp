@@ -20,7 +20,6 @@ static Status create_hdfs_fs_handle(const std::string& namenode, HdfsFsHandle* h
             return Status::InternalError(strings::Substitute("fail to connect hdfs namenode, namenode=$0, err=$1",
                                                              namenode, get_hdfs_err_msg()));
         }
-
     } else {
         return Status::InternalError(strings::Substitute("failed to make client, namenode=$0", namenode));
     }

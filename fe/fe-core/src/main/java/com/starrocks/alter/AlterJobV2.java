@@ -185,7 +185,7 @@ public abstract class AlterJobV2 implements Writable {
     }
 
     /**
-     * should be call before executing the job.
+     * should be called before executing the job.
      * return false if table is not stable.
      */
     protected boolean checkTableStable(Database db) throws AlterCancelException {

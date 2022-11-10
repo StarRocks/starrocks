@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "common/object_pool.h"
 #include "env/env.h"
 #include "env/env_hdfs.h"
 #include "exprs/expr_context.h"
@@ -232,6 +233,7 @@ protected:
 
     HdfsFileReaderParam _file_read_param;
     HdfsScannerParams _scanner_params;
+    ObjectPool _pool;
     RuntimeState* _runtime_state = nullptr;
     HdfsScanStats _stats;
     // predicate collections.

@@ -1,18 +1,18 @@
 # dayname
 
-## description
+## Description
 
-### Syntax
+Returns the day corresponding to a date.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
-VARCHAR DAYNAME(DATE)
+VARCHAR DAYNAME(date)
 ```
 
-Return date name corresponding to the date.
-
-The parameter is Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select dayname('2007-02-03 00:00:00');

@@ -61,6 +61,8 @@ public:
 
 private:
     void _add_expr_ctx(ExprContext* expr_ctx);
+
+    ObjectPool _pool;
     RuntimeState* _state;
     std::vector<ExprContext*> _expr_ctxs;
     const SlotDescriptor* _slot_desc;

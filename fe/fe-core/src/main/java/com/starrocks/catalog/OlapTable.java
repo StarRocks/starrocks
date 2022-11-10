@@ -93,7 +93,7 @@ public class OlapTable extends Table {
          * this state means table is under PENDING alter operation(SCHEMA_CHANGE or ROLLUP), and is not
          * stable. The tablet scheduler will continue fixing the tablets of this table. And the state will
          * change back to SCHEMA_CHANGE or ROLLUP after table is stable, and continue doing alter operation.
-         * This state is a in-memory state and no need to persist.
+         * This state is an in-memory state and no need to persist.
          */
         WAITING_STABLE
     }
@@ -489,7 +489,7 @@ public class OlapTable extends Table {
                 for (int i = 0; i < tabletNum; i++) {
                     long newTabletId = catalog.getNextId();
                     LocalTablet newTablet = new LocalTablet(newTabletId);
-                    idx.addTablet(newTablet, null /* tablet meta */, true /* is restore */);
+                    idx.addTablet(newTablet, null /* tablet meta */, false /* update inverted index */);
 
                     // replicas
                     List<Long> beIds = Catalog.getCurrentSystemInfo()
@@ -505,7 +505,7 @@ public class OlapTable extends Table {
                         long newReplicaId = catalog.getNextId();
                         Replica replica = new Replica(newReplicaId, beId, ReplicaState.NORMAL,
                                 partition.getVisibleVersion(), schemaHash);
-                        newTablet.addReplica(replica, true /* is restore */);
+                        newTablet.addReplica(replica, false /* update inverted index */);
                     }
                 }
             }
@@ -782,6 +782,10 @@ public class OlapTable extends Table {
     // get all partitions except temp partitions
     public Collection<Partition> getPartitions() {
         return idToPartition.values();
+    }
+
+    public int getNumberOfPartitions() {
+        return idToPartition.size();
     }
 
     // get only temp partitions

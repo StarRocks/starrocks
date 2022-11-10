@@ -322,6 +322,8 @@ public:
     // For test only
     void set_compare_strategy(CompareStrategy cmp) { _compare_strategy = cmp; }
 
+    int nan_direction() const { return _sort_order_flag[0] * _null_first_flag[0]; }
+
 protected:
     inline size_t _get_number_of_order_by_columns() const { return _sort_exprs->size(); }
 

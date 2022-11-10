@@ -14,13 +14,17 @@ namespace starrocks::vectorized {
 
 // DictConjuctPredicateOperator for global dictionary optimization.
 // It converts all predicates into code mappings.
+// the null input will deal with 0
 // eg: where key = 'SR' will convert to
-// [0] "SR" -> true
-// [1] "RK" -> false
+// [0] NULL -> false
+// [1] "SR" -> true
+// [2] "RK" -> false
 //
+
 template <FieldType field_type>
 class DictConjuctPredicateOperator {
 public:
+    static constexpr bool skip_null = false;
     DictConjuctPredicateOperator(std::vector<uint8_t> code_mapping) : _code_mapping(std::move(code_mapping)) {}
 
     uint8_t eval_at(const LowCardDictColumn* lowcard_column, int idx) const {

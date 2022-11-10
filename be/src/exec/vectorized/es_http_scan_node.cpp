@@ -169,7 +169,8 @@ Status EsHttpScanNode::_build_conjuncts() {
     _predicate_idx.reserve(conjunct_sz);
 
     for (int i = 0; i < _conjunct_ctxs.size(); ++i) {
-        EsPredicate* predicate = _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, _pool));
+        EsPredicate* predicate =
+                _pool->add(new EsPredicate(_conjunct_ctxs[i], _tuple_desc, runtime_state()->timezone(), _pool));
         predicate->set_field_context(_fields_context);
         status = predicate->build_disjuncts_list(true);
         if (status.ok()) {
@@ -263,7 +264,7 @@ static std::string get_host_port(const std::vector<TNetworkAddress>& es_hosts) {
 
 Status EsHttpScanNode::_create_scanner(int scanner_idx, std::unique_ptr<EsHttpScanner>* res) {
     std::vector<ExprContext*> scanner_expr_ctxs;
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
+    auto status = Expr::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
     RETURN_IF_ERROR(status);
 
     const TEsScanRange& es_scan_range = _scan_ranges[scanner_idx].scan_range.es_scan_range;

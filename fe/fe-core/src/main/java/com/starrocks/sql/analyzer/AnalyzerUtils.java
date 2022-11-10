@@ -21,8 +21,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.mysql.privilege.PrivPredicate;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AstVisitor;
@@ -130,11 +128,7 @@ public class AnalyzerUtils {
 
         @Override
         public Void visitInsertStatement(InsertStmt node, Void context) {
-            Database db = session.getCatalog().getDb(node.getDb());
-            if (db == null) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, node.getDb());
-            }
-            this.dbs.put(node.getDb(), db);
+            getDB(node.getTableName());
             return visit(node.getQueryStatement());
         }
 
@@ -198,7 +192,9 @@ public class AnalyzerUtils {
             }
 
             Database db = session.getCatalog().getDb(dbName);
-
+            if (db == null) {
+                return;
+            }
             dbs.put(dbName, db);
         }
     }

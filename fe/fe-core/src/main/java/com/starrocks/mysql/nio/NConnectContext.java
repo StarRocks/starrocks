@@ -39,7 +39,11 @@ public class NConnectContext extends ConnectContext {
     }
 
     @Override
-    public void cleanup() {
+    public synchronized void cleanup() {
+        if (closed) {
+            return;
+        }
+        closed = true;
         mysqlChannel.close();
         returnRows = 0;
     }

@@ -72,6 +72,10 @@ public abstract class DataSink {
         }
     }
 
+    public static boolean canTableSinkUsePipeline(Table table) {
+        return false;
+    }
+
     public boolean canUsePipeLine() {
         return false;
     }

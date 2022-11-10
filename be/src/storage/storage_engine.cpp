@@ -95,7 +95,7 @@ StorageEngine::StorageEngine(const EngineOptions& options)
 
           _file_cache(nullptr),
           _tablet_manager(new TabletManager(options.tablet_meta_mem_tracker, config::tablet_map_shard_size)),
-          _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size)),
+          _txn_manager(new TxnManager(config::txn_map_shard_size, config::txn_shard_size, options.store_paths.size())),
           _rowset_id_generator(new UniqueRowsetIdGenerator(options.backend_uid)),
           _memtable_flush_executor(nullptr),
           _block_manager(nullptr),
@@ -339,6 +339,19 @@ void StorageEngine::_start_disk_stat_monitor() {
     // tablet_worker_thread (see TaskWorkerPool) to make them report to FE ASAP.
     if (some_tablets_were_dropped) {
         trigger_report();
+    }
+
+    // Once sweep operation can lower the disk water level by removing data, so it doesn't make sense
+    // to wake up the sweeper thread multiple times in a short period of time. To avoid multiple
+    // disk scans, set an valid disk scan interval.
+    static time_t last_sweep_time = 0;
+    static const int32_t valid_sweep_interval = 30;
+    for (auto& it : _store_map) {
+        if (difftime(time(NULL), last_sweep_time) > valid_sweep_interval && it.second->reach_capacity_limit(0)) {
+            std::unique_lock<std::mutex> lk(_trash_sweeper_mutex);
+            _trash_sweeper_cv.notify_one();
+            last_sweep_time = time(NULL);
+        }
     }
 }
 
@@ -704,6 +717,7 @@ Status StorageEngine::_perform_update_compaction(DataDir* data_dir) {
 }
 
 Status StorageEngine::_start_trash_sweep(double* usage) {
+    LOG(INFO) << "start to sweep trash";
     Status res = Status::OK();
 
     const int32_t snapshot_expire = config::snapshot_expire_time_sec;

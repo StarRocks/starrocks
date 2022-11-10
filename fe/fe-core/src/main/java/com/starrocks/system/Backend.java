@@ -33,6 +33,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
+import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
 import com.starrocks.thrift.TDisk;
 import com.starrocks.thrift.TStorageMedium;
@@ -648,7 +649,8 @@ public class Backend implements Writable {
      * handle Backend's heartbeat response.
      * return true if any port changed, or alive state is changed.
      */
-    public boolean handleHbResponse(BackendHbResponse hbResponse) {
+    public boolean handleHbResponse(BackendHbResponse hbResponse, boolean isReplay) {
+        boolean becomeDead = false;
         boolean isChanged = false;
         if (hbResponse.getStatus() == HbStatus.OK) {
             if (!this.version.equals(hbResponse.getVersion())) {
@@ -694,13 +696,38 @@ public class Backend implements Writable {
                 this.heartbeatRetryTimes++;
             } else {
                 if (isAlive.compareAndSet(true, false)) {
-                    isChanged = true;
-                    LOG.info("{} is dead,", this.toString());
+                    becomeDead = true;
+                    LOG.info("{} is dead due to exceed heartbeatRetryTimes", this);
                 }
-
                 heartbeatErrMsg = hbResponse.getMsg() == null ? "Unknown error" : hbResponse.getMsg();
                 lastMissingHeartbeatTime = System.currentTimeMillis();
             }
+            // When the leader receives an error heartbeat info which status not ok, 
+            // this heartbeat info also need to be synced to follower.
+            // Since the failed heartbeat info also modifies fe's memory, (this.heartbeatRetryTimes++;)
+            // if this heartbeat is not synchronized to the follower, 
+            // that will cause the Follower and leader’s memory to be inconsistent
+            isChanged = true;
+        }
+
+        if (!isReplay) {
+            hbResponse.aliveStatus = isAlive.get() ?
+                HeartbeatResponse.AliveStatus.ALIVE : HeartbeatResponse.AliveStatus.NOT_ALIVE;
+        } else {
+            if (hbResponse.aliveStatus != null) {
+                // The metadata before the upgrade does not contain hbResponse.aliveStatus,
+                // in which case the alive status needs to be handled according to the original logic
+                boolean newIsAlive = hbResponse.aliveStatus == HeartbeatResponse.AliveStatus.ALIVE;
+                if (isAlive.compareAndSet(!newIsAlive, newIsAlive)) {
+                    becomeDead = !newIsAlive;
+                    LOG.info("{} alive status is changed to {}", this, newIsAlive);
+                }
+                heartbeatRetryTimes = 0;
+            }
+        }
+
+        if (becomeDead) {
+            CoordinatorMonitor.getInstance().addDeadBackend(id);
         }
 
         return isChanged;

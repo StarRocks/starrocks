@@ -270,6 +270,16 @@ public abstract class BaseAction implements IAction {
             sb.append(", password: ").append(password).append(", cluster: ").append(cluster);
             return sb.toString();
         }
+
+        public static ActionAuthorizationInfo of(
+                String fullUserName, String password, String remoteIp, String cluster) {
+            ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
+            authInfo.fullUserName = fullUserName;
+            authInfo.remoteIp = remoteIp;
+            authInfo.password = password;
+            authInfo.cluster = cluster;
+            return authInfo;
+        }
     }
 
     protected void checkGlobalAuth(UserIdentity currentUser, PrivPredicate predicate) throws UnauthorizedException {
@@ -296,7 +306,7 @@ public abstract class BaseAction implements IAction {
     }
 
     // return currentUserIdentity from StarRocks auth
-    protected UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
+    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
             throws UnauthorizedException {
         List<UserIdentity> currentUser = Lists.newArrayList();
         if (!Catalog.getCurrentCatalog().getAuth().checkPlainPassword(authInfo.fullUserName,
@@ -366,6 +376,27 @@ public abstract class BaseAction implements IAction {
             }
         }
         return true;
+    }
+
+    // Refer to {@link #parseAuthInfo(BaseRequest, ActionAuthorizationInfo)}
+    public static ActionAuthorizationInfo parseAuthInfo(String fullUserName, String password, String host) {
+        ActionAuthorizationInfo authInfo = new ActionAuthorizationInfo();
+        final String[] elements = fullUserName.split("@");
+        if (elements.length < 2) {
+            authInfo.fullUserName = ClusterNamespace.getFullName(SystemInfoService.DEFAULT_CLUSTER, fullUserName);
+            authInfo.cluster = SystemInfoService.DEFAULT_CLUSTER;
+        } else if (elements.length == 2) {
+            authInfo.fullUserName = ClusterNamespace.getFullName(elements[1], elements[0]);
+            authInfo.cluster = elements[1];
+        } else {
+            authInfo.fullUserName = fullUserName;
+        }
+        authInfo.password = password;
+        authInfo.remoteIp = host;
+
+        LOG.debug("Parse result for the input [{} {} {}]: {}", fullUserName, password, host, authInfo);
+
+        return authInfo;
     }
 
     protected int checkIntParam(String strParam) {

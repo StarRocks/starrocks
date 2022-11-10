@@ -1,16 +1,16 @@
 # from_days
 
-## description
+## Description
 
-### Syntax
+Returns a date from 0000-01-01.
+
+## Syntax
 
 ```Haskell
 DATE FROM_DAYS(INT N)
 ```
 
-This function returns a date from 0000-01-01.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select from_days(730669);

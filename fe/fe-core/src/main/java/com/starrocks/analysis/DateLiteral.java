@@ -32,8 +32,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.thrift.TDateLiteral;
 import com.starrocks.thrift.TExprNode;
 import com.starrocks.thrift.TExprNodeType;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -43,13 +41,11 @@ import java.nio.charset.StandardCharsets;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.ResolverStyle;
-import java.time.temporal.ChronoField;
 import java.util.Date;
 import java.util.Objects;
 import java.util.TimeZone;
 
 public class DateLiteral extends LiteralExpr {
-    private static final Logger LOG = LogManager.getLogger(DateLiteral.class);
 
     private static final DateLiteral MIN_DATE = new DateLiteral(0, 1, 1);
     private static final DateLiteral MAX_DATE = new DateLiteral(9999, 12, 31);
@@ -449,7 +445,7 @@ public class DateLiteral extends LiteralExpr {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(unixTimestamp(TimeZone.getDefault()));
+        return Objects.hash(super.hashCode(), Objects.hashCode(unixTimestamp(TimeZone.getDefault())));
     }
 
     @Override

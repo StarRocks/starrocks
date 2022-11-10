@@ -1,18 +1,18 @@
 # year
 
-## description
+## Description
 
-### Syntax
+Returns the year part in a date and returns a value that ranges from 1000 to 9999.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
 INT YEAR(DATETIME date)
 ```
 
-This function returns the year part in date type (a number from 1000 to 9999).
-
-The parameter is in Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select year('1987-01-01');

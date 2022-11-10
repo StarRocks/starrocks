@@ -131,7 +131,7 @@ void ExecNode::push_down_tuple_slot_mappings(RuntimeState* state,
 
 void ExecNode::push_down_join_runtime_filter(RuntimeState* state, vectorized::RuntimeFilterProbeCollector* collector) {
     if (collector->empty()) return;
-    if (_type != TPlanNodeType::AGGREGATION_NODE) {
+    if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
     _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);

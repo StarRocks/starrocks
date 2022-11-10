@@ -412,6 +412,7 @@ StatusOr<JavaGlobalRef> JVMClass::newInstance() const {
         return Status::InternalError("couldn't found default constructor for Java Object");
     }
     auto local_ref = env->NewObject((jclass)_clazz.handle(), constructor);
+    LOCAL_REF_GUARD(local_ref);
     return env->NewGlobalRef(local_ref);
 }
 

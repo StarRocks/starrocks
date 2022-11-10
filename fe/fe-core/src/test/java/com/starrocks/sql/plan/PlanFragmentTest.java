@@ -1425,7 +1425,7 @@ public class PlanFragmentTest extends PlanTestBase {
                         "WHERE CAST(coalesce(true, true) AS BOOLEAN) < true\n" +
                         "LIMIT 157";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("10:SELECT\n" +
+        Assert.assertTrue(plan.contains("11:SELECT\n" +
                 "  |  predicates: coalesce(TRUE, TRUE) < TRUE\n" +
                 "  |  limit: 157"));
     }
@@ -1620,16 +1620,16 @@ public class PlanFragmentTest extends PlanTestBase {
         String sql = "select case when v1 then 2 else 2 end from (select v1, case when true then v1 else v1 end as c2"
                 + " from t0 limit 1) as x where c2 > 2 limit 2;";
         String plan = getFragmentPlan(sql);
-        Assert.assertTrue(plan.contains("  2:Project\n"
-                + "  |  <slot 4> : 2\n"
-                + "  |  limit: 2\n"
-                + "  |  \n"
-                + "  1:SELECT\n"
-                + "  |  predicates: 1: v1 > 2\n"
-                + "  |  limit: 2\n"
-                + "  |  \n"
-                + "  0:OlapScanNode\n"
-                + "     TABLE: t0"));
+        Assert.assertTrue(plan.contains("  3:Project\n" +
+                "  |  <slot 4> : 2\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  2:SELECT\n" +
+                "  |  predicates: 1: v1 > 2\n" +
+                "  |  limit: 2\n" +
+                "  |  \n" +
+                "  1:EXCHANGE\n" +
+                "     limit: 1"));
     }
 
     @Test

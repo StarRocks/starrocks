@@ -45,6 +45,7 @@ class Expr;
 class MemPool;
 class MemTracker;
 class RuntimeState;
+class ObjectPool;
 class TColumnValue;
 
 using vectorized::ColumnPtr;
@@ -76,9 +77,9 @@ public:
     /// to create an ExprContext for each execution thread that needs to evaluate
     /// 'root'. Note that clones are already opened. '*new_context' must be initialized by
     /// the caller to NULL.
-    Status clone(RuntimeState* state, ExprContext** new_context);
+    Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_context);
 
-    Status clone(RuntimeState* state, ExprContext** new_ctx, Expr* root);
+    Status clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx, Expr* root);
 
     /// Closes all FunctionContexts. Must be called on every ExprContext, including clones.
     void close(RuntimeState* state);

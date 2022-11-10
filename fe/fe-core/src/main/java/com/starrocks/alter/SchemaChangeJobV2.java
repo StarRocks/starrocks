@@ -541,15 +541,16 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
 
             // all partitions are good
             onFinished(tbl);
+
+            pruneMeta();
+            this.jobState = JobState.FINISHED;
+            this.finishedTimeMs = System.currentTimeMillis();
+
+            Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
         } finally {
             db.writeUnlock();
         }
 
-        pruneMeta();
-        this.jobState = JobState.FINISHED;
-        this.finishedTimeMs = System.currentTimeMillis();
-
-        Catalog.getCurrentCatalog().getEditLog().logAlterJob(this);
         LOG.info("schema change job finished: {}", jobId);
     }
 
@@ -744,8 +745,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
             db.writeUnlock();
         }
 
+        // to make sure that this job will run runPendingJob() again to create the shadow index replicas
+        this.jobState = JobState.PENDING;
         this.watershedTxnId = replayedJob.watershedTxnId;
-        jobState = JobState.WAITING_TXN;
         LOG.info("replay pending schema change job: {}", jobId);
     }
 

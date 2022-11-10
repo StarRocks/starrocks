@@ -161,7 +161,7 @@ public:
     // dictionary codes from the column |codes|.
     // |codes| must be of type `FixedLengthColumn<int32_t>` or `NullableColumn<FixedLengthColumn<int32_t>`
     // and assume no `null` value in |codes|.
-    Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words);
+    virtual Status decode_dict_codes(const vectorized::Column& codes, vectorized::Column* words);
 
     // given a list of ordinals, fetch corresponding values.
     // |ordinals| must be ascending sorted.

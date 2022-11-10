@@ -22,7 +22,7 @@
 package com.starrocks.master;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.LinkedListMultimap;
+import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.ListMultimap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -310,23 +310,23 @@ public class ReportHandler extends Daemon {
         HashMap<Long, TStorageMedium> storageMediumMap = Catalog.getCurrentCatalog().getPartitionIdToStorageMediumMap();
 
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletSyncMap = LinkedListMultimap.create();
+        ListMultimap<Long, Long> tabletSyncMap = ArrayListMultimap.create();
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletDeleteFromMeta = LinkedListMultimap.create();
+        ListMultimap<Long, Long> tabletDeleteFromMeta = ArrayListMultimap.create();
         // tablet ids which schema hash is valid
         Set<Long> foundTabletsWithValidSchema = new HashSet<Long>();
         // tablet ids which schema hash is invalid
         Map<Long, TTabletInfo> foundTabletsWithInvalidSchema = new HashMap<Long, TTabletInfo>();
         // storage medium -> tablet id
-        ListMultimap<TStorageMedium, Long> tabletMigrationMap = LinkedListMultimap.create();
+        ListMultimap<TStorageMedium, Long> tabletMigrationMap = ArrayListMultimap.create();
 
         // dbid -> txn id -> [partition info]
         Map<Long, ListMultimap<Long, TPartitionVersionInfo>> transactionsToPublish = Maps.newHashMap();
         Map<Long, Long> transactionsToCommitTime = Maps.newHashMap();
-        ListMultimap<Long, Long> transactionsToClear = LinkedListMultimap.create();
+        ListMultimap<Long, Long> transactionsToClear = ArrayListMultimap.create();
 
         // db id -> tablet id
-        ListMultimap<Long, Long> tabletRecoveryMap = LinkedListMultimap.create();
+        ListMultimap<Long, Long> tabletRecoveryMap = ArrayListMultimap.create();
 
         Set<Pair<Long, Integer>> tabletWithoutPartitionId = Sets.newHashSet();
 
@@ -547,14 +547,6 @@ public class ReportHandler extends Daemon {
                                     ((metaVersion < backendVersion) ||
                                             (metaVersion == backendVersion && replica.isBad()))) {
 
-                                // This is just a optimization for the old compatibility
-                                // The init version in FE is (1-0), in BE is (2-0)
-                                // If the BE report version is (2-0), we just update the replica's version in
-                                // Master FE,
-                                // and no need to write edit log, to save some time.
-                                // TODO(cmy): This will be removed later.
-                                boolean isInitVersion = metaVersion == 1 && backendVersion == 2;
-
                                 if (backendReportVersion < Catalog.getCurrentSystemInfo()
                                         .getBackendReportVersion(backendId)) {
                                     continue;
@@ -566,7 +558,7 @@ public class ReportHandler extends Daemon {
                                 // to FE
                                 replica.updateRowCount(backendVersion, dataSize, rowCount);
 
-                                if (replica.getLastFailedVersion() < 0 && !isInitVersion) {
+                                if (replica.getLastFailedVersion() < 0) {
                                     // last failed version < 0 means this replica becomes health after sync,
                                     // so we write an edit log to sync this operation
                                     replica.setBad(false);
@@ -1115,7 +1107,7 @@ public class ReportHandler extends Daemon {
                         + olapTable.getSchemaHashByIndexId(indexId) + "]");
             }
 
-            // colocate table will delete Replica in meta when balance
+            // colocate table will delete Replica in meta when balancing,
             // but we need to rely on MetaNotFoundException to decide whether delete the tablet in backend.
             // delete tablet from backend if colocate tablet is healthy.
             ColocateTableIndex colocateTableIndex = Catalog.getCurrentColocateIndex();
@@ -1199,7 +1191,7 @@ public class ReportHandler extends Daemon {
             try {
                 task = reportQueue.take();
                 synchronized (pendingTaskMap) {
-                    // using lastest task
+                    // using the lastest task
                     task = pendingTaskMap.get(task.type).get(task.beId);
                     if (task == null) {
                         throw new Exception("pendingTaskMap not exists " + task.beId);

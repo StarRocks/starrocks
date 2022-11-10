@@ -949,7 +949,7 @@ Status HashJoinNode::_create_implicit_local_join_runtime_filters(RuntimeState* s
     for (int i = 0; i < _probe_expr_ctxs.size(); i++) {
         auto* desc = _pool->add(new RuntimeFilterProbeDescriptor());
         desc->_filter_id = implicit_runtime_filter_id_offset + i;
-        RETURN_IF_ERROR(_probe_expr_ctxs[i]->clone(state, &desc->_probe_expr_ctx));
+        RETURN_IF_ERROR(_probe_expr_ctxs[i]->clone(state, _pool, &desc->_probe_expr_ctx));
         desc->_runtime_filter.store(nullptr);
         child(0)->register_runtime_filter_descriptor(state, desc);
     }

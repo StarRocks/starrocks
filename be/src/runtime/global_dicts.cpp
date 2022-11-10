@@ -275,9 +275,9 @@ Status DictOptimizeParser::_rewrite_expr_ctxs(std::vector<ExprContext*>* pexpr_c
     for (int i = 0; i < expr_ctxs.size(); ++i) {
         auto& expr_ctx = expr_ctxs[i];
         DictOptimizeContext dict_ctx;
-        _check_could_apply_dict_optimize(expr_ctx, &dict_ctx);
+        RETURN_IF_ERROR(_check_could_apply_dict_optimize(expr_ctx, &dict_ctx));
         if (dict_ctx.could_apply_dict_optimize) {
-            eval_expression(expr_ctx, &dict_ctx, slot_ids[i]);
+            RETURN_IF_ERROR(eval_expression(expr_ctx, &dict_ctx, slot_ids[i]));
             auto* dict_ctx_handle = _free_pool.add(new DictOptimizeContext(std::move(dict_ctx)));
             Expr* replaced_expr = _free_pool.add(new DictFuncExpr(*expr_ctx->root(), dict_ctx_handle));
 

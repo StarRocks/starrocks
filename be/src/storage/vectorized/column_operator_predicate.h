@@ -2,6 +2,9 @@
 
 #pragma once
 
+#include <cstdint>
+#include <type_traits>
+
 #include "column/nullable_column.h"
 #include "storage/vectorized/column_predicate.h"
 
@@ -17,6 +20,19 @@ public:
     ColumnOperatorPredicate(const TypeInfoPtr& type_info, ColumnId id, Args... args)
             : ColumnPredicate(type_info, id), _predicate_operator(std::forward<Args>(args)...) {}
 
+    // evaluate
+    uint8_t evaluate_at(int index, const ColumnType* column) const {
+        return _predicate_operator.eval_at(column, index);
+    }
+
+    // evaluate with nullable
+    uint8_t evaluate_at_nullable(int index, const uint8_t* null_data, const ColumnType* column) const {
+        if constexpr (SpecColumnOperator::skip_null) {
+            return !null_data[index] && _predicate_operator.eval_at(column, index);
+        }
+        return _predicate_operator.eval_at(column, index);
+    }
+
     void evaluate(const Column* column, uint8_t* sel, uint16_t from, uint16_t to) const override {
         // get raw column
         const ColumnType* lowcard_column;
@@ -29,13 +45,13 @@ public:
         }
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = _predicate_operator.eval_at(lowcard_column, i);
+                sel[i] = evaluate_at(i, lowcard_column);
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = !null_data[i] && _predicate_operator.eval_at(lowcard_column, i);
+                sel[i] = evaluate_at_nullable(i, null_data, lowcard_column);
             }
         }
     }
@@ -52,13 +68,13 @@ public:
         }
         if (!column->has_null()) {
             for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] && _predicate_operator.eval_at(lowcard_column, i));
+                sel[i] = (sel[i] && evaluate_at(i, lowcard_column));
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] && !null_data[i] && _predicate_operator.eval_at(lowcard_column, i));
+                sel[i] = (sel[i] && evaluate_at_nullable(i, null_data, lowcard_column));
             }
         }
     }
@@ -81,7 +97,7 @@ public:
             /* must use uint8_t* to make vectorized effect */
             const uint8_t* null_data = down_cast<const NullableColumn*>(column)->immutable_null_column_data().data();
             for (size_t i = from; i < to; i++) {
-                sel[i] = (sel[i] || (!null_data[i] && _predicate_operator.eval_at(lowcard_column, i)));
+                sel[i] = (sel[i] || evaluate_at_nullable(i, null_data, lowcard_column));
             }
         }
     }
@@ -102,7 +118,7 @@ public:
             for (uint16_t i = 0; i < sel_size; ++i) {
                 uint16_t data_idx = sel[i];
                 sel[new_size] = data_idx;
-                new_size += _predicate_operator.eval_at(lowcard_column, data_idx);
+                new_size += evaluate_at(data_idx, lowcard_column);
             }
         } else {
             /* must use uint8_t* to make vectorized effect */
@@ -110,7 +126,7 @@ public:
             for (uint16_t i = 0; i < sel_size; ++i) {
                 uint16_t data_idx = sel[i];
                 sel[new_size] = data_idx;
-                new_size += !null_data[data_idx] && _predicate_operator.eval_at(lowcard_column, data_idx);
+                new_size += evaluate_at_nullable(data_idx, null_data, lowcard_column);
             }
         }
         return new_size;

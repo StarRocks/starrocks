@@ -16,7 +16,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
     }
 
     // general conjuncts.
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(_scanner_params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, _scanner_params.conjunct_ctxs, &_conjunct_ctxs));
 
     // slot id conjuncts.
     const auto& conjunct_ctxs_by_slot = _scanner_params.conjunct_ctxs_by_slot;
@@ -24,13 +24,14 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
         for (auto iter = conjunct_ctxs_by_slot.begin(); iter != conjunct_ctxs_by_slot.end(); ++iter) {
             SlotId slot_id = iter->first;
             _conjunct_ctxs_by_slot.insert({slot_id, std::vector<ExprContext*>()});
-            RETURN_IF_ERROR(Expr::clone_if_not_exists(iter->second, runtime_state, &_conjunct_ctxs_by_slot[slot_id]));
+            RETURN_IF_ERROR(
+                    Expr::clone_if_not_exists(runtime_state, &_pool, iter->second, &_conjunct_ctxs_by_slot[slot_id]));
         }
     }
 
     // min/max conjuncts.
-    RETURN_IF_ERROR(
-            Expr::clone_if_not_exists(_scanner_params.min_max_conjunct_ctxs, runtime_state, &_min_max_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, _scanner_params.min_max_conjunct_ctxs,
+                                              &_min_max_conjunct_ctxs));
 
     Status status = do_init(runtime_state, scanner_params);
     return status;

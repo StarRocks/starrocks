@@ -1,16 +1,16 @@
 # now
 
-## description
+## Description
 
-### Syntax
+Returns the current date and time.
+
+## Syntax
 
 ```Haskell
 DATETIME NOW()
 ```
 
-It returns the current date and time in Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select now();
@@ -23,4 +23,4 @@ MySQL > select now();
 
 ## keyword
 
-NOW
+NOW, now

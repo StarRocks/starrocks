@@ -1,20 +1,20 @@
 # timestampadd
 
-## description
+## Description
 
-### Syntax
+Adds an integer expression interval to the date or datetime expression `datetime_expr`.
+
+The unit for the interval as mentioned must be one of the following:
+
+SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
+
+## Syntax
 
 ```Haskell
 DATETIME TIMESTAMPADD(unit, interval, DATETIME datetime_expr)
 ```
 
-Timestampadd adds the integer expression interval to the date or datetime expression datetime_expr.
-
-The unit for the interval as mentioned should be one of the following:
-
-SECOND, MINUTE, HOUR, DAY, WEEK, MONTH, or YEAR.
-
-## example
+## Examples
 
 ```plain text
 

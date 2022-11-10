@@ -1,8 +1,20 @@
 # unix_timestamp
 
-## description
+## Description
 
-### Syntax
+Converts a DATE or DATETIME value into a UNIX timestamp.
+
+If no parameter is specified, this function converts the current time into a UNIX timestamp.
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+For time before 1970-01-01 00:00:00 or after 2038-01-19 03:14:07, this function returns 0.
+
+For more information about the date format, see [date_format](./date_format.md).
+
+This function may return different results for different time zones.
+
+## Syntax
 
 ```Haskell
 INT UNIX_TIMESTAMP()
@@ -10,19 +22,7 @@ INT UNIX_TIMESTAMP(DATETIME date)
 INT UNIX_TIMESTAMP(DATETIME date, STRING fmt)
 ```
 
-unix_timestamp converts Date or Datetime type to unix timestamp.
-
-Without a parameter, it will convert the current time to unix timestamp.
-
-Parameters must be Date or Datetime type.
-
-For time before 1970-01-01 00:00:00 or after 2038-01-19 03:14:07, it returns 0.
-
-Please refer to "date_format" for information about Format.
-
-This function may return different results across different time zones.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select unix_timestamp();

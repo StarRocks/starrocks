@@ -1,14 +1,16 @@
 # convert_tz
 
-## Syntax
-
-`DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)`
-
 ## Description
 
-Convert a datetime value dt from the time zone given by from_tz to the time zone given by to_tz and returns the resulting value. If the argument is invalid, return NULL.
+Converts a datetime value dt from the time zone given by from_tz to the time zone given by to_tz and returns the resulting value. If the argument is invalid, return NULL.
 
-## Example
+## Syntax
+
+```sql
+DATETIME CONVERT_TZ(DATETIME dt, VARCHAR from_tz, VARCHAR to_tz)`
+```
+
+## Examples
 
 ```Plain Text
 MySQL > select convert_tz('2019-08-01 13:21:03', 'Asia/Shanghai', 'America/Los_Angeles');

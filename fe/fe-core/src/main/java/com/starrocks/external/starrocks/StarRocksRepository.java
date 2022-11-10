@@ -11,7 +11,6 @@ import com.starrocks.catalog.Table.TableType;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.MasterDaemon;
-import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.meta.MetaContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -70,7 +69,7 @@ public class StarRocksRepository extends MasterDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
-        if (Catalog.getCurrentCatalog().getRole() != FrontendNodeType.FOLLOWER) {
+        if (!Catalog.getCurrentCatalog().isMaster()) {
             return;
         }
         for (ExternalOlapTable table : srTables.values()) {

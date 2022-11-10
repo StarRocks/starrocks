@@ -190,7 +190,7 @@ public class HeartbeatMgr extends MasterDaemon {
                 BackendHbResponse hbResponse = (BackendHbResponse) response;
                 Backend be = nodeMgr.getBackend(hbResponse.getBeId());
                 if (be != null) {
-                    boolean isChanged = be.handleHbResponse(hbResponse);
+                    boolean isChanged = be.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ClientPool.backendPool.clearPool(new TNetworkAddress(be.getHost(), be.getBePort()));
@@ -208,7 +208,7 @@ public class HeartbeatMgr extends MasterDaemon {
                 FsBroker broker = Catalog.getCurrentCatalog().getBrokerMgr().getBroker(
                         hbResponse.getName(), hbResponse.getHost(), hbResponse.getPort());
                 if (broker != null) {
-                    boolean isChanged = broker.handleHbResponse(hbResponse);
+                    boolean isChanged = broker.handleHbResponse(hbResponse, isReplay);
                     if (hbResponse.getStatus() != HbStatus.OK) {
                         // invalid all connections cached in ClientPool
                         ClientPool.brokerPool.clearPool(new TNetworkAddress(broker.ip, broker.port));

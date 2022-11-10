@@ -36,6 +36,7 @@ import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
+import com.starrocks.qe.CoordinatorMonitor;
 import com.starrocks.qe.QeService;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FeServer;
@@ -109,6 +110,8 @@ public class StarRocksFE {
             // init catalog and wait it be ready
             Catalog.getCurrentCatalog().initialize(args);
             Catalog.getCurrentCatalog().waitForReady();
+
+            CoordinatorMonitor.getInstance().start();
 
             // init and start:
             // 1. QeService for MySQL Server

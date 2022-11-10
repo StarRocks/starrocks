@@ -219,11 +219,6 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
     DCHECK(expr != nullptr);
     if (parent != nullptr) {
         parent->add_child(expr);
-    } else {
-        DCHECK(root_expr != nullptr);
-        DCHECK(ctx != nullptr);
-        *root_expr = expr;
-        *ctx = pool->add(new ExprContext(expr));
     }
     for (int i = 0; i < num_children; i++) {
         *node_idx += 1;
@@ -233,6 +228,12 @@ Status Expr::create_tree_from_thrift(ObjectPool* pool, const std::vector<TExprNo
         if (*node_idx >= nodes.size()) {
             return Status::InternalError("Failed to reconstruct expression tree from thrift.");
         }
+    }
+    if (parent == nullptr) {
+        DCHECK(root_expr != nullptr);
+        DCHECK(ctx != nullptr);
+        *root_expr = expr;
+        *ctx = pool->add(new ExprContext(expr));
     }
     return Status::OK();
 }
@@ -473,7 +474,7 @@ void Expr::close(RuntimeState* state, ExprContext* context, FunctionContext::Fun
 #endif
 }
 
-Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeState* state,
+Status Expr::clone_if_not_exists(RuntimeState* state, ObjectPool* pool, const std::vector<ExprContext*>& ctxs,
                                  std::vector<ExprContext*>* new_ctxs) {
     DCHECK(new_ctxs != nullptr);
     if (!new_ctxs->empty()) {
@@ -487,7 +488,7 @@ Status Expr::clone_if_not_exists(const std::vector<ExprContext*>& ctxs, RuntimeS
 
     new_ctxs->resize(ctxs.size());
     for (int i = 0; i < ctxs.size(); ++i) {
-        RETURN_IF_ERROR(ctxs[i]->clone(state, &(*new_ctxs)[i]));
+        RETURN_IF_ERROR(ctxs[i]->clone(state, pool, &(*new_ctxs)[i]));
     }
     return Status::OK();
 }

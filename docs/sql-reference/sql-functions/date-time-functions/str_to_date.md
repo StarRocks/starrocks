@@ -1,18 +1,18 @@
 # str_to_date
 
-## description
+## Description
 
-### Syntax
+Converts a string to a DATE value according to the specified format. If the conversion fails, NULL is returned.
+
+The format must be consistent with that described in [date_format](./date_format.md).
+
+## Syntax
 
 ```Haskell
 DATETIME STR_TO_DATE(VARCHAR str, VARCHAR format)
 ```
 
-Convert str to DATE type according to the specified format. If the converted result is wrong, NULL will be returned.
-
-Supported format should be consistent with date_format.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select str_to_date('2014-12-21 12:34:56', '%Y-%m-%d %H:%i:%s');

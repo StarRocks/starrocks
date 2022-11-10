@@ -243,7 +243,7 @@ public class CompoundPredicate extends Predicate {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Objects.hashCode(op);
+        return Objects.hash(super.hashCode(), op);
     }
 
     /**

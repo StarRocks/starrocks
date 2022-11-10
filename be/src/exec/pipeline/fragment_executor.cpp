@@ -86,12 +86,19 @@ Status FragmentExecutor::prepare(ExecEnv* exec_env, const TExecPlanFragmentParam
     }
 
     bool prepare_success = false;
-    DeferOp defer([this, &prepare_success]() {
-        if (!prepare_success) {
+    int64_t prepare_time = 0;
+    DeferOp defer([this, &request, &prepare_success, &prepare_time]() {
+        if (prepare_success) {
+            auto fragment_ctx = _query_ctx->fragment_mgr()->get(request.params.fragment_instance_id);
+            auto* prepare_timer = fragment_ctx->runtime_state()->runtime_profile()->add_counter(
+                    "FragmentInstancePrepareTime", TUnit::TIME_NS);
+            COUNTER_SET(prepare_timer, prepare_time);
+        } else {
             _fail_cleanup();
         }
     });
 
+    SCOPED_RAW_TIMER(&prepare_time);
     _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {

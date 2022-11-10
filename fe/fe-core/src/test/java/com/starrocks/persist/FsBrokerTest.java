@@ -25,6 +25,7 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.common.FeMetaVersion;
 import com.starrocks.meta.MetaContext;
 import com.starrocks.system.BrokerHbResponse;
+import com.starrocks.system.HeartbeatResponse;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -64,7 +65,7 @@ public class FsBrokerTest {
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, time);
-        fsBroker.handleHbResponse(hbResponse);
+        fsBroker.handleHbResponse(hbResponse, false);
         fsBroker.write(dos);
         dos.flush();
         dos.close();
@@ -92,7 +93,7 @@ public class FsBrokerTest {
         FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
         long time = System.currentTimeMillis();
         BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
-        fsBroker.handleHbResponse(hbResponse);
+        fsBroker.handleHbResponse(hbResponse, false);
         fsBroker.write(dos);
         dos.flush();
         dos.close();
@@ -108,5 +109,20 @@ public class FsBrokerTest {
         Assert.assertEquals(-1, readBroker.lastStartTime);
         Assert.assertEquals(-1, readBroker.lastUpdateTime);
         dis.close();
+    }
+
+    @Test
+    public void testBrokerAlive() throws Exception {
+
+        FsBroker fsBroker = new FsBroker("127.0.0.1", 8118);
+        long time = System.currentTimeMillis();
+        BrokerHbResponse hbResponse = new BrokerHbResponse("broker", "127.0.0.1", 8118, "got exception");
+
+        hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.ALIVE;
+        fsBroker.handleHbResponse(hbResponse, true);
+        Assert.assertTrue(fsBroker.isAlive);
+        hbResponse.aliveStatus = HeartbeatResponse.AliveStatus.NOT_ALIVE;
+        fsBroker.handleHbResponse(hbResponse, true);
+        Assert.assertFalse(fsBroker.isAlive);
     }
 }

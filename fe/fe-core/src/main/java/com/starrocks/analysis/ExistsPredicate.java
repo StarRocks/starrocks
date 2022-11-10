@@ -28,6 +28,8 @@ import com.starrocks.thrift.TExprNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Objects;
+
 /**
  * Class representing a [NOT] EXISTS predicate.
  */
@@ -96,7 +98,7 @@ public class ExistsPredicate extends Predicate {
 
     @Override
     public int hashCode() {
-        return 31 * super.hashCode() + Boolean.hashCode(notExists);
+        return Objects.hash(super.hashCode(), notExists);
     }
 
     @Override

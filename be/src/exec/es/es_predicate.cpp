@@ -89,8 +89,13 @@ std::string VExtLiteral::_value_to_string(ColumnPtr& column) {
     return res;
 }
 
-EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, ObjectPool* pool)
-        : _context(context), _tuple_desc(tuple_desc), _es_query_status(Status::OK()), _pool(pool) {}
+EsPredicate::EsPredicate(ExprContext* context, const TupleDescriptor* tuple_desc, const std::string& timezone,
+                         ObjectPool* pool)
+        : _context(context),
+          _tuple_desc(tuple_desc),
+          _es_query_status(Status::OK()),
+          _timezone(timezone),
+          _pool(pool) {}
 
 EsPredicate::~EsPredicate() {
     for (auto& _disjunct : _disjuncts) {
@@ -194,7 +199,7 @@ Status EsPredicate::_build_binary_predicate(const Expr* conjunct, bool* handled)
 
         // how to process literal
         ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
-        auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value)));
+        auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
         std::string col = slot_desc->col_name();
 
         // ES does not support non-bool literal pushdown for bool type
@@ -226,7 +231,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             }
             Expr* expr = conjunct->get_child(1);
             ASSIGN_OR_RETURN(auto expr_value, _context->evaluate(expr, nullptr));
-            auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value)));
+            auto literal = _pool->add(new VExtLiteral(expr->type().type, std::move(expr_value), _timezone));
             std::vector<ExtLiteral*> query_conditions;
             query_conditions.emplace_back(literal);
             std::vector<ExtColumnDesc> cols;
@@ -294,7 +299,7 @@ Status EsPredicate::_build_functioncall_predicate(const Expr* conjunct, bool* ha
             }
 
             ASSIGN_OR_RETURN(auto expr_col, _context->evaluate(expr, nullptr));
-            auto literal = _pool->add(new VExtLiteral(type, std::move(expr_col)));
+            auto literal = _pool->add(new VExtLiteral(type, std::move(expr_col), _timezone));
             ExtPredicate* predicate = new ExtLikePredicate(TExprNodeType::LIKE_PRED, col, slot_desc->type(), literal);
 
             _disjuncts.push_back(predicate);
@@ -324,13 +329,13 @@ Status build_inpred_values(const Predicate* pred, bool& is_not_in, Func&& func) 
     return Status::OK();
 }
 
-#define BUILD_INPRED_VALUES(TYPE)                                                                                    \
-    case TYPE: {                                                                                                     \
-        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                    \
-            in_pred_values.emplace_back(new VExtLiteral(slot_desc->type().type,                                      \
-                                                        vectorized::ColumnHelper::create_const_column<TYPE>(v, 1))); \
-        }));                                                                                                         \
-        break;                                                                                                       \
+#define BUILD_INPRED_VALUES(TYPE)                                                                                   \
+    case TYPE: {                                                                                                    \
+        RETURN_IF_ERROR(build_inpred_values<TYPE>(pred, is_not_in, [&](auto& v) {                                   \
+            in_pred_values.emplace_back(new VExtLiteral(                                                            \
+                    slot_desc->type().type, vectorized::ColumnHelper::create_const_column<TYPE>(v, 1), _timezone)); \
+        }));                                                                                                        \
+        break;                                                                                                      \
     }
 
 Status EsPredicate::_build_in_predicate(const Expr* conjunct, bool* handled) {
@@ -409,7 +414,7 @@ Status EsPredicate::_build_compound_predicate(const Expr* conjunct, bool* handle
         if (conjunct->op() == TExprOpcode::COMPOUND_AND) {
             std::vector<EsPredicate*> conjuncts;
             for (int i = 0; i < conjunct->get_num_children(); ++i) {
-                EsPredicate* predicate = _pool->add(new EsPredicate(_context, _tuple_desc, _pool));
+                EsPredicate* predicate = _pool->add(new EsPredicate(_context, _tuple_desc, _timezone, _pool));
                 predicate->set_field_context(_field_context);
                 Status status = predicate->_vec_build_disjuncts_list(conjunct->children()[i]);
                 if (status.ok()) {

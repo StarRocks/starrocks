@@ -92,6 +92,10 @@ public class IcebergTable extends Table {
         this.tableLocation = location;
     }
 
+    public void refreshTable() {
+        IcebergUtil.refreshTable(this.getIcebergTable());
+    }
+
     // icbTbl is used for caching
     public synchronized org.apache.iceberg.Table getIcebergTable() {
         try {

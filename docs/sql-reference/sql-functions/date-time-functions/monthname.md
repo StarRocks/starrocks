@@ -1,18 +1,18 @@
 # monthname
 
-## description
+## Description
 
-### Syntax
+Returns the name of the month for a given date.  
+
+The `date` parameter must be of the DATE or DATETIME type.
+
+## Syntax
 
 ```Haskell
-VARCHAR MONTHNAME(DATE)
+VARCHAR MONTHNAME(date)
 ```
 
-It returns the name of the month for a given date.  
-
-The parameter is in Date or Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select monthname('2008-02-03 00:00:00');
@@ -25,4 +25,4 @@ MySQL > select monthname('2008-02-03 00:00:00');
 
 ## keyword
 
-MONTHNAME
+MONTHNAME, monthname

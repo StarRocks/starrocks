@@ -5,9 +5,18 @@
 #include "exec/vectorized/hdfs_scan_node.h"
 #include "gen_cpp/Descriptors_types.h"
 #include "gutil/strings/substitute.h"
+#include "util/compression_utils.h"
 #include "util/utf8_check.h"
 
 namespace starrocks::vectorized {
+
+static CompressionTypePB return_compression_type_from_filename(const std::string& filename) {
+    ssize_t end = filename.size() - 1;
+    while (end >= 0 && filename[end] != '.' && filename[end] != '/') end--;
+    if (end == -1 || filename[end] == '/') return NO_COMPRESSION;
+    const std::string& ext = filename.substr(end + 1);
+    return CompressionUtils::to_compression_pb(ext);
+}
 
 class HdfsScannerCSVReader : public CSVReader {
 public:
@@ -104,6 +113,12 @@ Status HdfsTextScanner::do_init(RuntimeState* runtime_state, const HdfsScannerPa
 }
 
 Status HdfsTextScanner::do_open(RuntimeState* runtime_state) {
+    CompressionTypePB compression_type = return_compression_type_from_filename(_scanner_params.path);
+    if (compression_type != CompressionTypePB::NO_COMPRESSION &&
+        compression_type != CompressionTypePB::UNKNOWN_COMPRESSION) {
+        return Status::InternalError(strings::Substitute("Unsupported compress file format $0", _scanner_params.path));
+    }
+
     RETURN_IF_ERROR(_create_or_reinit_reader());
     SCOPED_RAW_TIMER(&_stats.reader_init_ns);
     for (int i = 0; i < _scanner_params.materialize_slots.size(); i++) {
@@ -153,6 +168,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
     }
 
     csv::Converter::Options options;
+    options.invalid_field_as_null = true;
 
     for (size_t num_rows = chunk->get()->num_rows(); num_rows < chunk_size; /**/) {
         status = down_cast<HdfsScannerCSVReader*>(_reader.get())->next_record(&record);
@@ -182,6 +198,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
         }
 
         bool has_error = false;
+        std::string error_msg;
         int num_materialize_columns = _scanner_params.materialize_slots.size();
         int field_size = fields.size();
         if (_scanner_params.hive_column_names->size() != field_size) {
@@ -198,6 +215,8 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 if (!_converters[j]->read_string(column, field, options)) {
                     LOG(WARNING) << "Converter encountered an error for field " << field.to_string() << ", index "
                                  << index << ", column " << _scanner_params.materialize_slots[j]->debug_string();
+                    error_msg = strings::Substitute("CSV parse column [$0] failed, more details please see be log.",
+                                                    _scanner_params.materialize_slots[j]->debug_string());
                     chunk->get()->set_num_rows(num_rows);
                     has_error = true;
                     break;
@@ -222,13 +241,15 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
                 ColumnPtr partition_value = _file_read_param.partition_values[p];
                 DCHECK(partition_value->is_constant());
                 auto* const_column = vectorized::ColumnHelper::as_raw_column<vectorized::ConstColumn>(partition_value);
-                ColumnPtr data_column = const_column->data_column();
+                const ColumnPtr& data_column = const_column->data_column();
                 if (data_column->is_nullable()) {
                     column->append_nulls(1);
                 } else {
                     column->append(*data_column, 0, 1);
                 }
             }
+        } else {
+            return Status::InternalError(error_msg);
         }
     }
     return chunk->get()->num_rows() > 0 ? Status::OK() : Status::EndOfFile("");
@@ -236,6 +257,7 @@ Status HdfsTextScanner::parse_csv(int chunk_size, ChunkPtr* chunk) {
 
 Status HdfsTextScanner::_create_or_reinit_reader() {
     const THdfsScanRange* scan_range = _scanner_params.scan_ranges[_current_range_index];
+
     if (_current_range_index == 0) {
         _reader =
                 std::make_unique<HdfsScannerCSVReader>(_file.get(), _record_delimiter, _field_delimiter,

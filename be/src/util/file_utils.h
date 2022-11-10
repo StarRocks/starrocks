@@ -57,6 +57,8 @@ public:
     //  Status::OK()      if create directory success or directory already exists
     static Status create_dir(const std::string& dir_path, Env* env);
 
+    static Status sync_dir(const std::string& path, Env* env);
+
     // Delete file recursively.
     static Status remove_all(const std::string& dir_path);
 

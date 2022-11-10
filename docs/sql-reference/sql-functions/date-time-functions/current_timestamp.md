@@ -1,16 +1,16 @@
 # current_timestamp
 
-## description
+## Description
 
-### Syntax
+Obtains the current date and returns a value if the DATETIME type.
+
+## Syntax
 
 ```Haskell
 DATETIME CURRENT_TIMESTAMP()
 ```
 
-Obtain the current date and return in Datetime type.
-
-## example
+## Examples
 
 ```Plain Text
 MySQL > select current_timestamp();
