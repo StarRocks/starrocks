@@ -7,7 +7,7 @@ import com.starrocks.analysis.RedirectStatus;
 import java.util.Map;
 
 public class DropFileStmt extends DdlStmt {
-    public static final String PROP_CATALOG = "globalStateMgr";
+    public static final String PROP_CATALOG = "catalog";
 
     private final String fileName;
     private String dbName;
