@@ -1,5 +1,30 @@
 # StarRocks version 2.3
 
+## 2.3.4
+
+发布日期： 2022 年 11 月 10 日
+
+### 功能优化
+
+- 优化 Routine Load 创建失败时的报错提示。[#12204]( https://github.com/StarRocks/starrocks/pull/12204)
+
+- 查询 Hive 时解析 CSV 数据失败后会直接报错。[#13013](https://github.com/StarRocks/starrocks/pull/13013)
+
+### 问题修复
+
+- 修复 HDFS 文件路径带有 `()` 导致查询报错的问题。[#12660](https://github.com/StarRocks/starrocks/pull/12660)
+
+- 修复子查询带有 LIMIT，并且使用 ORDER BY ... LIMIT ... OFFSET 对结果集进行排序后查询结果错误的问题。[#9698](https://github.com/StarRocks/starrocks/issues/9698)
+
+- 修复查询 ORC 文件时大小写不敏感的问题。[#12724](https://github.com/StarRocks/starrocks/pull/12724)
+
+- 修复 RuntimeFilter 没有正常关闭导致 BE 崩溃问题。[#12895](https://github.com/StarRocks/starrocks/pull/12895)
+
+- 修复新增列后立即删除数据可能导致查询结果错误的问题。[#12907](https://github.com/StarRocks/starrocks/pull/12923)
+- 修复当 StarRocks 和 MySQL 客户端不在同一局域网时，执行一次 KILL 无法成功终止 INSERT INTO SELECT 导入作业的问题。[#11879](https://github.com/StarRocks/starrocks/pull/11897)
+
+- 修复 audit log 中 pipeline engine 收集的 `ScanRows` 有误的问题。[#12185](https://github.com/StarRocks/starrocks/pull/12185)
+
 ## 2.3.3
 
 发布日期： 2022 年 9 月 27 日
