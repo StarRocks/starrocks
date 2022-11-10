@@ -11,6 +11,10 @@ jobs:
     env:
       PR_NUMBER: ${{ github.event.number }}
     steps:
+      - name: pre build
+        run: |
+          sudo rm -rf ../starrocks/*
+
       - uses: dorny/paths-filter@v2
         id: changes
         with:
@@ -21,15 +25,13 @@ jobs:
       - uses: actions/checkout@v3
         if: steps.changes.outputs.be == 'true'
         with:
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: set up build
         if: steps.changes.outputs.be == 'true'
         run: |
           time scp jenkins@ci01:~/userContent/be-build-$PR_NUMBER.tar.gz .
-          mkdir temp
-          tar xzf be-build-$PR_NUMBER.tar.gz -C temp
-          cp -r temp/be/build_Release be/
+          tar xzf be-build-$PR_NUMBER.tar.gz
           workdir=$(pwd)
           echo $workdir
           sed -i "s|\/root\/starrocks|$workdir|g" be/build_Release/compile_commands.json
@@ -40,3 +42,7 @@ jobs:
         with:
           build_dir: be/build_Release
           config_file: .clang-tidy
+          
+      - name: post build
+        run: |
+          sudo rm -rf ../starrocks/*

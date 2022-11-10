@@ -626,6 +626,10 @@ public abstract class AstVisitor<R, C> {
         return visitStatement(statement, context);
     }
 
+    public R visitShowPluginsStatement(ShowPluginsStmt statement, C context) {
+        return visitStatement(statement, context);
+    }
+
     // --------------------------------------- File Statement ----------------------------------------------------------
 
     public R visitCreateFileStatement(CreateFileStmt statement, C context) {

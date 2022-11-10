@@ -571,6 +571,25 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
                 asyncRefreshContext.step == 0 && null == asyncRefreshContext.timeUnit;
     }
 
+    public boolean shouldTriggeredRefreshBy(String dbName, String tableName) {
+        if (!isLoadTriggeredRefresh()) {
+            return false;
+        }
+        List<TableName> excludedTriggerTables = this.getTableProperty().getExcludedTriggerTables();
+        for (TableName tables : excludedTriggerTables) {
+            if (tables.getDb() == null) {
+                if (tables.getTbl().equals(tableName))  {
+                    return false;
+                }
+            } else {
+                if (tables.getDb().equals(dbName) && tables.getTbl().equals(tableName)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     public String getMaterializedViewDdlStmt(boolean simple) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE MATERIALIZED VIEW `").append(this.getName()).append("`");
@@ -645,6 +664,13 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
             sb.append(properties.get(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER)).append("\"");
         }
 
+        // disable refresh trigger
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)) {
+            sb.append(StatsConstants.TABLE_PROPERTY_SEPARATOR).append(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)
+                    .append("\" = \"");
+            sb.append(properties.get(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES)).append("\"");
+        }
+
         sb.append("\n)");
         String define = this.getSimpleDefineSql();
         if (StringUtils.isEmpty(define) || !simple) {
@@ -653,6 +679,23 @@ public class MaterializedView extends OlapTable implements GsonPostProcessable {
         sb.append("\nAS ").append(define);
         sb.append(";");
         return sb.toString();
+    }
+
+
+    public boolean containsBaseTable(TableName tableName) {
+        for (BaseTableInfo baseTableInfo : baseTableInfos) {
+            if (tableName.getDb() == null) {
+                if (tableName.getTbl().equals(baseTableInfo.getTableName())) {
+                    return true;
+                }
+            } else {
+                if (tableName.getTbl().equals(baseTableInfo.getTableName()) &&
+                        tableName.getDb().equals(baseTableInfo.getDbName())) {
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     public Set<String> getPartitionNamesToRefreshForMv() {

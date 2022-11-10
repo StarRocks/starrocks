@@ -51,7 +51,6 @@ class ColumnBlock;
 class ColumnBlockView;
 class ColumnVectorBatch;
 class MemTracker;
-class WrapperField;
 
 namespace vectorized {
 class ColumnPredicate;

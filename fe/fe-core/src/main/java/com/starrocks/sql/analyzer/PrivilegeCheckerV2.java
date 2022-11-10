@@ -3,34 +3,56 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.privilege.PrivilegeManager;
 import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
+import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AlterResourceStmt;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.BaseCreateAlterUserStmt;
 import com.starrocks.sql.ast.BaseGrantRevokePrivilegeStmt;
+import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.CreateFileStmt;
 import com.starrocks.sql.ast.CreateResourceStmt;
+import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DropFileStmt;
 import com.starrocks.sql.ast.DropResourceStmt;
+import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropTableStmt;
+import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.InsertStmt;
+import com.starrocks.sql.ast.InstallPluginStmt;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.SetOperationRelation;
+import com.starrocks.sql.ast.SetUserPropertyStmt;
+import com.starrocks.sql.ast.ShowAuthenticationStmt;
+import com.starrocks.sql.ast.ShowGrantsStmt;
+import com.starrocks.sql.ast.ShowPluginsStmt;
+import com.starrocks.sql.ast.ShowRolesStmt;
+import com.starrocks.sql.ast.ShowSmallFilesStmt;
+import com.starrocks.sql.ast.ShowSqlBlackListStmt;
+import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
+import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.ViewRelation;
 
 public class PrivilegeCheckerV2 {
+    private static final String EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG = "external catalog is not supported for now!";
 
     private PrivilegeCheckerV2() {
     }
@@ -43,7 +65,7 @@ public class PrivilegeCheckerV2 {
                                         TableName tableName,
                                         PrivilegeType.TableAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException("external catalog is not supported for now!");
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         String actionStr = action.toString();
         if (!PrivilegeManager.checkTableAction(context, tableName.getDb(), tableName.getTbl(), action)) {
@@ -54,12 +76,23 @@ public class PrivilegeCheckerV2 {
 
     static void checkDbAction(ConnectContext context, TableName tableName, PrivilegeType.DbAction action) {
         if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
-            throw new SemanticException("external catalog is not supported for now!");
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         String db = tableName.getDb();
         if (!PrivilegeManager.checkDbAction(context, db, action)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), db);
+        }
+    }
+
+    static void checkAnyActionInDb(ConnectContext context, String catalogName, String dbName) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
+            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
+        }
+
+        if (!PrivilegeManager.checkAnyActionInDb(context, dbName)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
+                    context.getQualifiedUser(), dbName);
         }
     }
 
@@ -164,15 +197,6 @@ public class PrivilegeCheckerV2 {
             }
         }
 
-        @Override
-        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
-            return null;
-        }
-
         // ---------------------------------------- External Resource Statement---------------------------------------------
         @Override
         public Void visitCreateResourceStatement(CreateResourceStmt statement, ConnectContext context) {
@@ -196,6 +220,192 @@ public class PrivilegeCheckerV2 {
             if (!PrivilegeManager.checkResourceAction(
                     context, statement.getResourceName(), PrivilegeType.ResourceAction.ALTER)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "ALTER");
+            }
+            return null;
+        }
+
+        // --------------------------------------- Plugin Statement --------------------------------------------------------
+
+        @Override
+        public Void visitInstallPluginStatement(InstallPluginStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitUninstallPluginStatement(UninstallPluginStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowPluginsStatement(ShowPluginsStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.PLUGIN)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "PLUGIN");
+            }
+            return null;
+        }
+
+        // --------------------------------------- File Statement ----------------------------------------------------------
+
+        @Override
+        public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
+            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
+            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
+            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            return null;
+        }
+
+        // --------------------------------------- Sql BlackList And WhiteList Statement -----------------------------------
+
+        @Override
+        public Void visitAddSqlBlackListStatement(AddSqlBlackListStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDelSqlBlackListStatement(DelSqlBlackListStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowSqlBlackListStatement(ShowSqlBlackListStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.BLACKLIST)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "BLACKLIST");
+            }
+            return null;
+        }
+
+        // ---------------------------------------- Privilege Statement ----------------------------------------------------
+
+        @Override
+        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
+            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitGrantRevokeRoleStatement(BaseGrantRevokeRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowGrantsStatement(ShowGrantsStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null && !user.equals(context.getCurrentUserIdentity())
+                    && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateAlterUserStatement(BaseCreateAlterUserStmt statement, ConnectContext context) {
+            if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropUserStatement(DropUserStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowRolesStatement(ShowRolesStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitCreateRoleStatement(CreateRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitDropRoleStatement(DropRoleStmt statement, ConnectContext context) {
+            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowAuthenticationStatement(ShowAuthenticationStmt statement, ConnectContext context) {
+            UserIdentity user = statement.getUserIdent();
+            if (user != null && !user.equals(context.getCurrentUserIdentity())
+                    && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
+            String user = statement.getUser();
+            if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
+                    && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt statement, ConnectContext context) {
+            PrivilegeManager privilegeManager = context.getGlobalStateMgr().getPrivilegeManager();
+            if (!privilegeManager.canExecuteAs(context, statement.getToUser())) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "IMPERSONATE");
+            }
+            return null;
+        }
+
+        @Override
+        public Void visitSetUserPropertyStatement(SetUserPropertyStmt statement, ConnectContext context) {
+            String user = statement.getUser();
+            if (user != null && !user.equals(context.getCurrentUserIdentity().getQualifiedUser())
+                    && !PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.GRANT)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
             }
             return null;
         }

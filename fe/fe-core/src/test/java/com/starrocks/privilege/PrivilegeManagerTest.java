@@ -669,12 +669,12 @@ public class PrivilegeManagerTest {
 
 
         // show tables in db:
-        // root can see two tables
+        // root can see two tables + 1 views
         ShowTableStmt showTableStmt = new ShowTableStmt("db", false, null);
         ShowExecutor executor = new ShowExecutor(ctx, showTableStmt);
         ShowResultSet resultSet = executor.execute();
         Set<String> allTables = resultSet.getResultRows().stream().map(k -> k.get(0)).collect(Collectors.toSet());
-        Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3")), allTables);
+        Assert.assertEquals(new HashSet<>(Arrays.asList("tbl0", "tbl1", "tbl2", "tbl3", "view1")), allTables);
 
         // user with table priv can only see tbl1
         ctx.setCurrentUserIdentity(userWithTablePriv);
@@ -1266,6 +1266,15 @@ public class PrivilegeManagerTest {
         // drop builtin role
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser("drop role public", ctx), ctx);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));
+        }
+
+        // revoke public role
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "revoke public from user_test_builtin_role", ctx), ctx);
             Assert.fail();
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));

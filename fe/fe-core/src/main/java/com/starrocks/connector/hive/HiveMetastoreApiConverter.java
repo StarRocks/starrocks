@@ -242,7 +242,7 @@ public class HiveMetastoreApiConverter {
         for (Schema.Field hudiField : tableSchema.getFields()) {
             if (!isFirst) {
                 columnNamesBuilder.append(",");
-                columnTypesBuilder.append(":");
+                columnTypesBuilder.append("#");
             }
 
             Optional<FieldSchema> field = allFields.stream()

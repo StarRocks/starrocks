@@ -3322,6 +3322,24 @@ public class LocalMetastore implements ConnectorMetadata {
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_REFRESH_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionRefreshNumber(number);
             }
+            if (properties.containsKey(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES))  {
+                List<TableName> tables = PropertyAnalyzer.analyzeExcludedTriggerTables(properties, materializedView);
+                StringBuilder tableSb = new StringBuilder();
+                for (int i = 1; i <= tables.size(); i++) {
+                    TableName tableName = tables.get(i - 1);
+                    if (tableName.getDb() == null) {
+                        tableSb.append(tableName.getTbl());
+                    } else {
+                        tableSb.append(tableName.getDb()).append(".").append(tableName.getTbl());
+                    }
+                    if (i != tables.size()) {
+                        tableSb.append(",");
+                    }
+                }
+                materializedView.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_EXCLUDED_TRIGGER_TABLES, tableSb.toString());
+                materializedView.getTableProperty().setExcludedTriggerTables(tables);
+            }
             if (!properties.isEmpty()) {
                 // here, all properties should be checked
                 throw new DdlException("Unknown properties: " + properties);
