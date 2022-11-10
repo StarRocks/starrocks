@@ -22,6 +22,7 @@ import com.starrocks.sql.ast.BaseGrantRevokeRoleStmt;
 import com.starrocks.sql.ast.CreateRoleStmt;
 import com.starrocks.sql.ast.DropRoleStmt;
 import com.starrocks.sql.ast.DropUserStmt;
+import com.starrocks.sql.ast.ExecuteAsStmt;
 import com.starrocks.sql.ast.SetRoleStmt;
 import com.starrocks.sql.ast.StatementBase;
 
@@ -214,5 +215,15 @@ public class PrivilegeStmtAnalyzerV2 {
             }
             return null;
         }
+
+        @Override
+        public Void visitExecuteAsStatement(ExecuteAsStmt stmt, ConnectContext session) {
+            if (stmt.isAllowRevert()) {
+                throw new SemanticException("`EXECUTE AS` must use with `WITH NO REVERT` for now!");
+            }
+            analyseUser(stmt.getToUser(), true);
+            return null;
+        }
+
     }
 }

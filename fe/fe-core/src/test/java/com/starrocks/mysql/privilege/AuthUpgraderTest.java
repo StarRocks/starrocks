@@ -414,7 +414,19 @@ public class AuthUpgraderTest {
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
                 "GRANT SELECT ON db1.tbl1 TO role public",
-                "GRANT USAGE ON resource 'hive0' TO role public");
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "grant global_grant_role to global_grant_user",
+                "revoke global_grant_role from global_grant_user",
+                "create user xxx",
+                "drop user global_grant_user",
+                "alter user global_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role global_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "global_grant", allows, new ArrayList<>());
     }
 
@@ -426,7 +438,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT USAGE ON resource 'hive0' TO role public",
-                "GRANT SELECT ON db1.tbl1 TO role public");
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "grant db_grant_role to db_grant_user",
+                "revoke db_grant_role from db_grant_user",
+                "create user xxx",
+                "drop user db_grant_user",
+                "alter user db_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role db_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "db_grant", allows, denies);
     }
 
@@ -438,7 +462,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT USAGE ON resource 'hive0' TO role public",
-                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public");
+                "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
+                "grant table_grant_role to table_grant_user",
+                "revoke table_grant_role from table_grant_user",
+                "create user xxx",
+                "drop user table_grant_user",
+                "alter user table_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role table_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "table_grant", allows, denies);
     }
 
@@ -450,7 +486,19 @@ public class AuthUpgraderTest {
         List<String> denies = Arrays.asList(
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
-                "GRANT SELECT ON db1.tbl1 TO role public");
+                "GRANT SELECT ON db1.tbl1 TO role public",
+                "grant resource_grant_role to resource_grant_user",
+                "revoke resource_grant_role from resource_grant_user",
+                "create user xxx",
+                "drop user resource_grant_user",
+                "alter user resource_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role resource_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "resource_grant", allows, denies);
     }
 
@@ -461,7 +509,108 @@ public class AuthUpgraderTest {
                 "GRANT SELECT ON ALL TABLES IN ALL DATABASES TO role public",
                 "GRANT SELECT ON ALL TABLES IN DATABASE db0 TO role public",
                 "GRANT SELECT ON db1.tbl1 TO role public",
-                "GRANT USAGE ON resource 'hive0' TO role public");
+                "GRANT USAGE ON resource 'hive0' TO role public",
+                "grant resource_global_grant_role to resource_global_grant_user",
+                "revoke resource_global_grant_role from resource_global_grant_user",
+                "create user xxx",
+                "drop user resource_global_grant_user",
+                "alter user resource_global_grant_user identified by 'asdf'",
+                "show roles",
+                "create role xxx",
+                "drop role resource_global_grant_role",
+                "show grants for root",
+                "show authentication for root",
+                "show property for 'root' ",
+                "set property for 'root' 'max_user_connections' = '100'");
         checkGrant(image, "resource_global_grant", allows, new ArrayList<>());
+    }
+
+    @Test
+    public void testPluginStmts() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user pluginUser",
+                "GRANT admin_priv on *.* TO pluginUser",
+                "create role pluginRole",
+                "GRANT admin_priv on *.* TO role pluginRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("pluginUser", "%"),
+                    "INSTALL PLUGIN FROM \"/home/users/starrocks/auditdemo.zip\"",
+                    "UNINSTALL PLUGIN auditdemo",
+                    "SHOW PLUGINS");
+
+            checkPrivilegeAsUser(
+                    createUserByRole("pluginRole"),
+                    "INSTALL PLUGIN FROM \"/home/users/starrocks/auditdemo.zip\"",
+                    "UNINSTALL PLUGIN auditdemo",
+                    "SHOW PLUGINS");
+        }
+    }
+
+    @Test
+    public void testBlackList() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user blacklistUser",
+                "GRANT admin_priv on *.* TO blacklistUser",
+                "create role blacklistRole",
+                "GRANT admin_priv on *.* TO role blacklistRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            checkPrivilegeAsUser(
+                    UserIdentity.createAnalyzedUserIdentWithIp("blacklistUser", "%"),
+                    "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";",
+                    "DELETE SQLBLACKLIST 0",
+                    "SHOW SQLBLACKLIST");
+
+            checkPrivilegeAsUser(
+                    createUserByRole("blacklistRole"),
+                    "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";",
+                    "DELETE SQLBLACKLIST 0",
+                    "SHOW SQLBLACKLIST");
+        }
+    }
+
+    @Test
+    public void testShowFile() throws Exception {
+        UtFrameUtils.PseudoImage image = executeAndUpgrade(
+                true,
+                "create user fileAdminUser",
+                "GRANT admin_priv on *.* TO fileAdminUser",
+                "create role fileAdminRole",
+                "GRANT admin_priv on *.* TO role fileAdminRole",
+                "create user fileDbUser",
+                "GRANT select_priv on db1.* TO fileDbUser",
+                "create role fileDbRole",
+                "GRANT select_priv on db1.* TO role fileDbRole",
+                "create user fileTblUser",
+                "GRANT select_priv on db1.tbl1 TO fileTblUser",
+                "create role fileTblRole",
+                "GRANT select_priv on db1.tbl1 TO role fileTblRole");
+        // check twice, the second time is as follower
+        for (int i = 0; i != 2; ++ i) {
+            if (i == 1) {
+                replayUpgrade(image);
+            }
+            List<UserIdentity> allUsers = Arrays.asList(
+                    UserIdentity.createAnalyzedUserIdentWithIp("fileAdminUser", "%"),
+                    createUserByRole("fileAdminRole"),
+                    UserIdentity.createAnalyzedUserIdentWithIp("fileDbUser", "%"),
+                    createUserByRole("fileDbRole"),
+                    UserIdentity.createAnalyzedUserIdentWithIp("fileTblUser", "%"),
+                    createUserByRole("fileTblRole")
+            );
+            for (UserIdentity user : allUsers) {
+                checkPrivilegeAsUser(user, "SHOW FILE FROM db1");
+            }
+        }
     }
 }
