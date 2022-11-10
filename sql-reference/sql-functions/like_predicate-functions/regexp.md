@@ -32,6 +32,6 @@ mysql> select regexp("abc123","abc*");
 1 row in set (0.06 sec)
 ```
 
-## 关键词
+## Keywords
 
-REGEXP, regular
+regexp, regular
