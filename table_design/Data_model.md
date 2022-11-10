@@ -331,8 +331,7 @@ create table users (
     property0 tinyint NOT NULL,
     property1 tinyint NOT NULL,
     property2 tinyint NOT NULL,
-    property3 tinyint NOT NULL,
-    ....
+    property3 tinyint NOT NULL
 ) PRIMARY KEY (user_id)
 DISTRIBUTED BY HASH(user_id) BUCKETS 4
 PROPERTIES("replication_num" = "3",
