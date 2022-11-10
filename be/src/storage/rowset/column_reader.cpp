@@ -43,7 +43,6 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "storage/vectorized_column_predicate.h"
-#include "storage/wrapper_field.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 

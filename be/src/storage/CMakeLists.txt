@@ -67,7 +67,6 @@ add_library(Storage STATIC
     types.cpp
     update_manager.cpp
     utils.cpp
-    wrapper_field.cpp
     compaction_utils.cpp
     rowset/array_column_iterator.cpp
     rowset/binary_plain_page.cpp
