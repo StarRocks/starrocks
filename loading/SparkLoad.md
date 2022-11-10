@@ -129,7 +129,7 @@ PROPERTIES 是 Spark 资源相关参数，如下：
 * `broker`: broker 名字。spark 作为 ETL 资源使用时必填。需要使用 `ALTER SYSTEM ADD BROKER` 命令提前完成配置。
 * `broker.property_key`: broker 读取 ETL 生成的中间文件时需要指定的认证信息等，详细可参考 [BROKER LOAD](../sql-reference/sql-statements/data-manipulation/BROKER%20LOAD)。
 
-   其他 Resource 详细参数请参考 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)
+   其他 Resource 详细参数请参考 [CREATE RESOURCE](../sql-reference/sql-statements/data-definition/CREATE%20RESOURCE.md)。
 
 #### 查看资源
 
@@ -171,7 +171,7 @@ FE 底层通过执行 `spark-submit` 的命令去提交 spark 任务，因此需
 
 ### 配置 YARN 客户端
 
-FE 底层通过执行 yarn 命令去获取正在运行的 application 的状态，以及杀死 application，因此需要为 FE 配置 yarn 客户端，建议使用 2.5.2 或以上的 hadoop2 官方版本（[hadoop 下载地址](https://archive.apache.org/dist/hadoop/common/)），下载完成后，请按步骤完成以下配置:
+FE 底层通过执行 yarn 命令去获取正在运行的 application 的状态，以及终止 application，因此需要为 FE 配置 yarn 客户端，建议使用 2.5.2 或以上的 hadoop2 官方版本（[hadoop 下载地址](https://archive.apache.org/dist/hadoop/common/)），下载完成后，请按步骤完成以下配置:
 
 * **配置 YARN 可执行文件路径**
   
@@ -369,11 +369,11 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 * enable-spark-load：开启 Spark load 和创建 resource 功能。默认为 false，关闭此功能。
 * spark-load-default-timeout-second：任务默认超时时间为 86400 秒（1 天）。
-* spark-home-default-dir：spark客户端路径 (fe/lib/spark2x) 。
-* spark-resource-path：打包好的spark依赖文件路径（默认为空）。
-* spark-launcher-log-dir：spark客户端的提交日志存放的目录（fe/log/spark-launcher-log）。
-* yarn-client-path：yarn二进制可执行文件路径 (fe/lib/yarn-client/hadoop/bin/yarn) 。
-* yarn-config-dir：yarn配置文件生成路径 (fe/lib/yarn-config) 。
+* spark-home-default-dir：spark 客户端路径 (fe/lib/spark2x) 。
+* spark-resource-path：打包好的 spark 依赖文件路径（默认为空）。
+* spark-launcher-log-dir：spark 客户端的提交日志存放的目录（fe/log/spark-launcher-log）。
+* yarn-client-path：yarn 二进制可执行文件路径 (fe/lib/yarn-client/hadoop/bin/yarn) 。
+* yarn-config-dir：yarn 配置文件生成路径 (fe/lib/yarn-config) 。
 
 ---
 
@@ -383,23 +383,23 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 #### 适用场景
 
-目前StarRocks中BITMAP列是使用类库Roaringbitmap实现的，而Roaringbitmap的输入数据类型只能是整型，因此如果要在导入流程中实现对于BITMAP列的预计算，那么就需要将输入数据的类型转换成整型。
+目前 StarRocks 中 BITMAP 列是使用类库 Roaringbitmap 实现的，而 Roaringbitmap 的输入数据类型只能是整型，因此如果要在导入流程中实现对于 BITMAP 列的预计算，那么就需要将输入数据的类型转换成整型。
 
-在StarRocks现有的导入流程中，全局字典的数据结构是基于Hive表实现的，保存了原始值到编码值的映射。
+在 StarRocks 现有的导入流程中，全局字典的数据结构是基于 Hive 表实现的，保存了原始值到编码值的映射。
 
 #### 构建流程
 
 **1.** 读取上游数据源的数据，生成一张 Hive 临时表，记为 hive-table。
 
-**2.** 从 hive-table 中抽取待去重字段的去重值，生成一张新的Hive表，记为distinct-value-table。
+**2.** 从 hive-table 中抽取待去重字段的去重值，生成一张新的 Hive 表，记为 distinct-value-table。
 
-**3.** 新建一张全局字典表，记为dict-table；一列为原始值，一列为编码后的值。
+**3.** 新建一张全局字典表，记为 dict-table；一列为原始值，一列为编码后的值。
 
-**4.** 将distinct-value-table与dict-table做left join，计算出新增的去重值集合，然后对这个集合使用窗口函数进行编码，此时去重列原始值就多了一列编码后的值，最后将这两列的数据写回dict-table。
+**4.** 将 distinct-value-table 与 dict-table 做 left join，计算出新增的去重值集合，然后对这个集合使用窗口函数进行编码，此时去重列原始值就多了一列编码后的值，最后将这两列的数据写回dict-table。
 
-**5.** 将dict-table与hive-table做join，完成hive-table中原始值替换成整型编码值的工作。
+**5.** 将 dict-table 与 hive-table 做 join，完成 hive-table 中原始值替换成整型编码值的工作。
 
-**6.** hive-table会被下一步数据预处理的流程所读取，经过计算后导入到StarRocks中。
+**6.** hive-table 会被下一步数据预处理的流程所读取，经过计算后导入到 StarRocks 中。
 
 ### Spark 程序导入
 
@@ -427,4 +427,4 @@ CANCEL LOAD FROM db1 WHERE LABEL = "label1";
 
 * Q：报错 Cannot execute hadoop-yarn/bin/../libexec/yarn-config.sh
 
-  A：使用 CDH 的 Hadoop 时，需要配置 HADOOP_LIBEXEC_DIR 环境变量，由于 hadoop-yarn 和 hadoop 目录不同，默认 libexec 目录会找 hadoop-yarn/bin/../libexec，而 libexec 在 hadoop 目录下，yarn application status命令获取Spark任务状态报错导致导入作业失败。
+  A：使用 CDH 的 Hadoop 时，需要配置 HADOOP_LIBEXEC_DIR 环境变量，由于 hadoop-yarn 和 hadoop 目录不同，默认 libexec 目录会找 hadoop-yarn/bin/../libexec，而 libexec 在 hadoop 目录下，yarn application status 命令获取 Spark 任务状态报错导致导入作业失败。
