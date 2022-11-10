@@ -27,7 +27,7 @@ struct OlapMetaReaderParams : MetaReaderParams {
     }
 };
 
-class OlapMetaReader : public MetaReader {
+class OlapMetaReader final : public MetaReader {
 public:
     OlapMetaReader();
     ~OlapMetaReader();

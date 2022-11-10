@@ -25,7 +25,7 @@ struct LakeMetaReaderParams : MetaReaderParams {
 // MetaReader will implements
 // 1. read meta info from segment footer
 // 2. read dict info from dict page if column is dict encoding type
-class LakeMetaReader: public MetaReader {
+class LakeMetaReader final : public MetaReader {
 public:
     LakeMetaReader();
     ~LakeMetaReader();

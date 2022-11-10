@@ -16,7 +16,7 @@ namespace vectorized {
 
 class LakeMetaScanNode;
 
-class LakeMetaScanner : public MetaScanner{
+class LakeMetaScanner final : public MetaScanner{
 public:
     LakeMetaScanner(LakeMetaScanNode* parent);
     virtual ~LakeMetaScanner() = default;
