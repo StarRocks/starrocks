@@ -49,7 +49,7 @@ public class StatisticUtils {
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
-        context.getSessionVariable().setReportSuccess(false);
+        context.getSessionVariable().setEnableProfile(false);
         if (null != ConnectContext.get()) {
             // from current session, may execute analyze stmt
             context.getSessionVariable().setStatisticCollectParallelism(

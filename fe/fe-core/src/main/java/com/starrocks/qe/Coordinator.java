@@ -270,7 +270,7 @@ public class Coordinator {
         if (context.getLastQueryId() != null) {
             this.queryGlobals.setLast_query_id(context.getLastQueryId().toString());
         }
-        this.needReport = context.getSessionVariable().isReportSucc();
+        this.needReport = context.getSessionVariable().isEnableProfile();
         this.preferComputeNode = context.getSessionVariable().isPreferComputeNode();
         this.useComputeNodeNumber = context.getSessionVariable().getUseComputeNodes();
         this.nextInstanceId = new TUniqueId();
@@ -701,7 +701,7 @@ public class Coordinator {
 
         } else {
             // This is a load process.
-            this.queryOptions.setIs_report_success(true);
+            this.queryOptions.setEnable_profile(true);
             deltaUrls = Lists.newArrayList();
             loadCounters = Maps.newHashMap();
             List<Long> relatedBackendIds = Lists.newArrayList(addressToBackendID.values());
@@ -2458,7 +2458,7 @@ public class Coordinator {
     public void mergeIsomorphicProfiles() {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
-        if (!sessionVariable.isReportSucc()) {
+        if (!sessionVariable.isEnableProfile()) {
             return;
         }
 

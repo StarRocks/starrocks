@@ -80,6 +80,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
+    public static final String ENABLE_PROFILE = "enable_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
     /**
@@ -397,8 +398,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int queryDeliveryTimeoutS = 300;
 
     // if true, need report to coordinator when plan fragment execute successfully.
-    @VariableMgr.VarAttr(name = IS_REPORT_SUCCESS)
-    private boolean isReportSucc = false;
+    @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
+    private boolean enableProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
@@ -834,12 +835,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryTimeoutS;
     }
 
-    public boolean isReportSucc() {
-        return isReportSucc;
+    public boolean isEnableProfile() {
+        return enableProfile;
     }
 
-    public void setReportSuccess(boolean isReportSuccess) {
-        this.isReportSucc = isReportSuccess;
+    public void setEnableProfile(boolean enableProfile) {
+        this.enableProfile = enableProfile;
     }
 
     public int getWaitTimeoutS() {
@@ -1434,7 +1435,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
-        tResult.setIs_report_success(isReportSucc);
+        tResult.setEnable_profile(enableProfile);
         tResult.setCodegen_level(0);
         tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
@@ -1559,7 +1560,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 Text.readString(in);
                 sqlMode = 0L;
             }
-            isReportSucc = in.readBoolean();
+            enableProfile = in.readBoolean();
             queryTimeoutS = in.readInt();
             maxExecMemByte = in.readLong();
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_37) {
