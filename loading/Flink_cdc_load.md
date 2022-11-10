@@ -8,6 +8,7 @@
 
 实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 简化待同步库表的创建。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
 
+> 说明：
 > MySQL 实时同步至 StarRocks 能够保证端到端的 exactly-once 的语义一致性。
 
 1. **同步库表结构**
