@@ -273,7 +273,7 @@ void FileScanNode::_scanner_worker(int start_idx, int length) {
     // Clone expr context
     std::vector<ExprContext*> scanner_expr_ctxs;
     DeferOp close_exprs([this, &scanner_expr_ctxs] { Expr::close(scanner_expr_ctxs, runtime_state()); });
-    auto status = Expr::clone_if_not_exists(_conjunct_ctxs, runtime_state(), &scanner_expr_ctxs);
+    auto status = Expr::clone_if_not_exists(runtime_state(), _pool, _conjunct_ctxs, &scanner_expr_ctxs);
 
     if (!status.ok()) {
         LOG(WARNING) << "Clone conjuncts failed.";

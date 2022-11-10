@@ -137,17 +137,17 @@ public class Tablet extends MetaObject implements Writable {
         return delete || !hasBackend;
     }
 
-    public void addReplica(Replica replica, boolean isRestore) {
+    public void addReplica(Replica replica, boolean updateInvertedIndex) {
         if (deleteRedundantReplica(replica.getBackendId(), replica.getVersion())) {
             replicas.add(replica);
-            if (!isRestore) {
+            if (updateInvertedIndex) {
                 Catalog.getCurrentInvertedIndex().addReplica(id, replica);
             }
         }
     }
 
     public void addReplica(Replica replica) {
-        addReplica(replica, false);
+        addReplica(replica, true);
     }
 
     public List<Replica> getReplicas() {

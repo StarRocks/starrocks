@@ -369,11 +369,12 @@ ColumnPtr LikePredicate::_predicate_const_regex(FunctionContext* context, Column
 }
 
 ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    auto value_column = VECTORIZED_FN_ARGS(0);
-    auto pattern_column = VECTORIZED_FN_ARGS(1);
+    const auto& value_column = VECTORIZED_FN_ARGS(0);
+    const auto& pattern_column = VECTORIZED_FN_ARGS(1);
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(value_viewer.size());
+    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
@@ -392,7 +393,7 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
     opts.set_dot_nl(true);
     opts.set_log_errors(false);
 
-    for (int row = 0; row < value_viewer.size(); ++row) {
+    for (int row = 0; row < num_rows; ++row) {
         if (value_viewer.is_null(row) || pattern_viewer.is_null(row)) {
             result.append_null();
             continue;
@@ -412,15 +413,16 @@ ColumnPtr LikePredicate::regex_match_full(FunctionContext* context, const starro
         result.append(v);
     }
 
-    return result.build(ColumnHelper::is_all_const(columns));
+    return result.build(all_const);
 }
 
 ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
-    auto value_column = VECTORIZED_FN_ARGS(0);
-    auto pattern_column = VECTORIZED_FN_ARGS(1);
+    const auto& value_column = VECTORIZED_FN_ARGS(0);
+    const auto& pattern_column = VECTORIZED_FN_ARGS(1);
+    auto [all_const, num_rows] = ColumnHelper::num_packed_rows(columns);
 
     ColumnViewer<TYPE_VARCHAR> value_viewer(value_column);
-    ColumnBuilder<TYPE_BOOLEAN> result(value_viewer.size());
+    ColumnBuilder<TYPE_BOOLEAN> result(num_rows);
 
     // pattern is constant value, use context's regex
     if (context->is_constant_column(1)) {
@@ -439,7 +441,7 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
     opts.set_dot_nl(true);
     opts.set_log_errors(false);
 
-    for (int row = 0; row < value_viewer.size(); ++row) {
+    for (int row = 0; row < num_rows; ++row) {
         if (value_viewer.is_null(row) || pattern_viewer.is_null(row)) {
             result.append_null();
             continue;
@@ -459,7 +461,7 @@ ColumnPtr LikePredicate::regex_match_partial(FunctionContext* context, const sta
         result.append(v);
     }
 
-    return result.build(ColumnHelper::is_all_const(columns));
+    return result.build(all_const);
 }
 
 template <bool fullMatch>

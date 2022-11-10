@@ -6,6 +6,7 @@
 #include <utility>
 
 #include "column/chunk.h"
+#include "common/object_pool.h"
 #include "env/env.h"
 #include "exprs/expr_context.h"
 #include "runtime/descriptors.h"
@@ -215,7 +216,7 @@ private:
 
 protected:
     std::atomic_bool _pending_token = false;
-
+    ObjectPool _pool;
     HdfsFileReaderParam _file_read_param;
     HdfsScannerParams _scanner_params;
     RuntimeState* _runtime_state = nullptr;

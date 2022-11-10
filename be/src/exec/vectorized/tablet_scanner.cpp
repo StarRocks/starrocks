@@ -33,7 +33,7 @@ Status TabletScanner::init(RuntimeState* runtime_state, const TabletScannerParam
     _skip_aggregation = params.skip_aggregation;
     _need_agg_finalize = params.need_agg_finalize;
 
-    RETURN_IF_ERROR(Expr::clone_if_not_exists(*params.conjunct_ctxs, runtime_state, &_conjunct_ctxs));
+    RETURN_IF_ERROR(Expr::clone_if_not_exists(runtime_state, &_pool, *params.conjunct_ctxs, &_conjunct_ctxs));
     RETURN_IF_ERROR(_get_tablet(params.scan_range));
     RETURN_IF_ERROR(_init_unused_output_columns(*params.unused_output_columns));
     RETURN_IF_ERROR(_init_return_columns());
@@ -146,7 +146,7 @@ Status TabletScanner::_init_reader_params(const std::vector<OlapScanRange*>* key
     }
 
     ConjunctivePredicatesRewriter not_pushdown_predicate_rewriter(_predicates, *_params.global_dictmaps);
-    not_pushdown_predicate_rewriter.rewrite_predicate(&_parent->_obj_pool);
+    not_pushdown_predicate_rewriter.rewrite_predicate(&_pool);
 
     // Range
     for (auto key_range : *key_ranges) {
@@ -223,7 +223,7 @@ Status TabletScanner::_init_unused_output_columns(const std::vector<std::string>
 // mapping a slot-column-id to schema-columnid
 Status TabletScanner::_init_global_dicts() {
     const auto& global_dict_map = _runtime_state->get_query_global_dict_map();
-    auto global_dict = _parent->_obj_pool.add(new ColumnIdToGlobalDictMap());
+    auto global_dict = _pool.add(new ColumnIdToGlobalDictMap());
     // mapping column id to storage column ids
     for (auto slot : _parent->_tuple_desc->slots()) {
         if (!slot->is_materialized()) {

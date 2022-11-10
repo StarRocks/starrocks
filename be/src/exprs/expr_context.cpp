@@ -103,12 +103,12 @@ int ExprContext::register_func(RuntimeState* state, const starrocks_udf::Functio
     return _fn_contexts.size() - 1;
 }
 
-Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
+Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(*new_ctx == nullptr);
 
-    *new_ctx = state->obj_pool()->add(new ExprContext(_root));
+    *new_ctx = pool->add(new ExprContext(_root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));
@@ -122,12 +122,12 @@ Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx) {
     return _root->open(state, *new_ctx, FunctionContext::THREAD_LOCAL);
 }
 
-Status ExprContext::clone(RuntimeState* state, ExprContext** new_ctx, Expr* root) {
+Status ExprContext::clone(RuntimeState* state, ObjectPool* pool, ExprContext** new_ctx, Expr* root) {
     DCHECK(_prepared);
     DCHECK(_opened);
     DCHECK(*new_ctx == nullptr);
 
-    *new_ctx = state->obj_pool()->add(new ExprContext(root));
+    *new_ctx = pool->add(new ExprContext(root));
     (*new_ctx)->_pool = std::make_unique<MemPool>();
     for (auto& _fn_context : _fn_contexts) {
         (*new_ctx)->_fn_contexts.push_back(_fn_context->impl()->clone((*new_ctx)->_pool.get()));

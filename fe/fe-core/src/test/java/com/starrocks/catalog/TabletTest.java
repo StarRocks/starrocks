@@ -164,8 +164,8 @@ public class TabletTest {
         // normal replica
         Replica normalReplica = new Replica(2L, 10002L,
                 9L, -1, 10L, 10L, ReplicaState.NORMAL, -1L, 9L);
-        tablet.addReplica(versionIncompleteReplica, true);
-        tablet.addReplica(normalReplica, true);
+        tablet.addReplica(versionIncompleteReplica, false);
+        tablet.addReplica(normalReplica, false);
         Assert.assertEquals(Tablet.TabletStatus.COLOCATE_REDUNDANT,
                 tablet.getColocateHealthStatus(9, 1, Sets.newHashSet(10002L)));
     }
