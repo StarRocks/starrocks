@@ -71,12 +71,11 @@ public class PhysicalStreamJoinOperator extends PhysicalStreamOperator {
             return false;
         }
         PhysicalStreamJoinOperator that = (PhysicalStreamJoinOperator) o;
-        return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate) &&
-                Objects.equals(joinHint, that.joinHint);
+        return joinType == that.joinType && Objects.equals(onPredicate, that.onPredicate);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), joinType, onPredicate, joinHint);
+        return Objects.hash(super.hashCode(), joinType, onPredicate);
     }
 }
