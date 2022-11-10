@@ -425,7 +425,11 @@ FROM KAFKA
     "kafka_partitions" = "0,1,2",
     "kafka_offsets" = "0,0,0"
 );
-json数据格式:
+```
+
+JSON数据格式:
+
+```Plain
 [
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
 {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
@@ -459,7 +463,11 @@ FROM KAFKA
     "kafka_partitions" = "0,1,2",
     "kafka_offsets" = "0,0,0"
 );
-json数据格式:
+```
+
+JSON 数据格式:
+
+```Plain
 {
 "RECORDS":[
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
