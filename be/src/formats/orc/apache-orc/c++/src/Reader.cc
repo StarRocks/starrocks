@@ -170,6 +170,9 @@ void ColumnSelector::updateSelected(std::vector<bool>& selectedColumns, std::vec
         for (unsigned long typeId : options.getInclude()) {
             updateSelectedByTypeId(selectedColumns, typeId);
         }
+        for (unsigned long typeId : options.getLazyLoadColumnIndexes()) {
+            updateSelectedByTypeId(lazyLoadColumns, typeId);
+        }
     } else {
         // default is to select all columns
         std::fill(selectedColumns.begin(), selectedColumns.end(), true);
