@@ -49,10 +49,7 @@ struct HdfsScanStats {
     // late materialization
     int64_t skip_read_rows = 0;
 
-    int64_t get_cpu_time_ns() const {
-        // TODO: make it more accurate
-        return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns;
-    }
+    int64_t get_cpu_time_ns() const;
 };
 
 class HdfsParquetProfile;
@@ -203,8 +200,6 @@ struct HdfsScannerContext {
 
     void append_not_existed_columns_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
     void append_partition_column_to_chunk(vectorized::ChunkPtr* chunk, size_t row_count);
-
-    bool enable_block_cache = false;
 };
 
 // if *lvalue == expect, swap(*lvalue,*rvalue)

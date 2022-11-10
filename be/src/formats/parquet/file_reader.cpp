@@ -453,7 +453,6 @@ Status FileReader::_init_group_readers() {
             r->set_end_offset(end_offset);
         }
         _sb_stream->set_io_ranges(ranges);
-        _sb_stream->set_enable_block_cache(fd_scanner_ctx.enable_block_cache);
         param.shared_buffered_stream = _sb_stream.get();
     }
 

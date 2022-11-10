@@ -28,7 +28,7 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* group_dict_decode_timer = nullptr;
 
     RuntimeProfile* root = profile->runtime_profile;
-    ADD_TIMER(root, kParquetProfileSectionPrefix);
+    ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::UNIT);
     level_decode_timer = ADD_CHILD_TIMER(root, "LevelDecodeTime", kParquetProfileSectionPrefix);
     value_decode_timer = ADD_CHILD_TIMER(root, "ValueDecodeTime", kParquetProfileSectionPrefix);
 
