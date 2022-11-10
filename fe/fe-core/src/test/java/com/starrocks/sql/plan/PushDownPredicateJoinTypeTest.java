@@ -12,7 +12,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import java.util.List;
 import java.util.stream.Stream;
 
-class PushDownPredicateJoinTypeTest extends PlanTestBase{
+class PushDownPredicateJoinTypeTest extends PlanTestBase {
 
     @BeforeAll
     public static void beforeClass() throws Exception {
