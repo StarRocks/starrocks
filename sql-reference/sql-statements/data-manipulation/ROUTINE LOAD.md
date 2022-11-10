@@ -425,11 +425,14 @@ FROM KAFKA
 ```
 
 JSON数据格式:
+
+```plain
 [
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
 {"category":"22","author":"2avc","price":895,"timestamp":1589191487},
 {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
 ]
+```
 
 说明：
 1）如果 JSON 数据是以数组开始，并且数组中每个对象是一条记录，则需要将 `strip_outer_array` 设置成 `true`，表示展平数组。
@@ -460,6 +463,8 @@ FROM KAFKA
 ```
 
 JSON 数据格式:
+
+```plain
 {
 "RECORDS":[
 {"category":"11","title":"SayingsoftheCentury","price":895,"timestamp":1589191587},
@@ -467,3 +472,4 @@ JSON 数据格式:
 {"category":"33","author":"3avc","title":"SayingsoftheCentury","timestamp":1589191387}
 ]
 }
+```
