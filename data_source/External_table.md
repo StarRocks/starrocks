@@ -129,7 +129,8 @@ CREATE EXTERNAL TABLE elastic_search_external_table
 ENGINE=ELASTICSEARCH
 PARTITION BY RANGE(k1)
 ()
-PROPERTIES (
+PROPERTIES 
+(
     "hosts" = "http://192.168.0.1:8200,http://192.168.0.2:8200",
     "user" = "root",
     "password" = "root",
@@ -141,129 +142,125 @@ PROPERTIES (
 
 参数说明：
 
-* **hosts**：Elasticsearch 集群连接地址，可指定一个或多个，StarRocks 通过这个地址获取到 Elasticsearch 版本号、索引的分片分布信息。
-* **user**：开启 **basic 认证** 的 Elasticsearch 集群的用户名，需要确保该用户有访问 **/*cluster/state/* nodes/http** 等路径权限和对索引的读权限。
-* **password**：对应用户的密码信息。
-* **index**：StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。
-* **type**：指定索引的类型，默认是 **doc**。
-* **transport**：内部保留，默认为 **http**。
-* **es.nodes.wan.only**：表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。自 2.3.0 版本起，StarRocks 支持配置该参数。
+* `hosts`：Elasticsearch 集群连接地址，用于获取 Elasticsearch 版本号以及索引的分片分布信息，可指定一个或多个。StarRocks 是根据 `GET /_nodes/http` API 返回的地址和 Elasticsearch 集群进行通讯，所以 `hosts` 参数值必须和 `GET /_nodes/http` 返回的地址一致，否则可能导致 BE 无法和 Elasticsearch 集群进行正常的通讯。
+* `user`：开启 basic 认证的 Elasticsearch 集群的用户名，需要确保该用户有访问 **/*cluster/state/* nodes/http** 等路径权限和对索引的读取权限。
+* `password`：对应用户的密码信息。
+* `index`：StarRocks 中的表对应的 Elasticsearch 的索引名字，可以是索引的别名。
+* `type`：指定索引的类型，默认是 `_doc`。如果您要查询的是数据是在 Elasticsearch 8 及以上版本，那么在 StarRocks 中创建外部表时就不需要配置该参数，因为 Elasticsearch 8 以及上版本已经移除了 mapping types。
+* `transport`：内部保留，默认为 `http`。
+* `es.nodes.wan.only`：表示 StarRocks 是否仅使用 `hosts` 指定的地址，去访问 Elasticsearch 集群并获取数据。自 2.3.0 版本起，StarRocks 支持配置该参数。
   * `true`：StarRocks 仅使用 `hosts` 指定的地址去访问 Elasticsearch 集群并获取数据，不会探测 Elasticsearch 集群的索引每个分片所在的数据节点地址。如果 StarRocks 无法访问 Elasticsearch 集群内部数据节点的地址，则需要配置为 `true`。
   * `false`：默认值，StarRocks 通过 `hosts` 中的地址，探测 Elasticsearch 集群索引各个分片所在数据节点的地址。StarRocks 经过查询规划后，相关 BE 节点会直接去请求 Elasticsearch 集群内部的数据节点，获取索引的分片数据。如果 StarRocks 可以访问 Elasticsearch 集群内部数据节点的地址，则建议保持默认值 `false`。
-* **es.net.ssl**: 是否允许使用 HTTPS 协议访问 Elasticsearch 集群。自 2.4 版本起，StarRocks 支持配置该参数。
+* `es.net.ssl`：是否允许使用 HTTPS 协议访问 Elasticsearch 集群。自 2.4 版本起，StarRocks 支持配置该参数。
   * `true`：允许，HTTP 协议和 HTTPS 协议均可访问。
   * `false`：不允许，只能使用 HTTP 协议访问。
 
 创建外部表时，需根据 Elasticsearch 的字段类型指定 StarRocks 中外部表的列类型，具体映射关系如下：
 
-| **Elasticsearch**          | **StarRocks**                     |
-| -------------------------- | --------------------------------- |
-| BOOLEAN                    | BOOLEAN                           |
-| BYTE                       | TINYINT/SMALLINT/INT/BIGINT |
-| SHORT                      | SMALLINT/INT/BIGINT           |
+| **Elasticsearch**          | **StarRocks**                   |
+| -------------------------- | --------------------------------|
+| BOOLEAN                    | BOOLEAN                         |
+| BYTE                       | TINYINT/SMALLINT/INT/BIGINT     |
+| SHORT                      | SMALLINT/INT/BIGINT             |
 | INTEGER                    | INT/BIGINT                      |
-| LONG                       | BIGINT                            |
-| FLOAT                      | FLOAT                             |
-| DOUBLE                     | DOUBLE                            |
+| LONG                       | BIGINT                          |
+| FLOAT                      | FLOAT                           |
+| DOUBLE                     | DOUBLE                          |
 | KEYWORD                    | CHAR/VARCHAR                    |
 | TEXT                       | CHAR/VARCHAR                    |
 | DATE                       | DATE/DATETIME                   |
 | NESTED                     | CHAR/VARCHAR                    |
 | OBJECT                     | CHAR/VARCHAR                    |
 
-> 说明：StarRocks 会通过 JSON 相关函数读取嵌套字段。
+> **说明**
+>
+> StarRocks 会通过 JSON 相关函数读取嵌套字段。
 
 ### 谓词下推
 
 StarRocks 支持对 Elasticsearch 表进行谓词下推，把过滤条件推给 Elasticsearch 进行执行，让执行尽量靠近存储，提高查询性能。目前支持下推的算子如下表：
 
-|   SQL syntax  |   ES syntax  |
-| :---: | :---: |
-|  =   |  term query   |
-|  in   |  terms query   |
-|  \>=,  <=, >, <   |  range   |
-|  and   |  bool.filter   |
-|  or   |  bool.should   |
-|  not   |  bool.must_not   |
-|  not in   |  bool.must_not + terms   |
-|  esquery   |  ES Query DSL   |
-
-<br/>
+| **SQL syntax**   | **Elasticsearch syntax**   |
+| ---------------- | ---------------------------|
+| =                | term query                 |
+| in               | terms query                |
+| \>=,  <=, >, <   | range                      |
+| and              | bool.filter                |
+| or               | bool.should                |
+| not              | bool.must_not              |
+| not in           | bool.must_not + terms      |
+| esquery          | ES Query DSL               |
 
 ### 查询示例
 
-通过 **esquery 函数** 将一些 **无法用 sql 表述的 ES query** 如 match、geoshape 等下推给 ES 进行过滤处理。esquery 的第一个列名参数用于关联 index，第二个参数是 ES 的基本 Query DSL 的 json 表述，使用花括号{}包含，**json 的 root key 有且只能有一个**，如 match、geo_shape、bool 等。
+通过 esquery 函数将一些无法用 SQL 表述的 Elasticsearch query，如 match 和 geoshape 等下推给 Elasticsearch 进行过滤处理。esquery 的第一个列名参数用于关联 index，第二个参数是 Elasticsearch 的基本 Query DSL 的 json 表述，使用花括号（`{}`）包含，**json 的 root key 有且只能有一个**，如 match、geo_shape 和 bool 等。
 
-* match 查询：
+* match 查询
 
-~~~sql
-select * from es_table where esquery(k4, '{
-    "match": {
-       "k4": "StarRocks on elasticsearch"
-    }
-}');
-~~~
+   ~~~sql
+   select * from es_table where esquery(k4, '{
+      "match": {
+         "k4": "StarRocks on elasticsearch"
+      }
+   }');
+   ~~~
 
-* geo 相关查询：
+* geo 相关查询
 
-~~~sql
-select * from es_table where esquery(k4, '{
-  "geo_shape": {
-     "location": {
-        "shape": {
-           "type": "envelope",
-           "coordinates": [
-              [
-                 13,
-                 53
-              ],
-              [
-                 14,
-                 52
-              ]
-           ]
-        },
-        "relation": "within"
-     }
-  }
-}');
-~~~
+   ~~~sql
+   select * from es_table where esquery(k4, '{
+   "geo_shape": {
+      "location": {
+         "shape": {
+            "type": "envelope",
+            "coordinates": [
+               [
+                  13,
+                  53
+               ],
+               [
+                  14,
+                  52
+               ]
+            ]
+         },
+         "relation": "within"
+      }
+   }
+   }');
+   ~~~
 
-* bool 查询：
+* bool 查询
 
-~~~sql
-select * from es_table where esquery(k4, ' {
-     "bool": {
-        "must": [
-           {
-              "terms": {
-                 "k1": [
-                    11,
-                    12
-                 ]
-              }
-           },
-           {
-              "terms": {
-                 "k2": [
-                    100
-                 ]
-              }
-           }
-        ]
-     }
-  }');
-~~~
-
-<br/>
+   ~~~sql
+   select * from es_table where esquery(k4, ' {
+      "bool": {
+         "must": [
+            {
+               "terms": {
+                  "k1": [
+                     11,
+                     12
+                  ]
+               }
+            },
+            {
+               "terms": {
+                  "k2": [
+                     100
+                  ]
+               }
+            }
+         ]
+      }
+   }');
+   ~~~
 
 ### 注意事项
 
-* ES 在 5.x 之前和之后的数据扫描方式不同，目前 **只支持 5.x 之后的版本**；
-* 支持使用 HTTP Basic 认证方式的 ES 集群；
-* 一些通过 StarRocks 的查询会比直接请求 ES 会慢很多，比如 count 相关的 query 等。这是因为 ES 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
-
-<br/>
+* Elasticsearch 5.x 之前和之后的数据扫描方式不同，目前 StarRocks 只支持查询 5.x 之后的版本。
+* 支持查询使用 HTTP Basic 认证的 Elasticsearch 集群。
+* 一些通过 StarRocks 的查询会比直接请求 Elasticsearch 会慢很多，比如 count 相关查询。这是因为 Elasticsearch 内部会直接读取满足条件的文档个数相关的元数据，不需要对真实的数据进行过滤操作，使得 count 的速度非常快。
 
 ## 更多数据库（JDBC）的外部表
 
