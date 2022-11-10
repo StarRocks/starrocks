@@ -25,4 +25,9 @@ public class ShowPluginsStmt extends ShowStmt {
     public ShowResultSetMetaData getMetaData() {
         return META_DATA;
     }
+
+    @Override
+    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
+        return visitor.visitShowPluginsStatement(this, context);
+    }
 }

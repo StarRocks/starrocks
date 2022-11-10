@@ -18,8 +18,6 @@ import org.junit.Test;
 public class PrivilegeCheckerV2Test {
     private static StarRocksAssert starRocksAssert;
     private static UserIdentity testUser;
-    private static UserIdentity testUser2;
-    private static UserIdentity rootUser;
 
     private static PrivilegeManager privilegeManager;
 
@@ -34,7 +32,6 @@ public class PrivilegeCheckerV2Test {
         starRocksAssert.withDatabase("db1");
         starRocksAssert.withDatabase("db2");
         starRocksAssert.withTable(createTblStmtStr);
-        rootUser = starRocksAssert.getCtx().getCurrentUserIdentity();
         privilegeManager = starRocksAssert.getCtx().getGlobalStateMgr().getPrivilegeManager();
         starRocksAssert.getCtx().setRemoteIP("localhost");
         privilegeManager.initBuiltinRolesAndUsers();
@@ -64,7 +61,6 @@ public class PrivilegeCheckerV2Test {
         createUserSql = "CREATE USER 'test2' IDENTIFIED BY ''";
         createUserStmt = (CreateUserStmt) UtFrameUtils.parseStmtWithNewParser(createUserSql, starRocksAssert.getCtx());
         authenticationManager.createUser(createUserStmt);
-        testUser2 = createUserStmt.getUserIdent();
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "create role test_role", starRocksAssert.getCtx()), starRocksAssert.getCtx());
@@ -181,6 +177,81 @@ public class PrivilegeCheckerV2Test {
                 "grant drop on all resources to test",
                 "revoke drop on all resources from test",
                 "Access denied; you need (at least one of) the DROP privilege(s) for this operation");
+    }
+
+    @Test
+    public void testPluginStmts() throws Exception {
+        String grantSql = "grant plugin on system to test";
+        String revokeSql = "revoke plugin on system from test";
+        String err = "Access denied; you need (at least one of) the PLUGIN privilege(s) for this operation";
+
+        String sql = "INSTALL PLUGIN FROM \"/home/users/starrocks/auditdemo.zip\"";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "UNINSTALL PLUGIN auditdemo";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "SHOW PLUGINS";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+    }
+
+    @Test
+    public void testFileStmts() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        String grantSelectTableSql = "grant select on db1.tbl1 to test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSelectTableSql, ctx), ctx);
+
+        // check file in system
+        String createFileSql = "CREATE FILE \"client.key\" IN db1\n" +
+                "PROPERTIES(\"catalog\" = \"internal\", \"url\" = \"http://test.bj.bcebos.com/kafka-key/client.key\")";
+        String dropFileSql = "DROP FILE \"client.key\" FROM db1 PROPERTIES(\"catalog\" = \"internal\")";
+
+        verifyGrantRevoke(
+                createFileSql,
+                "grant file on system to test",
+                "revoke file on system from test",
+                "Access denied; you need (at least one of) the FILE privilege(s) for this operation");
+        verifyGrantRevoke(
+                dropFileSql,
+                "grant file on system to test",
+                "revoke file on system from test",
+                "Access denied; you need (at least one of) the FILE privilege(s) for this operation");
+
+        ctx.setCurrentUserIdentity(UserIdentity.ROOT);
+        String revokeSelectTableSql = "revoke select on db1.tbl1 from test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(revokeSelectTableSql, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "grant file on system to test", ctx), ctx);
+
+        // check any action in table
+        String dbDeniedError = "Access denied for user 'test' to database 'db1'";
+        verifyGrantRevoke(createFileSql, grantSelectTableSql, revokeSelectTableSql, dbDeniedError);
+        verifyGrantRevoke(dropFileSql, grantSelectTableSql, revokeSelectTableSql, dbDeniedError);
+        verifyGrantRevoke("show file from db1", grantSelectTableSql, revokeSelectTableSql, dbDeniedError);
+
+        // check any action in db
+        String grantDropDbSql = "grant drop on database db1 to test";
+        String revokeDropDbSql = "revoke drop on database db1 from test";
+        verifyGrantRevoke(createFileSql, grantDropDbSql, revokeDropDbSql, dbDeniedError);
+        verifyGrantRevoke(dropFileSql, grantDropDbSql, revokeDropDbSql, dbDeniedError);
+        verifyGrantRevoke("show file from db1", grantDropDbSql, revokeDropDbSql, dbDeniedError);
+    }
+
+    @Test
+    public void testBlackListStmts() throws Exception {
+        String grantSql = "grant blacklist on system to test";
+        String revokeSql = "revoke blacklist on system from test";
+        String err = "Access denied; you need (at least one of) the BLACKLIST privilege(s) for this operation";
+
+        String sql = "ADD SQLBLACKLIST \"select count\\\\(\\\\*\\\\) from .+\";";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "DELETE SQLBLACKLIST 0";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
+
+        sql = "SHOW SQLBLACKLIST";
+        verifyGrantRevoke(sql, grantSql, revokeSql, err);
     }
 
     @Test

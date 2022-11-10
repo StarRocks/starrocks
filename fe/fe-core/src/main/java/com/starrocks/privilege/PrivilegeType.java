@@ -83,7 +83,10 @@ public enum PrivilegeType {
     public enum SystemAction {
         GRANT(1),
         NODE(2),
-        CREATE_RESOURCE(3);  // AND MORE...
+        CREATE_RESOURCE(3),
+        PLUGIN(4),
+        FILE(5),
+        BLACKLIST(6);  // AND MORE...
 
         private final int id;
 

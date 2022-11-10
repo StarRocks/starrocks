@@ -1346,7 +1346,7 @@ installPluginStatement
     ;
 
 uninstallPluginStatement
-    : UNINSTALL PLUGIN FROM identifierOrString
+    : UNINSTALL PLUGIN identifierOrString
     ;
 
 // ------------------------------------------- File Statement ----------------------------------------------------------
