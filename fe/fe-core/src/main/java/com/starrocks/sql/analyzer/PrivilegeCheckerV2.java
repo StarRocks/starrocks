@@ -80,7 +80,7 @@ public class PrivilegeCheckerV2 {
 
     static void checkDbAction(ConnectContext context, String catalogName, String dbName,
                               PrivilegeType.DbAction action) {
-        if (!CatalogMgr.isInternalCatalog(tableName.getCatalog())) {
+        if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
         if (!PrivilegeManager.checkDbAction(context, dbName, action)) {
@@ -89,7 +89,7 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    static void checkAnyActionInDb(ConnectContext context, String catalogName, String dbName) {
+    static void checkAnyActionOnDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
@@ -100,23 +100,12 @@ public class PrivilegeCheckerV2 {
         }
     }
 
-    static void checkAnyActionInDbOrUnderDb(ConnectContext context, String catalogName, String dbName) {
+    static void checkAnyActionOnDbOrUnderDb(ConnectContext context, String catalogName, String dbName) {
         if (!CatalogMgr.isInternalCatalog(catalogName)) {
             throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
         }
 
         if (!PrivilegeManager.checkAnyActionOnOrUnderDb(context, dbName)) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
-                    context.getQualifiedUser(), dbName);
-        }
-    }
-
-    static void checkAnyActionInDb(ConnectContext context, String catalogName, String dbName) {
-        if (!CatalogMgr.isInternalCatalog(catalogName)) {
-            throw new SemanticException(EXTERNAL_CATALOG_NOT_SUPPORT_ERR_MSG);
-        }
-
-        if (!PrivilegeManager.checkAnyActionInDb(context, dbName)) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_DB_ACCESS_DENIED,
                     context.getQualifiedUser(), dbName);
         }
@@ -226,13 +215,13 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitUseDbStatement(UseDbStmt statement, ConnectContext context) {
-            checkAnyActionInDbOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
+            checkAnyActionOnDbOrUnderDb(context, statement.getCatalogName(), statement.getDbName());
             return null;
         }
 
         @Override
         public Void visitShowCreateDbStatement(ShowCreateDbStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, statement.getCatalogName(), statement.getDb());
+            checkAnyActionOnDb(context, statement.getCatalogName(), statement.getDb());
             return null;
         }
 
@@ -258,17 +247,6 @@ public class PrivilegeCheckerV2 {
         @Override
         public Void visitDropDbStatement(DropDbStmt statement, ConnectContext context) {
             checkDbAction(context, statement.getCatalogName(), statement.getDbName(), PrivilegeType.DbAction.DROP);
-            return null;
-        }
-
-        // --------------------------------- Grant/Revoke Statement ---------------------------------
-
-        @Override
-        public Void visitGrantRevokePrivilegeStatement(BaseGrantRevokePrivilegeStmt stmt, ConnectContext session) {
-            PrivilegeManager privilegeManager = session.getGlobalStateMgr().getPrivilegeManager();
-            if (!privilegeManager.allowGrant(session, stmt.getTypeId(), stmt.getActionList(), stmt.getObjectList())) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "GRANT");
-            }
             return null;
         }
 
@@ -330,7 +308,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitCreateFileStatement(CreateFileStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -339,7 +317,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitDropFileStatement(DropFileStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnDb(context, context.getCurrentCatalog(), statement.getDbName());
             if (! PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.FILE)) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "FILE");
             }
@@ -348,7 +326,7 @@ public class PrivilegeCheckerV2 {
 
         @Override
         public Void visitShowSmallFilesStatement(ShowSmallFilesStmt statement, ConnectContext context) {
-            checkAnyActionInDb(context, context.getCurrentCatalog(), statement.getDbName());
+            checkAnyActionOnDb(context, context.getCurrentCatalog(), statement.getDbName());
             return null;
         }
 
