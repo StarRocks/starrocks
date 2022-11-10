@@ -18,11 +18,15 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.EquivalenceClasses;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
@@ -43,7 +47,7 @@ import java.util.stream.Collectors;
  * SPJG materialized view rewriter, based on
  * 《Optimizing Queries Using Materialized Views: A Practical, Scalable Solution》
  *
- *  This rewriter is for single or multi table join query rewrite
+ *  This rewriter is for single table or multi table join query rewrite
  */
 public class MaterializedViewRewriter {
     protected static final Logger LOG = LogManager.getLogger(MaterializedViewRewriter.class);
@@ -241,8 +245,121 @@ public class MaterializedViewRewriter {
     }
 
     private OptExpression tryUnionRewrite(RewriteContext rewriteContext, OptExpression targetExpr) {
-        // TODO: add union rewrite
+        PredicateSplit compensationPredicates = getCompensationPredicates(rewriteContext, false);
+        if (compensationPredicates == null) {
+            return null;
+        }
+        Preconditions.checkState(!ConstantOperator.TRUE.equals(compensationPredicates.getEqualPredicates())
+                || !ConstantOperator.TRUE.equals(compensationPredicates.getRangePredicates())
+                || !ConstantOperator.TRUE.equals(compensationPredicates.getResidualPredicates()));
+
+        OptExpression queryInput = queryBasedRewrite(rewriteContext,
+                compensationPredicates, materializationContext.getQueryExpression());
+        if (queryInput == null) {
+            return null;
+        }
+        OptExpression viewInput = viewBasedRewrite(rewriteContext, targetExpr);
+        if (viewInput == null) {
+            return null;
+        }
+        OptExpression union = createUnion(queryInput, viewInput, rewriteContext);
+        return union;
+    }
+
+    protected OptExpression queryBasedRewrite(RewriteContext rewriteContext, PredicateSplit compensationPredicates,
+                                              OptExpression queryExpression) {
+        ScalarOperator equalPredicates = Utils.canonizePredicate(compensationPredicates.getEqualPredicates());
+        ScalarOperator otherPredicates = Utils.canonizePredicate(Utils.compoundAnd(
+                compensationPredicates.getRangePredicates(), compensationPredicates.getResidualPredicates()));
+        if (!ConstantOperator.TRUE.equals(equalPredicates) || !ConstantOperator.TRUE.equals(otherPredicates)) {
+            Map<ColumnRefOperator, ScalarOperator> queryExprMap =
+                    Utils.getColumnRefMap(queryExpression, rewriteContext.getQueryRefFactory());
+
+            if (!ConstantOperator.TRUE.equals(equalPredicates)) {
+                Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
+                        normalizeAndReverseProjection(queryExprMap, rewriteContext, false);
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(equalPredicates);
+                // swapped by query based view ec
+                List<ScalarOperator> swappedConjuncts = conjuncts.stream().map(conjunct -> {
+                    ColumnRewriter rewriter = new ColumnRewriter(rewriteContext);
+                    return rewriter.rewriteByViewEc(conjunct);
+                }).collect(Collectors.toList());
+                List<ScalarOperator> rewrittens = rewriteQueryScalarOpToTarget(swappedConjuncts, normalizedMap,
+                        null, null);
+                if (rewrittens == null) {
+                    return null;
+                }
+                // TODO: consider normalizing it
+                equalPredicates = Utils.compoundAnd(rewrittens);
+            }
+
+            if (!ConstantOperator.TRUE.equals(otherPredicates)) {
+                List<ScalarOperator> conjuncts = Utils.extractConjuncts(otherPredicates);
+                // swapped by query ec
+                List<ScalarOperator> swappedConjuncts = conjuncts.stream().map(conjunct -> {
+                    ColumnRewriter rewriter = new ColumnRewriter(rewriteContext);
+                    return rewriter.rewriteByQueryEc(conjunct);
+                }).collect(Collectors.toList());
+                Multimap<ScalarOperator, ColumnRefOperator> normalizedMap =
+                        normalizeAndReverseProjection(queryExprMap, rewriteContext, true);
+                List<ScalarOperator> rewrittens = rewriteQueryScalarOpToTarget(swappedConjuncts, normalizedMap,
+                        null, null);
+                if (rewrittens == null) {
+                    return null;
+                }
+                otherPredicates = Utils.compoundAnd(rewrittens);
+            }
+        }
+        ScalarOperator viewToQueryCompensationPredicate =
+                Utils.canonizePredicate(Utils.compoundAnd(equalPredicates, otherPredicates));
+        // query predicate and (not viewToQueryCompensationPredicate) is the final query compensation predicate
+        ScalarOperator queryCompensationPredicate = Utils.canonizePredicate(
+                Utils.compoundAnd(
+                        rewriteContext.getQueryPredicateSplit().toScalarOperator(),
+                        CompoundPredicateOperator.not(viewToQueryCompensationPredicate)));
+        if (!ConstantOperator.TRUE.equals(queryCompensationPredicate)) {
+            // add filter
+            Operator.Builder builder = OperatorBuilderFactory.build(queryExpression.getOp());
+            builder.withOperator(queryExpression.getOp());
+            builder.setPredicate(queryCompensationPredicate);
+            Operator newQueryOp = builder.build();
+            OptExpression newQueryExpr = OptExpression.create(newQueryOp, queryExpression.getInputs());
+            deriveLogicalProperty(newQueryExpr);
+            return newQueryExpr;
+        }
         return null;
+    }
+
+    protected OptExpression createUnion(OptExpression queryInput, OptExpression viewInput, RewriteContext rewriteContext) {
+        List<ColumnRefOperator> queryOutputColumns = queryInput.getOutputColumns().getStream()
+                .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id)).collect(Collectors.toList());
+
+        List<ColumnRefOperator> viewOutputColumns = viewInput.getOutputColumns().getStream()
+                .mapToObj(id -> rewriteContext.getQueryRefFactory().getColumnRef(id)).collect(Collectors.toList());
+
+        List<ColumnRefOperator> unionOutputColumns = queryOutputColumns.stream()
+                .map(c -> rewriteContext.getQueryRefFactory().create(c, c.getType(), c.isNullable()))
+                .collect(Collectors.toList());
+        for (int i = 0; i < viewOutputColumns.size(); ++i) {
+            if (!unionOutputColumns.get(i).isNullable() && viewOutputColumns.get(i).isNullable()) {
+                unionOutputColumns.get(i).setNullable(true);
+            }
+        }
+
+        // generate new prjection
+        Map<ColumnRefOperator, ScalarOperator> unionProjection = Maps.newHashMap();
+        for (int i = 0; i < queryOutputColumns.size(); i++) {
+            unionProjection.put(queryOutputColumns.get(i), unionOutputColumns.get(i));
+        }
+        Projection projection = new Projection(unionProjection);
+        LogicalUnionOperator unionOperator = new LogicalUnionOperator.Builder()
+                .setOutputColumnRefOp(unionOutputColumns)
+                .setChildOutputColumns(Lists.newArrayList(queryOutputColumns, viewOutputColumns))
+                .setProjection(projection)
+                .isUnionAll(true)
+                .build();
+        OptExpression unionExpr = OptExpression.create(unionOperator, queryInput, viewInput);
+        return unionExpr;
     }
 
     protected Multimap<ScalarOperator, ColumnRefOperator> normalizeAndReverseProjection(

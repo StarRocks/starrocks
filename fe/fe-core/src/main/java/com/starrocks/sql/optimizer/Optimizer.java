@@ -419,8 +419,12 @@ public class Optimizer {
                 context.getRuleSet().addAutoJoinImplementationRule();
             }
         } else {
-            // add realtime mv rules
             context.getRuleSet().addRealtimeMVRules();
+        }
+
+        if (!context.getCandidateMvs().isEmpty()
+                && connectContext.getSessionVariable().isEnableCostBasedMaterializedViewRewrite()) {
+            context.getRuleSet().addMultiTableMvRewriteRule();
         }
 
         context.getTaskScheduler().pushTask(new OptimizeGroupTask(rootTaskContext, memo.getRootGroup()));
