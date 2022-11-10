@@ -19,6 +19,7 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.UserIdentity;
 import com.starrocks.common.DdlException;
@@ -152,5 +153,23 @@ public class SetExecutorTest {
         userVariable = ctx.getUserVariables("var");
         Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
         Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = cast(1 as boolean)";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariable = ctx.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
+        BoolLiteral literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(literal.getValue());
+
+        sql = "set @var = cast(0 as boolean)";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariable = ctx.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
+        literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertFalse(literal.getValue());
     }
 }
