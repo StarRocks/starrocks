@@ -224,6 +224,14 @@ public class StringLiteral extends LiteralExpr {
         return super.uncheckedCastTo(targetType);
     }
 
+    public Expr castToNontypedNumericLiteral() throws AnalysisException {
+        try {
+            return new DecimalLiteral(this.getValue());
+        } catch (Throwable e) {
+            return uncheckedCastTo(Type.DOUBLE);
+        }
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         super.write(out);
