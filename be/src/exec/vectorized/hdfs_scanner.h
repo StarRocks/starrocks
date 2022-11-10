@@ -51,7 +51,6 @@ struct HdfsScanStats {
     int64_t skip_read_rows = 0;
 
     int64_t get_cpu_time_ns() const {
-        // TODO: make it more accurate
         return expr_filter_ns + column_convert_ns + column_read_ns + reader_init_ns - io_ns;
     }
 };
