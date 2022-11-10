@@ -1244,6 +1244,15 @@ public class PrivilegeManagerTest {
         } catch (DdlException e) {
             Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));
         }
+
+        // revoke public role
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "revoke public from user_test_builtin_role", ctx), ctx);
+            Assert.fail();
+        } catch (DdlException e) {
+            Assert.assertTrue(e.getMessage().contains("role public cannot be dropped"));
+        }
     }
 
     @Test

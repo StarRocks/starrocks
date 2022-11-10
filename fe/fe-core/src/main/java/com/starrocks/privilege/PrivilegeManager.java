@@ -530,6 +530,10 @@ public class PrivilegeManager {
             roleReadLock();
             try {
                 long roleId = getRoleIdByNameNoLock(roleName);
+                // public cannot be revoked!
+                if (roleId == PUBLIC_ROLE_ID) {
+                    throw new PrivilegeException("role public cannot be dropped!");
+                }
                 collection.revokeRole(roleId);
             } finally {
                 roleReadUnlock();
