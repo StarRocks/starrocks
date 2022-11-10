@@ -7,6 +7,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.CreateMaterializedViewStatement;
 import com.starrocks.sql.ast.ExpressionPartitionDesc;
@@ -1005,6 +1006,17 @@ public class CreateMaterializedViewTest {
             Assert.fail(); // should raise Exception
         } catch (Exception e) {
             Assert.assertEquals("Incorrect table name '" + longLongName + "'", e.getMessage());
+        }
+    }
+
+    @Test
+    public void testCreateSyncMvFromSubquery() {
+        String sql = "create materialized view sync_mv_1 as" +
+                " select k1, sum(k2) from (select k1, k2 from tbl1 group by k1, k2) a group by k1";
+        try {
+            starRocksAssert.withMaterializedView(sql);
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("Materialized view query statement only support direct query from table"));
         }
     }
 }
