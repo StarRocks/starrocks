@@ -24,7 +24,6 @@
 #include <cstdint>
 
 #include "runtime/decimalv2_value.h"
-#include "runtime/primitive_type.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
 #include "util/slice.h"
@@ -40,31 +39,23 @@ template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_BOOL> {
     using CppType = bool;
     using UnsignedCppType = bool;
-
-    static const PrimitiveType primitive_type = TYPE_BOOLEAN;
 };
 
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_NONE> {
     using CppType = bool;
     using UnsignedCppType = bool;
-
-    static const PrimitiveType primitive_type = INVALID_TYPE;
 };
 
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_TINYINT> {
     using CppType = int8_t;
     using UnsignedCppType = uint8_t;
-
-    static const PrimitiveType primitiveType = TYPE_TINYINT;
 };
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_UNSIGNED_TINYINT> {
     using CppType = uint8_t;
     using UnsignedCppType = uint8_t;
-
-    static const PrimitiveType primitiveType = TYPE_TINYINT;
 };
 template <>
 struct CppTypeTraits<OLAP_FIELD_TYPE_SMALLINT> {
