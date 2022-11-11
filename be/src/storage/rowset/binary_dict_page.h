@@ -28,7 +28,6 @@
 #include "gen_cpp/segment.pb.h"
 #include "gutil/hash/string_hash.h"
 #include "runtime/mem_pool.h"
-#include "storage/column_block.h"
 #include "storage/column_vector.h"
 #include "storage/olap_common.h"
 #include "storage/range.h"
@@ -119,8 +118,6 @@ public:
     Status init() override;
 
     Status seek_to_position_in_page(uint32_t pos) override;
-
-    Status next_batch(size_t* n, ColumnBlockView* dst) override;
 
     Status next_batch(size_t* n, vectorized::Column* dst) override;
 
