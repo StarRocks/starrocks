@@ -282,6 +282,8 @@ TEST_F(TypeDescriptorTest, test_to_thrift) {
     {
         TypeDescriptor t;
         t.type = PrimitiveType::TYPE_MAP;
+        t.selected_fields.emplace_back(true);
+        t.selected_fields.emplace_back(true);
         t.children.resize(2);
         t.children[0].type = PrimitiveType::TYPE_INT;
         t.children[1].type = PrimitiveType::TYPE_STRUCT;
@@ -574,6 +576,8 @@ TEST_F(TypeDescriptorTest, test_to_protobuf) {
         TypeDescriptor t;
         t.children.resize(2);
         t.type = PrimitiveType::TYPE_MAP;
+        t.selected_fields.emplace_back(true);
+        t.selected_fields.emplace_back(true);
         t.children[0].type = PrimitiveType::TYPE_INT;
         t.children[1].type = PrimitiveType::TYPE_STRUCT;
         t.children[1].field_names = {"a", "b", "c"};
@@ -667,6 +671,8 @@ TEST_F(TypeDescriptorTest, test_debug_string) {
     {
         TypeDescriptor t;
         t.type = PrimitiveType::TYPE_MAP;
+        t.selected_fields.emplace_back(true);
+        t.selected_fields.emplace_back(true);
         t.children.resize(2);
         t.children[0].type = PrimitiveType::TYPE_INT;
         t.children[1].type = PrimitiveType::TYPE_VARCHAR;
