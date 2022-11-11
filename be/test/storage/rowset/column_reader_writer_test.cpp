@@ -274,7 +274,8 @@ protected:
                                 << "j:" << j;
                     } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
                                type == OLAP_FIELD_TYPE_OBJECT) {
-                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string()) << "j:" << j;
+                        ASSERT_EQ(value, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                                << "j:" << j;
                     } else {
                         ASSERT_EQ(*(Type*)result, reinterpret_cast<const Type*>(column->raw_data())[j]);
                     }
@@ -296,7 +297,8 @@ protected:
                     ASSERT_TRUE(st.ok());
                     for (int j = 0; j < rows_read; ++j) {
                         if (type == OLAP_FIELD_TYPE_CHAR) {
-                            ASSERT_EQ(*(string*)result, reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
+                            ASSERT_EQ(*(string*)result,
+                                      reinterpret_cast<const Slice*>(column->raw_data())[j].to_string())
                                     << "j:" << j;
                         } else if (type == OLAP_FIELD_TYPE_VARCHAR || type == OLAP_FIELD_TYPE_HLL ||
                                    type == OLAP_FIELD_TYPE_OBJECT) {

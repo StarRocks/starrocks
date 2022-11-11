@@ -71,34 +71,34 @@ public:
 
         //test1
 
-            auto column = vectorized::BinaryColumn::create();
-            column->reserve(1024);
-            size_t size = 1024;
-            status = page_decoder.next_batch(&size, column.get());
-            ASSERT_TRUE(status.ok());
-            ASSERT_EQ(3U, size);
-            ASSERT_EQ("Hello", column->get_data()[0]);
-            ASSERT_EQ(",", column->get_data()[1]);
-            ASSERT_EQ("StarRocks", column->get_data()[2]);
+        auto column = vectorized::BinaryColumn::create();
+        column->reserve(1024);
+        size_t size = 1024;
+        status = page_decoder.next_batch(&size, column.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(3U, size);
+        ASSERT_EQ("Hello", column->get_data()[0]);
+        ASSERT_EQ(",", column->get_data()[1]);
+        ASSERT_EQ("StarRocks", column->get_data()[2]);
 
-            size = 1024;
-            auto column1 = vectorized::BinaryColumn::create();
-            page_decoder.seek_to_position_in_page(2);
-            status = page_decoder.next_batch(&size, column1.get());
-            ASSERT_TRUE(status.ok());
-            ASSERT_EQ(1, size);
-            ASSERT_EQ("StarRocks", column1->get_data()[0]);
+        size = 1024;
+        auto column1 = vectorized::BinaryColumn::create();
+        page_decoder.seek_to_position_in_page(2);
+        status = page_decoder.next_batch(&size, column1.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(1, size);
+        ASSERT_EQ("StarRocks", column1->get_data()[0]);
 
-            auto column2 = vectorized::BinaryColumn::create();
-            page_decoder.seek_to_position_in_page(0);
-            vectorized::SparseRange read_range;
-            read_range.add(vectorized::Range(0, 1));
-            read_range.add(vectorized::Range(2, 3));
-            status = page_decoder.next_batch(read_range, column2.get());
-            ASSERT_TRUE(status.ok());
-            ASSERT_EQ(2, column2->size());
-            ASSERT_EQ("Hello", column2->get_data()[0]);
-            ASSERT_EQ("StarRocks", column2->get_data()[1]);
+        auto column2 = vectorized::BinaryColumn::create();
+        page_decoder.seek_to_position_in_page(0);
+        vectorized::SparseRange read_range;
+        read_range.add(vectorized::Range(0, 1));
+        read_range.add(vectorized::Range(2, 3));
+        status = page_decoder.next_batch(read_range, column2.get());
+        ASSERT_TRUE(status.ok());
+        ASSERT_EQ(2, column2->size());
+        ASSERT_EQ("Hello", column2->get_data()[0]);
+        ASSERT_EQ("StarRocks", column2->get_data()[1]);
     }
 };
 

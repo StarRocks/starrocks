@@ -29,7 +29,6 @@
 #include "column/column.h"
 #include "common/logging.h"
 #include "gen_cpp/segment.pb.h"
-#include "storage/chunk_helper.h"
 #include "runtime/mem_pool.h"
 #include "storage/chunk_helper.h"
 #include "storage/olap_common.h"

@@ -4,8 +4,8 @@
 
 #include "column/array_column.h"
 #include "column/nullable_column.h"
-#include "storage/rowset/scalar_column_iterator.h"
 #include "storage/column_vector.h"
+#include "storage/rowset/scalar_column_iterator.h"
 
 namespace starrocks {
 

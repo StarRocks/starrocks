@@ -23,8 +23,8 @@
 
 #include <cstdint>
 
-#include "runtime/primitive_type.h"
 #include "runtime/decimalv2_value.h"
+#include "runtime/primitive_type.h"
 #include "storage/collection.h"
 #include "storage/olap_common.h"
 #include "util/slice.h"
