@@ -185,6 +185,89 @@ public class PrivilegeCheckerV2Test {
     }
 
     @Test
+    public void testViewStmt() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+
+        // grant select on base table to user
+        String grantBaseTableSql = "grant select on db1.tbl1 to test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantBaseTableSql, ctx), ctx);
+
+        // privilege check for create_view on database
+        String createViewStmt = "create view db1.view1 as select * from db1.tbl1";
+        String grantCreateViewStmt = "grant create_view on database db1 to test";
+        String revokeCreateViewStmt = "revoke create_view on database db1 from test";
+        verifyGrantRevoke(
+                createViewStmt,
+                grantCreateViewStmt,
+                revokeCreateViewStmt,
+                "Access denied for user 'test' to database 'db1'");
+
+        // revoke select on base table, grant create_viw on database to user
+        String revokeBaseTableSql = "revoke select on db1.tbl1 from test";
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeBaseTableSql, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantCreateViewStmt, ctx), ctx);
+        verifyGrantRevoke(
+                createViewStmt,
+                grantBaseTableSql,
+                revokeBaseTableSql,
+                "SELECT command denied to user 'test'");
+
+        // create the view
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(createViewStmt, ctx), ctx);
+
+        // revoke create_view on database, grant select on base table to user
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeCreateViewStmt, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantBaseTableSql, ctx), ctx);
+        String grantAlterSql = "grant alter on view db1.view1 to test";
+        String revokeAlterSql = "revoke alter on view db1.view1 from test";
+        String alterViewSql = "alter view db1.view1 as select k2, k3 from db1.tbl1";
+        verifyGrantRevoke(
+                alterViewSql,
+                grantAlterSql,
+                revokeAlterSql,
+                "ALTER command denied to user 'test'");
+
+        // revoke select on base table, grant alter on view to user
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeBaseTableSql, ctx), ctx);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                grantAlterSql, ctx), ctx);
+        verifyGrantRevoke(
+                alterViewSql,
+                grantBaseTableSql,
+                revokeBaseTableSql,
+                "SELECT command denied to user 'test'");
+
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                revokeAlterSql, ctx), ctx);
+
+        // test select view
+        String selectViewSql = "select * from db1.view1";
+        verifyGrantRevoke(
+                selectViewSql,
+                grantBaseTableSql,
+                revokeBaseTableSql,
+                "SELECT command denied to user 'test'");
+        verifyGrantRevoke(
+                selectViewSql,
+                "grant select on view db1.view1 to test",
+                "revoke select on view db1.view1 from test",
+                "SELECT command denied to user 'test'");
+
+        // drop view
+        verifyGrantRevoke(
+                "drop view db1.view1",
+                "grant drop on view db1.view1 to test",
+                "revoke drop on view db1.view1 from test",
+                "DROP command denied to user 'test'");
+    }
+
+    @Test
     public void testPluginStmts() throws Exception {
         String grantSql = "grant plugin on system to test";
         String revokeSql = "revoke plugin on system from test";

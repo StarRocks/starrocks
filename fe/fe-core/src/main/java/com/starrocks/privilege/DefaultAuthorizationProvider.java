@@ -97,6 +97,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
             case RESOURCE:
                 return ResourcePEntryObject.generate(mgr, objectTokens);
 
+            case VIEW:
+                return ViewPEntryObject.generate(mgr, objectTokens);
+
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
         }
@@ -128,6 +131,9 @@ public class DefaultAuthorizationProvider implements AuthorizationProvider {
 
             case RESOURCE:
                 return ResourcePEntryObject.generate(allTypes, restrictType, restrictName);
+
+            case VIEW:
+                return ViewPEntryObject.generate(mgr, allTypes, restrictType, restrictName);
 
             default:
                 throw new PrivilegeException(UNEXPECTED_TYPE + typeStr);
