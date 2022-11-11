@@ -306,12 +306,12 @@ int main(int argc, char** argv) {
         start_be();
     }
 
-    daemon->stop();
-    daemon.reset();
-
 #ifdef WITH_BLOCK_CACHE
     starrocks::BlockCache::instance()->shutdown();
 #endif
+
+    daemon->stop();
+    daemon.reset();
 
 #ifdef USE_STAROS
     starrocks::shutdown_staros_worker();

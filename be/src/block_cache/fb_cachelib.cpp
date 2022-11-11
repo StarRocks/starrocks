@@ -4,6 +4,7 @@
 
 #include "common/logging.h"
 #include "common/statusor.h"
+#include "util/filesystem_util.h"
 
 namespace starrocks {
 
@@ -12,18 +13,18 @@ Status FbCacheLib::init(const CacheOptions& options) {
     config.setCacheSize(options.mem_space_size).setCacheName("default cache").setAccessConfig({25, 10});
     config.enableCachePersistence(options.meta_path).validate();
 
+    std::vector<std::string> nvm_files;
     if (!options.disk_spaces.empty()) {
         Cache::NvmCacheConfig nvmConfig;
         nvmConfig.navyConfig.setBlockSize(4096);
 
-        std::vector<std::string> files;
         for (auto& dir : options.disk_spaces) {
-            files.emplace_back(dir.path + "/cachelib_data");
+            nvm_files.emplace_back(dir.path + "/cachelib_data");
         }
-        if (files.size() == 1) {
-            nvmConfig.navyConfig.setSimpleFile(files[0], options.disk_spaces[0].size, false);
+        if (nvm_files.size() == 1) {
+            nvmConfig.navyConfig.setSimpleFile(nvm_files[0], options.disk_spaces[0].size, false);
         } else {
-            nvmConfig.navyConfig.setRaidFiles(files, options.disk_spaces[0].size, false);
+            nvmConfig.navyConfig.setRaidFiles(nvm_files, options.disk_spaces[0].size, false);
         }
         nvmConfig.navyConfig.blockCache().setRegionSize(16 * 1024 * 1024);
         nvmConfig.navyConfig.blockCache().setDataChecksum(options.checksum);
@@ -40,6 +41,12 @@ Status FbCacheLib::init(const CacheOptions& options) {
         // open file descriptors and associated fcntl locks).
         _cache.reset();
         LOG(INFO) << "couldn't attach to block cache: " << e.what() << ", creating a new one";
+
+        // Clean meta and data files
+        nvm_files.emplace_back(options.meta_path + "/metadata");
+        nvm_files.emplace_back(options.meta_path + "/NvmCacheState");
+        FileSystemUtil::remove_paths(nvm_files);
+
         _cache = std::make_unique<Cache>(Cache::SharedMemNew, config);
         _default_pool = _cache->addPool("default pool", _cache->getCacheMemoryStats().cacheSize);
     }
