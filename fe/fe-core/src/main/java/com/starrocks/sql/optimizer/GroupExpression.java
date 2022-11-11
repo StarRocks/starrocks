@@ -19,6 +19,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.StringJoiner;
 import java.util.stream.Collectors;
 
 /**
@@ -304,5 +305,11 @@ public class GroupExpression {
             sb.append(input.toPrettyString(childHeadlineIndent, childDetailIndent));
         }
         return sb.toString();
+    }
+
+    public String printExploredRules() {
+        StringJoiner joiner = new StringJoiner(", ", "{", "}");
+        ruleMasks.stream().forEach(e -> joiner.add(RuleType.values()[e].name()));
+        return joiner.toString();
     }
 }
