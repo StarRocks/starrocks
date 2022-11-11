@@ -3,6 +3,7 @@
 package com.starrocks.sql.ast;
 
 public class AlterDatabaseQuotaStmt extends DdlStmt {
+    private String catalog;
     private String dbName;
     private final QuotaType quotaType;
     private final String quotaValue;
@@ -18,6 +19,14 @@ public class AlterDatabaseQuotaStmt extends DdlStmt {
         this.dbName = dbName;
         this.quotaType = quotaType;
         this.quotaValue = quotaValue;
+    }
+
+    public String getCatalogName() {
+        return this.catalog;
+    }
+
+    public void setCatalogName(String catalogName) {
+        this.catalog = catalogName;
     }
 
     public String getDbName() {
