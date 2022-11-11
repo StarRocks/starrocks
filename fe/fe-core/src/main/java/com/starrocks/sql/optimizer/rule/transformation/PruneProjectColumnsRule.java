@@ -17,6 +17,7 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import org.apache.commons.collections.CollectionUtils;
 
 import java.util.List;
 import java.util.Map;
@@ -52,11 +53,17 @@ public class PruneProjectColumnsRule extends TransformationRule {
         }));
 
         if (newMap.isEmpty()) {
-            ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(
+            List<ColumnRefOperator> outputColumns =
                     projectOperator.getOutputColumns(new ExpressionContext(input.inputAt(0))).getStream().
-                            mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList()));
-            newMap.put(smallestColumn, smallestColumn);
-            requiredInputColumns.union(smallestColumn);
+                            mapToObj(context.getColumnRefFactory()::getColumnRef).collect(Collectors.toList());
+            if (CollectionUtils.isNotEmpty(outputColumns)) {
+                ColumnRefOperator smallestColumn = Utils.findSmallestColumnRef(outputColumns);
+                ScalarOperator expr = projectOperator.getColumnRefMap().get(smallestColumn);
+                if (!smallestColumn.equals(expr)) {
+                    newMap.put(smallestColumn, expr);
+                    requiredInputColumns.union(smallestColumn);
+                }
+            }
         }
 
         // Change the requiredOutputColumns in context

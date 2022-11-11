@@ -221,7 +221,6 @@ public class RuleSet {
                 PruneHDFSScanColumnRule.HUDI_SCAN,
                 PruneScanColumnRule.JDBC_SCAN,
                 new PruneProjectColumnsRule(),
-                new PruneProjectRule(),
                 new PruneFilterColumnsRule(),
                 new PruneAggregateColumnsRule(),
                 new PruneTopNColumnsRule(),
