@@ -340,7 +340,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 | max_base_compaction_num_singleton_deltas              | 100         | N/A    | 单次 BaseCompaction 合并的最大 segment 数。                        |
 | base_compaction_interval_seconds_since_last_operation | 86400       | second | 上一轮 BaseCompaction 距今的间隔，是触发 BaseCompaction 条件之一。 |
 | cumulative_compaction_check_interval_seconds          | 1           | second | CumulativeCompaction 线程轮询的间隔。                        |
-| cumulative_compaction_skip_window_seconds             | 30          | second | 为了避免最近写入的版本因为被 compact 而无法提供查询，comulative compaction 会保留最近一段时间窗口内的版本，不做 compact。这个参数用来设置时间窗口的大小。 |
 | update_compaction_check_interval_seconds              | 60          | second | Primary key 模型 Update compaction 的检查间隔。              |
 | min_compaction_failure_interval_sec                   | 120         | second | Tablet Compaction 失败之后，再次被调度的间隔。               |
 | periodic_counter_update_period_ms                     | 500         | ms     | Counter 统计信息的间隔。                                     |
@@ -390,7 +389,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |clone_worker_count|3|克隆的线程数|
 |storage_medium_migrate_count|1|介质迁移的线程数，SATA 迁移到 SSD|
 |check_consistency_worker_count|1|计算 tablet 的校验和(checksum)|
-|alter_tablet_timeout_seconds|86400|Schema change 超时时间|
 |sys_log_dir|${STARROCKS_HOME}/log|存放日志的地方，包括 INFO，WARNING，ERROR，FATAL 等日志|
 |user_function_dir|${STARROCKS_HOME}/lib/udf|UDF 程序存放的地方|
 |small_file_dir|${STARROCKS_HOME}/lib/small_file|保存文件管理器下载的文件的目录|
@@ -403,11 +401,9 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |num_threads_per_core|3|每个 CPU core 启动的线程数|
 |compress_rowbatches|TRUE|BE 之间 rpc 通信是否压缩 RowBatch，用于查询层之间的数据传输|
 |serialize_batch|FALSE|BE 之间 rpc 通信是否序列化 RowBatch，用于查询层之间的数据传输|
-|max_unpacked_row_block_size|104857600|单个 block 最大的字节数，100MB|
 |file_descriptor_cache_clean_interval|3600|文件句柄缓存清理的间隔，用于清理长期不用的文件句柄|
 |storage_root_path|${STARROCKS_HOME}/storage|存储数据的目录，多块盘配置使用分隔符 `;` 间隔，例如：/data1/starrocks;/data2/starrocks。如果为 SSD 磁盘，需在路径后添加 `.SSD`，如果为 HDD 磁盘，需在路径后添加 `.HDD`。|
 |max_percentage_of_error_disk|0|磁盘错误达到一定比例，BE 退出|
-|default_num_rows_per_data_block|1024|每个 block 的数据行数|
 |max_tablet_num_per_shard|1024|每个 shard 的 tablet 数目，用于划分 tablet，防止单个目录下 tablet 子目录过多|
 |max_garbage_sweep_interval|3600|磁盘进行垃圾清理的最大间隔|
 |min_garbage_sweep_interval|180|磁盘进行垃圾清理的最小间隔|
@@ -417,12 +413,8 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |index_stream_cache_capacity|10737418240|BloomFilter/Min/Max 等统计信息缓存的容量|
 |storage_page_cache_limit|0|PageCache 的容量，string，可写为 “20G”。|
 |disable_storage_page_cache|TRUE|是否开启 PageCache|
-|base_compaction_start_hour|20|BaseCompaction 开启的时间|
-|base_compaction_end_hour|7|BaseCompaction 结束的时间|
-|base_compaction_num_cumulative_deltas|5|BaseCompaction 触发条件之一：Cumulative 文件数目要达到的限制|
 |base_compaction_num_threads_per_disk|1|每个磁盘 BaseCompaction 线程的数目|
 |base_cumulative_delta_ratio|0.3|BaseCompaction 触发条件之一：Cumulative 文件大小达到 Base 文件的比例|
-|cumulative_compaction_write_mbytes_per_sec|100|CumulativeCompaction 写磁盘的限速|
 |max_compaction_concurrency|-1|BaseCompaction + CumulativeCompaction 的最大并发， -1 代表没有限制。|
 |compaction_trace_threshold|60|单次 Compaction 打印 trace 的时间阈值，如果单次 compaction 时间超过该阈值就打印 trace，单位为秒|
 |webserver_port|8040|Http Server 端口|
@@ -433,7 +425,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |fragment_pool_thread_num_min|64|最小查询线程数，默认启动 64 个线程。|
 |fragment_pool_thread_num_max|4096|最大查询线程数。|
 |fragment_pool_queue_size|2048|单节点上能够处理的查询请求上限|
-|enable_partitioned_hash_join|FALSE|使用 PartitionHashJoin|
 |enable_partitioned_aggregation|TRUE|使用 PartitionAggregation|
 |enable_token_check|TRUE|Token 开启检验|
 |enable_prefetch|TRUE|查询提前预取|
@@ -441,7 +432,6 @@ curl -XPOST http://be_host:http_port/api/update_config?configuration_item=value
 |load_process_max_memory_limit_percent|30|单节点上所有的导入线程占据的内存上限比例。|
 |sync_tablet_meta|FALSE|存储引擎是否开 sync 保留到磁盘上。|
 |routine_load_thread_pool_size|10|例行导入的线程池数目。|
-|default_rowset_type|ALPHA|存储引擎的格式，默认新 ALPHA，后面会替换成 BETA。|
 |brpc_max_body_size|2147483648|BRPC 最大的包容量，单位为 Byte。|
 |tablet_map_shard_size|32|Tablet 分组数。|
 |enable_bitmap_union_disk_format_with_set|FALSE|Bitmap 新存储格式，可以优化 bitmap_union 性能。|
