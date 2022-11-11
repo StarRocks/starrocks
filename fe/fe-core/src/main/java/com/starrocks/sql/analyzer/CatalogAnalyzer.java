@@ -15,6 +15,7 @@ import com.starrocks.sql.ast.DropCatalogStmt;
 
 import java.util.Map;
 
+import static com.starrocks.connector.ConnectorMgr.SUPPORT_CONNECTOR_TYPE;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
 
 public class CatalogAnalyzer {
@@ -48,7 +49,7 @@ public class CatalogAnalyzer {
                 throw new SemanticException("'type' can not be null or empty");
             }
             statement.setCatalogType(catalogType);
-            if (!CreateCatalogStmt.supportedCatalog.contains(catalogType)) {
+            if (!SUPPORT_CONNECTOR_TYPE.contains(catalogType)) {
                 throw new SemanticException("[type : %s] is not supported", catalogType);
             }
             return null;
