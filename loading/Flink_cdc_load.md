@@ -6,7 +6,7 @@
 
 ![MySQL 同步](../assets/4.9.2.png)
 
-实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 简化待同步库表的创建。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
+实时同步 MySQL 至 StarRocks 分成同步库表结构、同步数据两个阶段进行。首先 StarRocks Migration Tool (数据迁移工具，以下简称 SMT) 将外部数据库的表结构转化成StarRocks的建表语句。然后 Flink 集群运行 Flink job，同步 MySQL 全量及增量数据至 StarRocks。具体同步流程如下：
 
 > 说明：
 > MySQL 实时同步至 StarRocks 能够保证端到端的 exactly-once 的语义一致性。
@@ -86,7 +86,7 @@
       >
       > - 第二个版本号 y.yy 为其支持的 Flink 版本号。
       >
-      > - 第三个版本号 z.zz 为 Flink 支持的 Scala 版本号。如果 Flink 为 1.14 以及之前版本，则需要传入。
+      > - 第三个版本号 z.zz 为 Flink 支持的 Scala 版本号。如果 Flink 为 1.14.x 以及之前版本，则需要下载带有 Scala 版本号的 flink-connector-starrocks。
 
    由于本文使用 Flink 版本号 1.14.5，Scala 版本号 2.11，因此可以下载 flink-connector-starrocks JAR 包 **1.2.3_flink-1.14_2.11.jar**。
 
@@ -94,11 +94,11 @@
 
    > **注意**
    >
-   > 如果 Flink 已经处于运行状态中，则需要重启 Flink ，加载并生效 JAR 包。
+   > 如果 Flink 已经处于运行状态中，则需要先停止 Flink，然后重启 Flink ，以加载并生效 JAR 包。
    >
    > ```Bash
-   > $ ./bin/stop-cluster.sh
-   > $ ./bin/start-cluster.sh
+   > ./bin/stop-cluster.sh
+   > ./bin/start-cluster.sh
    > ```
 
 5. 下载并解压 [SMT](https://www.starrocks.com/zh-CN/download/community)，并将放在 **flink-1.14.5** 目录下。
@@ -111,7 +111,7 @@
 
 您需要确保已经开启 MySQL Binlog 日志，实时同步时需要读取 MySQL Binlog 日志数据，解析并同步至 StarRocks。
 
-1. 编辑 MySQL 配置文件 **my.cnf**（默认路径为 **/etc/my.cnf**），开启 MySQL Binlog。
+1. 编辑 MySQL 配置文件 **my.cnf**（默认路径为 **/etc/my.cnf**），以开启 MySQL Binlog。
 
    ```Bash
    # 开启 Binlog 日志
@@ -227,7 +227,7 @@
     flink-create.all.sql  starrocks-create.1.sql
     ```
 
-3. 如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，基于[主键模型](../table_design/Data_model.md#主键模型)创建目标表。
+3. 执行如下命令，连接 StarRocks，并执行 SQL 文件 **starrocks-create.all.sql**，用于创建目标库和表。推荐使用 SQL 文件中默认的建表语句，基于[主键模型](../table_design/Data_model.md#主键模型)创建目标表。
 
     > **注意**
     >
@@ -345,7 +345,7 @@
 
    如果您只需要同步部分数据，例如支付时间在2021年12月21日之后的数据，则可以在 `INSERT INTO SELECT` 语句中使用 `WHERE` 子句设置过滤条件，例如  `WHERE pay_dt >'2021-12-21'`。不满足该条件的数据，即支付时间在2021年12月21日或者之前的数据不会同步至StarRocks。
 
-2. 如果返回如下结果，则表示 Flink job 已经提交，开始同步全量和增量数据。
+   如果返回如下结果，则表示 Flink job 已经提交，开始同步全量和增量数据。
 
    ```SQL
    [INFO] Submitting SQL update statement to the cluster...
@@ -353,7 +353,7 @@
    Job ID: 5ae005c4b3425d8bb13fe660260a35da
    ```
 
-3. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
+2. 可以通过 [Flink WebUI](https://nightlies.apache.org/flink/flink-docs-master/docs/try-flink/flink-operations-playground/#flink-webui) 或者在 Flink 命令行执行命令`bin/flink list -running`，查看 Flink 集群中正在运行的 Flink job，以及 Flink job ID。
       1. Flink WebUI 界面
          ![task 拓扑](../assets/4.9.3.png)
 
@@ -465,19 +465,19 @@ flink.starrocks.sink.properties.strip_outer_array=true
 
 > **注意**
 >
-> 该方式会对导入性能有一定的影响。
+> 该方式会对导入速度有一定的影响。
 
 ### 多个的 INSERT INTO 语句合并为一个 Flink job
 
-1. 在 **flink-create.all.sql** 文件使用 [STATEMENT SET](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/table/sqlclient/#execute-a-set-of-sql-statements) 语句，将多个的 INSERT INTO 语句合并为一个 Flink job，避免占用过多的 Flink job 资源。
+在 **flink-create.all.sql** 文件使用 [STATEMENT SET](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/table/sqlclient/#execute-a-set-of-sql-statements) 语句，将多个的 INSERT INTO 语句合并为一个 Flink job，避免占用过多的 Flink job 资源。
 
    > 说明
    >
    > Flink 自 1.13 起 支持  [STATEMENT SET](https://nightlies.apache.org/flink/flink-docs-master/docs/dev/table/sqlclient/#execute-a-set-of-sql-statements) 语法。
 
-2. 打开 **result/flink-create.all.sql** 文件。
+1. 打开 **result/flink-create.all.sql** 文件。
 
-3. 修改文件中的 SQL 语句，将所有的  INSERT INTO 语句调整位置到文件末尾。然后在第一条 INSERT语句的前面加上`EXECUTE STATEMENT SET BEGIN;` 在最后一 INSERT 语句后面加上一行`END;`。
+2. 修改文件中的 SQL 语句，将所有的  INSERT INTO 语句调整位置到文件末尾。然后在第一条 INSERT语句的前面加上`EXECUTE STATEMENT SET BEGIN;` 在最后一 INSERT 语句后面加上一行`END;`。
 
    > **注意**
    >
@@ -499,4 +499,4 @@ flink.starrocks.sink.properties.strip_outer_array=true
 
 ## 常见问题
 
-请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_faq.md)。
+请参见 [MySQL 实时同步至 StarRocks 常见问题](../faq/loading/synchronize_mysql_into_sr.md)。
