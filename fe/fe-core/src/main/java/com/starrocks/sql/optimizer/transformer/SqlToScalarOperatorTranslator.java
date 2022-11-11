@@ -78,8 +78,10 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.time.LocalDateTime;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -213,7 +215,11 @@ public final class SqlToScalarOperatorTranslator {
         private final CTETransformerContext cteContext;
         public final OptExprBuilder builder;
         public final Map<ScalarOperator, SubqueryOperator> subqueryPlaceholders;
-
+        // ArrayDeque will push into and pop out the head
+        // Example: the Deque is [1,2,3,4]
+        // when push(5) -> [5,1,2,3,4]
+        // then pop() -> [1,2,3,4]
+        private final Deque<Integer> usedSubFieldPos = new ArrayDeque<>();
         public Visitor(ExpressionMapping expressionMapping, ColumnRefFactory columnRefFactory,
                        List<ColumnRefOperator> correlation, ConnectContext session,
                        CTETransformerContext cteContext, OptExprBuilder builder,
@@ -248,6 +254,8 @@ public final class SqlToScalarOperatorTranslator {
                     expressionMapping.getScope().resolveField(node, expressionMapping.getOuterScopeRelationId());
             ColumnRefOperator columnRefOperator =
                     expressionMapping.getColumnRefWithIndex(resolvedField.getRelationFieldIndex());
+            List<Integer> usedPos = new ArrayList<>(usedSubFieldPos);
+            columnRefOperator.addUsedSubfieldPos(usedPos);
 
             if (!expressionMapping.getScope().isLambdaScope() &&
                     resolvedField.getScope().getRelationId().equals(expressionMapping.getOuterScopeRelationId())) {
@@ -274,8 +282,15 @@ public final class SqlToScalarOperatorTranslator {
         @Override
         public ScalarOperator visitCollectionElementExpr(CollectionElementExpr node, Context context) {
             Preconditions.checkState(node.getChildren().size() == 2);
+            // key value all selected used in map
+            if (node.getChild(0).getType().isMapType()) {
+                usedSubFieldPos.push(-1);
+            }
             ScalarOperator collectionOperator = visit(node.getChild(0), context.clone(node));
             ScalarOperator subscriptOperator = visit(node.getChild(1), context.clone(node));
+            if (node.getChild(0).getType().isMapType()) {
+                usedSubFieldPos.pop();
+            }
             return new CollectionElementOperator(node.getType(), collectionOperator, subscriptOperator);
         }
 
@@ -589,10 +604,23 @@ public final class SqlToScalarOperatorTranslator {
 
         @Override
         public ScalarOperator visitFunctionCall(FunctionCallExpr node, Context context) {
+            if (node.getFnName().getFunction().equalsIgnoreCase("map_keys") ||
+                    node.getFnName().getFunction().equalsIgnoreCase("map_size")) {
+                usedSubFieldPos.push(0);
+            }
+            if (node.getFnName().getFunction().equalsIgnoreCase("map_values")) {
+                usedSubFieldPos.push(1);
+            }
             List<ScalarOperator> arguments = node.getChildren()
                     .stream()
                     .map(child -> visit(child, context.clone(node)))
                     .collect(Collectors.toList());
+            if (node.getFnName().getFunction().equalsIgnoreCase("map_keys") ||
+                    node.getFnName().getFunction().equalsIgnoreCase("map_size") ||
+                    node.getFnName().getFunction().equalsIgnoreCase("map_values")) {
+                usedSubFieldPos.pop();
+            }
+
             return new CallOperator(
                     node.getFnName().getFunction(),
                     node.getType(),
