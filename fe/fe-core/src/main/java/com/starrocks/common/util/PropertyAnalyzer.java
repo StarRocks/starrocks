@@ -54,7 +54,6 @@ import static com.starrocks.catalog.TableProperty.INVALID;
 
 
 public class PropertyAnalyzer {
-    public static final long DEFAULT_STORAGE_CACHE_TTL = 2592000L;
     private static final Logger LOG = LogManager.getLogger(PropertyAnalyzer.class);
     private static final String COMMA_SEPARATOR = ",";
 

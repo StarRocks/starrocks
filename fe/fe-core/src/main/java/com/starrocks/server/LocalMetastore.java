@@ -2038,7 +2038,7 @@ public class LocalMetastore implements ConnectorMetadata {
                 long storageCacheTtlS = 0;
                 try {
                     storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(properties,
-                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, PropertyAnalyzer.DEFAULT_STORAGE_CACHE_TTL);
+                            PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.default_cache_ttl_seconds);
                 } catch (AnalysisException e) {
                     throw new DdlException(e.getMessage());
                 }
@@ -2048,9 +2048,8 @@ public class LocalMetastore implements ConnectorMetadata {
                 if (!enableStorageCache && storageCacheTtlS != 0) {
                     throw new DdlException("Storage cache ttl should be 0 when cache is disabled");
                 }
-                // default ttl is 30 days
                 if (enableStorageCache && storageCacheTtlS == 0) {
-                    storageCacheTtlS = PropertyAnalyzer.DEFAULT_STORAGE_CACHE_TTL;
+                    throw new DdlException("Storage cache ttl should not be 0 when cache is enabled");
                 }
 
                 // set to false if absent

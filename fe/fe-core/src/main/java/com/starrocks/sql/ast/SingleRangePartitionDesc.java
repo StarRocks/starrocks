@@ -8,6 +8,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.FeNameFormat;
 import com.starrocks.common.util.PrintableMap;
@@ -136,7 +137,7 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         boolean enableStorageCache = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ENABLE_STORAGE_CACHE, false);
         long storageCacheTtlS = PropertyAnalyzer.analyzeLongProp(
-                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, PropertyAnalyzer.DEFAULT_STORAGE_CACHE_TTL);
+                properties, PropertyAnalyzer.PROPERTIES_STORAGE_CACHE_TTL, Config.default_cache_ttl_seconds);
         boolean allowAsyncWriteBack = PropertyAnalyzer.analyzeBooleanProp(
                 properties, PropertyAnalyzer.PROPERTIES_ALLOW_ASYNC_WRITE_BACK, false);
 
@@ -146,9 +147,8 @@ public class SingleRangePartitionDesc extends PartitionDesc {
         if (!enableStorageCache && storageCacheTtlS != 0) {
             throw new AnalysisException("Storage cache ttl should be 0 when cache is disabled");
         }
-        // default ttl is 30 days
         if (enableStorageCache && storageCacheTtlS == 0) {
-            storageCacheTtlS = PropertyAnalyzer.DEFAULT_STORAGE_CACHE_TTL;
+            throw new AnalysisException("Storage cache ttl should not be 0 when cache is enabled");
         }
         if (!enableStorageCache && allowAsyncWriteBack) {
             throw new AnalysisException("storage allow_async_write_back can't be enabled when cache is disabled");

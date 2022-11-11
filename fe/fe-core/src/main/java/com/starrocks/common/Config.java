@@ -1073,6 +1073,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, aliases = {"storage_cooldown_second"})
     public static long tablet_sched_storage_cooldown_second = -1L; // won't cool down by default
 
+
     /**
      * FOR BeLoadBalancer:
      * the threshold of cluster balance score, if a backend's load score is 10% lower than average score,
@@ -1843,4 +1844,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_check_db_state = true;
+
+    /**
+     * default storage cache ttl of lake table
+     */
+    @ConfField(mutable = true)
+    public static long default_cache_ttl_seconds = 2592000L;
 }
