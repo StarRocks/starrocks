@@ -47,10 +47,6 @@ public:
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
 
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return _col_iter->next_batch(n, dst, has_null);
-    }
-
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
 
     bool all_page_dict_encoded() const override { return _col_iter->all_page_dict_encoded(); }
@@ -112,10 +108,6 @@ public:
     Status seek_to_first() override { return _col_iter->seek_to_first(); }
 
     Status seek_to_ordinal(ordinal_t ord) override { return _col_iter->seek_to_ordinal(ord); }
-
-    Status next_batch(size_t* n, ColumnBlockView* dst, bool* has_null) override {
-        return Status::InternalError("scalar next_batch() should never be called");
-    }
 
     ordinal_t get_current_ordinal() const override { return _col_iter->get_current_ordinal(); }
 
