@@ -1359,7 +1359,15 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
 
         Catalog catalog = Catalog.getCurrentCatalog();
         Map<Pair<Long, Long>, PartitionStat> partitionStats = Maps.newHashMap();
+<<<<<<< HEAD
         List<Long> dbIds = catalog.getDbIdsIncludeRecycleBin();
+=======
+        long start = System.nanoTime();
+        long lockTotalTime = 0;
+        long lockStart;
+        List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
+        DATABASE:
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
         for (Long dbId : dbIds) {
             Database db = catalog.getDbIncludeRecycleBin(dbId);
             if (db == null) {
@@ -1370,16 +1378,48 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 continue;
             }
 
+            // set the config to a local variable to avoid config params changed.
+            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+            int partitionChecked = 0;
             db.readLock();
+            lockStart = System.nanoTime();
             try {
+<<<<<<< HEAD
                 for (Table table : catalog.getTablesIncludeRecycleBin(db)) {
+=======
+                TABLE:
+                for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
                     // check table is olap table or colocate table
                     if (!table.needSchedule(isLocalBalance)) {
                         continue;
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
+<<<<<<< HEAD
                     for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+=======
+                    for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                        partitionChecked++;
+                        if (partitionChecked % partitionBatchNum == 0) {
+                            lockTotalTime += System.nanoTime() - lockStart;
+                            // release lock, so that lock can be acquired by other threads.
+                            LOG.debug("partition checked reached batch value, release lock");
+                            db.readUnlock();
+                            db.readLock();
+                            LOG.debug("balancer get lock again");
+                            lockStart = System.nanoTime();
+                            if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
+                                continue DATABASE;
+                            }
+                            if (globalStateMgr.getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
+                                continue TABLE;
+                            }
+                            if (globalStateMgr.getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
+                                continue;
+                            }
+                        }
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
@@ -1463,9 +1503,15 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                     }
                 }
             } finally {
+                lockTotalTime += System.nanoTime() - lockStart;
                 db.readUnlock();
             }
         }
+
+        long cost = (System.nanoTime() - start) / 1000000;
+        lockTotalTime = lockTotalTime / 1000000;
+        LOG.info("finished to calculate partition stats. cost: {} ms, in lock time: {} ms",
+                cost, lockTotalTime);
 
         return partitionStats;
     }

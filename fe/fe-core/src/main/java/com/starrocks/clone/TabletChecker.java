@@ -189,16 +189,67 @@ public class TabletChecker extends MasterDaemon {
         LOG.info(stat.incrementalBrief());
     }
 
+<<<<<<< HEAD
     private void checkTablets() {
         long start = System.currentTimeMillis();
+=======
+    /**
+     * Check the manually repaired table/partition first,
+     * so that they can be scheduled for repair at first place.
+     */
+    private void checkAllTablets() {
+        checkTabletsOnlyInPrios();
+        checkTabletsNotInPrios();
+    }
+
+    private void checkTabletsOnlyInPrios() {
+        doCheck(true);
+    }
+
+    private void checkTabletsNotInPrios() {
+        doCheck(false);
+    }
+
+    /**
+     * In order to avoid meaningless repair schedule, for task that need to
+     * choose a source replica to clone from, we check that whether we can
+     * find a healthy source replica before send it to pending queue.
+     * <p>
+     * If we don't do this check, the task will go into the pending queue and
+     * get deleted when no healthy source replica found, and then it will be added
+     * to the queue again in the next `TabletChecker` round.
+     */
+    private boolean tryChooseSrcBeforeSchedule(TabletSchedCtx tabletCtx) {
+        if (tabletCtx.needCloneFromSource()) {
+            if (tabletCtx.getReplicas().size() == 1 && Config.recover_with_empty_tablet) {
+                // in this case, we need to forcefully create an empty replica to recover
+                return true;
+            } else {
+                return tabletCtx.getHealthyReplicas().size() != 0;
+            }
+        } else {
+            return true;
+        }
+    }
+
+    private void doCheck(boolean checkInPrios) {
+        long start = System.nanoTime();
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
         long totalTabletNum = 0;
         long unhealthyTabletNum = 0;
         long addToSchedulerTabletNum = 0;
         long tabletInScheduler = 0;
         long tabletNotReady = 0;
 
+<<<<<<< HEAD
         List<Long> dbIds = catalog.getDbIdsIncludeRecycleBin();
         OUT:
+=======
+        long lockTotalTime = 0;
+        long lockStart;
+        List<Long> dbIds = globalStateMgr.getDbIdsIncludeRecycleBin();
+        DATABASE:
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
         for (Long dbId : dbIds) {
             Database db = catalog.getDbIncludeRecycleBin(dbId);
             if (db == null) {
@@ -209,16 +260,49 @@ public class TabletChecker extends MasterDaemon {
                 continue;
             }
 
+            // set the config to a local variable to avoid config params changed.
+            int partitionBatchNum = Config.tablet_checker_partition_batch_num;
+            int partitionChecked = 0;
             db.readLock();
+            lockStart = System.nanoTime();
             try {
+<<<<<<< HEAD
                 List<Long> aliveBeIdsInCluster = infoService.getClusterBackendIds(db.getClusterName(), true);
                 for (Table table : catalog.getTablesIncludeRecycleBin(db)) {
+=======
+                List<Long> aliveBeIdsInCluster = infoService.getBackendIds(true);
+                TABLE:
+                for (Table table : globalStateMgr.getTablesIncludeRecycleBin(db)) {
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
                     if (!table.needSchedule(false)) {
                         continue;
                     }
 
                     OlapTable olapTbl = (OlapTable) table;
+<<<<<<< HEAD
                     for (Partition partition : catalog.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+=======
+                    for (Partition partition : globalStateMgr.getAllPartitionsIncludeRecycleBin(olapTbl)) {
+                        partitionChecked++;
+                        if (partitionChecked % partitionBatchNum == 0) {
+                            LOG.debug("partition checked reached batch value, release lock");
+                            lockTotalTime += System.nanoTime() - lockStart;
+                            // release lock, so that lock can be acquired by other threads.
+                            db.readUnlock();
+                            db.readLock();
+                            LOG.debug("checker get lock again");
+                            lockStart = System.nanoTime();
+                            if (globalStateMgr.getDbIncludeRecycleBin(dbId) == null) {
+                                continue DATABASE;
+                            }
+                            if (globalStateMgr.getTableIncludeRecycleBin(db, olapTbl.getId()) == null) {
+                                continue TABLE;
+                            }
+                            if (globalStateMgr.getPartitionIncludeRecycleBin(olapTbl, partition.getId()) == null) {
+                                continue;
+                            }
+                        }
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
                         if (partition.getState() != PartitionState.NORMAL) {
                             // when alter job is in FINISHING state, partition state will be set to NORMAL,
                             // and we can schedule the tablets in it.
@@ -254,7 +338,7 @@ public class TabletChecker extends MasterDaemon {
 
                                 if (statusWithPrio.first == TabletStatus.HEALTHY) {
                                     // Only set last status check time when status is healthy.
-                                    localTablet.setLastStatusCheckTime(start);
+                                    localTablet.setLastStatusCheckTime(System.currentTimeMillis());
                                     continue;
                                 } else if (isInPrios) {
                                     statusWithPrio.second = TabletSchedCtx.Priority.VERY_HIGH;
@@ -282,7 +366,7 @@ public class TabletChecker extends MasterDaemon {
                                 if (res == AddResult.LIMIT_EXCEED) {
                                     LOG.info("number of scheduling tablets in tablet scheduler"
                                             + " exceed to limit. stop tablet checker");
-                                    break OUT;
+                                    break DATABASE;
                                 } else if (res == AddResult.ADDED) {
                                     addToSchedulerTabletNum++;
                                 }
@@ -300,19 +384,35 @@ public class TabletChecker extends MasterDaemon {
                     } // partitions
                 } // tables
             } finally {
+                lockTotalTime += System.nanoTime() - lockStart;
                 db.readUnlock();
             }
         } // end for dbs
 
-        long cost = System.currentTimeMillis() - start;
+        long cost = (System.nanoTime() - start) / 1000000;
+        lockTotalTime = lockTotalTime / 1000000;
 
         stat.counterTabletCheckCostMs.addAndGet(cost);
         stat.counterTabletChecked.addAndGet(totalTabletNum);
         stat.counterUnhealthyTabletNum.addAndGet(unhealthyTabletNum);
         stat.counterTabletAddToBeScheduled.addAndGet(addToSchedulerTabletNum);
 
+<<<<<<< HEAD
         LOG.info("finished to check tablets. unhealth/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, cost: {} ms",
                 unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum, tabletInScheduler, tabletNotReady, cost);
+=======
+        LOG.info("finished to check tablets. checkInPrios: {}, " +
+                        "unhealthy/total/added/in_sched/not_ready: {}/{}/{}/{}/{}, " +
+                        "cost: {} ms, in lock time: {} ms",
+                checkInPrios, unhealthyTabletNum, totalTabletNum, addToSchedulerTabletNum,
+                tabletInScheduler, tabletNotReady, cost, lockTotalTime);
+    }
+
+    private boolean isTableInPrios(long dbId, long tblId) {
+        synchronized (prios) {
+            return prios.contains(dbId, tblId);
+        }
+>>>>>>> e6ce66969 ([Enhancement] Split tablets into small batches to decrease db lock occupation (#13070))
     }
 
     private boolean isInPrios(long dbId, long tblId, long partId) {
