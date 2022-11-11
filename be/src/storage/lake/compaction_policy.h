@@ -14,6 +14,7 @@ class Tablet;
 using TabletPtr = std::shared_ptr<Tablet>;
 class CompactionPolicy;
 using CompactionPolicyPtr = std::shared_ptr<CompactionPolicy>;
+class TabletMetadataPB;
 
 // Compaction policy for lake tablet
 class CompactionPolicy {
@@ -23,5 +24,9 @@ public:
 
     static StatusOr<CompactionPolicyPtr> create_compaction_policy(TabletPtr tablet);
 };
+
+double cumulative_compaction_score(const TabletMetadataPB& metadata);
+
+double base_compaction_score(const TabletMetadataPB& metadata);
 
 } // namespace starrocks::lake
