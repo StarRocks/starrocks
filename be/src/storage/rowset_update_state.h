@@ -46,6 +46,9 @@ public:
         return _check_and_resolve_conflict(tablet, rowset, rowset_id, latest_applied_version, read_column_ids, index);
     }
 
+    static void plan_read_by_rssid(const vector<uint64_t>& rowids, size_t* num_default,
+                                   std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid, vector<uint32_t>* idxes);
+
 private:
     Status _do_load(Tablet* tablet, Rowset* rowset);
 

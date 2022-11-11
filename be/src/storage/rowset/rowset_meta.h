@@ -97,7 +97,7 @@ public:
 
     // return semgent_footer position and size if rowset is partial_rowset
     const FooterPointerPB* partial_rowset_footer(uint32_t segment_id) const {
-        if (!_rowset_meta_pb->has_txn_meta()) {
+        if (!_rowset_meta_pb->has_txn_meta() || _rowset_meta_pb->txn_meta().has_merge_condition()) {
             return nullptr;
         }
         return &_rowset_meta_pb->txn_meta().partial_rowset_footers(segment_id);
