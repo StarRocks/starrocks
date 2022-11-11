@@ -515,10 +515,10 @@ TEST_F(VectorizedLambdaFunctionExprTest, array_map_lambda_test_const_array) {
                 if (result->is_nullable()) {
                     auto col = std::dynamic_pointer_cast<NullableColumn>(result);
                     auto array_col = std::dynamic_pointer_cast<ArrayColumn>(col->data_column());
-                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // bool
+                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
                 } else {
                     auto array_col = std::dynamic_pointer_cast<ArrayColumn>(result);
-                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // bool
+                    EXPECT_EQ(2, array_col->elements_column()->type_size()); // nullable bool
                 }
             }
             Expr::close(expr_ctxs, &_runtime_state);
