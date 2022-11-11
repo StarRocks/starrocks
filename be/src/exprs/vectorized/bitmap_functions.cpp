@@ -483,4 +483,49 @@ ColumnPtr BitmapFunctions::base64_to_bitmap(FunctionContext* context, const star
     return builder.build(ColumnHelper::is_all_const(columns));
 }
 
+ColumnPtr BitmapFunctions::sub_bitmap(FunctionContext* context, const starrocks::vectorized::Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+
+    ColumnViewer<TYPE_OBJECT> bitmap_viewer(columns[0]);
+    ColumnViewer<TYPE_BIGINT> offset_viewer(columns[1]);
+
+    ColumnPtr len_column = nullptr;
+    if (columns.size() > 2) {
+        len_column = columns[2];
+    } else {
+        len_column = ColumnHelper::create_const_column<TYPE_BIGINT>(INT32_MAX, bitmap_viewer.size());
+    }
+
+    ColumnViewer<TYPE_BIGINT> len_viewer(len_column);
+
+    size_t size = columns[0]->size();
+    ColumnBuilder<TYPE_OBJECT> builder(size);
+
+    for (int row = 0; row < size; row++) {
+        if (bitmap_viewer.is_null(row) || offset_viewer.is_null(row) || len_viewer.is_null(row) ||
+            len_viewer.value(row) <= 0) {
+            builder.append_null();
+            continue;
+        }
+
+        auto bitmap = bitmap_viewer.value(row);
+        auto offset = offset_viewer.value(row);
+        auto len = len_viewer.value(row);
+        if (bitmap->cardinality() == 0 || offset == INT_MIN || len <= 0) {
+            builder.append_null();
+            continue;
+        }
+
+        BitmapValue ret_bitmap;
+        if (bitmap->sub_bitmap_internal(offset, len, &ret_bitmap) == 0) {
+            builder.append_null();
+            continue;
+        }
+
+        builder.append(std::move(ret_bitmap));
+    }
+
+    return builder.build(ColumnHelper::is_all_const(columns));
+}
+
 } // namespace starrocks::vectorized
