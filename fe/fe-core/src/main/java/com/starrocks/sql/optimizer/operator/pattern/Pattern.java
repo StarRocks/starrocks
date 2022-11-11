@@ -79,7 +79,7 @@ public class Pattern {
         return matchWithoutChild(expression, 0);
     }
 
-    private boolean matchWithoutChild(GroupExpression expression, int level) {
+    public boolean matchWithoutChild(GroupExpression expression, int level) {
         if (expression == null) {
             return false;
         }

@@ -33,24 +33,37 @@ public class AggregateChecker {
         return distinct;
     }
 
-    private class AggregateCheckVisitor extends ScalarOperatorVisitor<Boolean, Object> {
+    private class AggregateCheckVisitor extends ScalarOperatorVisitor<Boolean, Void> {
         @Override
-        public Boolean visit(ScalarOperator scalarOperator, Object context) {
+        public Boolean visit(ScalarOperator scalarOperator, Void context) {
             // Aggregate must be CallOperator
-            CallOperator aggCall = (CallOperator) scalarOperator;
-            if (aggCall.isDistinct()) {
+            return isMatched(scalarOperator);
+        }
+
+        @Override
+        public Boolean visitCall(CallOperator callOperator, Void context) {
+            // Aggregate must be CallOperator
+            if (callOperator.isDistinct()) {
                 distinct = true;
+            }
+            return isMatched(callOperator);
+        }
+
+        boolean isMatched(ScalarOperator scalarOperator) {
+            // judge child first
+            boolean childMatched = true;
+            for (int i = 0; i < scalarOperator.getChildren().size(); i++) {
+                if (scalarOperator.getChild(i).isVariable()) {
+                    Boolean matched = scalarOperator.getChild(i).accept(this, null);
+                    if (!Boolean.TRUE.equals(matched)) {
+                        childMatched = false;
+                    }
+                }
             }
             if (mvAggregates.contains(scalarOperator)) {
                 return true;
             }
-            for (int i = 0; i < scalarOperator.getChildren().size(); i++) {
-                boolean matched = scalarOperator.getChild(i).accept(this, null);
-                if (matched) {
-                    return true;
-                }
-            }
-            return false;
+            return childMatched;
         }
     }
 }

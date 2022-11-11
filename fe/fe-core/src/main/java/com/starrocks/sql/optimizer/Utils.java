@@ -760,6 +760,9 @@ public class Utils {
         List<ScalarOperator> targetItems = Utils.extractDisjunctive(target);
         int srcLength = srcItems.size();
         int targetLength = targetItems.size();
+        if (!targetItems.containsAll(srcItems)) {
+            return null;
+        }
         targetItems.removeAll(srcItems);
         if (targetItems.isEmpty() && srcLength == targetLength) {
             // it is the same, so return true constant
@@ -828,13 +831,46 @@ public class Utils {
         return predicate.accept(checkVisitor, null);
     }
 
+    public static Map<ColumnRefOperator, ScalarOperator> getLineage(
+            OptExpression expression, ColumnRefFactory refFactory) {
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
+        if (expression.getOp().getProjection() != null) {
+            columnRefMap.putAll(expression.getOp().getProjection().getColumnRefMap());
+            // for LogicalAggregationOperator, should include aggregation
+            if (expression.getOp() instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
+                Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
+                        java.util.function.Function.identity(),
+                        java.util.function.Function.identity()));
+                columnRefMap.putAll(keyMap);
+                columnRefMap.putAll(agg.getAggregations());
+            }
+        } else {
+            if (expression.getOp() instanceof LogicalAggregationOperator) {
+                LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
+                Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(
+                        java.util.function.Function.identity(),
+                        java.util.function.Function.identity()));
+                columnRefMap.putAll(keyMap);
+                columnRefMap.putAll(agg.getAggregations());
+            } else {
+                ColumnRefSet refSet = expression.getOutputColumns();
+                for (int columnId : refSet.getColumnIds()) {
+                    ColumnRefOperator columnRef = refFactory.getColumnRef(columnId);
+                    columnRefMap.put(columnRef, columnRef);
+                }
+            }
+        }
+
+        return columnRefMap;
+    }
+
     public static Map<ColumnRefOperator, ScalarOperator> getColumnRefMap(
             OptExpression expression, ColumnRefFactory refFactory) {
-        Map<ColumnRefOperator, ScalarOperator> columnRefMap;
+        Map<ColumnRefOperator, ScalarOperator> columnRefMap = Maps.newHashMap();
         if (expression.getOp().getProjection() != null) {
-            columnRefMap = expression.getOp().getProjection().getColumnRefMap();
+            columnRefMap.putAll(expression.getOp().getProjection().getColumnRefMap());
         } else {
-            columnRefMap = Maps.newHashMap();
             if (expression.getOp() instanceof LogicalAggregationOperator) {
                 LogicalAggregationOperator agg = (LogicalAggregationOperator) expression.getOp();
                 Map<ColumnRefOperator, ScalarOperator> keyMap = agg.getGroupingKeys().stream().collect(Collectors.toMap(

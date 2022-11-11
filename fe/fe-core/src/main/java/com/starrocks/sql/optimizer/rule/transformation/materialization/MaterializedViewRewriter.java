@@ -32,6 +32,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.BaseScalarOperatorShuttle;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
+import org.apache.commons.collections4.iterators.PermutationIterator;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -576,15 +577,16 @@ public class MaterializedViewRewriter {
                 }
             } else {
                 ImmutableList.Builder<BiMap<Integer, Integer>> newResult = ImmutableList.builder();
-                for (Integer src : queryEntry.getValue()) {
-                    for (Integer target : mvTableToRelationId.get(queryEntry.getKey())) {
-                        for (BiMap<Integer, Integer> m : result) {
-                            if (!m.containsValue(target)) {
-                                final BiMap<Integer, Integer> newM = HashBiMap.create(m);
-                                newM.put(src, target);
-                                newResult.add(newM);
-                            }
+                PermutationIterator<Integer> permutationIterator = new PermutationIterator<>(mvTableToRelationId.get(queryEntry.getKey()));
+                List<Integer> queryList = queryEntry.getValue().stream().collect(Collectors.toList());
+                while (permutationIterator.hasNext()) {
+                    List<Integer> permutation = permutationIterator.next();
+                    for (BiMap<Integer, Integer> m : result) {
+                        final BiMap<Integer, Integer> newM = HashBiMap.create(m);
+                        for (int i = 0; i < queryList.size(); i++) {
+                            newM.put(queryList.get(i), permutation.get(i));
                         }
+                        newResult.add(newM);
                     }
                 }
                 result = newResult.build();

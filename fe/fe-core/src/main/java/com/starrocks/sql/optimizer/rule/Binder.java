@@ -77,7 +77,11 @@ public class Binder {
      * Pattern tree match groupExpression tree
      */
     private OptExpression match(Pattern pattern, GroupExpression groupExpression) {
-        if (!pattern.matchWithoutChild(groupExpression)) {
+        return match(pattern, groupExpression, 0);
+    }
+
+    private OptExpression match(Pattern pattern, GroupExpression groupExpression, int level) {
+        if (!pattern.matchWithoutChild(groupExpression, level)) {
             return null;
         }
 
@@ -97,7 +101,7 @@ public class Binder {
             } else {
                 childPattern = pattern.childAt(patternIndex);
             }
-            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group));
+            OptExpression opt = match(childPattern, extractGroupExpression(childPattern, group), level + 1);
 
             if (opt == null) {
                 return null;

@@ -39,7 +39,7 @@ public class LineageFactory {
             if (!(optExpression.getOp() instanceof LogicalOperator)) {
                 return null;
             }
-            Map<ColumnRefOperator, ScalarOperator> projection = Utils.getColumnRefMap(optExpression, refFactory);
+            Map<ColumnRefOperator, ScalarOperator> projection = Utils.getLineage(optExpression, refFactory);
             lineage.putAll(projection);
             for (OptExpression input : optExpression.getInputs()) {
                 input.getOp().accept(this, input, context);

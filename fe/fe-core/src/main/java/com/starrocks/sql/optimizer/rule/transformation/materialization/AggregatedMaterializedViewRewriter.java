@@ -97,7 +97,32 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
 
         // check aggregates of query
         // normalize mv's aggs by using query's table ref and query ec
+        Map<ColumnRefOperator, ScalarOperator> mvProjection =
+                Utils.getColumnRefMap(rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
+
         List<ScalarOperator> swappedMvAggs = Lists.newArrayList();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : mvProjection.entrySet()) {
+            if (mvAgg.getGroupingKeys().contains(entry.getKey())) {
+                continue;
+            }
+            // here must be aggreate values
+            ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(entry.getValue().clone());
+            ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
+            swappedMvAggs.add(swapped);
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> queryProjection =
+                Utils.getColumnRefMap(rewriteContext.getQueryExpression(), rewriteContext.getQueryRefFactory());
+        Map<ColumnRefOperator, ScalarOperator> queryAggs = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : queryProjection.entrySet()) {
+            if (queryAgg.getGroupingKeys().contains(entry.getKey())) {
+                continue;
+            }
+            ScalarOperator rewritten = rewriteContext.getQueryColumnRefRewriter().rewrite(entry.getValue().clone());
+            ScalarOperator swapped = columnRewriter.rewriteByQueryEc(rewritten);
+            queryAggs.put(entry.getKey(), swapped);
+        }
+        /*
         for (Map.Entry<ColumnRefOperator, CallOperator> aggEntry : mvAgg.getAggregations().entrySet()) {
             ScalarOperator rewritten = rewriteContext.getMvColumnRefRewriter().rewrite(aggEntry.getValue().clone());
             ScalarOperator swapped = columnRewriter.rewriteViewToQueryWithQueryEc(rewritten);
@@ -111,13 +136,14 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             queryAggs.put(aggEntry.getKey(), swapped);
         }
 
+         */
+
         AggregateChecker aggregateChecker = new AggregateChecker(swappedMvAggs);
         boolean aggMatched = aggregateChecker.check(queryAggs.values().stream().collect(Collectors.toList()));
         if (!aggMatched) {
             return null;
         }
-        Map<ColumnRefOperator, ScalarOperator> mvProjection =
-                Utils.getColumnRefMap(rewriteContext.getMvExpression(), rewriteContext.getMvRefFactory());
+
         // normalize view projection by query relation and ec
         Multimap<ScalarOperator, ColumnRefOperator> normalizedViewMap =
                 normalizeAndReverseProjection(mvProjection, rewriteContext, false);

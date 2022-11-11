@@ -54,7 +54,7 @@ public class MvRewriteOptimizationTest {
                 "properties (\n" +
                 "\"replication_num\" = \"1\"\n" +
                 ");")
-                .withTable("create table dept (\n" +
+                .withTable("create table depts (\n" +
                         "    deptno int not null,\n" +
                         "    name varchar(25) not null\n" +
                         ")\n" +
@@ -78,12 +78,48 @@ public class MvRewriteOptimizationTest {
                         "properties (\n" +
                         "\"replication_num\" = \"1\"\n" +
                         ");");
+        starRocksAssert.withTable("CREATE TABLE `test_all_type` (\n" +
+                "  `t1a` varchar(20) NULL COMMENT \"\",\n" +
+                "  `t1b` smallint(6) NULL COMMENT \"\",\n" +
+                "  `t1c` int(11) NULL COMMENT \"\",\n" +
+                "  `t1d` bigint(20) NULL COMMENT \"\",\n" +
+                "  `t1e` float NULL COMMENT \"\",\n" +
+                "  `t1f` double NULL COMMENT \"\",\n" +
+                "  `t1g` bigint(20) NULL COMMENT \"\",\n" +
+                "  `id_datetime` datetime NULL COMMENT \"\",\n" +
+                "  `id_date` date NULL COMMENT \"\", \n" +
+                "  `id_decimal` decimal(10,2) NULL COMMENT \"\" \n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`t1a`)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(`t1a`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+        starRocksAssert.withTable("CREATE TABLE `t0` (\n" +
+                "  `v1` bigint NULL COMMENT \"\",\n" +
+                "  `v2` bigint NULL COMMENT \"\",\n" +
+                "  `v3` bigint NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"storage_format\" = \"DEFAULT\"\n" +
+                ");");
+
         cluster.runSql("test", "insert into emps values(1, 1, \"emp_name1\", 100);");
         cluster.runSql("test", "insert into emps values(2, 1, \"emp_name1\", 120);");
         cluster.runSql("test", "insert into emps values(3, 1, \"emp_name1\", 150);");
-        cluster.runSql("test", "insert into dept values(1, \"dept_name1\")");
+        cluster.runSql("test", "insert into depts values(1, \"dept_name1\")");
         cluster.runSql("test", "insert into dependents values(1, \"dependent_name1\")");
         cluster.runSql("test", "insert into locations values(1, \"location1\")");
+        cluster.runSql("test", "insert into t0 values(1, 2, 3)");
+        cluster.runSql("test", "insert into test_all_type values(" +
+                "\"value1\", 1, 2, 3, 4.0, 5.0, 6, \"2022-11-11 10:00:01\", \"2022-11-11\", 10.12)");
     }
 
     @AfterClass
@@ -322,6 +358,375 @@ public class MvRewriteOptimizationTest {
         PlanTestBase.assertContains(plan, "mv_2");
         dropMv("test", "mv_1");
         dropMv("test", "mv_2");
+    }
+
+    @Test
+    public void testJoinMvRewrite() throws Exception {
+        createAndRefreshMv("test", "join_mv_1", "create materialized view join_mv_1" +
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT t0.v1 as v1, test_all_type.t1d, test_all_type.t1c" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100");
+
+        String query_1_1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
+        String plan_1_1 = getFragmentPlan(query_1_1);
+        PlanTestBase.assertContains(plan_1_1, "join_mv_1");
+
+        // t1e is not the output of mv
+        String query_1_2 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c, test_all_type.t1e" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100";
+        String plan_1_2 = getFragmentPlan(query_1_2);
+        PlanTestBase.assertNotContains(plan_1_2, "join_mv_1");
+
+        String query_1_3 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 = 99";
+        String plan_1_3 = getFragmentPlan(query_1_3);
+        PlanTestBase.assertContains(plan_1_3, "2:Project\n" +
+                "  |  <slot 6> : 17: t1c\n" +
+                "  |  <slot 14> : 15: v1 + 1 * 2\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: 15: v1 = 99\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: join_mv_1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: join_mv_1");
+
+        connectContext.getSessionVariable().setEnableMaterializedViewUnionRewrite(false);
+        String query_1_4 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 101";
+        String plan_1_4 = getFragmentPlan(query_1_4);
+        PlanTestBase.assertNotContains(plan_1_4, "join_mv_1");
+
+        String query_1_5 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 < 100 and t0.v1 > 10";
+        String plan_1_5 = getFragmentPlan(query_1_5);
+        PlanTestBase.assertContains(plan_1_5, "join_mv_1");
+
+        String query_1_6 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d";
+        String plan_1_6 = getFragmentPlan(query_1_6);
+        PlanTestBase.assertNotContains(plan_1_6, "join_mv_1");
+
+        dropMv("test", "join_mv_1");
+
+        createAndRefreshMv("test", "join_mv_2", "create materialized view join_mv_2" +
+                " distributed by hash(v1)" +
+                " as " +
+                " SELECT t0.v1 as v1, test_all_type.t1c" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 <= 100");
+
+        // test on equivalence classes for output and predicates
+        String query_2_1 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d < 100";
+        String plan_2_1 = getFragmentPlan(query_2_1);
+        PlanTestBase.assertContains(plan_2_1, "join_mv_2");
+
+        String query_2_2 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d < 10";
+        String plan_2_2 = getFragmentPlan(query_2_2);
+        PlanTestBase.assertContains(plan_2_2, "2:Project\n" +
+                "  |  <slot 6> : 16: t1c\n" +
+                "  |  <slot 14> : 15: v1 + 1 * 2\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: 15: v1 <= 9\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: join_mv_2\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     partitions=1/1\n" +
+                "     rollup: join_mv_2");
+        String query_2_3 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where test_all_type.t1d = 100";
+        String plan_2_3 = getFragmentPlan(query_2_3);
+        PlanTestBase.assertContains(plan_2_3, "join_mv_2");
+
+        String query_2_4 = "SELECT (test_all_type.t1d + 1) * 2, test_all_type.t1c" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d where t0.v1 between 1 and 10";
+        String plan_2_4 = getFragmentPlan(query_2_4);
+        PlanTestBase.assertContains(plan_2_4, "join_mv_2");
+
+        dropMv("test", "join_mv_2");
+
+        createAndRefreshMv("test", "join_mv_3", "create materialized view join_mv_3" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps.empid, depts.deptno, depts.name from emps join depts using (deptno)");
+        String query_3_1 = "select empid, depts.deptno from emps join depts using (deptno) where empid = 1";
+        String plan_3_1 = getFragmentPlan(query_3_1);
+        PlanTestBase.assertContains(plan_3_1, "join_mv_3");
+
+        // output on equivalence classes
+        String query_3_2 = "select empid, emps.deptno from emps join depts using (deptno) where empid = 1";
+        String plan_3_2 = getFragmentPlan(query_3_2);
+        PlanTestBase.assertContains(plan_3_2, "join_mv_3");
+
+        String query_3_3 = "select empid, emps.deptno from emps join depts using (deptno) where empid > 1";
+        String plan_3_3 = getFragmentPlan(query_3_3);
+        PlanTestBase.assertContains(plan_3_3, "join_mv_3");
+
+        String query_3_4 = "select empid, emps.deptno from emps join depts using (deptno) where empid < 1";
+        String plan_3_4 = getFragmentPlan(query_3_4);
+        PlanTestBase.assertContains(plan_3_4, "join_mv_3");
+
+        // query delta(query has three tables and view has two tabels) is supported
+        // depts.name should be in the output of mv
+        String query_3_5 = "select emps.empid, emps.deptno from emps join depts using (deptno)" +
+                " join dependents on (depts.name = dependents.name)";
+        String plan_3_5 = getFragmentPlan(query_3_5);
+        PlanTestBase.assertContains(plan_3_5, "join_mv_3");
+
+        // query delta depends on join reorder
+        String query_3_6 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
+                " join emps on (emps.deptno = depts.deptno)";
+        String plan_3_6 = getFragmentPlan(query_3_6);
+        PlanTestBase.assertContains(plan_3_6, "join_mv_3");
+
+        // more tables
+        String query_3_7 = "select dependents.empid from depts join dependents on (depts.name = dependents.name)" +
+                " join locations on (locations.name = dependents.name) join emps on (emps.deptno = depts.deptno)";
+        String plan_3_7 = getFragmentPlan(query_3_7);
+        PlanTestBase.assertContains(plan_3_7, "join_mv_3");
+
+        dropMv("test", "join_mv_3");
+
+        createAndRefreshMv("test", "join_mv_4", "create materialized view join_mv_4" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps.empid, emps.name as name1, emps.deptno, depts.name as name2 from emps join depts using (deptno)" +
+                " where (depts.name is not null and emps.name ='a')" +
+                " or (depts.name is not null and emps.name = 'b')" +
+                " or (depts.name is not null and emps.name = 'c')");
+
+        // TODO: support in predicate rewrite
+        String query_4_1 = "select depts.deptno, depts.name from emps join depts using (deptno)" +
+                " where (depts.name is not null and emps.name = 'a')" +
+                " or (depts.name is not null and emps.name = 'b')";
+        String plan_4_1 = getFragmentPlan(query_4_1);
+        PlanTestBase.assertNotContains(plan_4_1, "join_mv_4");
+        dropMv("test", "join_mv_4");
+
+        createAndRefreshMv("test", "join_mv_5", "create materialized view join_mv_5" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps.empid, emps.name as name1, emps.deptno, depts.name as name2 from emps join depts using (deptno)" +
+                " where emps.name = 'a'");
+
+        createAndRefreshMv("test", "join_mv_6", "create materialized view join_mv_6" +
+                        " distributed by hash(empid)" +
+                        " as " +
+                        " select empid, deptno, name2 from join_mv_5 where name2 like \"%abc%\"");
+
+        String query_4_2 = "select emps.deptno, depts.name from emps join depts using (deptno)" +
+                " where emps.name = 'a' and depts.name like \"%abc%\"";
+        String plan_4_2 = getFragmentPlan(query_4_2);
+        // the nested rewrite succeed, but the result depends on cost
+        PlanTestBase.assertContains(plan_4_2, "join_mv_");
+
+        dropMv("test", "join_mv_5");
+        dropMv("test", "join_mv_6");
+
+        createAndRefreshMv("test", "join_mv_7", "create materialized view join_mv_7" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps.empid from emps join depts using (deptno)");
+
+        // TODO: rewrite on subquery
+        String query_4_3 = "select emps.empid from emps where deptno in (select deptno from depts)";
+        String plan_4_3 = getFragmentPlan(query_4_3);
+        PlanTestBase.assertNotContains(plan_4_3, "join_mv_7");
+        dropMv("test", "join_mv_7");
+
+        // multi relations test
+        createAndRefreshMv("test", "join_mv_8", "create materialized view join_mv_8" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps1.empid, emps2.name from emps emps1 join emps emps2 on (emps1.empid = emps2.empid)");
+        String query_5_1 = "select emps1.name, emps2.empid from emps emps1 join emps emps2 on (emps1.empid = emps2.empid)";
+        String plan_5_1 = getFragmentPlan(query_5_1);
+        PlanTestBase.assertContains(plan_5_1, "join_mv_8");
+        dropMv("test", "join_mv_8");
+
+        createAndRefreshMv("test", "join_mv_9", "create materialized view join_mv_9" +
+                " distributed by hash(empid)" +
+                " as" +
+                " select emps1.empid, emps2.name as name1, depts.name as name2 from emps emps1 join depts using (deptno)" +
+                " join emps emps2 on (emps1.empid = emps2.empid)");
+        String query_5_2 = "select emps2.empid, emps1.name as name1, depts.name as name2 from emps emps2 join depts using (deptno)" +
+                " join emps emps1 on (emps1.empid = emps2.empid)";
+        String plan_5_2 = getFragmentPlan(query_5_2);
+        PlanTestBase.assertContains(plan_5_2, "join_mv_9");
+        dropMv("test", "join_mv_9");
+
+    }
+
+    @Test
+    public void testAggregateMvRewrite() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000000);
+        createAndRefreshMv("test", "agg_join_mv_1", "create materialized view agg_join_mv_1" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                " test_all_type.t1d, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1d");
+
+        String query_1_1 = "SELECT t0.v1 as v1, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 = 1" +
+                " group by v1, test_all_type.t1d";
+        String plan_1_1 = getFragmentPlan(query_1_1);
+        PlanTestBase.assertContains(plan_1_1, "2:Project\n" +
+                "  |  <slot 1> : 16: v1\n" +
+                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 14> : 18: total_sum\n" +
+                "  |  <slot 15> : 19: total_num\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: 16: v1 = 1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: agg_join_mv_1");
+
+        String query_1_2 = "SELECT t0.v1 as v1, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1d";
+        String plan_1_2 = getFragmentPlan(query_1_2);
+        PlanTestBase.assertContains(plan_1_2, "1:Project\n" +
+                "  |  <slot 1> : 16: v1\n" +
+                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 14> : 18: total_sum\n" +
+                "  |  <slot 15> : 19: total_num\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: agg_join_mv_1");
+
+        String query_1_3 = "SELECT t0.v1 as v1, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 99" +
+                " group by v1, test_all_type.t1d";
+        String plan_1_3 = getFragmentPlan(query_1_3);
+        PlanTestBase.assertContains(plan_1_3, "2:Project\n" +
+                "  |  <slot 1> : 16: v1\n" +
+                "  |  <slot 7> : 16: v1\n" +
+                "  |  <slot 14> : 18: total_sum\n" +
+                "  |  <slot 15> : 19: total_num\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: 16: v1 <= 98\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: agg_join_mv_1");
+
+        String query_1_4 = "SELECT t0.v1 as v1, " +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 99" +
+                " group by v1";
+        String plan_1_4 = getFragmentPlan(query_1_4);
+        PlanTestBase.assertContains(plan_1_4, "2:Project\n" +
+                "  |  <slot 1> : 16: v1\n" +
+                "  |  <slot 14> : 18: total_sum\n" +
+                "  |  <slot 15> : 19: total_num\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: 16: v1 <= 98\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: agg_join_mv_1");
+
+        // test group key not equal
+        String query_1_5 = "SELECT t0.v1 + 1 as alias, test_all_type.t1d," +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by alias, test_all_type.t1d";
+        String plan_1_5 = getFragmentPlan(query_1_5);
+        PlanTestBase.assertNotContains(plan_1_5, "agg_join_mv_1");
+
+        dropMv("test", "agg_join_mv_1");
+
+        createAndRefreshMv("test", "agg_join_mv_2", "create materialized view agg_join_mv_2" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                " test_all_type.t1b, sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1b");
+        String query_2_1 = "SELECT t0.v1 as v1, " +
+                " sum(test_all_type.t1c) as total_sum, count(test_all_type.t1c) as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 99" +
+                " group by v1";
+        // rollup test
+        String plan_2_1 = getFragmentPlan(query_2_1);
+        PlanTestBase.assertContains(plan_2_1, "2:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(18: total_sum), sum(19: total_num)\n" +
+                "  |  group by: 16: v1\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: 16: v1 <= 98\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: agg_join_mv_2");
+        dropMv("test", "agg_join_mv_2");
+
+        createAndRefreshMv("test", "agg_join_mv_3", "create materialized view agg_join_mv_3" +
+                " distributed by hash(v1) as SELECT t0.v1 as v1," +
+                " test_all_type.t1b, sum(test_all_type.t1c) * 2 as total_sum, count(distinct test_all_type.t1c) + 1 as total_num" +
+                " from t0 join test_all_type on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 100" +
+                " group by v1, test_all_type.t1b");
+
+        // rollup with distinct
+        String query_3_1 = "SELECT t0.v1 as v1, " +
+                " (sum(test_all_type.t1c)  * 2) + (count(distinct test_all_type.t1c) + 1) as total_sum, (count(distinct test_all_type.t1c) + 1) * 2 as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 99" +
+                " group by v1";
+        String plan_3_1 = getFragmentPlan(query_3_1);
+        PlanTestBase.assertNotContains(plan_3_1, "agg_join_mv_3");
+
+
+        // distinct rewrite without rollup
+        String query_3_2 = "SELECT t0.v1, test_all_type.t1b," +
+                " (sum(test_all_type.t1c) * 2) + 1 as total_sum, (count(distinct test_all_type.t1c) + 1) * 2 as total_num" +
+                " from t0 join test_all_type" +
+                " on t0.v1 = test_all_type.t1d" +
+                " where t0.v1 < 99" +
+                " group by v1, test_all_type.t1b";
+        String plan_3_2 = getFragmentPlan(query_3_2);
+        PlanTestBase.assertContains(plan_3_2, "agg_join_mv_3");
+
+        dropMv("test", "agg_join_mv_3");
+
+    }
+
+    @Test
+    public void testUnionRewrite() throws Exception {
+
+    }
+
+    @Test
+    public void testPartitialPartitionRewrite() {
+
     }
 
     public String getFragmentPlan(String sql) throws Exception {
