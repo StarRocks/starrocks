@@ -1,16 +1,13 @@
 // This file is licensed under the Elastic License 2.0. Copyright 2021-present, StarRocks Limited.
 package com.starrocks.sql.ast;
 
-import com.google.common.collect.Lists;
 import com.starrocks.analysis.DdlStmt;
 import com.starrocks.common.util.PrintableMap;
 
-import java.util.List;
 import java.util.Map;
 
 public class CreateCatalogStmt extends DdlStmt {
     public static final String TYPE = "type";
-    public static final List<String> supportedCatalog = Lists.newArrayList("hive");
 
     private final String catalogName;
     private final String comment;
