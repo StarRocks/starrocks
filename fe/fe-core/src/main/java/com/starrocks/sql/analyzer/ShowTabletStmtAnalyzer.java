@@ -10,11 +10,15 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.proc.LakeTabletsProcNode;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.ShowTabletStmt;
@@ -81,8 +85,22 @@ public class ShowTabletStmtAnalyzer {
                     }
                     SlotRef slotRef = (SlotRef) orderByElement.getExpr();
                     int index = 0;
+                    Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
+                    String tableName = statement.getTableName();
+                    Table table = null;
+                    db.readLock();
                     try {
-                        index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
+                        table = db.getTable(tableName);
+                    } finally {
+                        db.readUnlock();
+                    }
+
+                    try {
+                        if (table.isLakeTable()) {
+                            index = LakeTabletsProcNode.analyzeColumn(slotRef.getColumnName());
+                        } else {
+                            index = LocalTabletsProcDir.analyzeColumn(slotRef.getColumnName());
+                        }
                     } catch (AnalysisException e) {
                         throw new SemanticException(e.getMessage());
                     }
