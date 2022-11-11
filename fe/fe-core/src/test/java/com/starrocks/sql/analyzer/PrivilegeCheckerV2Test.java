@@ -113,7 +113,7 @@ public class PrivilegeCheckerV2Test {
 
         try {
             ctxToTestUser();
-            // user 'test' not has GRANT/NOD privilege
+            // user 'test' not has GRANT/NODE privilege
             PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
             Assert.fail();
         } catch (SemanticException e) {
@@ -519,10 +519,18 @@ public class PrivilegeCheckerV2Test {
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
 
+        verifyNODEAndGRANT(
+                "show backends",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
         verifyGrantRevoke(
                 "show frontends",
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show frontends",
                 "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
 
         verifyGrantRevoke(
@@ -530,10 +538,25 @@ public class PrivilegeCheckerV2Test {
                 "grant OPERATE on system to test",
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show broker",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyGrantRevoke(
+                "show compute nodes",
+                "grant OPERATE on system to test",
+                "revoke OPERATE on system from test",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
+        verifyNODEAndGRANT(
+                "show compute nodes",
+                "Access denied; you need (at least one of) the OPERATE/NODE privilege(s) for this operation");
+
     }
 
     @Test
-    public void testShowTransactionAndTabletStmt() throws Exception {
+    public void testShowTabletStmt() throws Exception {
 
         verifyGrantRevoke(
                 "show tablet from example_db.example_table",
@@ -541,6 +564,16 @@ public class PrivilegeCheckerV2Test {
                 "revoke OPERATE on system from test",
                 "Access denied; you need (at least one of) the OPERATE privilege(s) for this operation");
     }
+
+    @Test
+    public void testShowTransactionStmt() throws Exception {
+
+        ctxToTestUser();
+        ConnectContext ctx = starRocksAssert.getCtx();
+        StatementBase statement = UtFrameUtils.parseStmtWithNewParser("SHOW TRANSACTION FROM db WHERE ID=4005;", ctx);
+        PrivilegeCheckerV2.check(statement, starRocksAssert.getCtx());
+    }
+
 
     @Test
     public void testAdminOperateStmt() throws Exception {
@@ -618,7 +651,7 @@ public class PrivilegeCheckerV2Test {
 
     @Test
     public void testKillStmt() throws Exception {
-        // ShowProcStmt
+        // KillStmt
         verifyGrantRevoke(
                 "kill query 1",
                 "grant OPERATE on system to test",

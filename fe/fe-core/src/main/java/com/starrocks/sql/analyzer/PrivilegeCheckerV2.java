@@ -150,6 +150,18 @@ public class PrivilegeCheckerV2 {
         }
     }
 
+    static void checkStmtOperatePrivilege(ConnectContext context) {
+        if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
+        }
+    }
+
+    static void checkStmtNodePrivilege(ConnectContext context) {
+        if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "NODE");
+        }
+    }
+
     /**
      * check privilege by AST tree
      */
@@ -587,70 +599,83 @@ public class PrivilegeCheckerV2 {
         // ---------------------------------------- Show tablet Statement -------------------------------------------------
         @Override
         public Void visitShowTabletStatement(ShowTabletStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         // ---------------------------------------- Admin operate Statement -------------------------------------------------
 
         @Override
         public Void visitAdminSetConfigStatement(AdminSetConfigStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminSetReplicaStatusStatement(AdminSetReplicaStatusStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminShowConfigStatement(AdminShowConfigStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminShowReplicaDistributionStatement(AdminShowReplicaDistributionStmt statement,
                                                                 ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminShowReplicaStatusStatement(AdminShowReplicaStatusStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminRepairTableStatement(AdminRepairTableStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminCancelRepairTableStatement(AdminCancelRepairTableStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAdminCheckTabletsStatement(AdminCheckTabletsStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitKillStatement(KillStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitAlterSystemStatement(AlterSystemStmt statement, ConnectContext context) {
-            return checkStmtNodePrivilege(context);
+            checkStmtNodePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitCancelAlterSystemStatement(CancelAlterSystemStmt statement, ConnectContext context) {
-            return checkStmtNodePrivilege(context);
+            checkStmtNodePrivilege(context);
+            return null;
         }
 
         @Override
         public Void visitShowProcStmt(ShowProcStmt statement, ConnectContext context) {
-            return checkStmtOperatePrivilege(context);
+            checkStmtOperatePrivilege(context);
+            return null;
         }
 
         @Override
@@ -675,21 +700,6 @@ public class PrivilegeCheckerV2 {
                     checkStmtOperatePrivilege(context);
                 }
             });
-            return null;
-        }
-
-        // ---------------------------------------- Common Privilege logic -------------------------------------------------
-        private Void checkStmtOperatePrivilege(ConnectContext context) {
-            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "OPERATE");
-            }
-            return null;
-        }
-
-        private Void checkStmtNodePrivilege(ConnectContext context) {
-            if (!PrivilegeManager.checkSystemAction(context, PrivilegeType.SystemAction.OPERATE)) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_SPECIFIC_ACCESS_DENIED_ERROR, "NODE");
-            }
             return null;
         }
     }
