@@ -1,0 +1,26 @@
+name: project
+
+on:
+  pull_request_target:
+    branches:
+      - main
+    types:
+      - opened
+      - edited
+
+jobs:
+  autolabel:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions-ecosystem/action-add-labels@v1
+        if: >
+          startsWith(github.event.pull_request.title, '[BugFix]') &&
+          !contains(github.event.pull_request.title, 'cherry-pick') &&
+          !contains(github.event.pull_request.title, 'backport')
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels: |
+            2.5
+            2.4
+            2.3
+            2.2
