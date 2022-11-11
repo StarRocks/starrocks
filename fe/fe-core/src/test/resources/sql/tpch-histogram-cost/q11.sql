@@ -64,7 +64,7 @@ OutPut Exchange Id: 30
 |  * sum-->[1.0, 3.204037490987743E8, 0.0, 8.0, 99864.0] ESTIMATE
 |
 27:NESTLOOP JOIN
-|  join op: CROSS JOIN
+|  join op: INNER JOIN
 |  other join predicates: [21: sum, DOUBLE, true] > [43: expr, DOUBLE, true]
 |  build runtime filters:
 |  - filter_id = 4, build_expr = (43: expr), remote = false
