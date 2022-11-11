@@ -55,9 +55,6 @@ public class PruneHDFSScanColumnRule extends TransformationRule {
         if (!containsMaterializedColumn(scanOperator, scanColumns)) {
             List<ColumnRefOperator> preOutputColumns =
                     new ArrayList<>(scanOperator.getColRefToColumnMetaMap().keySet());
-            List<ColumnRefOperator> outputColumns = preOutputColumns.stream()
-                    .filter(column -> !column.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
-                    .collect(Collectors.toList());
 
             int smallestIndex = -1;
             int smallestColumnLength = Integer.MAX_VALUE;
