@@ -36,21 +36,21 @@ StarRocks 2.3 and later provide an internal catalog to manage the internal data 
 
 4. Query internal data. For more usages of the SELECT statement, see [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md).
 
-```SQL
-SELECT * FROM table_name;
-```
+      ```SQL
+      SELECT * FROM table_name;
+      ```
 
-If you do not specify the database in the preceding steps, you can specify it in a select query to directly query internal data.
+      If you do not specify the database in the preceding steps, you can directly specify it in a select query.
 
-```SQL
-SELECT * FROM db_name.table_name;
-```
+      ```SQL
+      SELECT * FROM db_name.table_name;
+      ```
 
-Or
+      Or
 
-```SQL
-SELECT * FROM default_catalog.db_name.table_name;
-```
+      ```SQL
+      SELECT * FROM default_catalog.db_name.table_name;
+      ```
 
 ## Examples
 

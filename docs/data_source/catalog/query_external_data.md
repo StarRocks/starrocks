@@ -36,7 +36,7 @@ This topic guides you through querying data from external data sources by using 
       SELECT * FROM table_name;
       ```
 
-      If you do not specify the external catalog and database in the preceding steps, you can specify them in a select query to directly query external data.
+      If you do not specify the external catalog and database in the preceding steps, you can directly specify them in a select query.
 
       ```SQL
       SELECT * FROM catalog_name.db_name.table_name;
