@@ -80,6 +80,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_DELIVERY_TIMEOUT = "query_delivery_timeout";
     public static final String MAX_EXECUTION_TIME = "max_execution_time";
     public static final String IS_REPORT_SUCCESS = "is_report_success";
+    public static final String ENABLE_PROFILE = "enable_profile";
     public static final String PROFILING = "profiling";
     public static final String SQL_MODE = "sql_mode";
     /**
@@ -297,7 +298,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String QUERY_CACHE_ENTRY_MAX_BYTES = "query_cache_entry_max_bytes";
     public static final String QUERY_CACHE_ENTRY_MAX_ROWS = "query_cache_entry_max_rows";
     public static final String TRANSMISSION_ENCODE_LEVEL = "transmission_encode_level";
+
     public static final String NESTED_MV_REWRITE_MAX_LEVEL = "nested_mv_rewrite_max_level";
+    public static final String ENABLE_MATERIALIZED_VIEW_REWRITE = "enable_materialized_view_rewrite";
+    public static final String ENABLE_MATERIALIZED_VIEW_UNION_REWRITE = "enable_materialized_view_union_rewrite";
+    public static final String ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE = "enable_rule_based_materialized_view_rewrite";
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -393,8 +398,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int queryDeliveryTimeoutS = 300;
 
     // if true, need report to coordinator when plan fragment execute successfully.
-    @VariableMgr.VarAttr(name = IS_REPORT_SUCCESS)
-    private boolean isReportSucc = false;
+    @VariableMgr.VarAttr(name = ENABLE_PROFILE, alias = IS_REPORT_SUCCESS)
+    private boolean enableProfile = false;
 
     // Default sqlMode is ONLY_FULL_GROUP_BY
     @VariableMgr.VarAttr(name = SQL_MODE_STORAGE_NAME, alias = SQL_MODE, show = SQL_MODE)
@@ -736,7 +741,16 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = NESTED_MV_REWRITE_MAX_LEVEL)
     private int nestedMvRewriteMaxLevel = 3;
-    
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableMaterializedViewRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_UNION_REWRITE)
+    private boolean enableMaterializedViewUnionRewrite = true;
+
+    @VarAttr(name = ENABLE_RULE_BASED_MATERIALIZED_VIEW_REWRITE)
+    private boolean enableRuleBasedMaterializedViewRewrite = true;
+
     public boolean getEnablePopulateBlockCache() {
         return enablePopulateBlockCache;
     }
@@ -821,12 +835,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return queryTimeoutS;
     }
 
-    public boolean isReportSucc() {
-        return isReportSucc;
+    public boolean isEnableProfile() {
+        return enableProfile;
     }
 
-    public void setReportSuccess(boolean isReportSuccess) {
-        this.isReportSucc = isReportSuccess;
+    public void setEnableProfile(boolean enableProfile) {
+        this.enableProfile = enableProfile;
     }
 
     public int getWaitTimeoutS() {
@@ -1373,12 +1387,36 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return nestedMvRewriteMaxLevel;
     }
 
+    public boolean isEnableMaterializedViewRewrite() {
+        return enableMaterializedViewRewrite;
+    }
+
+    public void setEnableMaterializedViewRewrite(boolean enableMaterializedViewRewrite) {
+        this.enableMaterializedViewRewrite = enableMaterializedViewRewrite;
+    }
+
+    public boolean isEnableMaterializedViewUnionRewrite() {
+        return enableMaterializedViewUnionRewrite;
+    }
+
+    public void setEnableMaterializedViewUnionRewrite(boolean enableMaterializedViewUnionRewrite) {
+        this.enableMaterializedViewUnionRewrite = enableMaterializedViewUnionRewrite;
+    }
+
     // 1 means the mvs directly based on base table
     public void setNestedMvRewriteMaxLevel(int nestedMvRewriteMaxLevel) {
         if (nestedMvRewriteMaxLevel <= 0) {
             nestedMvRewriteMaxLevel = 1;
         }
         this.nestedMvRewriteMaxLevel = nestedMvRewriteMaxLevel;
+    }
+
+    public boolean isEnableRuleBasedMaterializedViewRewrite() {
+        return enableRuleBasedMaterializedViewRewrite;
+    }
+
+    public void setEnableRuleBasedMaterializedViewRewrite(boolean enableRuleBasedMaterializedViewRewrite) {
+        this.enableRuleBasedMaterializedViewRewrite = enableRuleBasedMaterializedViewRewrite;
     }
 
     // Serialize to thrift object
@@ -1397,7 +1435,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         // Avoid integer overflow
         tResult.setQuery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryTimeoutS));
         tResult.setQuery_delivery_timeout(Math.min(Integer.MAX_VALUE / 1000, queryDeliveryTimeoutS));
-        tResult.setIs_report_success(isReportSucc);
+        tResult.setEnable_profile(enableProfile);
         tResult.setCodegen_level(0);
         tResult.setBatch_size(chunkSize);
         tResult.setDisable_stream_preaggregations(disableStreamPreaggregations);
@@ -1522,7 +1560,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
                 Text.readString(in);
                 sqlMode = 0L;
             }
-            isReportSucc = in.readBoolean();
+            enableProfile = in.readBoolean();
             queryTimeoutS = in.readInt();
             maxExecMemByte = in.readLong();
             if (GlobalStateMgr.getCurrentStateJournalVersion() >= FeMetaVersion.VERSION_37) {

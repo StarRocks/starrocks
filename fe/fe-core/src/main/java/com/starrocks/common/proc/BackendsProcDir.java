@@ -57,7 +57,7 @@ public class BackendsProcDir implements ProcDirInterface {
                 .add("Alive").add("SystemDecommissioned").add("ClusterDecommissioned").add("TabletNum")
                 .add("DataUsedCapacity").add("AvailCapacity").add("TotalCapacity").add("UsedPct")
                 .add("MaxDiskUsedPct").add("ErrMsg").add("Version").add("Status").add("DataTotalCapacity")
-                .add("DataUsedPct").add("CpuCores");
+                .add("DataUsedPct").add("CpuCores").add("NumRunningQueries").add("MemUsedPct").add("CpuUsedPct");
         if (Config.integrate_starmgr) {
             builder.add("StarletPort").add("WorkerId");
         }
@@ -175,6 +175,12 @@ public class BackendsProcDir implements ProcDirInterface {
 
             // Num CPU cores
             backendInfo.add(BackendCoreStat.getCoresOfBe(backendId));
+
+            backendInfo.add(backend.getNumRunningQueries());
+            double memUsedPct = backend.getMemUsedPct();
+            backendInfo.add(String.format("%.2f", memUsedPct * 100) + " %");
+            backendInfo.add(String.format("%.1f", backend.getCpuUsedPermille() / 10.0) + " %");
+
             if (Config.integrate_starmgr) {
                 backendInfo.add(String.valueOf(backend.getStarletPort()));
                 long workerId = GlobalStateMgr.getCurrentState().getStarOSAgent().getWorkerIdByBackendId(backendId);

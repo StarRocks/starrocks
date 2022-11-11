@@ -101,7 +101,7 @@ public class JoinTest extends PlanTestBase {
         plan = getFragmentPlan(sql);
         Assert.assertTrue(plan,
                 plan.contains("  3:NESTLOOP JOIN\n" +
-                        "  |  join op: INNER JOIN\n" +
+                        "  |  join op: CROSS JOIN\n" +
                         "  |  colocate: false, reason: \n" +
                         "  |  \n" +
                         "  |----2:EXCHANGE\n" +
@@ -730,7 +730,7 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from t0 as x0 join t1 as x1 on (1 = 2) is not null;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "3:NESTLOOP JOIN\n" +
-                "  |  join op: INNER JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n");
     }
 
@@ -803,7 +803,7 @@ public class JoinTest extends PlanTestBase {
         String sql = "select * from t0 cross join t1 on t0.v1 != t1.v4 and t0.v2 != t1.v5";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 != 4: v4, 2: v2 != 5: v5\n");
     }
@@ -1010,7 +1010,7 @@ public class JoinTest extends PlanTestBase {
         String plan = getFragmentPlan(sql);
         connectContext.getSessionVariable().setMaxTransformReorderJoins(4);
         assertContains(plan, "11:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 1: v1 + 10: v10 = 2");
     }

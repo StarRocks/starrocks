@@ -63,6 +63,7 @@ public:
         return ArraySlice<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SLICE_FN)
+    DEFINE_ARRAY_SLICE_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_SLICE_FN
 
 #define DEFINE_ARRAY_CONCAT_FN(NAME, PT)                                                     \
@@ -70,6 +71,7 @@ public:
         return ArrayConcat<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_CONCAT_FN)
+    DEFINE_ARRAY_CONCAT_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_CONCAT_FN
 
 #define DEFINE_ARRAY_OVERLAP_FN(NAME, PT)                                                     \
@@ -91,6 +93,7 @@ public:
         return ArraySort<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_SORT_FN)
+    DEFINE_ARRAY_SORT_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_SORT_FN
 
 #define DEFINE_ARRAY_REVERSE_FN(NAME, PT)                                                     \
@@ -98,6 +101,7 @@ public:
         return ArrayReverse<PT>::process(context, columns);                                   \
     }
     APPLY_COMMONE_TYPES_FOR_ARRAY(DEFINE_ARRAY_REVERSE_FN)
+    DEFINE_ARRAY_REVERSE_FN(json, PrimitiveType::TYPE_JSON)
 #undef DEFINE_ARRAY_REVERSE_FN
 
 #define DEFINE_ARRAY_JOIN_FN(NAME)                                                         \

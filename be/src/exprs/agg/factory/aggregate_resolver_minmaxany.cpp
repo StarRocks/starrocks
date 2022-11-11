@@ -78,6 +78,7 @@ void AggregateFuncResolver::register_minmaxany() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, MinMaxAnyDispatcher(), this);
     }
+    type_dispatch_all(TYPE_JSON, MinMaxAnyDispatcher(), this);
 }
 
 } // namespace starrocks::vectorized

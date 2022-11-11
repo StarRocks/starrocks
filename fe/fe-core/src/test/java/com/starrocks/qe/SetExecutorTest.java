@@ -19,10 +19,12 @@ package com.starrocks.qe;
 
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.AccessTestUtil;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.DateLiteral;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.FloatLiteral;
 import com.starrocks.analysis.IntLiteral;
+import com.starrocks.analysis.LargeIntLiteral;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.UserIdentity;
@@ -126,7 +128,7 @@ public class SetExecutorTest {
         Assert.assertEquals(9, ctx.sessionVariable.getQueryTimeoutS());
     }
 
-    public void tesrUserVariableImp(LiteralExpr value, Type type) throws Exception {
+    public void testUserVariableImp(LiteralExpr value, Type type) throws Exception {
         String sql = String.format("set @var = cast(%s as %s)", value.toSql(), type.toSql());
         SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         SetExecutor executor = new SetExecutor(ctx, stmt);
@@ -141,18 +143,48 @@ public class SetExecutorTest {
 
     @Test
     public void testUserDefineVariable() throws Exception {
-        tesrUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.TINYINT);
-        tesrUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.SMALLINT);
-        tesrUserVariableImp(new IntLiteral(1, Type.INT), Type.INT);
-        tesrUserVariableImp(new IntLiteral(1, Type.BIGINT), Type.BIGINT);
-        tesrUserVariableImp(new FloatLiteral(1D, Type.FLOAT), Type.FLOAT);
-        tesrUserVariableImp(new FloatLiteral(1D, Type.DOUBLE), Type.DOUBLE);
-        tesrUserVariableImp(new DateLiteral("2020-01-01", Type.DATE), Type.DATE);
-        tesrUserVariableImp(new DateLiteral("2020-01-01 00:00:00", Type.DATETIME), Type.DATETIME);
-        tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
-        tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
-        tesrUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
-        tesrUserVariableImp(new StringLiteral("xxx"), ScalarType.createVarcharType(10));
+        testUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.TINYINT);
+        testUserVariableImp(new IntLiteral(1, Type.TINYINT), Type.SMALLINT);
+        testUserVariableImp(new IntLiteral(1, Type.INT), Type.INT);
+        testUserVariableImp(new IntLiteral(1, Type.BIGINT), Type.BIGINT);
+        testUserVariableImp(new LargeIntLiteral("1"), Type.LARGEINT);
+        testUserVariableImp(new FloatLiteral(1D, Type.FLOAT), Type.FLOAT);
+        testUserVariableImp(new FloatLiteral(1D, Type.DOUBLE), Type.DOUBLE);
+        testUserVariableImp(new DateLiteral("2020-01-01", Type.DATE), Type.DATE);
+        testUserVariableImp(new DateLiteral("2020-01-01 00:00:00", Type.DATETIME), Type.DATETIME);
+        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL32_INT), Type.DECIMAL32_INT);
+        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL64_INT), Type.DECIMAL64_INT);
+        testUserVariableImp(new DecimalLiteral("1", Type.DECIMAL128_INT), Type.DECIMAL128_INT);
+        testUserVariableImp(new StringLiteral("xxx"), ScalarType.createVarcharType(10));
+    }
+
+    @Test
+    public void testUserDefineVariable2() throws Exception {
+        String sql = "set @var = cast(10 as decimal)";
+        SetStmt stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        SetExecutor executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        UserVariable userVariable = ctx.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isDecimalV3());
+        Assert.assertEquals("10", userVariable.getResolvedExpression().getStringValue());
+
+        sql = "set @var = cast(1 as boolean)";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariable = ctx.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
+        BoolLiteral literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertTrue(literal.getValue());
+
+        sql = "set @var = cast(0 as boolean)";
+        stmt = (SetStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        executor = new SetExecutor(ctx, stmt);
+        executor.execute();
+        userVariable = ctx.getUserVariables("var");
+        Assert.assertTrue(userVariable.getResolvedExpression().getType().isBoolean());
+        literal = (BoolLiteral) userVariable.getResolvedExpression();
+        Assert.assertFalse(literal.getValue());
     }
 
     @Test

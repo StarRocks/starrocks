@@ -144,7 +144,7 @@ public class ResourceGroupMgr implements Writable {
         Preconditions.checkArgument(ctx != null);
         String roleName = null;
         if (GlobalStateMgr.getCurrentState().isUsingNewPrivilege()) {
-            // TODO will support RBAC later
+            // TODO(yiming) will support RBAC later
             return null;
         }
         String qualifiedRoleName = GlobalStateMgr.getCurrentState().getAuth()

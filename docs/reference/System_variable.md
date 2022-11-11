@@ -44,7 +44,7 @@ Variables that can be set both globally or partially effective include:
 * disable_streaming_preaggregations
 * exec_mem_limit
 * force_streaming_aggregate
-* is_report_success
+* enable_profile
 * hash_join_push_down_right_table
 * parallel_fragment_exec_instance_num
 * parallel_exchange_instance_num
@@ -188,13 +188,13 @@ Used for MySQL client compatibility. No practical usage.
 
 Used for MySQL client compatibility. No practical usage.
 
-* is_report_success
+* enable_profile
 
 Used to set whether the profile of the query needs to be viewed. The default is false, meaning no profile is required.
 
 By default, a profile will only be sent to the FE when a query error occurs in the BEt. Profile sending causes network overhead and therefore affects high concurrency.
 
-When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `is_report_success` turned on.
+When there is a need to analyze the profile of a query, users can set this variable to true and send a query to deep dive. After the query is completed, the profile can be viewed on the web page of the currently connected FE (address: `fe_host:fe_http_port/query`). This page displays the profiles of the last 100 queries with `enable_profile` turned on.
 
 * language
 

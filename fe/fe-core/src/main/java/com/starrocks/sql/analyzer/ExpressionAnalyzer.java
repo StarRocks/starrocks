@@ -720,6 +720,12 @@ public class ExpressionAnalyzer {
                             fnName + " requires second parameter must be greater than 0");
                 }
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+            } else if (fnName.equals(FunctionSet.ARRAY_SLICE)) {
+                // Default type is TINYINT, it would match to a wrong function
+                for (int i = 1; i < argumentTypes.length; i++) {
+                    argumentTypes[i] = Type.BIGINT;
+                }
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_SUPERTYPE_OF);
             } else {
                 fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
             }

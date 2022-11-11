@@ -127,6 +127,9 @@ public enum RuleType {
     TF_PRUNE_CTE_PRODUCE,
     TF_COMPUTE_CTE_COSTS,
 
+    TF_MV_ONLY_SCAN_RULE,
+    TF_MV_FILTER_SCAN_RULE,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,

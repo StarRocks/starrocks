@@ -10,15 +10,14 @@
 #include "exprs/expr.h"
 #include "exprs/expr_context.h"
 #include "exprs/vectorized/runtime_filter_bank.h"
+#include "formats/orc/orc_mapping.h"
 #include "runtime/descriptors.h"
 #include "runtime/types.h"
 #include "util/buffered_stream.h"
 
-namespace orc {
-namespace proto {
+namespace orc::proto {
 class ColumnStatistics;
-}
-} // namespace orc
+} // namespace orc::proto
 
 namespace starrocks {
 class RandomAccessFile;
@@ -26,8 +25,8 @@ class RuntimeState;
 } // namespace starrocks
 namespace starrocks::vectorized {
 
-using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, int from, int size,
-                                    const TypeDescriptor& type_desc, void* ctx);
+using FillColumnFunction = void (*)(orc::ColumnVectorBatch* cvb, ColumnPtr& col, size_t from, size_t size,
+                                    const TypeDescriptor& type_desc, const OrcMappingPtr& mapping, void* ctx);
 
 // OrcChunkReader is a bridge between apache/orc and Column
 // It mainly does 4 things:
@@ -139,6 +138,7 @@ private:
     orc::RowReaderOptions _row_reader_options;
     const std::vector<SlotDescriptor*>& _src_slot_descriptors;
     std::unordered_map<SlotId, SlotDescriptor*> _slot_id_to_desc;
+    std::unique_ptr<OrcMapping> _root_selected_mapping;
     std::vector<TypeDescriptor> _src_types;
     // _src_slot index to position in orc
     std::vector<int> _position_in_orc;
@@ -149,7 +149,7 @@ private:
     Status _slot_to_orc_column_name(const SlotDescriptor* slot,
                                     const std::unordered_map<int, std::string>& column_id_to_orc_name,
                                     std::string* orc_column_name);
-    Status _init_include_columns();
+    Status _init_include_columns(const std::unique_ptr<OrcMapping>& mapping);
     Status _init_position_in_orc();
     Status _init_src_types();
     Status _init_cast_exprs();

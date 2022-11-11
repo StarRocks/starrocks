@@ -31,7 +31,6 @@
 #include "storage/tablet_reader.h"
 #include "storage/union_iterator.h"
 #include "storage/update_manager.h"
-#include "storage/wrapper_field.h"
 #include "testutil/assert.h"
 #include "util/defer_op.h"
 #include "util/path_util.h"
@@ -1450,16 +1449,6 @@ void TabletUpdatesTest::test_convert_from(bool enable_persistent_index) {
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-        } else {
-            column_mapping->default_value = WrapperField::create(new_column);
-
-            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
-
-            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
-                column_mapping->default_value->set_null();
-            } else {
-                column_mapping->default_value->from_string(new_column.default_value());
-            }
         }
     }
     ASSERT_TRUE(tablet_to_schema_change->updates()->convert_from(_tablet, 4, chunk_changer.get()).ok());
@@ -1494,16 +1483,6 @@ void TabletUpdatesTest::test_convert_from_with_pending(bool enable_persistent_in
         auto column_mapping = chunk_changer->get_mutable_column_mapping(i);
         if (column_index >= 0) {
             column_mapping->ref_column = column_index;
-        } else {
-            column_mapping->default_value = WrapperField::create(new_column);
-
-            ASSERT_FALSE(column_mapping->default_value == nullptr) << "init column mapping failed: malloc error";
-
-            if (new_column.is_nullable() && new_column.default_value().length() == 0) {
-                column_mapping->default_value->set_null();
-            } else {
-                column_mapping->default_value->from_string(new_column.default_value());
-            }
         }
     }
     ASSERT_TRUE(tablet_to_schema_change->rowset_commit(3, create_rowset(tablet_to_schema_change, keys3)).ok());

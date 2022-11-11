@@ -30,7 +30,7 @@ import java.io.DataOutput;
 import java.io.IOException;
 
 public class TablePrivEntry extends DbPrivEntry {
-    private static final String ANY_TBL = "*";
+    public static final String ANY_TBL = "*";
 
     private PatternMatcher tblPattern;
     private String origTbl;
