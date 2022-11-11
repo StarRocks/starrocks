@@ -224,12 +224,18 @@ void HiveDataSource::_init_counter(RuntimeState* state) {
     _profile.column_convert_timer = ADD_TIMER(_runtime_profile, "ColumnConvertTime");
 
     if (_use_block_cache) {
-        _profile.block_cache_read_counter = ADD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT);
-        _profile.block_cache_read_bytes = ADD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES);
-        _profile.block_cache_read_timer = ADD_TIMER(_runtime_profile, "BlockCacheReadTimer");
-        _profile.block_cache_write_counter = ADD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT);
-        _profile.block_cache_write_bytes = ADD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES);
-        _profile.block_cache_write_timer = ADD_TIMER(_runtime_profile, "BlockCacheWriteTimer");
+        static const char* prefix = "BlockCache";
+        ADD_COUNTER(_runtime_profile, prefix, TUnit::UNIT);
+        _profile.block_cache_read_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_read_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheReadBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_read_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheReadTimer", prefix);
+        _profile.block_cache_write_counter =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteCounter", TUnit::UNIT, prefix);
+        _profile.block_cache_write_bytes =
+                ADD_CHILD_COUNTER(_runtime_profile, "BlockCacheWriteBytes", TUnit::BYTES, prefix);
+        _profile.block_cache_write_timer = ADD_CHILD_TIMER(_runtime_profile, "BlockCacheWriteTimer", prefix);
     }
 
     if (hdfs_scan_node.__isset.table_name) {
