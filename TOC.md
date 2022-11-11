@@ -225,6 +225,7 @@
       + [current_timestamp](/sql-reference/sql-functions/date-time-functions/current_timestamp.md)
       + [curtime](/sql-reference/sql-functions/date-time-functions/curtime.md)
       + [now](/sql-reference/sql-functions/date-time-functions/now.md)
+      + [date](/sql-reference/sql-functions/date-time-functions/date.md)
       + [date_add](/sql-reference/sql-functions/date-time-functions/date_add.md)
       + [date_sub](/sql-reference/sql-functions/date-time-functions/date_sub.md)
       + [date_format](/sql-reference/sql-functions/date-time-functions/date_format.md)
