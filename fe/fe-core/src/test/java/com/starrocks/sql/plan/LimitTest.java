@@ -534,7 +534,7 @@ public class LimitTest extends PlanTestBase {
         String sql = "select * from t0 cross join t1 on t0.v2 != t1.v5 limit 10";
         String plan = getFragmentPlan(sql);
         Assert.assertTrue(plan, plan.contains("  3:NESTLOOP JOIN\n" +
-                "  |  join op: CROSS JOIN\n" +
+                "  |  join op: INNER JOIN\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  other join predicates: 2: v2 != 5: v5\n" +
                 "  |  limit: 10\n" +
