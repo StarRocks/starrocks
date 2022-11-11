@@ -30,28 +30,51 @@ import com.starrocks.thrift.TStructField;
 import com.starrocks.thrift.TTypeDesc;
 import com.starrocks.thrift.TTypeNode;
 import com.starrocks.thrift.TTypeNodeType;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 
 /**
  * Describes a STRUCT type. STRUCT types have a list of named struct fields.
  */
 public class StructType extends Type {
+
+    private static final Logger LOG = LogManager.getLogger(StructType.class);
+
     private final HashMap<String, StructField> fieldMap = Maps.newHashMap();
     private final ArrayList<StructField> fields;
 
-    public StructType(ArrayList<StructField> fields) {
-        Preconditions.checkNotNull(fields);
-        this.fields = fields;
-        for (int i = 0; i < this.fields.size(); ++i) {
-            this.fields.get(i).setPosition(i);
-            fieldMap.put(this.fields.get(i).getName().toLowerCase(), this.fields.get(i));
+    public StructType(ArrayList<StructField> structFields) {
+        Preconditions.checkNotNull(structFields);
+        Preconditions.checkArgument(structFields.size() > 0);
+        this.fields = new ArrayList<>();
+        for (StructField field : structFields) {
+            if (fieldMap.containsKey(field.getName())) {
+                LOG.warn(String.format("Contains the same struct subfield name: %s, ignore it", field.getName()));
+            } else {
+                field.setPosition(fields.size());
+                fields.add(field);
+                fieldMap.put(field.getName(), field);
+            }
         }
     }
 
-    public StructType() {
-        fields = Lists.newArrayList();
+    @Override
+    public String toString() {
+        // TODO(SmithCruise): Lazy here, any difference from toSql()?
+        return toSql();
+    }
+
+    @Override
+    public int getTypeSize() {
+        int size = 0;
+        for (StructField structField : fields) {
+            size += structField.getType().getTypeSize();
+        }
+        return size;
     }
 
     @Override
@@ -63,7 +86,7 @@ public class StructType extends Type {
         for (StructField f : fields) {
             fieldsSql.add(f.toSql(depth + 1));
         }
-        return String.format("STRUCT<%s>", Joiner.on(",").join(fieldsSql));
+        return String.format("STRUCT<%s>", Joiner.on(", ").join(fieldsSql));
     }
 
     @Override
@@ -77,18 +100,20 @@ public class StructType extends Type {
                 leftPadding, Joiner.on(",\n").join(fieldsSql), leftPadding);
     }
 
-    public void addField(StructField field) {
-        field.setPosition(fields.size());
-        fields.add(field);
-        fieldMap.put(field.getName().toLowerCase(), field);
-    }
-
     public ArrayList<StructField> getFields() {
         return fields;
     }
 
     public StructField getField(String fieldName) {
-        return fieldMap.get(fieldName.toLowerCase());
+        return fieldMap.get(fieldName);
+    }
+
+    public int getFieldPos(String fieldName) {
+        return fieldMap.get(fieldName).getPosition();
+    }
+
+    public StructField getField(int pos) {
+        return fields.get(pos);
     }
 
     public void clearFields() {
@@ -110,12 +135,26 @@ public class StructType extends Type {
         TTypeNode node = new TTypeNode();
         container.types.add(node);
         Preconditions.checkNotNull(fields);
+        Preconditions.checkState(!fields.isEmpty(), "StructType must contains at least one StructField.");
         Preconditions.checkNotNull(!fields.isEmpty());
         node.setType(TTypeNodeType.STRUCT);
         node.setStruct_fields(new ArrayList<TStructField>());
+        //TODO(SmithCruise) Select all subfields now, partial subfield select will be implemented in next PR.
+        Boolean[] selectedFields = new Boolean[fields.size()];
+        Arrays.fill(selectedFields, true);
+        node.setSelected_fields(Arrays.asList(selectedFields));
         for (StructField field : fields) {
             field.toThrift(container, node);
         }
+    }
+
+    @Override
+    public StructType clone() {
+        ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+        for (StructField field : fields) {
+            structFields.add(field.clone());
+        }
+        return new StructType(structFields);
     }
 }
 

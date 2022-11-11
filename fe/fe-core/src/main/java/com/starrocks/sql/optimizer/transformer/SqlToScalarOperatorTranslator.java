@@ -28,6 +28,7 @@ import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.VariableExpr;
@@ -72,6 +73,7 @@ import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubqueryOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 
@@ -253,7 +255,25 @@ public final class SqlToScalarOperatorTranslator {
                     resolvedField.getScope().getRelationId().equals(expressionMapping.getOuterScopeRelationId())) {
                 correlation.add(columnRefOperator);
             }
-            return columnRefOperator;
+
+            // If origin type is struct type, means that node contains subfield access
+            if (node.getTrueOriginType().isStructType()) {
+                Preconditions.checkArgument(node.getUsedStructFieldPos() != null, "StructType SlotRef must have" +
+                        "an non-empty usedStructFiledPos!");
+                Preconditions.checkArgument(node.getUsedStructFieldPos().size() > 0);
+                List<Integer> usedStructFieldPos = node.getUsedStructFieldPos();
+                return SubfieldOperator.build(columnRefOperator, node.getOriginType(), usedStructFieldPos);
+            } else {
+                return columnRefOperator;
+            }
+        }
+
+        @Override
+        public ScalarOperator visitSubfieldExpr(SubfieldExpr node, Context context) {
+            Preconditions.checkArgument(node.getChildren().size() == 1);
+
+            ScalarOperator child = visit(node.getChild(0), context);
+            return SubfieldOperator.build(child, node);
         }
 
         @Override

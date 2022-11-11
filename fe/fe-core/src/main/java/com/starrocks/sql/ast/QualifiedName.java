@@ -24,7 +24,8 @@ public class QualifiedName {
         return new QualifiedName(ImmutableList.copyOf(originalParts));
     }
 
-    private QualifiedName(List<String> originalParts) {
+    // Make sure QualifiedName is immutable.
+    private QualifiedName(ImmutableList<String> originalParts) {
         this.parts = originalParts;
     }
 

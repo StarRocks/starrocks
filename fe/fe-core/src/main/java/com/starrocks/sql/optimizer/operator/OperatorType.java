@@ -99,6 +99,7 @@ public enum OperatorType {
     CLONE,
     LAMBDA_FUNCTION,
     SUBQUERY,
+    SUB_FIELD,
 
     /**
      * PATTERN

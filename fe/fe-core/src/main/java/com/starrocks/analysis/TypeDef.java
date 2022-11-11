@@ -24,8 +24,12 @@ package com.starrocks.analysis;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
+
+import java.util.List;
 
 /**
  * Represents an anonymous type definition, e.g., used in DDL and CASTs.
@@ -83,6 +87,8 @@ public class TypeDef implements ParseNode {
             analyzeScalarType((ScalarType) type);
         } else if (type.isArrayType()) {
             analyzeArrayType((ArrayType) type);
+        } else if (type.isStructType()) {
+            analyzeStructType((StructType) type);
         } else {
             throw new AnalysisException("Unsupported data type: " + type.toSql());
         }
@@ -148,6 +154,13 @@ public class TypeDef implements ParseNode {
         analyze(baseType);
         if (baseType.isHllType() || baseType.isBitmapType() || baseType.isPseudoType() || baseType.isPercentile()) {
             throw new AnalysisException("Invalid data type: " + type.toSql());
+        }
+    }
+
+    private void analyzeStructType(StructType type) throws AnalysisException {
+        List<StructField> structFields = type.getFields();
+        for (StructField structField: structFields) {
+            analyze(structField.getType());
         }
     }
 

@@ -51,11 +51,30 @@ public class ViewDefBuilder {
                 }
                 res += ".";
             }
-            res += "`" + fieldName + "`";
+
+            fieldName = handleColumnName(fieldName);
+            columnName = handleColumnName(columnName);
+
+            res += fieldName;
             if (!fieldName.equalsIgnoreCase(columnName)) {
-                res += " AS `" + columnName + "`";
+                res += " AS " + columnName;
             }
             return res;
+        }
+
+        // Consider struct, like fieldName = a.b.c, columnName = a.b.c
+        private String handleColumnName(String name) {
+            String[] fields = name.split("\\.");
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < fields.length; i++) {
+                sb.append("`");
+                sb.append(fields[i]);
+                sb.append("`");
+                if (i < fields.length - 1) {
+                    sb.append(".");
+                }
+            }
+            return sb.toString();
         }
 
         @Override
