@@ -54,9 +54,6 @@ public class RuntimeProfile {
 
     private static final Logger LOG = LogManager.getLogger(RuntimeProfile.class);
     private static final String ROOT_COUNTER = "";
-    private static final Set<String> NON_MERGE_COUNTER_NAMES =
-            Sets.newHashSet("DegreeOfParallelism", "RuntimeBloomFilterNum", "RuntimeInFilterNum", "PushdownPredicates",
-                    "MemoryLimit");
     private static final String MERGED_INFO_PREFIX_MIN = "__MIN_OF_";
     private static final String MERGED_INFO_PREFIX_MAX = "__MAX_OF_";
 
@@ -248,6 +245,7 @@ public class RuntimeProfile {
                         Counter counter =
                                 addCounter(topName, tcounter.type, parentName);
                         counter.setValue(tcounter.value);
+                        counter.setSkipMerge(tcounter.skip_merge);
                         tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
                         if (pair.first.getType() != tcounter.type) {
@@ -275,6 +273,7 @@ public class RuntimeProfile {
                 if (pair == null) {
                     Counter counter = addCounter(tcounter.name, tcounter.type);
                     counter.setValue(tcounter.value);
+                    counter.setSkipMerge(tcounter.skip_merge);
                 } else {
                     if (pair.first.getType() != tcounter.type) {
                         LOG.error("Cannot update counters with the same name but different types"
@@ -567,10 +566,6 @@ public class RuntimeProfile {
                 List<String> currentNames = Lists.newArrayList(nameQueue);
                 nameQueue.clear();
                 for (String name : currentNames) {
-                    if (NON_MERGE_COUNTER_NAMES.contains(name)) {
-                        continue;
-                    }
-
                     Set<String> childNames = profile.childCounterMap.get(name);
                     if (childNames != null) {
                         for (String childName : childNames) {
@@ -584,6 +579,9 @@ public class RuntimeProfile {
                     Pair<Counter, String> pair = profile.counterMap.get(name);
                     Preconditions.checkNotNull(pair);
                     Counter counter = pair.first;
+                    if (counter.isSkipMerge()) {
+                        continue;
+                    }
                     String parentName = pair.second;
 
                     while (allLevelCounters.size() <= levelIdx) {
@@ -723,20 +721,10 @@ public class RuntimeProfile {
                 continue;
             }
 
-            if (Counter.isAverageType(minCounter.getType())) {
-                // For time metrics, remove MIN/MAX metrics if it's values are close
-                long diff = maxCounter.getValue() - minCounter.getValue();
-                long mergedValue = counter.getValue();
-                if (diff <= mergedValue / 5.0) {
-                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
-                }
-            } else {
-                // For non-time metrics, remove MIN/MAX metrics if it's value is identical
-                if (Objects.equals(minCounter.getValue(), maxCounter.getValue())) {
-                    profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
-                    profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
-                }
+            if (Objects.equals(minCounter.getValue(), maxCounter.getValue()) &&
+                    Objects.equals(minCounter.getValue(), counter.getValue())) {
+                profile.removeCounter(MERGED_INFO_PREFIX_MIN + name);
+                profile.removeCounter(MERGED_INFO_PREFIX_MAX + name);
             }
         }
 

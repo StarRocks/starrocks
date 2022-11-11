@@ -55,10 +55,6 @@ static const std::string THREAD_INVOLUNTARY_CONTEXT_SWITCHES = "InvoluntaryConte
 
 const std::string RuntimeProfile::ROOT_COUNTER = ""; // NOLINT
 
-const std::unordered_set<std::string> RuntimeProfile::NON_MERGE_COUNTER_NAMES = {
-        "DegreeOfParallelism", "RuntimeBloomFilterNum",      "RuntimeInFilterNum",  "PushdownPredicates", "MemoryLimit",
-        "ChunkBufferCapacity", "DefaultChunkBufferCapacity", "PeakChunkBufferSize", "TabletCount"};
-
 RuntimeProfile::RuntimeProfile(std::string name, bool is_averaged_profile)
         : _parent(nullptr),
           _pool(new ObjectPool()),
@@ -488,6 +484,9 @@ void RuntimeProfile::copy_all_counters_from(RuntimeProfile* src_profile) {
             DCHECK(src_counter != nullptr);
             auto* new_counter = add_counter_unlock(name, src_counter->type(), parent_name);
             new_counter->set(src_counter->value());
+            if (src_counter->skip_merge()) {
+                new_counter->enable_skip_merge();
+            }
         }
 
         auto names_it = src_profile->_child_counter_map.find(name);
@@ -705,6 +704,7 @@ void RuntimeProfile::to_thrift(std::vector<TRuntimeProfileNode>* nodes) {
         counter.name = iter.first;
         counter.value = iter.second.first->value();
         counter.type = iter.second.first->type();
+        counter.skip_merge = iter.second.first->skip_merge();
         node.counters.push_back(counter);
     }
 
@@ -793,9 +793,6 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                     name_queue.pop();
                 }
                 for (const auto& name : current_names) {
-                    if (NON_MERGE_COUNTER_NAMES.find(name) != NON_MERGE_COUNTER_NAMES.end()) {
-                        continue;
-                    }
                     auto names_it = profile->_child_counter_map.find(name);
                     if (names_it != profile->_child_counter_map.end()) {
                         for (auto& child_name : names_it->second) {
@@ -809,6 +806,9 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                     DCHECK(pair_it != profile->_counter_map.end());
                     const auto& pair = pair_it->second;
                     const auto* counter = pair.first;
+                    if (counter->skip_merge()) {
+                        continue;
+                    }
                     const auto& parent_name = pair.second;
 
                     while (all_level_counters.size() <= level_idx) {
@@ -852,6 +852,7 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
             int64_t min_value = std::numeric_limits<int64_t>::max();
             int64_t max_value = std::numeric_limits<int64_t>::min();
             bool already_merged = false;
+            bool skip_merge = false;
             for (auto profile : profiles) {
                 auto* counter = profile->get_counter(name);
 
@@ -866,6 +867,9 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                                  << ", counter_name=" << name << ", exist_type=" << std::to_string(type)
                                  << ", another_type=" << std::to_string(counter->type());
                     return;
+                }
+                if (counter->skip_merge()) {
+                    skip_merge = true;
                 }
 
                 auto* min_counter = profile->get_counter(strings::Substitute("$0$1", MERGED_INFO_PREFIX_MIN, name));
@@ -904,6 +908,9 @@ void RuntimeProfile::merge_isomorphic_profiles(std::vector<RuntimeProfile*>& pro
                                      << ", counter_name=" << name << ", parent_counter_name=" << parent_name;
                     }
                     counter0 = profile0->add_counter(name, type);
+                }
+                if (skip_merge) {
+                    counter0->enable_skip_merge();
                 }
             }
             counter0->set(merged_value);

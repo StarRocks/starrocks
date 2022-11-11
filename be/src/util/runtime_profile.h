@@ -89,7 +89,7 @@ class RuntimeProfile {
 public:
     class Counter {
     public:
-        explicit Counter(TUnit::type type, int64_t value = 0) : _value(value), _type(type) {}
+        explicit Counter(TUnit::type type, int64_t value = 0) : _value(value), _type(type){};
 
         virtual ~Counter() = default;
 
@@ -114,11 +114,16 @@ public:
 
         TUnit::type type() const { return _type; }
 
+        bool skip_merge() const { return _skip_merge; }
+
+        void enable_skip_merge() { _skip_merge = true; }
+
     private:
         friend class RuntimeProfile;
 
         std::atomic<int64_t> _value;
         TUnit::type _type;
+        bool _skip_merge = false;
     };
 
     class ConcurrentTimerCounter;
