@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * PlanFragments form a tree structure via their ExchangeNodes. A tree of fragments
@@ -400,6 +401,7 @@ public class PlanFragment extends TreeNode<PlanFragment> {
     /**
      * Create thrift fragment with the unique fields, including
      * - output_sink (only for MultiCastDataStreamSink and ExportSink).
+     *
      * @return The thrift fragment with the unique fields.
      */
     public TPlanFragment toThriftForUniqueFields() {
@@ -629,7 +631,10 @@ public class PlanFragment extends TreeNode<PlanFragment> {
 
     // For plan fragment has join
     public void mergeQueryGlobalDicts(List<Pair<Integer, ColumnDict>> dicts) {
-        this.queryGlobalDicts.addAll(dicts);
+        if (this.queryGlobalDicts != dicts) {
+            this.queryGlobalDicts = Stream.concat(this.queryGlobalDicts.stream(), dicts.stream()).distinct()
+                    .collect(Collectors.toList());
+        }
     }
 
     public void setLoadGlobalDicts(
